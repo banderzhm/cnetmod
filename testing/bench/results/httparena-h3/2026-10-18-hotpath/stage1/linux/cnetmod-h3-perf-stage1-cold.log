@@ -1,0 +1,12 @@
+Test project /tmp/cnetmod-h3-arena-build
+    Start 64: http3_cold_listener_cleanup
+1/1 Test #64: http3_cold_listener_cleanup ......   Passed   35.45 sec
+
+100% tests passed out of 1
+
+Label Time Summary:
+http3        =  35.45 sec*proc (1 test)
+interop      =  35.45 sec*proc (1 test)
+lifecycle    =  35.45 sec*proc (1 test)
+
+Total Test time (real) =  35.46 sec

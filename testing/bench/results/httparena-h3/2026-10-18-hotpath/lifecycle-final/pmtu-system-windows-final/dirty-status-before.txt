@@ -1,0 +1,45 @@
+ M src/executor/async_op.cppm
+ M src/executor/platform/io_uring_async_op.cpp
+ M src/executor/platform/iocp_async_op.cpp
+ M src/io/platform/io_uring.cppm
+ M src/io/platform/io_uring_impl.cpp
+ M src/io/platform/iocp_impl.cpp
+ M src/protocol/http/v3/http3_server.cpp
+ M src/protocol/http/v3/http3_server.cppm
+ M src/protocol/quic/congestion_control.cpp
+ M src/protocol/quic/congestion_control.cppm
+ M src/protocol/quic/loss_detection.cpp
+ M src/protocol/quic/loss_detection.cppm
+ M src/protocol/quic/quic_connection.cpp
+ M src/protocol/quic/quic_connection.cppm
+ M src/protocol/quic/quic_foundation.cppm
+ M src/protocol/quic/quic_recovery.cpp
+ M src/protocol/quic/quic_recovery.cppm
+ M src/protocol/quic/quic_stream.cpp
+ M src/protocol/quic/quic_stream.cppm
+ M src/utils/concurrentContainers/atomic_hash_map.cppm
+ M src/utils/concurrentContainers/atomic_hash_map.inl
+ M testing/bench/arena_h3_server.cpp
+ M testing/http3/CMakeLists.txt
+ M testing/http3/h3_interop_server.cpp
+ M testing/http3/http3_lifecycle.py
+ M testing/http3/http_client_e2e.cpp
+ M testing/http3/http_client_e2e.py
+ M testing/http3/http_client_e2e_server.cpp
+ M testing/tests/CMakeLists.txt
+ M testing/tests/test_concurrent_containers.cpp
+ M testing/tests/test_quic_congestion.cpp
+ M testing/tests/test_quic_loss_detection.cpp
+ M testing/tests/test_quic_stream.cpp
+ M testing/tests/test_udp_batch.cpp
+?? testing/bench/results/httparena-h3/2026-10-18-hotpath/
+?? testing/http3/h3-interop-results.json
+?? testing/http3/http3_cold_cleanup.py
+?? testing/http3/http3_outbound_pto.py
+?? testing/http3/large_aead_peer.py
+?? testing/http3/quic_handshake_confirmation.py
+?? testing/http3/quic_pmtu_cc.py
+?? testing/http3/quic_pmtu_cc_server.cpp
+?? testing/http3/quic_retire_stream.py
+?? testing/http3/quic_retire_stream_server.cpp
+?? testing/tests/test_udp_sendto_on_cancel.cpp

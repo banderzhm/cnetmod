@@ -18,6 +18,7 @@ set(TEST_SOURCES
     test_deadline.cpp
     test_task_group.cpp
     test_task.cpp
+    test_stream_write.cpp
     test_lazy.cpp
     test_database_datetime.cpp
     test_configuration_properties.cpp
@@ -76,6 +77,7 @@ set(TEST_SOURCES
     test_quic_varint.cpp
     test_quic_frame.cpp
     test_quic_packet.cpp
+    test_quic_in_place_crypto.cpp
     test_quic_stream.cpp
     test_quic_loss_detection.cpp
     test_quic_congestion.cpp
@@ -90,6 +92,14 @@ endif()
 
 if(CNETMOD_ENABLE_SSL)
     list(APPEND TEST_SOURCES test_security_token.cpp)
+endif()
+
+if(WIN32)
+    list(APPEND TEST_SOURCES test_udp_sendto_on_cancel.cpp)
+endif()
+
+if(CNETMOD_ENABLE_WEBSOCKET)
+    list(APPEND TEST_SOURCES test_websocket_frame.cpp)
 endif()
 
 # Filter out QUIC/HTTP3 tests if QUIC not available
@@ -221,6 +231,8 @@ function(cnetmod_test_component TEST_NAME OUTPUT_VARIABLE)
         set(_target cnetmod_mysql)
     elseif(TEST_NAME MATCHES "^test_mongodb")
         set(_target cnetmod_mongodb)
+    elseif(TEST_NAME MATCHES "^test_websocket")
+        set(_target cnetmod_websocket)
     elseif(TEST_NAME MATCHES "^test_mqtt")
         set(_target cnetmod_mqtt)
     elseif(TEST_NAME MATCHES "^test_raft")
@@ -247,6 +259,11 @@ foreach(test_src ${TEST_SOURCES})
     get_filename_component(test_name ${test_src} NAME_WE)
 
     add_executable(${test_name} ${test_src})
+    if(test_name STREQUAL "test_quic_in_place_crypto")
+        # Same-primary-module implementation unit exercises private crypto.
+        # Keep it out of TEST_SOURCES: only the main produces a test target.
+        target_sources(${test_name} PRIVATE test_quic_in_place_crypto_impl.cpp)
+    endif()
     list(APPEND CNETMOD_TEST_TARGETS ${test_name})
     if(test_name STREQUAL "test_http_disabled_overhead")
         set_property(TARGET ${test_name} PROPERTY
@@ -664,6 +681,9 @@ endif()
 if(TARGET test_dns_cancellation)
     target_link_options(test_dns_cancellation PRIVATE "LINKER:--wrap=getaddrinfo")
     set_tests_properties(test_dns_cancellation PROPERTIES TIMEOUT 15)
+endif()
+if(TARGET test_udp_sendto_on_cancel)
+    set_tests_properties(test_udp_sendto_on_cancel PROPERTIES TIMEOUT 60)
 endif()
 
 # HTTP/3 targets and the only HTTP/3 interoperability CTest are owned by

@@ -1,0 +1,2409 @@
+module;
+
+#include <cnetmod/config.hpp>
+
+#include <openssl/crypto.h>
+#include <openssl/hmac.h>
+#include <openssl/rand.h>
+
+module cnetmod.protocol.http.v3.server;
+import std;
+import cnetmod.core.log;
+import cnetmod.core.ssl;
+import cnetmod.core.address;
+import cnetmod.core.buffer;
+import cnetmod.core.socket;
+import cnetmod.io.io_context;
+import cnetmod.executor.pool;
+import cnetmod.coro.task;
+import cnetmod.coro.spawn;
+import cnetmod.coro.timer;
+import cnetmod.coro.cancel;
+import cnetmod.coro.wait_group;
+import cnetmod.coro.mutex;
+import cnetmod.protocol.udp;
+import cnetmod.executor.async_op;
+import cnetmod.protocol.http.v3.session;
+import cnetmod.protocol.http.semantics;
+import cnetmod.protocol.quic;
+import cnetmod.utils.concurrent_containers.atomic_hash_map;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
+import cnetmod.utils.concurrent_containers.queue;
+import cnetmod.utils.concurrent_containers.copy_on_write_value;
+
+namespace cnetmod::http::v3 {
+
+namespace detail {
+
+    class retry_token_manager
+    {
+    public:
+        retry_token_manager()
+            : secrets_(make_initial_secrets()) {}
+
+        [[nodiscard]] auto ready() const noexcept -> bool
+        {
+            return secrets_.read()->ready;
+        }
+
+        [[nodiscard]] auto issue(const endpoint& sender, const quic::connection_id& odcid,
+            const quic::connection_id& retry_scid) -> std::expected<std::vector<std::byte>, std::error_code>
+        {
+            rotate_if_due();
+            const auto secrets = secrets_.read();
+            if (!secrets->ready || odcid.empty() || retry_scid.empty())
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            auto payload = make_payload(sender, odcid, retry_scid,
+                std::chrono::duration_cast<std::chrono::seconds>(
+                    std::chrono::system_clock::now().time_since_epoch())
+                    .count());
+            auto tag = authenticate(payload, secrets->current);
+            if (!tag)
+                return std::unexpected(tag.error());
+            payload.insert(payload.end(), tag->begin(), tag->end());
+            return payload;
+        }
+
+        [[nodiscard]] auto validate(std::span<const std::byte> token, const endpoint& sender,
+            const quic::connection_id& retry_scid) -> std::expected<quic::connection_id, std::error_code>
+        {
+            rotate_if_due();
+            const auto secrets = secrets_.read();
+            constexpr std::size_t tag_size = 32;
+            if (!secrets->ready || token.size() < 1U + 8U + 1U + 1U + tag_size)
+                return std::unexpected(std::make_error_code(std::errc::permission_denied));
+            const auto payload = token.first(token.size() - tag_size);
+            auto current_tag = authenticate(payload, secrets->current);
+            auto previous_tag = secrets->previous ? authenticate(payload, *secrets->previous)
+                                                  : std::expected<std::array<std::byte, 32>, std::error_code>{
+                                                        std::unexpected(std::make_error_code(std::errc::no_such_file_or_directory))};
+            const auto token_tag = token.data() + payload.size();
+            const bool current_matches = current_tag &&
+                CRYPTO_memcmp(current_tag->data(), token_tag, tag_size) == 0;
+            const bool previous_matches = previous_tag &&
+                CRYPTO_memcmp(previous_tag->data(), token_tag, tag_size) == 0;
+            if (!current_matches && !previous_matches)
+                return std::unexpected(std::make_error_code(std::errc::permission_denied));
+            std::size_t offset{};
+            if (std::to_integer<std::uint8_t>(payload[offset++]) != 1U)
+                return std::unexpected(std::make_error_code(std::errc::permission_denied));
+            std::uint64_t issued{};
+            for (std::size_t i{}; i < 8U; ++i)
+                issued = (issued << 8U) | std::to_integer<std::uint8_t>(payload[offset++]);
+            const auto now = std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::system_clock::now().time_since_epoch())
+                                 .count();
+            if (issued > static_cast<std::uint64_t>(now) ||
+                static_cast<std::uint64_t>(now) - issued > token_lifetime.count())
+                return std::unexpected(std::make_error_code(std::errc::timed_out));
+            auto source = read_string(payload, offset);
+            auto odcid = read_cid(payload, offset);
+            auto embedded_retry_scid = read_cid(payload, offset);
+            if (!source || !odcid || !embedded_retry_scid || offset != payload.size() ||
+                *source != sender.to_string() || *embedded_retry_scid != retry_scid)
+                return std::unexpected(std::make_error_code(std::errc::permission_denied));
+            return *odcid;
+        }
+
+        [[nodiscard]] auto issue_stateless_reset_token(const quic::connection_id& cid)
+            -> std::expected<std::array<std::byte, 16>, std::error_code>
+        {
+            rotate_if_due();
+            const auto secrets = secrets_.read();
+            if (!secrets->ready || cid.empty())
+                return std::unexpected(std::make_error_code(std::errc::io_error));
+            static constexpr std::string_view label{"cnetmod quic stateless reset"};
+            std::vector<std::byte> payload;
+            payload.reserve(label.size() + cid.size());
+            for (const char value : label)
+                payload.push_back(static_cast<std::byte>(static_cast<unsigned char>(value)));
+            payload.insert(payload.end(), cid.data(), cid.data() + cid.size());
+            auto tag = authenticate(payload, secrets->current);
+            if (!tag)
+                return std::unexpected(tag.error());
+            std::array<std::byte, 16> token{};
+            std::copy_n(tag->begin(), token.size(), token.begin());
+            return token;
+        }
+
+    private:
+        static constexpr std::chrono::seconds token_lifetime{10};
+        static constexpr std::chrono::seconds secret_rotation_period{60};
+
+        struct secret_state
+        {
+            std::array<unsigned char, 32> current{};
+            std::optional<std::array<unsigned char, 32>> previous;
+            std::chrono::steady_clock::time_point rotated_at;
+            bool ready{};
+        };
+
+        [[nodiscard]] static auto make_initial_secrets() -> secret_state
+        {
+            secret_state result;
+            result.rotated_at = std::chrono::steady_clock::now();
+            result.ready = RAND_bytes(result.current.data(), result.current.size()) == 1;
+            return result;
+        }
+
+        concurrent_containers::copy_on_write_value<secret_state> secrets_;
+
+        auto rotate_if_due() -> void
+        {
+            const auto observed = secrets_.read();
+            const auto now = std::chrono::steady_clock::now();
+            if (!observed->ready || now - observed->rotated_at < secret_rotation_period)
+                return;
+            secrets_.update([](secret_state& state)
+                {
+                    const auto update_time = std::chrono::steady_clock::now();
+                    if (!state.ready || update_time - state.rotated_at < secret_rotation_period)
+                        return;
+                    std::array<unsigned char, 32> next{};
+                    if (RAND_bytes(next.data(), next.size()) != 1)
+                    {
+                        state.ready = false;
+                        return;
+                    }
+                    state.previous = state.current;
+                    state.current = next;
+                    state.rotated_at = update_time;
+                });
+        }
+
+        [[nodiscard]] static auto make_payload(const endpoint& sender, const quic::connection_id& odcid,
+            const quic::connection_id& retry_scid, std::int64_t timestamp) -> std::vector<std::byte>
+        {
+            std::vector<std::byte> result;
+            result.reserve(96);
+            result.push_back(std::byte{1});
+            for (int shift = 56; shift >= 0; shift -= 8)
+                result.push_back(static_cast<std::byte>((static_cast<std::uint64_t>(timestamp) >> shift) & 0xffU));
+            append_string(result, sender.to_string());
+            append_cid(result, odcid);
+            append_cid(result, retry_scid);
+            return result;
+        }
+
+        static auto append_string(std::vector<std::byte>& out, std::string_view value) -> void
+        {
+            out.push_back(static_cast<std::byte>(value.size()));
+            for (const auto c : value)
+                out.push_back(static_cast<std::byte>(static_cast<unsigned char>(c)));
+        }
+
+        static auto append_cid(std::vector<std::byte>& out, const quic::connection_id& cid) -> void
+        {
+            out.push_back(static_cast<std::byte>(cid.size()));
+            out.insert(out.end(), cid.data(), cid.data() + cid.size());
+        }
+
+        [[nodiscard]] static auto read_string(std::span<const std::byte> in, std::size_t& offset)
+            -> std::optional<std::string>
+        {
+            if (offset >= in.size())
+                return std::nullopt;
+            const auto length = std::to_integer<std::uint8_t>(in[offset++]);
+            if (offset + length > in.size())
+                return std::nullopt;
+            std::string value;
+            value.reserve(length);
+            for (std::size_t i{}; i < length; ++i)
+                value.push_back(static_cast<char>(std::to_integer<unsigned char>(in[offset + i])));
+            offset += length;
+            return value;
+        }
+
+        [[nodiscard]] static auto read_cid(std::span<const std::byte> in, std::size_t& offset)
+            -> std::optional<quic::connection_id>
+        {
+            if (offset >= in.size())
+                return std::nullopt;
+            const auto length = std::to_integer<std::uint8_t>(in[offset++]);
+            if (length > quic::max_cid_length || offset + length > in.size())
+                return std::nullopt;
+            auto cid = quic::connection_id{in.data() + offset, length};
+            offset += length;
+            return cid;
+        }
+
+        [[nodiscard]] static auto authenticate(std::span<const std::byte> payload,
+            const std::array<unsigned char, 32>& secret)
+            -> std::expected<std::array<std::byte, 32>, std::error_code>
+        {
+            std::array<std::byte, 32> tag{};
+            unsigned int length{};
+            if (HMAC(EVP_sha256(), secret.data(), static_cast<int>(secret.size()),
+                    reinterpret_cast<const unsigned char*>(payload.data()), payload.size(),
+                    reinterpret_cast<unsigned char*>(tag.data()), &length) == nullptr ||
+                length != tag.size())
+                return std::unexpected(std::make_error_code(std::errc::io_error));
+            return tag;
+        }
+    };
+
+    [[nodiscard]] inline auto make_retry_packet(std::uint32_t wire_version,
+        const quic::connection_id& client_scid, const quic::connection_id& retry_scid,
+        std::span<const std::byte> token, const quic::connection_id& odcid)
+        -> std::expected<std::vector<std::byte>, std::error_code>
+    {
+        const auto version = static_cast<quic::quic_version>(wire_version);
+        if (version != quic::quic_version::v1 && version != quic::quic_version::v2)
+            return std::unexpected(std::make_error_code(std::errc::protocol_not_supported));
+        std::vector<std::byte> packet;
+        packet.reserve(7U + client_scid.size() + retry_scid.size() + token.size() + 16U);
+        packet.push_back(static_cast<std::byte>(version == quic::quic_version::v1 ? 0xf0U : 0xc0U));
+        for (int shift = 24; shift >= 0; shift -= 8)
+            packet.push_back(static_cast<std::byte>((wire_version >> shift) & 0xffU));
+        packet.push_back(static_cast<std::byte>(client_scid.size()));
+        packet.insert(packet.end(), client_scid.data(), client_scid.data() + client_scid.size());
+        packet.push_back(static_cast<std::byte>(retry_scid.size()));
+        packet.insert(packet.end(), retry_scid.data(), retry_scid.data() + retry_scid.size());
+        packet.insert(packet.end(), token.begin(), token.end());
+        auto integrity = quic::make_retry_integrity_tag(version, odcid, packet);
+        if (!integrity)
+            return std::unexpected(integrity.error());
+        packet.insert(packet.end(), integrity->begin(), integrity->end());
+        return packet;
+    }
+
+} // namespace detail
+
+// A coroutine lambda stores captures in its closure, not necessarily in the
+// coroutine frame.  The listener launches this task detached, so use ordinary
+// value parameters to retain both objects until the session has stopped.
+// This also makes the ownership boundary explicit: the session borrows the
+// QUIC connection while this task owns shared references to both.
+auto run_server_session(std::shared_ptr<http3_server_session> session,
+    std::shared_ptr<quic::quic_connection> connection) -> task<void>
+{
+    (void)connection;
+    co_await session->run();
+}
+
+/// HTTP/3 listener ownership.  QUIC packet demultiplexing is performed by the
+/// transport layer; the server exposes lifecycle and request-session policy.
+struct http3_server::impl
+{
+public:
+    struct inbox_budget_state
+    {
+        std::atomic<std::uint64_t> capacity_dropped{};
+        std::atomic<std::uint64_t> budget_dropped{};
+        std::atomic<std::uint64_t> creation_dropped{};
+        std::atomic<std::uint64_t> queued{};
+        std::atomic<std::uint64_t> peak_queued{};
+        std::atomic<std::size_t> active_inboxes{};
+    };
+
+    struct dispatch_state
+    {
+        static constexpr std::size_t route_capacity{262144U};
+        static constexpr std::size_t maximum_route_readers{1024U};
+
+        struct route_entry
+        {
+            impl* owner{};
+            quic::quic_connection* connection{};
+            std::optional<std::chrono::steady_clock::time_point> expires_at;
+        };
+
+    private:
+        // The dispatcher reads a CID route for every UDP datagram.  Atomic
+        // shared_ptr snapshots are safe but turn that read into a pair of
+        // reference-count RMW operations.  Route records are immutable and
+        // reclaimed by this small, fixed epoch domain instead: readers only
+        // perform acquire/release stores, while CID changes (the rare path)
+        // pay the retirement/reclamation work.
+        struct route_record
+        {
+            quic::connection_id cid;
+            route_entry entry;
+            bool tombstone{};
+            std::uint64_t retired_epoch{};
+            route_record* retired_next{};
+        };
+
+        struct alignas(64) route_slot
+        {
+            std::atomic<route_record*> value{};
+        };
+
+        struct alignas(64) reader_epoch
+        {
+            std::atomic<std::uint64_t> value{};
+        };
+
+        class read_guard
+        {
+        public:
+            read_guard(dispatch_state& state, std::size_t reader) noexcept
+                : state_(state), reader_(reader)
+            {
+                for (;;)
+                {
+                    const auto observed = state_.epoch_.load(std::memory_order_acquire);
+                    state_.readers_[reader_].value.store(observed, std::memory_order_release);
+                    if (observed == state_.epoch_.load(std::memory_order_acquire))
+                        break;
+                }
+            }
+
+            ~read_guard()
+            {
+                state_.readers_[reader_].value.store(0U, std::memory_order_release);
+            }
+
+            read_guard(const read_guard&) = delete;
+            auto operator=(const read_guard&) -> read_guard& = delete;
+
+        private:
+            dispatch_state& state_;
+            std::size_t reader_;
+        };
+
+        [[nodiscard]] auto slot_index(const quic::connection_id& cid) const noexcept
+            -> std::size_t
+        {
+            return std::hash<quic::connection_id>{}(cid) & (route_capacity - 1U);
+        }
+
+        [[nodiscard]] auto locate(const quic::connection_id& cid) const noexcept
+            -> std::pair<std::size_t, route_record*>
+        {
+            auto index = slot_index(cid);
+            std::size_t reusable = route_capacity;
+            route_record* reusable_record{};
+            for (std::size_t probe{}; probe < route_capacity; ++probe)
+            {
+                auto* const current = routes_[index].value.load(std::memory_order_acquire);
+                if (current == nullptr)
+                {
+                    if (reusable != route_capacity)
+                        return {reusable, reusable_record};
+                    return {index, current};
+                }
+                if (current->cid == cid)
+                    return {index, current};
+                if (current->tombstone && reusable == route_capacity)
+                {
+                    reusable = index;
+                    reusable_record = current;
+                }
+                index = (index + 1U) & (route_capacity - 1U);
+            }
+            return reusable != route_capacity
+                ? std::pair{reusable, reusable_record}
+                : std::pair{route_capacity, static_cast<route_record*>(nullptr)};
+        }
+
+        void push_retired(route_record* record) noexcept
+        {
+            auto* head = retired_.load(std::memory_order_relaxed);
+            do
+            {
+                record->retired_next = head;
+            } while (!retired_.compare_exchange_weak(head, record,
+                std::memory_order_release, std::memory_order_relaxed));
+        }
+
+        void retire(route_record* record) noexcept
+        {
+            if (record == nullptr)
+                return;
+            record->retired_epoch = epoch_.fetch_add(1U, std::memory_order_acq_rel) + 1U;
+            retired_count_.fetch_add(1U, std::memory_order_relaxed);
+            push_retired(record);
+        }
+
+        [[nodiscard]] auto safe_to_reclaim(std::uint64_t retired_epoch) const noexcept -> bool
+        {
+            for (const auto& reader : readers_)
+            {
+                const auto active = reader.value.load(std::memory_order_acquire);
+                if (active != 0U && active <= retired_epoch)
+                    return false;
+            }
+            return true;
+        }
+
+        void collect_retired() noexcept
+        {
+            auto* pending = retired_.exchange(nullptr, std::memory_order_acq_rel);
+            while (pending != nullptr)
+            {
+                auto* const next = pending->retired_next;
+                if (safe_to_reclaim(pending->retired_epoch))
+                {
+                    delete pending;
+                    retired_count_.fetch_sub(1U, std::memory_order_relaxed);
+                }
+                else
+                    push_retired(pending);
+                pending = next;
+            }
+        }
+
+        struct reclaim_guard
+        {
+            dispatch_state& state;
+            bool needed{true};
+
+            ~reclaim_guard()
+            {
+                if (needed)
+                    state.collect_retired();
+            }
+        };
+
+        [[nodiscard]] auto replace(const quic::connection_id& cid, route_entry entry,
+            bool only_if_absent, std::size_t reader) -> bool
+        {
+            // Reclaim only after this operation has left its read epoch.
+            const reclaim_guard reclaim{*this};
+            read_guard guard{*this, reader};
+            for (;;)
+            {
+                const auto [index, current] = locate(cid);
+                if (index == route_capacity)
+                    return false;
+                if (only_if_absent && current != nullptr && !current->tombstone)
+                    return false;
+                auto* replacement = new route_record{cid, std::move(entry)};
+                auto* expected = current;
+                if (routes_[index].value.compare_exchange_weak(expected, replacement,
+                        std::memory_order_release, std::memory_order_acquire))
+                {
+                    retire(current);
+                    return true;
+                }
+                delete replacement;
+            }
+        }
+
+        [[nodiscard]] auto erase_record(const quic::connection_id& cid,
+            route_record* expected, std::size_t reader) -> bool
+        {
+            const reclaim_guard reclaim{*this};
+            read_guard guard{*this, reader};
+            auto [index, current] = locate(cid);
+            if (index == route_capacity || current != expected ||
+                current == nullptr || current->tombstone)
+                return false;
+            auto* replacement = new route_record{cid, {}, true};
+            if (!routes_[index].value.compare_exchange_strong(current, replacement,
+                    std::memory_order_release, std::memory_order_acquire))
+            {
+                delete replacement;
+                return false;
+            }
+            retire(expected);
+            return true;
+        }
+
+        [[nodiscard]] auto erase_owned(const quic::connection_id& cid,
+            impl& owner, std::size_t reader, bool pending_only = false) -> bool
+        {
+            const reclaim_guard reclaim{*this};
+            read_guard guard{*this, reader};
+            auto [index, current] = locate(cid);
+            if (index == route_capacity || current == nullptr || current->tombstone ||
+                current->entry.owner != std::addressof(owner) ||
+                (pending_only && !current->entry.expires_at))
+                return false;
+            auto* replacement = new route_record{cid, {}, true};
+            auto* expected = current;
+            if (!routes_[index].value.compare_exchange_strong(expected, replacement,
+                    std::memory_order_release, std::memory_order_acquire))
+            {
+                delete replacement;
+                return false;
+            }
+            retire(current);
+            return true;
+        }
+
+    public:
+        auto add_worker(impl& worker) -> std::size_t
+        {
+            // Workers are registered by the owning server before its
+            // dispatcher starts. The vector is immutable on the hot path.
+            if (workers.size() + 1U >= maximum_route_readers)
+                std::terminate();
+            workers.push_back(std::addressof(worker));
+            return workers.size();
+        }
+
+        [[nodiscard]] auto select(const quic::connection_id& cid,
+            bool retain_pending) -> std::optional<route_entry>
+        {
+            reclaim_guard reclaim{*this, false};
+            const auto now = std::chrono::steady_clock::now();
+            {
+                read_guard guard{*this, 0U};
+                const auto [index, route] = locate(cid);
+                if (index != route_capacity && route != nullptr && !route->tombstone)
+                {
+                    if (!route->entry.expires_at || *route->entry.expires_at > now)
+                        return route->entry;
+                    auto* replacement = new route_record{cid, {}, true};
+                    auto* expected = route;
+                    if (routes_[index].value.compare_exchange_strong(expected, replacement,
+                            std::memory_order_release, std::memory_order_acquire))
+                    {
+                        retire(route);
+                        reclaim.needed = true;
+                    }
+                    else
+                        delete replacement;
+                }
+            }
+            if (workers.empty())
+                return std::nullopt;
+            auto* selected = workers[next_worker.fetch_add(1U, std::memory_order_relaxed) % workers.size()];
+            route_entry target{selected, nullptr, std::nullopt};
+            if (retain_pending)
+            {
+                target.expires_at = now + std::chrono::seconds{10};
+                if (!replace(cid, target, true, 0U))
+                {
+                    read_guard guard{*this, 0U};
+                    const auto [index, winner] = locate(cid);
+                    if (index != route_capacity && winner != nullptr && !winner->tombstone)
+                        return winner->entry;
+                    // Without a retained Initial route, later CRYPTO packets
+                    // could reach a different worker. Drop it and let QUIC
+                    // retransmission apply backpressure instead.
+                    return std::nullopt;
+                }
+                selected->retain_pending_route(cid, *target.expires_at);
+            }
+            return target;
+        }
+
+        auto replace_connection_routes(impl& owner,
+            quic::quic_connection& connection,
+            std::span<const quic::quic_connection::local_cid_route> active) -> void
+        {
+            for (const auto& route : active)
+                (void)replace(route.cid,
+                    route_entry{std::addressof(owner), std::addressof(connection), std::nullopt},
+                    false, owner.route_epoch_slot_);
+        }
+
+        auto retain_reset_route(impl& owner, const quic::connection_id& cid) -> void
+        {
+            (void)replace(cid, route_entry{std::addressof(owner), nullptr, std::nullopt},
+                false, owner.route_epoch_slot_);
+        }
+
+        auto erase(impl& owner, const quic::connection_id& cid) -> void
+        {
+            (void)erase_owned(cid, owner, owner.route_epoch_slot_);
+        }
+
+        auto erase_pending(impl& owner, const quic::connection_id& cid) -> void
+        {
+            (void)erase_owned(cid, owner, owner.route_epoch_slot_, true);
+        }
+
+        auto maintain_retired() noexcept -> bool
+        {
+            collect_retired();
+            return retired_count_.load(std::memory_order_relaxed) != 0U;
+        }
+
+        [[nodiscard]] auto retired_count() const noexcept -> std::size_t
+        {
+            return retired_count_.load(std::memory_order_relaxed);
+        }
+
+        dispatch_state() : routes_(std::make_unique<route_slot[]>(route_capacity)) {}
+
+        ~dispatch_state()
+        {
+            for (std::size_t index{}; index < route_capacity; ++index)
+                delete routes_[index].value.load(std::memory_order_relaxed);
+            auto* pending = retired_.exchange(nullptr, std::memory_order_relaxed);
+            while (pending != nullptr)
+            {
+                auto* const next = pending->retired_next;
+                delete pending;
+                pending = next;
+            }
+        }
+
+    private:
+        std::unique_ptr<route_slot[]> routes_;
+        std::array<reader_epoch, maximum_route_readers> readers_{};
+        std::atomic<std::uint64_t> epoch_{1U};
+        std::atomic<route_record*> retired_{};
+        std::atomic<std::size_t> retired_count_{};
+
+    public:
+        std::vector<impl*> workers;
+        std::atomic<std::size_t> next_worker{};
+    };
+
+    impl(io_context& context, ssl_context& tls, endpoint listen_endpoint,
+        server_request_handler handler, bool shared_port = false)
+        : context_(context), socket_context_(context), tls_(tls), endpoint_(std::move(listen_endpoint)), handler_(std::move(handler)), socket_(context), datagram_socket_(std::addressof(socket_)), retry_tokens_(std::make_shared<detail::retry_token_manager>()), shared_port_(shared_port)
+    {
+        transport_config_.stateless_reset_token_generator = [tokens = retry_tokens_](const quic::connection_id& cid)
+        {
+            return tokens->issue_stateless_reset_token(cid);
+        };
+    }
+
+    impl(io_context& context, ssl_context& tls, endpoint listen_endpoint,
+        async_server_request_handler handler, bool shared_port = false)
+        : impl(context, tls, std::move(listen_endpoint), server_request_handler{}, shared_port)
+    {
+        async_handler_ = std::move(handler);
+    }
+
+    impl(io_context& context, ssl_context& tls, endpoint listen_endpoint,
+        streaming_server_request_handler handler, bool shared_port = false)
+        : impl(context, tls, std::move(listen_endpoint), server_request_handler{}, shared_port)
+    {
+        streaming_handler_ = std::move(handler);
+    }
+
+    impl(io_context& context, ssl_context& tls, endpoint listen_endpoint,
+        async_webtransport_handler handler, bool shared_port = false)
+        : impl(context, tls, std::move(listen_endpoint), server_request_handler{}, shared_port)
+    {
+        webtransport_handler_ = std::move(handler);
+    }
+
+    impl(io_context& context, ssl_context& tls, endpoint listen_endpoint,
+        http3_server_handlers handlers, bool shared_port = false)
+        : impl(context, tls, std::move(listen_endpoint), std::move(handlers.request), shared_port)
+    {
+        webtransport_handler_ = std::move(handlers.webtransport);
+        push_cancellation_observer_ = std::move(handlers.push_cancelled);
+    }
+
+    impl(io_context& context, io_context& socket_context, ssl_context& tls,
+        endpoint listen_endpoint, server_request_handler handler,
+        udp::udp_socket& shared_socket,
+        std::shared_ptr<detail::retry_token_manager> retry_tokens,
+        std::shared_ptr<dispatch_state> dispatcher,
+        std::shared_ptr<inbox_budget_state> inbox_budget)
+        : context_(context), socket_context_(socket_context), tls_(tls), endpoint_(std::move(listen_endpoint)), handler_(std::move(handler)), socket_(context), datagram_socket_(std::addressof(shared_socket)), retry_tokens_(std::move(retry_tokens)), dispatcher_(std::move(dispatcher)), inbox_budget_(std::move(inbox_budget)), processor_only_(true)
+    {
+        transport_config_.stateless_reset_token_generator = [tokens = retry_tokens_](const quic::connection_id& cid)
+        {
+            return tokens->issue_stateless_reset_token(cid);
+        };
+    }
+
+    impl(io_context& context, io_context& socket_context, ssl_context& tls,
+        endpoint listen_endpoint, async_server_request_handler handler,
+        udp::udp_socket& shared_socket,
+        std::shared_ptr<detail::retry_token_manager> retry_tokens,
+        std::shared_ptr<dispatch_state> dispatcher,
+        std::shared_ptr<inbox_budget_state> inbox_budget)
+        : impl(context, socket_context, tls, std::move(listen_endpoint),
+              server_request_handler{}, shared_socket, std::move(retry_tokens),
+              std::move(dispatcher), std::move(inbox_budget))
+    {
+        async_handler_ = std::move(handler);
+    }
+
+    impl(io_context& context, io_context& socket_context, ssl_context& tls,
+        endpoint listen_endpoint, streaming_server_request_handler handler,
+        udp::udp_socket& shared_socket,
+        std::shared_ptr<detail::retry_token_manager> retry_tokens,
+        std::shared_ptr<dispatch_state> dispatcher,
+        std::shared_ptr<inbox_budget_state> inbox_budget)
+        : impl(context, socket_context, tls, std::move(listen_endpoint),
+              server_request_handler{}, shared_socket, std::move(retry_tokens),
+              std::move(dispatcher), std::move(inbox_budget))
+    {
+        streaming_handler_ = std::move(handler);
+    }
+
+    impl(io_context& context, io_context& socket_context, ssl_context& tls,
+        endpoint listen_endpoint, async_webtransport_handler handler,
+        udp::udp_socket& shared_socket,
+        std::shared_ptr<detail::retry_token_manager> retry_tokens,
+        std::shared_ptr<dispatch_state> dispatcher,
+        std::shared_ptr<inbox_budget_state> inbox_budget)
+        : impl(context, socket_context, tls, std::move(listen_endpoint),
+              server_request_handler{}, shared_socket, std::move(retry_tokens),
+              std::move(dispatcher), std::move(inbox_budget))
+    {
+        webtransport_handler_ = std::move(handler);
+    }
+
+    impl(server_context& context, ssl_context& tls, endpoint listen_endpoint,
+        server_request_handler handler)
+        : context_(context.accept_io()), socket_context_(context_), tls_(tls), endpoint_(std::move(listen_endpoint)), handler_(std::move(handler)), socket_(context_), datagram_socket_(std::addressof(socket_)), retry_tokens_(std::make_shared<detail::retry_token_manager>())
+    {
+        transport_config_.stateless_reset_token_generator = [tokens = retry_tokens_](const quic::connection_id& cid)
+        {
+            return tokens->issue_stateless_reset_token(cid);
+        };
+        shards_.reserve(context.worker_count());
+#ifdef CNETMOD_PLATFORM_WINDOWS
+        dispatcher_ = std::make_shared<dispatch_state>();
+        for (unsigned index{}; index < context.worker_count(); ++index)
+        {
+            auto& worker = context.next_worker_io();
+            auto shard = std::make_unique<impl>(worker, context_, tls_, endpoint_,
+                handler_, socket_, retry_tokens_, dispatcher_, inbox_budget_);
+            shard->route_epoch_slot_ = dispatcher_->add_worker(*shard);
+            shards_.push_back(std::move(shard));
+        }
+#else
+        for (unsigned index{}; index < context.worker_count(); ++index)
+        {
+            auto& worker = context.next_worker_io();
+            auto shard = std::make_unique<impl>(worker, tls_, endpoint_,
+                handler_, true);
+            shard->inbox_budget_ = inbox_budget_;
+            shards_.push_back(std::move(shard));
+        }
+#endif
+    }
+
+    impl(server_context& context, ssl_context& tls, endpoint listen_endpoint,
+        async_server_request_handler handler)
+        : impl(context, tls, std::move(listen_endpoint), server_request_handler{})
+    {
+        handler_ = {};
+        async_handler_ = std::move(handler);
+        for (auto& shard : shards_)
+        {
+            shard->handler_ = {};
+            shard->async_handler_ = async_handler_;
+        }
+    }
+
+    impl(server_context& context, ssl_context& tls, endpoint listen_endpoint,
+        streaming_server_request_handler handler)
+        : impl(context, tls, std::move(listen_endpoint), server_request_handler{})
+    {
+        handler_ = {};
+        streaming_handler_ = std::move(handler);
+        for (auto& shard : shards_)
+        {
+            shard->handler_ = {};
+            shard->streaming_handler_ = streaming_handler_;
+        }
+    }
+
+    impl(server_context& context, ssl_context& tls, endpoint listen_endpoint,
+        async_webtransport_handler handler)
+        : impl(context, tls, std::move(listen_endpoint), server_request_handler{})
+    {
+        handler_ = {};
+        webtransport_handler_ = std::move(handler);
+        for (auto& shard : shards_)
+        {
+            shard->handler_ = {};
+            shard->webtransport_handler_ = webtransport_handler_;
+        }
+    }
+
+    impl(server_context& context, ssl_context& tls, endpoint listen_endpoint,
+        http3_server_handlers handlers)
+        : impl(context, tls, std::move(listen_endpoint), std::move(handlers.request))
+    {
+        webtransport_handler_ = std::move(handlers.webtransport);
+        push_cancellation_observer_ = std::move(handlers.push_cancelled);
+        for (auto& shard : shards_)
+        {
+            shard->webtransport_handler_ = webtransport_handler_;
+            shard->push_cancellation_observer_ = push_cancellation_observer_;
+        }
+    }
+
+    [[nodiscard]] auto start() -> std::expected<void, std::error_code>
+    {
+        {
+            concurrent_containers::exclusive_latch_guard guard{state_latch_};
+            if (timers_->stopping)
+                return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
+            if (!timers_->active)
+                timers_ = std::make_shared<connection_timer_state>(state_latch_owner_);
+        }
+        if (running_)
+            return {};
+        // A stopped listener can be started again on a freshly opened UDP
+        // socket.  Its shutdown token is one-shot, so clear it before any
+        // receive coroutine can arm it.
+        listener_receive_wakeup_.reset();
+        listener_send_wakeup_.reset();
+        if (!shards_.empty())
+        {
+#ifdef CNETMOD_PLATFORM_WINDOWS
+            if (!retry_tokens_->ready())
+                return std::unexpected(std::make_error_code(std::errc::io_error));
+            tls_.configure_alpn_server({"h3"});
+            socket_options options;
+            options.recv_buffer_size = 4 * 1024 * 1024;
+            options.send_buffer_size = 4 * 1024 * 1024;
+            // A shared listener sends stateless Retry from its accept context
+            // before a connection has an affinity. The Windows registered-I/O
+            // provider cannot issue that control-plane send through ordinary
+            // IOCP on a RIO socket, which drops the Retry and prevents the
+            // handshake. Keep the shared multi-worker listener on IOCP's
+            // batched UDP path; dedicated RIO sockets remain available where
+            // their receive/send ownership is one execution context.
+            options.registered_io = false;
+            auto opened = socket_.open(endpoint_, options);
+            if (!opened)
+                return std::unexpected(opened.error());
+            for (auto& shard : shards_)
+            {
+                // Processor shards bypass start(), but stop() cancels both
+                // one-shot tokens. Their previous operations were joined.
+                shard->listener_receive_wakeup_.reset();
+                shard->listener_send_wakeup_.reset();
+                const auto inbox_capacity = std::bit_ceil(std::max<std::size_t>(
+                    8U, shard->inbox_limits_.max_connection_inboxes * 4U));
+                shard->inboxes_ = std::make_unique<inbox_map>(inbox_capacity);
+                {
+                    concurrent_containers::exclusive_latch_guard guard{shard->state_latch_};
+                    if (!shard->timers_->active)
+                        shard->timers_ = std::make_shared<connection_timer_state>(shard->state_latch_owner_);
+                }
+                shard->running_ = true;
+                shard->timers_->loop_completion.add(1U);
+                spawn(shard->context_, shard->run_timer_loop(shard->timers_));
+            }
+            running_ = true;
+            timers_->loop_completion.add(1U);
+            spawn(context_, run_dispatch_loop(timers_));
+            return {};
+#else
+            for (auto& shard : shards_)
+            {
+                auto started = shard->start();
+                if (!started)
+                    return std::unexpected(started.error());
+            }
+            running_ = true;
+            return {};
+#endif
+        }
+        if (!retry_tokens_->ready())
+            return std::unexpected(std::make_error_code(std::errc::io_error));
+        // RFC 9114 requires HTTP/3 peers to negotiate an `h3` ALPN value.
+        // The TLS context is application-owned so that certificates and
+        // verification policy remain configurable, but the HTTP/3 listener
+        // owns this protocol-specific selection policy.
+        tls_.configure_alpn_server({"h3"});
+        socket_options options;
+        options.reuse_address = shared_port_;
+        options.reuse_port = shared_port_;
+        options.recv_buffer_size = 4 * 1024 * 1024;
+        options.send_buffer_size = 4 * 1024 * 1024;
+        auto opened = socket_.open(endpoint_, options);
+        if (!opened)
+            return std::unexpected(opened.error());
+        running_ = true;
+        timers_->loop_completion.add(1U);
+        spawn(context_, run_loop(timers_));
+        timers_->loop_completion.add(1U);
+        spawn(context_, run_timer_loop(timers_));
+        return {};
+    }
+
+    auto set_max_datagram_frame_size(std::uint64_t bytes) -> std::expected<void, std::error_code>
+    {
+        if (running_)
+            return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
+        transport_config_.max_datagram_frame_size = bytes;
+        for (auto& shard : shards_)
+            shard->transport_config_.max_datagram_frame_size = bytes;
+        return {};
+    }
+
+    auto set_multipath_initial_max_path_id(std::uint32_t maximum_path_id)
+        -> std::expected<void, std::error_code>
+    {
+        if (running_)
+            return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
+        if (maximum_path_id == 0U)
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        transport_config_.multipath_initial_max_path_id = maximum_path_id;
+        for (auto& shard : shards_)
+            shard->transport_config_.multipath_initial_max_path_id = maximum_path_id;
+        return {};
+    }
+
+    auto set_path_mtu_discovery(std::uint64_t maximum_payload,
+        std::chrono::milliseconds probe_interval,
+        std::chrono::milliseconds initial_probe_delay)
+        -> std::expected<void, std::error_code>
+    {
+        if (running_)
+            return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
+        if (maximum_payload < quic::min_initial_pkt_size ||
+            probe_interval <= std::chrono::milliseconds::zero() ||
+            initial_probe_delay < std::chrono::milliseconds::zero())
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        transport_config_.enable_path_mtu_discovery = true;
+        transport_config_.max_path_mtu = maximum_payload;
+        transport_config_.path_mtu_probe_interval = probe_interval;
+        transport_config_.path_mtu_initial_probe_delay = initial_probe_delay;
+        for (auto& shard : shards_)
+        {
+            shard->transport_config_.enable_path_mtu_discovery = true;
+            shard->transport_config_.max_path_mtu = maximum_payload;
+            shard->transport_config_.path_mtu_probe_interval = probe_interval;
+            shard->transport_config_.path_mtu_initial_probe_delay = initial_probe_delay;
+        }
+        return {};
+    }
+
+    auto set_max_udp_payload_size(std::uint64_t bytes)
+        -> std::expected<void, std::error_code>
+    {
+        if (running_)
+            return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
+        if (bytes < quic::min_initial_pkt_size ||
+            bytes > quic::max_udp_receive_payload)
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        transport_config_.max_udp_payload_size = bytes;
+        for (auto& shard : shards_)
+            shard->transport_config_.max_udp_payload_size = bytes;
+        return {};
+    }
+
+    auto set_qpack_settings(std::uint64_t max_table_capacity,
+        std::uint64_t max_blocked_streams) -> std::expected<void, std::error_code>
+    {
+        if (running_)
+            return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
+        if ((max_table_capacity == 0U) != (max_blocked_streams == 0U))
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        h3_settings_.qpack_max_table_capacity = max_table_capacity;
+        h3_settings_.qpack_blocked_streams = max_blocked_streams;
+        for (auto& shard : shards_)
+        {
+            shard->h3_settings_.qpack_max_table_capacity = max_table_capacity;
+            shard->h3_settings_.qpack_blocked_streams = max_blocked_streams;
+        }
+        return {};
+    }
+
+    auto set_request_body_limits(request_body_stream_options options)
+        -> std::expected<void, std::error_code>
+    {
+        if (running_)
+            return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
+        if (options.max_bytes == 0U || options.chunk_capacity == 0U)
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        request_body_options_ = options;
+        for (auto& shard : shards_)
+            shard->request_body_options_ = options;
+        return {};
+    }
+
+    auto set_idle_timeout(std::chrono::milliseconds timeout)
+        -> std::expected<void, std::error_code>
+    {
+        if (running_)
+            return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
+        if (timeout < std::chrono::milliseconds::zero())
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        transport_config_.idle_timeout = timeout;
+        for (auto& shard : shards_)
+            shard->transport_config_.idle_timeout = timeout;
+        return {};
+    }
+
+    auto set_push_cancellation_observer(
+        server_push_cancellation_observer observer)
+        -> std::expected<void, std::error_code>
+    {
+        if (running_)
+            return std::unexpected(
+                std::make_error_code(std::errc::operation_in_progress));
+        push_cancellation_observer_ = std::move(observer);
+        for (auto& shard : shards_)
+            shard->push_cancellation_observer_ = push_cancellation_observer_;
+        return {};
+    }
+
+    auto set_early_data_tickets(
+        std::shared_ptr<quic::server_early_data_ticket_callbacks> callbacks,
+        std::vector<std::byte> context) -> std::expected<void, std::error_code>
+    {
+        if (running_)
+            return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
+        if (callbacks && (context.empty() || !callbacks->seal || !callbacks->open || !callbacks->replay_cache))
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        transport_config_.early_data_tickets = std::move(callbacks);
+        transport_config_.early_data_context = std::move(context);
+        for (auto& shard : shards_)
+        {
+            shard->transport_config_.early_data_tickets = transport_config_.early_data_tickets;
+            shard->transport_config_.early_data_context = transport_config_.early_data_context;
+        }
+        return {};
+    }
+
+    auto set_inbox_limits(http3_inbox_limits limits)
+        -> std::expected<void, std::error_code>
+    {
+        if (running_)
+            return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
+        if (limits.per_connection_datagrams < 2U ||
+            limits.max_queued_datagrams < 2U ||
+            limits.max_connection_inboxes == 0U ||
+            limits.max_connection_inboxes >
+                std::numeric_limits<std::size_t>::max() / 4U)
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        inbox_limits_ = limits;
+        for (auto& shard : shards_)
+            shard->inbox_limits_ = limits;
+        return {};
+    }
+
+    [[nodiscard]] auto stop() -> task<void>
+    {
+        std::shared_ptr<connection_timer_state> timers;
+        bool claimed{};
+        {
+            concurrent_containers::exclusive_latch_guard guard{state_latch_};
+            timers = timers_;
+            if (timers->stopped)
+                co_return;
+            if (!timers->stopping)
+            {
+                timers->stopping = true;
+                timers->active = false;
+                timers->stop_completion.add(1U);
+                claimed = true;
+            }
+        }
+        if (!claimed)
+        {
+            co_await timers->stop_completion.wait();
+            co_return;
+        }
+        auto* const resume = io_context::current();
+        if (resume != std::addressof(context_))
+            co_await post_awaitable{context_};
+        running_ = false;
+        // Cancellation is marshalled onto each kernel queue's owner. It is
+        // requested before any connection receive lock can block shutdown.
+        listener_receive_wakeup_.cancel();
+        listener_send_wakeup_.request_cancel();
+        if (std::addressof(context_) != std::addressof(socket_context_))
+            co_await post_awaitable{socket_context_};
+        listener_send_wakeup_.dispatch_cancel();
+        if (std::addressof(context_) != std::addressof(socket_context_))
+            co_await post_awaitable{context_};
+        {
+            concurrent_containers::exclusive_latch_guard guard{timers->latch};
+            timers->queue = {};
+            timers->generations.clear();
+            timers->wait_deadline.reset();
+        }
+        timers->wakeup.cancel();
+        if (!shards_.empty())
+        {
+            // No dispatcher can enqueue into a shard after its gate closes.
+            co_await timers->loop_completion.wait();
+            for (auto& shard : shards_)
+                co_await shard->stop();
+            socket_.close();
+        }
+        else
+        {
+            std::vector<std::shared_ptr<http3_server_session>> sessions;
+            auto watchdog = std::make_shared<shutdown_watchdog>();
+            {
+                concurrent_containers::exclusive_latch_guard guard{timers->latch};
+                sessions.reserve(sessions_.size());
+                for (const auto& [_, session] : sessions_)
+                    sessions.push_back(session);
+                std::unordered_set<quic::quic_connection*> seen;
+                for (const auto& [_, connection] : connections_)
+                    if (seen.insert(connection.get()).second)
+                        watchdog->connections.push_back(connection);
+            }
+            // RFC 9000's closing period is three PTOs. Use the initial PTO
+            // budget here, capped by a configured shorter idle timeout; even
+            // disabled idle detection cannot leave stop waiting indefinitely.
+            auto grace = quic::loss_detector{transport_config_}.pto_duration() * 3;
+            if (transport_config_.idle_timeout > std::chrono::milliseconds::zero())
+                grace = std::min(grace, std::chrono::duration_cast<decltype(grace)>(transport_config_.idle_timeout));
+            watchdog->completion.add(1U);
+            spawn(context_, watch_shutdown(watchdog, grace));
+            for (const auto& session : sessions)
+            {
+                co_await session->send_goaway((quic::stream_id{1} << 62U) - 4U);
+                co_await session->close();
+            }
+            for (const auto& connection : watchdog->connections)
+                if (!connection->is_closed())
+                    co_await connection->async_close({}, "HTTP/3 listener stopping");
+            co_await timers->loop_completion.wait();
+            watchdog->timer.cancel();
+            co_await watchdog->completion.wait();
+            {
+                concurrent_containers::exclusive_latch_guard guard{timers->latch};
+                if (dispatcher_)
+                {
+                    for (const auto& [cid, _] : connections_)
+                        dispatcher_->erase(*this, cid);
+                    for (const auto& [cid, _] : reset_routes_)
+                        dispatcher_->erase(*this, cid);
+                    for (const auto& [cid, _] : pending_route_expirations_)
+                        dispatcher_->erase(*this, cid);
+                }
+                sessions_.clear();
+                connections_.clear();
+                published_route_generations_.clear();
+                active_connections_.store(0U, std::memory_order_relaxed);
+                timers->generations.clear();
+                timers->queue = {};
+                timers->wait_deadline.reset();
+                pending_route_expirations_.clear();
+                reset_routes_.clear();
+                timers->maintenance_deadline.reset();
+                if (inboxes_)
+                {
+                    std::unordered_set<connection_inbox*> reclaimed;
+                    (void)inboxes_->erase_if([this, &reclaimed](const auto&,
+                        const std::shared_ptr<connection_inbox>& inbox)
+                        {
+                            if (reclaimed.insert(inbox.get()).second)
+                                while (inbox->datagrams.try_dequeue())
+                                    release_inbox_datagram();
+                            return true;
+                        });
+                    inbox_budget_->active_inboxes.fetch_sub(reclaimed.size(), std::memory_order_release);
+                }
+            }
+            if (!processor_only_)
+                socket_.close();
+        }
+        if (resume && resume != std::addressof(context_))
+            co_await post_awaitable{*resume};
+        {
+            concurrent_containers::exclusive_latch_guard guard{timers->latch};
+            timers->stopped = true;
+            timers->stopping = false;
+        }
+        // Completion may synchronously resume a caller which destroys impl.
+        timers->stop_completion.done();
+        co_return;
+    }
+
+    [[nodiscard]] auto is_running() const noexcept -> bool
+    {
+        return running_.load(std::memory_order_acquire);
+    }
+
+    [[nodiscard]] auto statistics() const noexcept -> http3_server_statistics
+    {
+        auto result = http3_server_statistics{
+            inbox_enqueued_datagrams_.load(std::memory_order_relaxed),
+            dropped_inbox_datagrams_.load(std::memory_order_relaxed),
+            inbox_budget_->active_inboxes.load(std::memory_order_relaxed),
+            inbox_budget_->queued.load(std::memory_order_relaxed),
+            inbox_budget_->peak_queued.load(std::memory_order_relaxed),
+            inbox_budget_->budget_dropped.load(std::memory_order_relaxed),
+            inbox_budget_->capacity_dropped.load(std::memory_order_relaxed),
+            inbox_budget_->creation_dropped.load(std::memory_order_relaxed),
+            pooled_receive_datagrams_.load(std::memory_order_relaxed),
+            heap_receive_datagrams_.load(std::memory_order_relaxed)};
+#ifdef CNETMOD_PLATFORM_WINDOWS
+        if (!processor_only_ && datagram_socket_ != nullptr)
+        {
+            const auto socket_statistics = datagram_socket_->native_socket().async_statistics();
+            result.rio_receive_datagrams = socket_statistics.receive_completions;
+            result.rio_send_datagrams = socket_statistics.send_completions;
+            result.rio_receive_queue_dropped_datagrams = socket_statistics.receive_queue_drops;
+            result.rio_fallbacks = socket_statistics.registered_io_fallback ? 1U : 0U;
+        }
+#endif
+        result.active_connections = active_connections_.load(std::memory_order_relaxed);
+        {
+            concurrent_containers::shared_latch_guard state_guard{state_latch_};
+            result.retained_reset_routes = reset_routes_.size();
+            result.pending_initial_routes = pending_route_expirations_.size();
+            result.pending_connection_timers = timers_->queue.size();
+        }
+        if (dispatcher_)
+            result.retired_dispatch_routes = dispatcher_->retired_count();
+        for (const auto& shard : shards_)
+        {
+            const auto shard_result = shard->statistics();
+            // Server-context shards share the budget above; only their
+            // per-worker ingress/allocator counters are additive.
+            result.inbox_enqueued_datagrams += shard_result.inbox_enqueued_datagrams;
+            result.inbox_dropped_datagrams += shard_result.inbox_dropped_datagrams;
+            result.pooled_receive_datagrams += shard_result.pooled_receive_datagrams;
+            result.heap_receive_datagrams += shard_result.heap_receive_datagrams;
+            result.active_connections += shard_result.active_connections;
+            result.retained_reset_routes += shard_result.retained_reset_routes;
+            result.pending_initial_routes += shard_result.pending_initial_routes;
+            result.pending_connection_timers += shard_result.pending_connection_timers;
+        }
+        return result;
+    }
+
+private:
+    struct stateless_reset_route
+    {
+        std::array<std::byte, 16> token;
+        std::chrono::steady_clock::time_point expires_at;
+    };
+
+    static constexpr auto stateless_reset_retention = std::chrono::seconds{30};
+
+    struct timer_entry
+    {
+        std::chrono::steady_clock::time_point deadline;
+        // Superseded idle/PTO entries can remain in the heap until their old
+        // deadline. Routing/session state owns live connections; stale timers
+        // must not retain a retired connection's streams, TLS and write pool.
+        std::weak_ptr<quic::quic_connection> connection;
+        std::uint64_t generation{};
+    };
+
+    struct timer_entry_later
+    {
+        [[nodiscard]] auto operator()(const timer_entry& left,
+            const timer_entry& right) const noexcept -> bool
+        {
+            return left.deadline > right.deadline;
+        }
+    };
+
+    struct timer_schedule
+    {
+        std::chrono::steady_clock::time_point deadline;
+        std::uint64_t generation{};
+    };
+
+    // The connection observer owns only weak references to this scheduling
+    // state. It can publish after the listener has stopped without retaining
+    // the listener, its socket, or the connection itself.
+    struct connection_timer_state
+    {
+        explicit connection_timer_state(
+            std::shared_ptr<concurrent_containers::atomic_rw_latch> structural_latch)
+            : latch_owner(std::move(structural_latch)), latch(*latch_owner) {}
+        std::shared_ptr<concurrent_containers::atomic_rw_latch> latch_owner;
+        concurrent_containers::atomic_rw_latch& latch;
+        std::unordered_map<quic::quic_connection*, timer_schedule> generations;
+        std::priority_queue<timer_entry, std::vector<timer_entry>, timer_entry_later> queue;
+        std::optional<std::chrono::steady_clock::time_point> wait_deadline;
+        std::optional<std::chrono::steady_clock::time_point> maintenance_deadline;
+        cancel_token wakeup;
+        async_wait_group loop_completion;
+        std::atomic<bool> active{true};
+        bool stopping{};
+        bool stopped{};
+        async_wait_group stop_completion;
+        bool maintenance_wakeup{};
+
+        auto publish(const std::weak_ptr<quic::quic_connection>& weak_connection,
+            std::optional<std::chrono::steady_clock::time_point> deadline) -> void
+        {
+            // A stale null snapshot must not erase a newer producer's PTO.
+            if (!deadline)
+                return;
+            const auto connection = weak_connection.lock();
+            if (!connection)
+                return;
+            bool wake{};
+            {
+                concurrent_containers::exclusive_latch_guard guard{latch};
+                if (!active)
+                    return;
+                const auto existing = generations.find(connection.get());
+                if (existing != generations.end() && *deadline >= existing->second.deadline)
+                    return;
+                const auto generation = existing != generations.end()
+                    ? existing->second.generation + 1U : 1U;
+                generations.insert_or_assign(connection.get(), timer_schedule{*deadline, generation});
+                queue.push(timer_entry{*deadline, weak_connection, generation});
+                wake = wait_deadline && *deadline < *wait_deadline;
+            }
+            // Cancellation may synchronously resume the timer coroutine.
+            if (wake)
+                wakeup.cancel();
+        }
+    };
+
+    struct loop_completion_guard
+    {
+        async_wait_group& completion;
+        ~loop_completion_guard() { completion.done(); }
+    };
+
+    struct shutdown_watchdog
+    {
+        std::vector<std::shared_ptr<quic::quic_connection>> connections;
+        cancel_token timer;
+        async_wait_group completion;
+    };
+
+    auto watch_shutdown(std::shared_ptr<shutdown_watchdog> watchdog,
+        std::chrono::steady_clock::duration grace) -> task<void>
+    {
+        loop_completion_guard completed{watchdog->completion};
+        const auto waited = co_await async_timer_wait(context_, grace, watchdog->timer);
+        if (!waited || watchdog->timer.is_cancelled())
+            co_return;
+        for (const auto& connection : watchdog->connections)
+            co_await connection->async_stop_io();
+    }
+
+    struct maintenance_wake_guard
+    {
+        std::shared_ptr<connection_timer_state> state;
+        ~maintenance_wake_guard()
+        {
+            bool wake{};
+            {
+                concurrent_containers::exclusive_latch_guard guard{state->latch};
+                wake = std::exchange(state->maintenance_wakeup, false);
+            }
+            if (wake)
+                state->wakeup.cancel();
+        }
+    };
+
+    auto retain_reset_route(const quic::quic_connection::local_cid_route& route) -> void
+    {
+        maintenance_wake_guard wake_guard{timers_};
+        if (std::ranges::all_of(route.stateless_reset_token,
+                [](std::byte value)
+                {
+                    return value == std::byte{};
+                }))
+            return;
+        {
+            concurrent_containers::exclusive_latch_guard state_guard{state_latch_};
+            const auto expires = std::chrono::steady_clock::now() + stateless_reset_retention;
+            reset_routes_.insert_or_assign(route.cid, stateless_reset_route{route.stateless_reset_token, expires});
+            schedule_maintenance_locked(expires);
+        }
+        if (dispatcher_ && inboxes_)
+            dispatcher_->retain_reset_route(*this, route.cid);
+    }
+
+    // Cold state has deadlines even when there are no live connections left.
+    // Called with state_latch_ held, just like connection timer publication.
+    auto schedule_maintenance_locked(std::chrono::steady_clock::time_point deadline) -> void
+    {
+        if (!timers_->maintenance_deadline || deadline < *timers_->maintenance_deadline)
+            timers_->maintenance_deadline = deadline;
+        if (timers_->wait_deadline && deadline < *timers_->wait_deadline)
+            timers_->maintenance_wakeup = true;
+    }
+
+    auto retain_pending_route(const quic::connection_id& cid,
+        std::chrono::steady_clock::time_point expires) -> void
+    {
+        maintenance_wake_guard wake_guard{timers_};
+        concurrent_containers::exclusive_latch_guard state_guard{state_latch_};
+        pending_route_expirations_.insert_or_assign(cid, expires);
+        schedule_maintenance_locked(expires);
+    }
+
+    auto refresh_connection_routes(const std::shared_ptr<quic::quic_connection>& connection) -> void
+    {
+        const bool closing = connection->is_closed();
+        const bool draining = connection->state() == quic::connection_state::draining;
+        const auto route_generation = connection->local_cid_route_generation();
+        bool route_changed{};
+        {
+            concurrent_containers::shared_latch_guard state_guard{state_latch_};
+            const auto known = published_route_generations_.find(connection.get());
+            route_changed = known == published_route_generations_.end() ||
+                known->second.generation != route_generation;
+        }
+        // CID vectors are copied to publish dispatcher snapshots.  This is a
+        // rare control-plane action: do not pay for it after every packet
+        // when the connection's CID generation is unchanged.
+        if (!route_changed && !closing && !draining)
+            return;
+
+        const auto retired = connection->take_retired_local_cid_routes();
+        for (const auto& route : retired)
+            retain_reset_route(route);
+        const auto routes = connection->local_cid_routes();
+        bool replace_dispatcher_routes{};
+        {
+            concurrent_containers::exclusive_latch_guard state_guard{state_latch_};
+            const auto known = published_route_generations_.find(connection.get());
+            route_changed = known == published_route_generations_.end() ||
+                known->second.generation != route_generation;
+            if (route_changed)
+            {
+                std::erase_if(connections_, [&connection](const auto& entry)
+                    {
+                        return entry.second == connection;
+                    });
+
+                for (const auto& route : routes)
+                    connections_.emplace(route.cid, connection);
+                const bool active = known != published_route_generations_.end()
+                    ? known->second.active : !closing && !draining;
+                if (known == published_route_generations_.end() && active)
+                    active_connections_.fetch_add(1U, std::memory_order_relaxed);
+                published_route_generations_.insert_or_assign(connection.get(),
+                    published_connection_route{route_generation, active});
+                replace_dispatcher_routes = dispatcher_ != nullptr;
+            }
+            if (closing || draining)
+            {
+                sessions_.erase(connection.get());
+                if (const auto published = published_route_generations_.find(connection.get());
+                    published != published_route_generations_.end() && published->second.active)
+                {
+                    published->second.active = false;
+                    active_connections_.fetch_sub(1U, std::memory_order_relaxed);
+                }
+            }
+            if (closing)
+            {
+                std::erase_if(connections_, [&connection](const auto& entry)
+                    {
+                        return entry.second == connection;
+                    });
+                published_route_generations_.erase(connection.get());
+                timers_->generations.erase(connection.get());
+            }
+        }
+        if (replace_dispatcher_routes)
+            dispatcher_->replace_connection_routes(*this, *connection, routes);
+        if (closing)
+        {
+            for (const auto& route : routes)
+                retain_reset_route(route);
+            if (dispatcher_)
+                remove_connection_inboxes(*connection);
+        }
+    }
+
+    auto discard_expired_reset_routes() -> void
+    {
+        maintenance_wake_guard wake_guard{timers_};
+        const auto now = std::chrono::steady_clock::now();
+        concurrent_containers::exclusive_latch_guard state_guard{state_latch_};
+        if (!timers_->maintenance_deadline || now < *timers_->maintenance_deadline)
+            return;
+        timers_->maintenance_deadline.reset();
+        std::erase_if(reset_routes_, [this, now](const auto& entry)
+            {
+                if (entry.second.expires_at > now)
+                {
+                    if (!timers_->maintenance_deadline || entry.second.expires_at < *timers_->maintenance_deadline)
+                        timers_->maintenance_deadline = entry.second.expires_at;
+                    return false;
+                }
+                if (dispatcher_)
+                    dispatcher_->erase(*this, entry.first);
+                return true;
+            });
+        std::erase_if(pending_route_expirations_, [this, now](const auto& entry)
+            {
+                if (entry.second > now)
+                {
+                    if (!timers_->maintenance_deadline || entry.second < *timers_->maintenance_deadline)
+                        timers_->maintenance_deadline = entry.second;
+                    return false;
+                }
+                // A Retry-validated Initial can already have promoted this
+                // CID to a live connection. Never erase the promoted route.
+                dispatcher_->erase_pending(*this, entry.first);
+                return true;
+            });
+        if (dispatcher_ && inboxes_)
+        {
+            const auto stale_before = now - std::chrono::seconds{10};
+            const auto removed = inboxes_->erase_if([this, stale_before](
+                                                        const inbox_key& key,
+                                                        const std::shared_ptr<connection_inbox>& inbox)
+                {
+                    if (key.connection != nullptr ||
+                        inbox->promoted_connection.load(std::memory_order_acquire) != nullptr)
+                        return false;
+                    if (inbox->created_at <= stale_before)
+                        return true;
+                    const auto expires = inbox->created_at + std::chrono::seconds{10};
+                    if (!timers_->maintenance_deadline || expires < *timers_->maintenance_deadline)
+                        timers_->maintenance_deadline = expires;
+                    return false;
+                });
+            if (removed != 0U)
+                inbox_budget_->active_inboxes.fetch_sub(removed, std::memory_order_release);
+        }
+        // No reader epoch is held here. If another worker still protects a
+        // retired record, retry only while that concrete reclamation is pending.
+        if (dispatcher_ && dispatcher_->maintain_retired())
+            schedule_maintenance_locked(now + std::chrono::milliseconds{1});
+    }
+
+    auto ensure_http3_session(const std::shared_ptr<quic::quic_connection>& connection) -> void
+    {
+        if (!running_ || connection->state() != quic::connection_state::connected)
+            return;
+        {
+            concurrent_containers::shared_latch_guard state_guard{state_latch_};
+            if (!timers_->active || sessions_.contains(connection.get()))
+                return;
+        }
+        auto session = std::shared_ptr<http3_server_session>{webtransport_handler_ && async_handler_
+                ? make_http3_server_session(*connection,
+                      http3_server_handlers{async_handler_, webtransport_handler_,
+                          push_cancellation_observer_})
+                : webtransport_handler_ ? make_http3_server_session(*connection, webtransport_handler_)
+                : streaming_handler_    ? make_http3_server_session(*connection, streaming_handler_)
+                : async_handler_        ? make_http3_server_session(*connection, async_handler_)
+                                        : make_http3_server_session(*connection, handler_)};
+        session->configure_local_settings(h3_settings_);
+        session->configure_request_body_stream(request_body_options_);
+        session->configure_push_cancellation_observer(
+            push_cancellation_observer_);
+        {
+            concurrent_containers::exclusive_latch_guard state_guard{state_latch_};
+            if (!timers_->active || sessions_.contains(connection.get()))
+                return;
+            sessions_.emplace(connection.get(), session);
+        }
+        // The listener map is bookkeeping, not coroutine ownership.  Keep the
+        // session and its referenced QUIC connection alive until run() has
+        // observed closure; otherwise stop()/route retirement can destroy a
+        // raw session pointer while the detached coroutine is suspended in
+        // async_accept_stream().
+        spawn(context_, run_server_session(std::move(session), connection));
+    }
+
+    [[nodiscard]] auto send_stateless_reset(std::span<const std::byte> datagram,
+        const quic::connection_id& dcid, const endpoint& sender) -> task<void>
+    {
+        // RFC 9000 §10.3: only a CID for which this endpoint previously
+        // advertised a token is eligible.  Never reset arbitrary traffic.
+        std::optional<stateless_reset_route> route;
+        {
+            concurrent_containers::shared_latch_guard state_guard{state_latch_};
+            if (const auto found = reset_routes_.find(dcid); found != reset_routes_.end())
+                route = found->second;
+        }
+        if (!route || datagram.size() < 21U)
+            co_return;
+
+        std::vector<std::byte> reset(datagram.size());
+        if (RAND_bytes(reinterpret_cast<unsigned char*>(reset.data()),
+                static_cast<int>(reset.size())) != 1)
+            co_return;
+        reset.front() = static_cast<std::byte>(
+            (std::to_integer<std::uint8_t>(reset.front()) & 0x3fU) | 0x40U);
+        std::copy(route->token.begin(), route->token.end(),
+            reset.end() - static_cast<std::ptrdiff_t>(route->token.size()));
+        co_await listener_send_mutex_.lock();
+        async_lock_guard send_guard{listener_send_mutex_, std::adopt_lock};
+        if (std::addressof(context_) != std::addressof(socket_context_))
+            co_await post_awaitable{socket_context_};
+        (void)co_await async_sendto(socket_context_, datagram_socket_->native_socket(),
+            const_buffer{reset.data(), reset.size()}, sender, listener_send_wakeup_);
+        if (std::addressof(context_) != std::addressof(socket_context_))
+            co_await post_awaitable{context_};
+    }
+
+    [[nodiscard]] auto process_incoming(udp_received_datagram incoming) -> task<void>
+    {
+        if (!running_)
+            co_return;
+        auto& buffer = incoming.bytes;
+        const auto& sender = incoming.peer;
+        if (buffer.empty())
+            co_return;
+
+        // Keep packet-level diagnosis opt-in.  This is deliberately before
+        // long-header parsing so a browser Initial that is rejected by an
+        // early invariant remains observable.
+
+        // Never retain an unordered_map iterator after releasing
+        // connections_mutex_. CID retirement/issuance can rehash this map on
+        // another worker; a copied shared_ptr is the stable route hand-off.
+        std::shared_ptr<quic::quic_connection> connection;
+        const auto first = std::to_integer<std::uint8_t>(buffer.front());
+        if ((first & 0x80U) != 0U)
+        {
+            auto header = quic::decode_long_header(buffer);
+            if (!header)
+            {
+
+                co_return;
+            }
+
+            {
+                concurrent_containers::shared_latch_guard state_guard{state_latch_};
+                if (const auto route = connections_.find(header->dcid);
+                    route != connections_.end())
+                    connection = route->second;
+            }
+            if (!connection &&
+                header->type == quic::packet_type::initial)
+            {
+                if ((header->version != static_cast<std::uint32_t>(quic::quic_version::v1) &&
+                        header->version != static_cast<std::uint32_t>(quic::quic_version::v2)) ||
+                    header->dcid.empty())
+                {
+
+                    co_return;
+                }
+                if (header->token.empty())
+                {
+                    if (buffer.size() < quic::min_initial_pkt_size)
+                    {
+
+                        co_return;
+                    }
+                    std::array<std::byte, 8> retry_cid_bytes{};
+                    if (RAND_bytes(reinterpret_cast<unsigned char*>(retry_cid_bytes.data()),
+                            retry_cid_bytes.size()) != 1)
+                        co_return;
+                    const auto retry_scid = quic::connection_id{retry_cid_bytes.data(),
+                        static_cast<std::uint8_t>(retry_cid_bytes.size())};
+                    auto token = retry_tokens_->issue(sender, header->dcid, retry_scid);
+                    if (!token)
+                    {
+                        co_return;
+                    }
+                    auto retry = detail::make_retry_packet(header->version, header->scid,
+                        retry_scid, *token, header->dcid);
+                    if (!retry)
+                        co_return;
+                    co_await listener_send_mutex_.lock();
+                    async_lock_guard send_guard{listener_send_mutex_, std::adopt_lock};
+                    if (std::addressof(context_) != std::addressof(socket_context_))
+                        co_await post_awaitable{socket_context_};
+                    (void)co_await async_sendto(socket_context_,
+                        datagram_socket_->native_socket(),
+                        const_buffer{retry->data(), retry->size()}, sender, listener_send_wakeup_);
+
+                    if (std::addressof(context_) != std::addressof(socket_context_))
+                        co_await post_awaitable{context_};
+                    co_return;
+                }
+                auto original_dcid = retry_tokens_->validate(
+                    header->token, sender, header->dcid);
+                if (!original_dcid)
+                    co_return;
+                connection = std::make_shared<quic::quic_connection>(context_,
+                    socket_context_, *datagram_socket_, sender, quic::quic_role::server,
+                    tls_, transport_config_);
+                connection->set_timer_deadline_observer(
+                    [weak_state = std::weak_ptr{timers_}, weak_connection = std::weak_ptr{connection}](
+                        std::optional<std::chrono::steady_clock::time_point> deadline)
+                    {
+                        if (const auto state = weak_state.lock())
+                            state->publish(weak_connection, deadline);
+                    });
+                if (!connection->register_cid(header->dcid) ||
+                    !connection->set_original_destination_connection_id(*original_dcid))
+                    co_return;
+                {
+                    concurrent_containers::exclusive_latch_guard state_guard{state_latch_};
+                    if (!timers_->active)
+                        co_return;
+                    const auto [route, inserted] = connections_.emplace(header->dcid, connection);
+                    if (!inserted)
+                        connection = route->second;
+                }
+                if (dispatcher_)
+                    promote_pending_inbox(header->dcid, *connection);
+            }
+        }
+        else
+        {
+            const auto cid_length = transport_config_.cid_length;
+
+            if ((first & 0x40U) == 0U || buffer.size() < 1U + cid_length + 4U)
+                co_return;
+            const auto dcid = quic::connection_id{buffer.data() + 1U, cid_length};
+
+            {
+                concurrent_containers::shared_latch_guard state_guard{state_latch_};
+                if (const auto route = connections_.find(dcid);
+                    route != connections_.end())
+                    connection = route->second;
+            }
+
+            if (!connection)
+            {
+                co_await send_stateless_reset(buffer, dcid, sender);
+                co_return;
+            }
+        }
+        if (!connection)
+            co_return;
+        auto processed = co_await connection->process_datagram(buffer, sender);
+        if (!running_)
+            co_return;
+        if (!processed)
+        {
+
+            refresh_connection_routes(connection);
+            co_return;
+        }
+        ensure_http3_session(connection);
+        refresh_connection_routes(connection);
+    }
+
+    void record_receive_buffer(const udp_received_datagram& incoming) noexcept
+    {
+        if (incoming.bytes.is_pooled())
+            pooled_receive_datagrams_.fetch_add(1U, std::memory_order_relaxed);
+        else
+            heap_receive_datagrams_.fetch_add(1U, std::memory_order_relaxed);
+    }
+
+    struct connection_inbox
+    {
+        // Overflow deliberately behaves like UDP loss, which QUIC already
+        // recovers through ACK/loss detection. Capacity is configured before
+        // start and constrained again by the listener-wide budget.
+        explicit connection_inbox(std::size_t queue_capacity)
+            : datagrams(queue_capacity) {}
+
+        concurrent_containers::bounded_mpmc_queue<udp_received_datagram> datagrams;
+        std::atomic_flag scheduled{};
+        std::atomic<quic::quic_connection*> promoted_connection{};
+        std::chrono::steady_clock::time_point created_at{
+            std::chrono::steady_clock::now()};
+    };
+
+    struct inbox_key
+    {
+        quic::quic_connection* connection{};
+        quic::connection_id pending_cid;
+
+        auto operator==(const inbox_key&) const -> bool = default;
+    };
+
+    struct inbox_key_hash
+    {
+        auto operator()(const inbox_key& key) const noexcept -> std::size_t
+        {
+            if (key.connection)
+                return std::hash<quic::quic_connection*>{}(key.connection);
+            return std::hash<quic::connection_id>{}(key.pending_cid);
+        }
+    };
+
+    auto record_inbox_drop(std::atomic<std::uint64_t>& reason) -> void
+    {
+        reason.fetch_add(1U, std::memory_order_relaxed);
+        const auto dropped = dropped_inbox_datagrams_.fetch_add(
+                                 1U, std::memory_order_relaxed) +
+            1U;
+        // Power-of-two sampling keeps overload visible without turning the
+        // drop path into a logger bottleneck.
+        if ((dropped & (dropped - 1U)) == 0U)
+            logger::warn{"HTTP/3 inbox overload; dropped {} UDP datagrams", dropped};
+    }
+
+    [[nodiscard]] auto reserve_inbox_datagram() -> bool
+    {
+        const auto previous = inbox_budget_->queued.fetch_add(
+            1U, std::memory_order_acq_rel);
+        if (previous >= inbox_limits_.max_queued_datagrams)
+        {
+            inbox_budget_->queued.fetch_sub(1U, std::memory_order_release);
+            record_inbox_drop(inbox_budget_->budget_dropped);
+            return false;
+        }
+        auto observed = inbox_budget_->peak_queued.load(std::memory_order_relaxed);
+        const auto current = previous + 1U;
+        while (current > observed &&
+            !inbox_budget_->peak_queued.compare_exchange_weak(observed, current,
+                std::memory_order_relaxed, std::memory_order_relaxed))
+        {}
+        return true;
+    }
+
+    auto release_inbox_datagram() noexcept -> void
+    {
+        inbox_budget_->queued.fetch_sub(1U, std::memory_order_release);
+    }
+
+    auto promote_pending_inbox(const quic::connection_id& pending_cid,
+        quic::quic_connection& connection) -> void
+    {
+        if (!inboxes_)
+            std::terminate();
+        const auto pending_key = inbox_key{nullptr, pending_cid};
+        const auto pending = inboxes_->find(pending_key);
+        if (!pending)
+            return;
+        // Keep the pending CID as an alias until the connection closes. A
+        // dispatcher which had already selected the Initial route can still
+        // enqueue safely, but both keys share one scheduled flag and therefore
+        // one serial QUIC execution lane.
+        (*pending)->promoted_connection.store(std::addressof(connection),
+            std::memory_order_release);
+        const inbox_key connection_key{std::addressof(connection), {}};
+        if (inboxes_->try_emplace(connection_key, *pending))
+            return;
+        const auto existing = inboxes_->find(connection_key);
+        if (!existing || *existing != *pending)
+            logger::error{"HTTP/3 failed to preserve the pending inbox during CID promotion"};
+    }
+
+    auto remove_connection_inboxes(quic::quic_connection& connection) -> void
+    {
+        if (!inboxes_)
+            std::terminate();
+        const auto removed = inboxes_->erase_if([target = std::addressof(connection)](
+                                                    const inbox_key& key,
+                                                    const std::shared_ptr<connection_inbox>& inbox)
+            {
+                return key.connection == target ||
+                    inbox->promoted_connection.load(std::memory_order_acquire) == target;
+            });
+        if (removed != 0U)
+            inbox_budget_->active_inboxes.fetch_sub(1U, std::memory_order_release);
+    }
+
+    auto enqueue(quic::quic_connection* connection,
+        const quic::connection_id& dcid, udp_received_datagram incoming) -> void
+    {
+        if (!inboxes_)
+            std::terminate();
+        if (!running_)
+            return;
+        const inbox_key key{connection, connection ? quic::connection_id{} : dcid};
+        auto inbox = inboxes_->find(key);
+        if (!inbox)
+        {
+            const auto previous = inbox_budget_->active_inboxes.fetch_add(1U,
+                std::memory_order_acq_rel);
+            if (previous >= inbox_limits_.max_connection_inboxes)
+            {
+                inbox_budget_->active_inboxes.fetch_sub(1U, std::memory_order_release);
+                record_inbox_drop(inbox_budget_->creation_dropped);
+                return;
+            }
+            auto candidate = std::make_shared<connection_inbox>(
+                inbox_limits_.per_connection_datagrams);
+            if (inboxes_->try_emplace(key, candidate))
+            {
+                if (connection == nullptr)
+                {
+                    maintenance_wake_guard wake_guard{timers_};
+                    concurrent_containers::exclusive_latch_guard state_guard{state_latch_};
+                    schedule_maintenance_locked(candidate->created_at + std::chrono::seconds{10});
+                }
+                inbox = std::move(candidate);
+            }
+            else
+            {
+                inbox_budget_->active_inboxes.fetch_sub(1U, std::memory_order_release);
+                inbox = inboxes_->find(key);
+            }
+        }
+        if (!inbox)
+        {
+            record_inbox_drop(inbox_budget_->creation_dropped);
+            return;
+        }
+        if (!reserve_inbox_datagram())
+            return;
+        if (!(*inbox)->datagrams.try_enqueue(std::move(incoming)))
+        {
+            release_inbox_datagram();
+            record_inbox_drop(inbox_budget_->capacity_dropped);
+            return;
+        }
+
+        bool schedule{};
+        {
+            concurrent_containers::exclusive_latch_guard guard{state_latch_};
+            if (timers_->active && !(*inbox)->scheduled.test_and_set(std::memory_order_acq_rel))
+            {
+                timers_->loop_completion.add(1U);
+                schedule = true;
+            }
+        }
+        if (schedule)
+            spawn(context_, drain_inbox(std::move(*inbox), timers_));
+        inbox_enqueued_datagrams_.fetch_add(1U, std::memory_order_relaxed);
+    }
+
+    [[nodiscard]] auto drain_inbox(std::shared_ptr<connection_inbox> inbox,
+        std::shared_ptr<connection_timer_state> timers)
+        -> task<void>
+    {
+        loop_completion_guard completion{timers->loop_completion};
+        // A single busy connection must not retain an executor worker until
+        // its queue happens to empty. Keep its QUIC state serialised through
+        // `scheduled`, but periodically yield the worker so timers, control
+        // streams and other connections can make progress.
+        constexpr std::size_t drain_quantum = 64U;
+        std::size_t processed_in_quantum{};
+        while (timers->active.load(std::memory_order_acquire))
+        {
+            auto incoming = inbox->datagrams.try_dequeue();
+            if (!incoming)
+            {
+                inbox->scheduled.clear(std::memory_order_release);
+                // A producer can enqueue between the failed dequeue and the
+                // clear above. Reclaim scheduling ownership if that happened;
+                // otherwise no work can be stranded without a drain task.
+                if (inbox->datagrams.approximate_size() != 0U &&
+                    !inbox->scheduled.test_and_set(std::memory_order_acq_rel))
+                    continue;
+                co_return;
+            }
+            release_inbox_datagram();
+            discard_expired_reset_routes();
+            co_await process_incoming(std::move(*incoming));
+            if (++processed_in_quantum == drain_quantum &&
+                inbox->datagrams.approximate_size() != 0U)
+            {
+                processed_in_quantum = 0U;
+                co_await post_awaitable{context_};
+            }
+        }
+        inbox->scheduled.clear(std::memory_order_release);
+    }
+
+    [[nodiscard]] auto run_loop(std::shared_ptr<connection_timer_state> timers) -> task<void>
+    {
+        loop_completion_guard completion{timers->loop_completion};
+        while (timers->active.load(std::memory_order_acquire))
+        {
+            discard_expired_reset_routes();
+            // RIO owns a persistent receive ring and can safely return a
+            // larger burst. The IOCP fallback drains a modest batch, then
+            // yields after every packet so session/control work cannot be
+            // starved by a permanently readable UDP socket.
+            const bool registered_io = socket_.native_socket().registered_io_enabled();
+            const auto receive_batch_size = registered_io ? std::size_t{32U}
+                                                          : std::size_t{8U};
+            auto received = co_await async_recvfrom_batch(context_,
+                socket_.native_socket(), receive_batch_size,
+                static_cast<std::size_t>(transport_config_.max_udp_payload_size),
+                listener_receive_wakeup_);
+            if (!timers->active.load(std::memory_order_acquire))
+                co_return;
+            if (!received)
+            {
+
+                if (!running_)
+                    break;
+                continue;
+            }
+
+            for (std::size_t index{}; index < received->size(); ++index)
+            {
+                auto& incoming = (*received)[index];
+                record_receive_buffer(incoming);
+                co_await process_incoming(std::move(incoming));
+                if (!registered_io && index + 1U < received->size())
+                    co_await post_awaitable{context_};
+            }
+
+            // A readiness backend can keep completing full receive batches
+            // synchronously while the UDP socket remains readable. Yield only
+            // after a saturated batch: a short batch will suspend naturally
+            // on the next receive, while unconditionally posting here adds a
+            // full reactor turn to every low-latency request/response.
+            if (received->size() == receive_batch_size && receive_batch_size > 1U)
+                co_await post_awaitable{context_};
+        }
+    }
+
+    [[nodiscard]] auto run_timer_loop(std::shared_ptr<connection_timer_state> timers) -> task<void>
+    {
+        loop_completion_guard completion{timers->loop_completion};
+        while (running_)
+        {
+            {
+                concurrent_containers::shared_latch_guard guard{timers->latch};
+                if (!timers->active)
+                    co_return;
+            }
+            discard_expired_reset_routes();
+            const auto now = std::chrono::steady_clock::now();
+            std::vector<std::shared_ptr<quic::quic_connection>> expired;
+            {
+                concurrent_containers::exclusive_latch_guard state_guard{timers->latch};
+                while (!timers->queue.empty() && timers->queue.top().deadline <= now)
+                {
+                    auto entry = timers->queue.top();
+                    timers->queue.pop();
+                    auto connection = entry.connection.lock();
+                    if (!connection)
+                        continue;
+                    const auto scheduled = timers->generations.find(connection.get());
+                    if (scheduled == timers->generations.end() ||
+                        scheduled->second.generation != entry.generation ||
+                        scheduled->second.deadline != entry.deadline)
+                        continue;
+                    timers->generations.erase(scheduled);
+                    expired.push_back(std::move(connection));
+                }
+            }
+            for (auto& connection : expired)
+            {
+                co_await connection->async_poll_timers();
+                {
+                    concurrent_containers::shared_latch_guard guard{timers->latch};
+                    if (!timers->active)
+                        co_return;
+                }
+                // Idle/PTO processing can retire a connection without any
+                // further peer datagram. Reconcile ownership here as well as
+                // on receive, otherwise CID routes retain timed-out peers.
+                refresh_connection_routes(connection);
+                }
+
+            // Release the last expired batch before sleeping. The routes
+            // may already be gone, and the next maintenance deadline can be
+            // much later than the connection's actual retirement.
+            expired.clear();
+
+            // No periodic scan: sleep until the heap head. Publishing an
+            // earlier deadline cancels this wait, so ACK/PTO work remains
+            // timely without a 1ms polling cadence.
+            const auto now_after_poll = std::chrono::steady_clock::now();
+            std::chrono::steady_clock::time_point deadline;
+            {
+                concurrent_containers::exclusive_latch_guard state_guard{timers->latch};
+                if (!timers->active)
+                    co_return;
+                deadline = timers->queue.empty()
+                    ? now_after_poll + std::chrono::hours{24}
+                    : std::max(timers->queue.top().deadline, now_after_poll);
+                if (timers->maintenance_deadline)
+                    deadline = std::min(deadline, std::max(*timers->maintenance_deadline, now_after_poll));
+                timers->wakeup.reset();
+                timers->wait_deadline = deadline;
+            }
+            (void)co_await async_timer_wait(context_, deadline - now_after_poll,
+                timers->wakeup);
+            {
+                concurrent_containers::exclusive_latch_guard state_guard{timers->latch};
+                timers->wait_deadline.reset();
+            }
+        }
+    }
+
+    [[nodiscard]] auto run_dispatch_loop(std::shared_ptr<connection_timer_state> timers) -> task<void>
+    {
+        loop_completion_guard completion{timers->loop_completion};
+        while (timers->active.load(std::memory_order_acquire))
+        {
+            auto received = co_await async_recvfrom_batch(context_,
+                socket_.native_socket(), 64U,
+                static_cast<std::size_t>(transport_config_.max_udp_payload_size),
+                listener_receive_wakeup_);
+            if (!timers->active.load(std::memory_order_acquire))
+                co_return;
+            if (!received)
+            {
+                if (!running_)
+                    break;
+                continue;
+            }
+            for (auto& incoming : *received)
+            {
+                record_receive_buffer(incoming);
+                if (incoming.bytes.empty())
+                    continue;
+                quic::connection_id dcid;
+                bool retain_pending{};
+                const auto first = std::to_integer<std::uint8_t>(incoming.bytes.front());
+                if ((first & 0x80U) != 0U)
+                {
+                    auto header = quic::decode_long_header(incoming.bytes);
+                    if (!header)
+                        continue;
+                    dcid = header->dcid;
+                    retain_pending = header->type == quic::packet_type::initial;
+                }
+                else
+                {
+                    const auto cid_length = transport_config_.cid_length;
+                    if ((first & 0x40U) == 0U ||
+                        incoming.bytes.size() < 1U + cid_length + 4U)
+                        continue;
+                    dcid = quic::connection_id{
+                        incoming.bytes.data() + 1U, cid_length};
+                }
+                if (auto target = dispatcher_->select(dcid, retain_pending))
+                    target->owner->enqueue(
+                        target->connection, dcid, std::move(incoming));
+            }
+        }
+    }
+
+    io_context& context_;
+    io_context& socket_context_;
+    ssl_context& tls_;
+    endpoint endpoint_;
+    server_request_handler handler_;
+    async_server_request_handler async_handler_;
+    streaming_server_request_handler streaming_handler_;
+    async_webtransport_handler webtransport_handler_;
+    server_push_cancellation_observer push_cancellation_observer_;
+    udp::udp_socket socket_;
+    udp::udp_socket* datagram_socket_{};
+    // `run_loop` and `run_timer_loop` can be resumed by different IOCP
+    // workers.  The maps and heap below form one structural control plane;
+    // guard only their short, non-awaiting mutations with the project-owned
+    // atomic latch. Packet processing and UDP I/O remain outside this latch.
+    // Generations share this lock, so concurrent statistics never locks an
+    // obsolete control-plane latch while start replaces the timer state.
+    std::shared_ptr<concurrent_containers::atomic_rw_latch> state_latch_owner_{
+        std::make_shared<concurrent_containers::atomic_rw_latch>()};
+    concurrent_containers::atomic_rw_latch& state_latch_{*state_latch_owner_};
+    std::shared_ptr<connection_timer_state> timers_{
+        std::make_shared<connection_timer_state>(state_latch_owner_)};
+    std::atomic<std::size_t> active_connections_{};
+    std::unordered_map<quic::connection_id, std::shared_ptr<quic::quic_connection>> connections_;
+    struct published_connection_route
+    {
+        std::uint64_t generation{};
+        bool active{true};
+    };
+    std::unordered_map<quic::quic_connection*, published_connection_route> published_route_generations_;
+    // Owns the outstanding listener UDP receive. It is deliberately distinct
+    // from per-connection cancellation so server shutdown never depends on
+    // closing a descriptor to wake a platform readiness wait.
+    cancel_token listener_receive_wakeup_;
+    cancel_token listener_send_wakeup_;
+    async_mutex listener_send_mutex_;
+    std::unordered_map<quic::quic_connection*, std::shared_ptr<http3_server_session>> sessions_;
+    std::unordered_map<quic::connection_id, stateless_reset_route> reset_routes_;
+    std::unordered_map<quic::connection_id, std::chrono::steady_clock::time_point> pending_route_expirations_;
+    quic::quic_config transport_config_{};
+    http3_settings h3_settings_{};
+    request_body_stream_options request_body_options_{};
+    http3_inbox_limits inbox_limits_{};
+    std::shared_ptr<detail::retry_token_manager> retry_tokens_;
+    std::shared_ptr<dispatch_state> dispatcher_;
+    std::shared_ptr<inbox_budget_state> inbox_budget_{
+        std::make_shared<inbox_budget_state>()};
+    // Slot zero is reserved for the shared-socket dispatcher.  Each Windows
+    // shard receives its own epoch slot before the listener starts.
+    std::size_t route_epoch_slot_{};
+    std::vector<std::unique_ptr<impl>> shards_;
+    using inbox_map = concurrent_containers::atomic_hash_map<inbox_key,
+        std::shared_ptr<connection_inbox>, inbox_key_hash>;
+    // Only Windows shared-socket workers dispatch across execution contexts.
+    // Linux SO_REUSEPORT shards process their own socket and never allocate
+    // this fixed-capacity table.
+    std::unique_ptr<inbox_map> inboxes_;
+    bool processor_only_{};
+    bool shared_port_{};
+    std::atomic<bool> running_{false};
+    std::atomic<std::uint64_t> inbox_enqueued_datagrams_{};
+    std::atomic<std::uint64_t> dropped_inbox_datagrams_{};
+    std::atomic<std::uint64_t> pooled_receive_datagrams_{};
+    std::atomic<std::uint64_t> heap_receive_datagrams_{};
+};
+
+http3_server::http3_server(io_context& context, ssl_context& tls, endpoint endpoint,
+    server_request_handler handler)
+    : impl_(std::make_unique<impl>(context, tls, std::move(endpoint), std::move(handler))) {}
+
+http3_server::http3_server(io_context& context, ssl_context& tls, endpoint endpoint,
+    async_server_request_handler handler)
+    : impl_(std::make_unique<impl>(context, tls, std::move(endpoint), std::move(handler))) {}
+
+http3_server::http3_server(io_context& context, ssl_context& tls, endpoint endpoint,
+    streaming_server_request_handler handler)
+    : impl_(std::make_unique<impl>(context, tls, std::move(endpoint), std::move(handler))) {}
+
+http3_server::http3_server(io_context& context, ssl_context& tls, endpoint endpoint,
+    async_webtransport_handler handler)
+    : impl_(std::make_unique<impl>(context, tls, std::move(endpoint), std::move(handler))) {}
+
+http3_server::http3_server(io_context& context, ssl_context& tls, endpoint endpoint,
+    http3_server_handlers handlers)
+    : impl_(std::make_unique<impl>(context, tls, std::move(endpoint), std::move(handlers))) {}
+
+http3_server::http3_server(server_context& context, ssl_context& tls,
+    endpoint endpoint, server_request_handler handler)
+    : impl_(std::make_unique<impl>(context, tls, std::move(endpoint),
+          std::move(handler))) {}
+
+http3_server::http3_server(server_context& context, ssl_context& tls,
+    endpoint endpoint, async_server_request_handler handler)
+    : impl_(std::make_unique<impl>(context, tls, std::move(endpoint),
+          std::move(handler))) {}
+
+http3_server::http3_server(server_context& context, ssl_context& tls,
+    endpoint endpoint, streaming_server_request_handler handler)
+    : impl_(std::make_unique<impl>(context, tls, std::move(endpoint),
+          std::move(handler))) {}
+
+http3_server::http3_server(server_context& context, ssl_context& tls,
+    endpoint endpoint, async_webtransport_handler handler)
+    : impl_(std::make_unique<impl>(context, tls, std::move(endpoint),
+          std::move(handler))) {}
+
+http3_server::http3_server(server_context& context, ssl_context& tls,
+    endpoint endpoint, http3_server_handlers handlers)
+    : impl_(std::make_unique<impl>(context, tls, std::move(endpoint),
+          std::move(handlers))) {}
+
+http3_server::~http3_server() = default;
+
+auto http3_server::start() -> std::expected<void, std::error_code>
+{
+    return impl_->start();
+}
+
+auto http3_server::set_push_cancellation_observer(
+    server_push_cancellation_observer observer)
+    -> std::expected<void, std::error_code>
+{
+    return impl_->set_push_cancellation_observer(std::move(observer));
+}
+
+auto http3_server::set_max_datagram_frame_size(std::uint64_t bytes)
+    -> std::expected<void, std::error_code>
+{
+    return impl_->set_max_datagram_frame_size(bytes);
+}
+
+auto http3_server::set_multipath_initial_max_path_id(std::uint32_t maximum_path_id)
+    -> std::expected<void, std::error_code>
+{
+    return impl_->set_multipath_initial_max_path_id(maximum_path_id);
+}
+
+auto http3_server::set_path_mtu_discovery(std::uint64_t maximum_payload,
+    std::chrono::milliseconds probe_interval,
+    std::chrono::milliseconds initial_probe_delay) -> std::expected<void, std::error_code>
+{
+    return impl_->set_path_mtu_discovery(maximum_payload, probe_interval,
+        initial_probe_delay);
+}
+
+auto http3_server::set_max_udp_payload_size(std::uint64_t bytes)
+    -> std::expected<void, std::error_code>
+{
+    return impl_->set_max_udp_payload_size(bytes);
+}
+
+auto http3_server::set_qpack_settings(std::uint64_t max_table_capacity,
+    std::uint64_t max_blocked_streams) -> std::expected<void, std::error_code>
+{
+    return impl_->set_qpack_settings(max_table_capacity, max_blocked_streams);
+}
+
+auto http3_server::set_request_body_limits(request_body_stream_options options)
+    -> std::expected<void, std::error_code>
+{
+    return impl_->set_request_body_limits(options);
+}
+
+auto http3_server::set_idle_timeout(std::chrono::milliseconds timeout)
+    -> std::expected<void, std::error_code>
+{
+    return impl_->set_idle_timeout(timeout);
+}
+
+auto http3_server::set_inbox_limits(http3_inbox_limits limits)
+    -> std::expected<void, std::error_code>
+{
+    return impl_->set_inbox_limits(limits);
+}
+
+auto http3_server::set_early_data_tickets(
+    std::shared_ptr<quic::server_early_data_ticket_callbacks> callbacks,
+    std::vector<std::byte> context) -> std::expected<void, std::error_code>
+{
+    return impl_->set_early_data_tickets(std::move(callbacks), std::move(context));
+}
+
+auto http3_server::stop() -> task<void>
+{
+    co_await impl_->stop();
+}
+
+auto http3_server::is_running() const noexcept -> bool
+{
+    return impl_->is_running();
+}
+
+auto http3_server::statistics() const noexcept -> http3_server_statistics
+{
+    return impl_->statistics();
+}
+
+auto make_http3_server(io_context& ctx, ssl_context& tls, endpoint ep,
+    server_request_handler handler) -> std::unique_ptr<http3_server>
+{
+    return std::make_unique<http3_server>(ctx, tls, std::move(ep), std::move(handler));
+}
+
+auto make_http3_server(io_context& ctx, ssl_context& tls, endpoint ep,
+    async_server_request_handler handler) -> std::unique_ptr<http3_server>
+{
+    return std::make_unique<http3_server>(ctx, tls, std::move(ep), std::move(handler));
+}
+
+auto make_http3_server(io_context& ctx, ssl_context& tls, endpoint ep,
+    streaming_server_request_handler handler) -> std::unique_ptr<http3_server>
+{
+    return std::make_unique<http3_server>(ctx, tls, std::move(ep), std::move(handler));
+}
+
+auto make_http3_server(io_context& ctx, ssl_context& tls, endpoint ep,
+    async_webtransport_handler handler) -> std::unique_ptr<http3_server>
+{
+    return std::make_unique<http3_server>(ctx, tls, std::move(ep), std::move(handler));
+}
+
+auto make_http3_server(io_context& ctx, ssl_context& tls, endpoint ep,
+    http3_server_handlers handlers) -> std::unique_ptr<http3_server>
+{
+    return std::make_unique<http3_server>(ctx, tls, std::move(ep), std::move(handlers));
+}
+
+auto make_http3_server(server_context& ctx, ssl_context& tls, endpoint ep,
+    server_request_handler handler) -> std::unique_ptr<http3_server>
+{
+    return std::make_unique<http3_server>(ctx, tls, std::move(ep),
+        std::move(handler));
+}
+
+auto make_http3_server(server_context& ctx, ssl_context& tls, endpoint ep,
+    async_server_request_handler handler) -> std::unique_ptr<http3_server>
+{
+    return std::make_unique<http3_server>(ctx, tls, std::move(ep),
+        std::move(handler));
+}
+
+auto make_http3_server(server_context& ctx, ssl_context& tls, endpoint ep,
+    streaming_server_request_handler handler) -> std::unique_ptr<http3_server>
+{
+    return std::make_unique<http3_server>(ctx, tls, std::move(ep), std::move(handler));
+}
+
+auto make_http3_server(server_context& ctx, ssl_context& tls, endpoint ep,
+    async_webtransport_handler handler) -> std::unique_ptr<http3_server>
+{
+    return std::make_unique<http3_server>(ctx, tls, std::move(ep), std::move(handler));
+}
+
+auto make_http3_server(server_context& ctx, ssl_context& tls, endpoint ep,
+    http3_server_handlers handlers) -> std::unique_ptr<http3_server>
+{
+    return std::make_unique<http3_server>(ctx, tls, std::move(ep), std::move(handlers));
+}
+
+} // namespace cnetmod::http::v3

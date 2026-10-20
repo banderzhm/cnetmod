@@ -1,0 +1,1 @@
+taskset -c 16-31 /tmp/cnetmod-h3-loadgen169/src/h2load --alpn-list=h3 --tls13-ciphers=TLS_AES_128_GCM_SHA256 --groups=X25519 'https://127.0.0.1:8443/baseline2?a=1&b=1' -c 64 -m 64 -t 16 -D 5s --warm-up-time=2s

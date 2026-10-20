@@ -1,0 +1,26 @@
+DEBUG:asyncio:Using selector: EpollSelector
+DEBUG:quic:[092ad6be9765d60c] TLS State.CLIENT_HANDSHAKE_START -> State.CLIENT_EXPECT_SERVER_HELLO
+DEBUG:quic:[1e16c9bb15a582e2] TLS State.CLIENT_HANDSHAKE_START -> State.CLIENT_EXPECT_SERVER_HELLO
+DEBUG:quic:[1e16c9bb15a582e2] Loss detection triggered
+DEBUG:quic:[1e16c9bb15a582e2] Scheduled CRYPTO data of INITIAL packets 0 for retransmission
+INFO:quic:[1e16c9bb15a582e2] Retrying with token (75 bytes)
+DEBUG:quic:[1e16c9bb15a582e2] TLS State.CLIENT_HANDSHAKE_START -> State.CLIENT_EXPECT_SERVER_HELLO
+DEBUG:quic:[1e16c9bb15a582e2] QuicConnectionState.FIRSTFLIGHT -> QuicConnectionState.CONNECTED
+INFO:quic:[1e16c9bb15a582e2] Negotiated protocol version 0x00000001 (VERSION_1)
+DEBUG:quic:[1e16c9bb15a582e2] TLS State.CLIENT_EXPECT_SERVER_HELLO -> State.CLIENT_EXPECT_ENCRYPTED_EXTENSIONS
+DEBUG:quic:[1e16c9bb15a582e2] TLS State.CLIENT_EXPECT_ENCRYPTED_EXTENSIONS -> State.CLIENT_EXPECT_CERTIFICATE_REQUEST_OR_CERTIFICATE
+DEBUG:quic:[1e16c9bb15a582e2] TLS State.CLIENT_EXPECT_CERTIFICATE_REQUEST_OR_CERTIFICATE -> State.CLIENT_EXPECT_CERTIFICATE_VERIFY
+DEBUG:quic:[1e16c9bb15a582e2] TLS State.CLIENT_EXPECT_CERTIFICATE_VERIFY -> State.CLIENT_EXPECT_FINISHED
+DEBUG:quic:[1e16c9bb15a582e2] Discarding epoch Epoch.INITIAL
+DEBUG:quic:[1e16c9bb15a582e2] TLS State.CLIENT_EXPECT_FINISHED -> State.CLIENT_POST_HANDSHAKE
+INFO:quic:[1e16c9bb15a582e2] ALPN negotiated protocol h3
+DEBUG:quic:[1e16c9bb15a582e2] Stream 3 created by peer
+DEBUG:quic:[1e16c9bb15a582e2] Stream 7 created by peer
+DEBUG:quic:[1e16c9bb15a582e2] Stream 11 created by peer
+DEBUG:quic:[1e16c9bb15a582e2] Stream 0 discarded
+INFO:quic:[1e16c9bb15a582e2] Connection close sent (code 0x0, reason )
+DEBUG:quic:[1e16c9bb15a582e2] QuicConnectionState.CONNECTED -> QuicConnectionState.CLOSING
+DEBUG:quic:[1e16c9bb15a582e2] Discarding epoch Epoch.HANDSHAKE
+DEBUG:quic:[1e16c9bb15a582e2] Discarding epoch Epoch.ONE_RTT
+DEBUG:quic:[1e16c9bb15a582e2] QuicConnectionState.CLOSING -> QuicConnectionState.TERMINATED
+PASS zero-ingress 35s cleanup: [0, 4, 0, 0, 0, 0] -> [0, 0, 0, 0, 0, 0]

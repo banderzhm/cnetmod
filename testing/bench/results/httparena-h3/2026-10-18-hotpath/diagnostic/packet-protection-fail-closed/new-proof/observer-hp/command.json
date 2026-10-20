@@ -1,0 +1,15 @@
+[
+  "/var/tmp/cnetmod-h3-crypto-new-real-fault/quic_packet_failure_server",
+  "--port",
+  "41537",
+  "--mode",
+  "observer",
+  "--cert",
+  "/var/tmp/cnetmod-h3-crypto-new-proof/observer-hp/cert.pem",
+  "--key",
+  "/var/tmp/cnetmod-h3-crypto-new-proof/observer-hp/key.pem",
+  "--listening-report",
+  "/var/tmp/cnetmod-h3-crypto-new-proof/observer-hp/listening",
+  "--result-report",
+  "/var/tmp/cnetmod-h3-crypto-new-proof/observer-hp/result"
+]

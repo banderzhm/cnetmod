@@ -72,6 +72,11 @@ class cluster_slot_cache
 {
 public:
     /**
+     * @brief Destroys cached endpoint values out of line.
+     */
+    ~cluster_slot_cache();
+
+    /**
      * @brief Removes every cached slot mapping.
      */
     void clear();

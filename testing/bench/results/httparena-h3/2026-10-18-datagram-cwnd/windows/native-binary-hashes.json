@@ -1,0 +1,102 @@
+{
+  "test_udp_sendto_on_cancel": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_udp_sendto_on_cancel.exe",
+    "sha256": "44a87ca32437d3d12258df172ce3d5fc5a417ea39389e3ddfa6af4028af7b8aa"
+  },
+  "quic_retire_stream_server": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\bin\\Release\\quic_retire_stream_server.exe",
+    "sha256": "c38b6605705e8257254c9368fd0062efcbd6fe4ff0975070c5e072303a63fcbd"
+  },
+  "quic_pmtu_cc_server": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\bin\\Release\\quic_pmtu_cc_server.exe",
+    "sha256": "f403f2217dc78ab28beefdef5f3b9ee0e97d590549b17c94c08e852104c17d31"
+  },
+  "quic_datagram_cc_server": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\bin\\Release\\quic_datagram_cc_server.exe",
+    "sha256": "33c478820977db5ed1b036dbec5da91eda3a6304bed4b8f9b9f81543d3c4fdaa"
+  },
+  "test_concurrent_containers": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_concurrent_containers.exe",
+    "sha256": "28db22bffba936081b2b1126f8d7140b27506c1fa2fa7fcc859ea8f8650b94b1"
+  },
+  "test_deadline": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_deadline.exe",
+    "sha256": "70cf09c6f8ed300134a6e3f2f60db2c020fd22bd91a267698b411fea0fe81c15"
+  },
+  "test_task_group": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_task_group.exe",
+    "sha256": "d2a4dd6a6be136c24290e389ba2cd39a65060e61a34b7b4a7cb65fb5dcfde599"
+  },
+  "test_wait_group": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_wait_group.exe",
+    "sha256": "7062f13f896994213f7bda8a44bc4c152bb789ba5b607209783ad4767861578c"
+  },
+  "test_task": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_task.exe",
+    "sha256": "237288e25468ba8539a1393396285111196c8b888014106cf4e97c7a846ff650"
+  },
+  "test_udp_batch": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_udp_batch.exe",
+    "sha256": "4785191e7e187fa49b7873a68cb2d503f7af664a3cf815655a1bdd6951ee027e"
+  },
+  "test_quic_varint": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_quic_varint.exe",
+    "sha256": "f7537ae16dc58a76ed50eb73c42377e288ad5f073916ab7abbdaf78debf4afea"
+  },
+  "test_quic_frame": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_quic_frame.exe",
+    "sha256": "dd268e47334aae8963480b123d5143cf0fffcbe00afc8445f5ce08be6c72bfcf"
+  },
+  "test_quic_packet": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_quic_packet.exe",
+    "sha256": "04b607371321168fd172f45ed772ef8477c5aed24ee3760a6032dcb584a07bd7"
+  },
+  "test_quic_stream": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_quic_stream.exe",
+    "sha256": "576f97fadafd4c31addf4934fd01203f75e2715dd965225743a2e917f524c673"
+  },
+  "test_quic_loss_detection": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_quic_loss_detection.exe",
+    "sha256": "c5cbec86b7e35016510b40b0296e2982a9dfdd8601ca6c1b32bf506b40a631c5"
+  },
+  "test_quic_congestion": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_quic_congestion.exe",
+    "sha256": "68d4be68bd10b1048e190b5464def88b43d0402ed5fc19718d08dc7fc6bb0e6f"
+  },
+  "test_quic_early_data": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_quic_early_data.exe",
+    "sha256": "316f1f364b254c398e71088dd68410a8f81b77b0f4fda6b10253bc9e4ee84a3e"
+  },
+  "test_http3_qpack": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_http3_qpack.exe",
+    "sha256": "cfd6d1b8ed28d91e47bb2e6259004ee5c60637e1e485f9211b213e41fde6dbc5"
+  },
+  "test_http3_frame": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_http3_frame.exe",
+    "sha256": "e2e437587a7bbc0d1dc723447087f2b3739991a160308451e544ca3181b03a89"
+  },
+  "h3_interop_server": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\bin\\Release\\h3_interop_server.exe",
+    "sha256": "199842bcfa73501c60fd599e23dd99072c34310b71a97fbcf5c6576bcde18cc7"
+  },
+  "h3_interop_client": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\bin\\Release\\h3_interop_client.exe",
+    "sha256": "bb0ea572ae9213d320bc01f6210f00bcef77e835c88e886e1a956f47d59e4ecc"
+  },
+  "http3_e2e_server": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\http3\\Release\\http3_e2e_server.exe",
+    "sha256": "1c091f7aa9622107eb0145049dc7eeab6a6c1a411c0495f0bc8b0395a4b93e61"
+  },
+  "http_client_http3_e2e": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\http3\\Release\\http_client_http3_e2e.exe",
+    "sha256": "fd0626f30c3c579495712a0dfaee80689d8e81d2127f7741f3a588ea37dc58a2"
+  },
+  "http3_migration_e2e": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\http3\\Release\\http3_migration_e2e.exe",
+    "sha256": "a079e80137594b53316c6a31e7b0d48bf096060a3b9d9fa223d09dc74857f0bc"
+  },
+  "arena_h3_server": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\bench\\Release\\arena_h3_server.exe",
+    "sha256": "4feec3d0337e995478334f62c3c98101ec100a751733b060c345481521aee4c4"
+  }
+}

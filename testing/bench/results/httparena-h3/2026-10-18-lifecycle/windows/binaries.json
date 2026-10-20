@@ -1,0 +1,12 @@
+[
+  {
+    "Algorithm": "SHA256",
+    "Hash": "2BB5FEA64A57411C862B854EC1B13780ABD2795745FAF4A1227017F504B17D0A",
+    "Path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\bin\\Release\\h3_interop_server.exe"
+  },
+  {
+    "Algorithm": "SHA256",
+    "Hash": "FA72E146969FCA6E88394DC1CBD5C94745A3CCF064A1F29D460F1AF47E5B3AAC",
+    "Path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\bench\\Release\\arena_h3_server.exe"
+  }
+]

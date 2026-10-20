@@ -1,0 +1,110 @@
+[
+  {
+    "run": 1,
+    "returncode": 0,
+    "server_cpu_seconds": 53.06999999999999,
+    "wall_seconds_including_warmup": 7.091961943006027,
+    "server_cpu_percent_including_warmup": 748.3119682041827,
+    "total": 1599447,
+    "started": 1599447,
+    "done": 1599447,
+    "succeeded": 1599447,
+    "failed": 0,
+    "errored": 0,
+    "timeout": 0,
+    "status_codes": {
+      "2xx": 1599699,
+      "3xx": 0,
+      "4xx": 0,
+      "5xx": 0
+    },
+    "reported_wall_seconds": 7.01,
+    "seconds": 5,
+    "rps_2xx": 319939.8,
+    "error_rate": 0.0,
+    "status_counter_delta": -252,
+    "valid": true,
+    "latency": {
+      "source": "h2load reservoir samples",
+      "minimum_us": 740.0,
+      "maximum_us": 144090.0,
+      "p50_us": 10760.0,
+      "p95_us": 25150.0,
+      "p99_us": 38740.0,
+      "mean_us": 12310.0
+    },
+    "rps_completed": 319889.4
+  },
+  {
+    "run": 2,
+    "returncode": 0,
+    "server_cpu_seconds": 48.50000000000001,
+    "wall_seconds_including_warmup": 7.092182555003092,
+    "server_cpu_percent_including_warmup": 683.8515453298123,
+    "total": 1767597,
+    "started": 1767597,
+    "done": 1767597,
+    "succeeded": 1767597,
+    "failed": 0,
+    "errored": 0,
+    "timeout": 0,
+    "status_codes": {
+      "2xx": 1767824,
+      "3xx": 0,
+      "4xx": 0,
+      "5xx": 0
+    },
+    "reported_wall_seconds": 7.01,
+    "seconds": 5,
+    "rps_2xx": 353564.8,
+    "error_rate": 0.0,
+    "status_counter_delta": -227,
+    "valid": true,
+    "latency": {
+      "source": "h2load reservoir samples",
+      "minimum_us": 1080.0,
+      "maximum_us": 99170.0,
+      "p50_us": 10340.0,
+      "p95_us": 20700.0,
+      "p99_us": 28050.0,
+      "mean_us": 11160.0
+    },
+    "rps_completed": 353519.4
+  },
+  {
+    "run": 3,
+    "returncode": 0,
+    "server_cpu_seconds": 50.53999999999999,
+    "wall_seconds_including_warmup": 7.090714614998433,
+    "server_cpu_percent_including_warmup": 712.7631380495372,
+    "total": 1673451,
+    "started": 1673451,
+    "done": 1673451,
+    "succeeded": 1673451,
+    "failed": 0,
+    "errored": 0,
+    "timeout": 0,
+    "status_codes": {
+      "2xx": 1673639,
+      "3xx": 0,
+      "4xx": 0,
+      "5xx": 0
+    },
+    "reported_wall_seconds": 7.01,
+    "seconds": 5,
+    "rps_2xx": 334727.8,
+    "error_rate": 0.0,
+    "status_counter_delta": -188,
+    "valid": true,
+    "latency": {
+      "source": "h2load reservoir samples",
+      "minimum_us": 625.0,
+      "maximum_us": 150310.0,
+      "p50_us": 10930.0,
+      "p95_us": 23460.0,
+      "p99_us": 32060.000000000004,
+      "mean_us": 11950.0
+    },
+    "rps_completed": 334690.2
+  }
+]

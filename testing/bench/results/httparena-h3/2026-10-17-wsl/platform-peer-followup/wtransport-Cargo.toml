@@ -1,0 +1,10 @@
+[package]
+name="cnetmod-wtransport-validation"
+version="0.1.0"
+edition="2024"
+[[bin]]
+name="webtransport_probe"
+path="webtransport_probe.rs"
+[dependencies]
+wtransport={version="=0.7.1",features=["dangerous-configuration"]}
+tokio={version="1.47",features=["macros","rt-multi-thread","time"]}

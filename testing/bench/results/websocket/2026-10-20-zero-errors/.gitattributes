@@ -1,0 +1,2 @@
+evidence/bad-*.bin binary
+*.patch -whitespace

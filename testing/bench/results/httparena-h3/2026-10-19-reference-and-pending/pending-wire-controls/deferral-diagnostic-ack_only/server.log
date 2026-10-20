@@ -1,0 +1,7 @@
+[2026-10-19 00:18:47.561] [info] [133183004923840] [deferral-diagnostic.cpp:4298] PMTU_PENDING_PACK path=0 target=1328 selected=1 cwnd=14783 credit=1 empty=1 pto_probe=0 at_us=320739642
+[2026-10-19 00:18:47.664] [info] [133183004923840] [deferral-diagnostic.cpp:2996] PMTU_PENDING_SCHEDULE path=0 ack_target=1328 next_us=320853422 at_us=320843422
+[2026-10-19 00:18:47.675] [info] [133183004923840] [deferral-diagnostic.cpp:4298] PMTU_PENDING_PACK path=0 target=1452 selected=0 cwnd=16111 credit=0 empty=0 pto_probe=0 at_us=320853737
+[2026-10-19 00:18:47.728] [info] [133183004923840] [deferral-diagnostic.cpp:4298] PMTU_PENDING_PACK path=0 target=1452 selected=0 cwnd=16111 credit=0 empty=0 pto_probe=0 at_us=320906736
+[2026-10-19 00:18:47.728] [info] [133183004923840] [deferral-diagnostic.cpp:4298] PMTU_PENDING_PACK path=0 target=1452 selected=0 cwnd=16111 credit=0 empty=0 pto_probe=0 at_us=320906762
+[2026-10-19 00:18:47.976] [info] [133183004923840] [deferral-diagnostic.cpp:4298] PMTU_PENDING_PACK path=0 target=1452 selected=1 cwnd=8055 credit=1 empty=1 pto_probe=0 at_us=321155080
+[2026-10-19 00:18:48.298] [info] [133183004923840] [deferral-diagnostic.cpp:4298] PMTU_PENDING_PACK path=0 target=1452 selected=1 cwnd=8055 credit=1 empty=1 pto_probe=0 at_us=321476803

@@ -1,0 +1,5 @@
+[==========] Running 16 test(s).
+[ RUN      ] udp_segmented_batch_preserves_ipv4_ipv6_tail_empty_peer_and_cap_boundaries
+[       OK ] udp_segmented_batch_preserves_ipv4_ipv6_tail_empty_peer_and_cap_boundaries
+[==========] 1 test(s) ran.
+[  PASSED  ] 1 test(s).

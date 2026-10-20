@@ -1,0 +1,7 @@
+{
+  "commit": "8525da3b",
+  "binary_sha256": "802d4fe7ed28a76ccf1a3735cd1dece1c6e447004155bc7e0e0119011d60781c",
+  "test_token": "explicitly handed over by user for serial official retest",
+  "profiles": "same seven profiles, three rounds each; no retry for score",
+  "resource_sampling": "supplemental /proc RSS once per second; official Docker peaks unchanged"
+}

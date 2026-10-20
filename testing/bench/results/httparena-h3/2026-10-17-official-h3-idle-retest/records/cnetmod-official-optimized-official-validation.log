@@ -1,0 +1,11 @@
+=== Validating: cnetmod-official-optimized ===
+[info] Subscribed tests: baseline-h3
+[build] Building Docker image...
+3bb09b55bcd95718f3e71d3e1a2b6935c057e9b2590cc027863ff0daed731e85
+[wait] Waiting for server...
+[ready] Server is up
+[test] h3 endpoints (QUIC on :48443/udp)
+  PASS [baseline-h3 over QUIC] (4/4 2xx, ALPN h3)
+
+=== Results: 1 passed, 0 failed ===
+httparena-validate-cnetmod-official-optimized

@@ -1,0 +1,20 @@
+--- official/Dockerfile
++++ local-build/Dockerfile
+@@ -32,7 +32,7 @@
+     git init -q thirdparty/tcc && \
+     git -C thirdparty/tcc fetch -q --depth 1 https://github.com/vlang/tccbin d6e7ac1b1bcc98aed734a6ecbfa8509f24606c74 && \
+     git -C thirdparty/tcc checkout -q FETCH_HEAD && \
+-    make local=1 && ln -s /opt/v/v /usr/local/bin/v
++    make -j4 local=1 && ln -s /opt/v/v /usr/local/bin/v
+ 
+ # Install vanilla as the `vanilla` module (import vanilla.server, vanilla.core, ...),
+ # pinned to a specific commit: reproducible, with NO per-build network call to
+@@ -95,7 +95,7 @@
+         -DUSE_SHARED_MBEDTLS_LIBRARY=On -DUSE_STATIC_MBEDTLS_LIBRARY=Off \
+         -DENABLE_TESTING=Off -DENABLE_PROGRAMS=Off \
+         -DCMAKE_INSTALL_PREFIX=/usr/local && \
+-    cmake --build /tmp/mbedtls-build -j"$(nproc)" && \
++    cmake --build /tmp/mbedtls-build -j4 && \
+     cmake --install /tmp/mbedtls-build && ldconfig && \
+     rm -rf /tmp/mbedtls.tar.bz2 "/tmp/mbedtls-${MBEDTLS_VERSION}" /tmp/mbedtls-build
+ 

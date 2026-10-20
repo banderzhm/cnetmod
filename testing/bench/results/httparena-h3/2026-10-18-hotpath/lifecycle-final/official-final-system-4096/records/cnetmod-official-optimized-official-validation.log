@@ -1,0 +1,12 @@
+=== Validating: cnetmod-official-optimized ===
+[info] Subscribed tests: baseline-h3
+[build] Building Docker image...
+6ddec51addbef7d93b3552980ebc75f218de295bdc3c632e07b7791cd79897ed
+[wait] Waiting for server...
+[ready] Server is up
+[test] h3 endpoints (QUIC on :48443/udp)
+  PASS [baseline-h3 over QUIC] (4/4 2xx, ALPN h3)
+
+=== Results: 1 passed, 0 failed ===
+cnetmod-final-4c178de9d76f4c63adb15a4ebe898833-validate-cnetmod-official-optimized
+Terminated                 sleep "$VALIDATE_TIMEOUT"

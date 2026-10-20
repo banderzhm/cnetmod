@@ -1,0 +1,28 @@
+Test project /tmp/cnetmod-h3-arena-build
+    Start 50: test_quic_stream
+1/3 Test #50: test_quic_stream .............................   Passed    0.00 sec
+    Start 65: http_client_http3_end_to_end
+2/3 Test #65: http_client_http3_end_to_end .................   Passed    0.57 sec
+    Start 66: http_client_http3_dynamic_qpack_end_to_end
+3/3 Test #66: http_client_http3_dynamic_qpack_end_to_end ...***Failed   30.42 sec
+[2026-10-17 11:01:19.517] [error] [136063371600384] [http_client_e2e.cpp:1137] HTTP/3 client end-to-end regression failed: buffered response spanning multiple QUIC packets failed: Transport endpoint is not connected
+client exited with status 1
+server stdout:
+
+server stderr:
+
+
+
+67% tests passed, 1 tests failed out of 3
+
+Label Time Summary:
+client        =  30.99 sec*proc (2 tests)
+end_to_end    =  30.99 sec*proc (2 tests)
+http3         =  30.99 sec*proc (2 tests)
+qpack         =  30.42 sec*proc (1 test)
+
+Total Test time (real) =  30.99 sec
+
+The following tests FAILED:
+	 66 - http_client_http3_dynamic_qpack_end_to_end (Failed) client end_to_end http3 qpack
+Errors while running CTest

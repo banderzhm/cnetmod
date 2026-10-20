@@ -1,0 +1,15 @@
+{
+  "native_python": "D:\\runtime\\miniconda3\\python.exe",
+  "source_windows": "C:\\Users\\25007\\.codex\\worktrees\\2c3c\\cnetmod",
+  "head": "61ff3144287bfdd771c25b5cc42a5266fc3e4a42",
+  "branch": "fix/http3-arena-performance",
+  "status": " M src/protocol/quic/quic_connection.cpp\n M src/protocol/quic/quic_send_pipeline.cpp\n M src/protocol/quic/quic_send_pipeline.cppm\n M testing/http3/CMakeLists.txt\n M testing/tests/test_quic_frame.cpp\n M testing/tests/test_quic_loss_detection.cpp\n?? testing/http3/h3-interop-results.json\n?? testing/http3/quic_pmtu_pending.py\n?? testing/http3/quic_pmtu_pending_server.cpp\n",
+  "source_count": 5545,
+  "complete_native_git_input_set": true,
+  "added_fixture_files": [
+    "testing/http3/quic_pmtu_pending.py",
+    "testing/http3/quic_pmtu_pending_server.cpp"
+  ],
+  "protected_sha256": "ca41c4cb5adcc34ee16042e00ea9c6dfb248b9a17649995dbacfeb43b64d8b66",
+  "diff_sha256": "217cb9e44295bfeac871d47af6ce76f3971ff88994d4127059143b75af1c0851"
+}

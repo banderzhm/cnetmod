@@ -1,0 +1,20 @@
+[==========] Running 11 test(s).
+[ RUN      ] atomic_hash_map_and_copy_on_write_publish_consistent_values
+[       OK ] atomic_hash_map_and_copy_on_write_publish_consistent_values
+[ RUN      ] atomic_hash_map_bounded_insert_and_cas_eviction
+[       OK ] atomic_hash_map_bounded_insert_and_cas_eviction
+[ RUN      ] atomic_hash_map_each_erase_releases_owned_value
+  ASSERT FAILED: weak.expired() at /var/tmp/cnetmod-h3-atomic-map-old-owner-negative/test_concurrent_containers.cpp:313
+  ASSERT FAILED: weak.expired() at /var/tmp/cnetmod-h3-atomic-map-old-owner-negative/test_concurrent_containers.cpp:313
+  ASSERT FAILED: weak.expired() at /var/tmp/cnetmod-h3-atomic-map-old-owner-negative/test_concurrent_containers.cpp:313
+[  FAILED  ] atomic_hash_map_each_erase_releases_owned_value (3 failure(s))
+[ RUN      ] atomic_hash_map_erase_preserves_concurrent_reader_snapshot
+  ASSERT FAILED: weak.expired() at /var/tmp/cnetmod-h3-atomic-map-old-owner-negative/test_concurrent_containers.cpp:353
+  ASSERT FAILED: weak.expired() at /var/tmp/cnetmod-h3-atomic-map-old-owner-negative/test_concurrent_containers.cpp:353
+  ASSERT FAILED: weak.expired() at /var/tmp/cnetmod-h3-atomic-map-old-owner-negative/test_concurrent_containers.cpp:353
+[  FAILED  ] atomic_hash_map_erase_preserves_concurrent_reader_snapshot (3 failure(s))
+[ RUN      ] atomic_hash_map_owner_tombstones_support_non_default_values_and_collisions
+[       OK ] atomic_hash_map_owner_tombstones_support_non_default_values_and_collisions
+[==========] 5 test(s) ran.
+[  PASSED  ] 3 test(s).
+[  FAILED  ] 2 test(s).

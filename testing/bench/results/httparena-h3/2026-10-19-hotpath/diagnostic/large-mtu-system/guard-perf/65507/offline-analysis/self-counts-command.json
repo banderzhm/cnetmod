@@ -1,0 +1,16 @@
+[
+  "/usr/sbin/perf",
+  "report",
+  "--stdio",
+  "--no-children",
+  "--percent-limit",
+  "0",
+  "--show-nr-samples",
+  "--show-total-period",
+  "--sort",
+  "symbol,dso",
+  "-g",
+  "none",
+  "-i",
+  "/var/tmp/cnetmod-h3-large-mtu-perf-c6333e93d31b45c689c0146783514018/static-perf.data"
+]

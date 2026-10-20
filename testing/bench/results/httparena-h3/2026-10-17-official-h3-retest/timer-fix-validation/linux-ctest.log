@@ -1,0 +1,45 @@
+Test project /tmp/cnetmod-h3-arena-build
+    Start 65: http_client_http3_end_to_end
+1/8 Test #65: http_client_http3_end_to_end .........................   Passed    0.67 sec
+    Start 66: http_client_http3_dynamic_qpack_end_to_end
+2/8 Test #66: http_client_http3_dynamic_qpack_end_to_end ...........***Failed   30.48 sec
+[2026-10-17 11:52:27.784] [error] [130664666862080] [http_client_e2e.cpp:1188] HTTP/3 client end-to-end regression failed: server push disabled by default failed: Transport endpoint is not connected
+client exited with status 1
+server stdout:
+
+server stderr:
+
+
+    Start 67: http3_multipath_end_to_end
+3/8 Test #67: http3_multipath_end_to_end ...........................   Passed    0.51 sec
+    Start 68: http3_multipath_path_mtu_end_to_end
+4/8 Test #68: http3_multipath_path_mtu_end_to_end ..................   Passed    0.39 sec
+    Start 69: http3_multipath_path_mtu_blackhole_end_to_end
+5/8 Test #69: http3_multipath_path_mtu_blackhole_end_to_end ........   Passed    2.76 sec
+    Start 70: http3_multipath_local_path_close_end_to_end
+6/8 Test #70: http3_multipath_local_path_close_end_to_end ..........   Passed    0.62 sec
+    Start 71: http3_connect_close_end_to_end
+7/8 Test #71: http3_connect_close_end_to_end .......................   Passed    0.34 sec
+    Start 72: http3_multipath_path_validation_timeout_end_to_end
+8/8 Test #72: http3_multipath_path_validation_timeout_end_to_end ...   Passed    3.25 sec
+
+88% tests passed, 1 tests failed out of 8
+
+Label Time Summary:
+blackhole     =   2.76 sec*proc (1 test)
+client        =  31.49 sec*proc (3 tests)
+close         =   0.96 sec*proc (2 tests)
+connect       =   0.34 sec*proc (1 test)
+end_to_end    =  39.02 sec*proc (8 tests)
+http3         =  39.02 sec*proc (8 tests)
+multipath     =   7.53 sec*proc (5 tests)
+pmtu          =   3.15 sec*proc (2 tests)
+qpack         =  30.48 sec*proc (1 test)
+quic          =   7.87 sec*proc (6 tests)
+timeout       =   3.25 sec*proc (1 test)
+
+Total Test time (real) =  39.02 sec
+
+The following tests FAILED:
+	 66 - http_client_http3_dynamic_qpack_end_to_end (Failed) client end_to_end http3 qpack
+Errors while running CTest

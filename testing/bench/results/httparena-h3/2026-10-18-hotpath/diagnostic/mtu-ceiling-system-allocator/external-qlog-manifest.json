@@ -1,0 +1,23 @@
+{
+  "scope": "raw qlogs retained externally; no raw qlog or key copied to repository",
+  "files": [
+    {
+      "ceiling": 1472,
+      "path": "/var/tmp/cnetmod-h3-mtu-preflight-d1d75d2b98744840896b101f141765ac/1472/client.0.0.sqlog",
+      "sha256": "5eb635e03992e551682fa0874c6734add70e2c704469fdd15ed3bfb873d7745b",
+      "bytes": 22622124
+    },
+    {
+      "ceiling": 4096,
+      "path": "/var/tmp/cnetmod-h3-mtu-preflight-d1d75d2b98744840896b101f141765ac/4096/client.0.0.sqlog",
+      "sha256": "f004fd10debe969ad9d002d31af61044e47027dd804e69960988d6838e82e379",
+      "bytes": 11066850
+    },
+    {
+      "ceiling": 8192,
+      "path": "/var/tmp/cnetmod-h3-mtu-preflight-d1d75d2b98744840896b101f141765ac/8192/client.0.0.sqlog",
+      "sha256": "2e4dcb13424fe2169397f672db900934b28ca9426a0585fcdc88f7c1315cd63c",
+      "bytes": 8084629
+    }
+  ]
+}

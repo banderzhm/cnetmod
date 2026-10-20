@@ -1,0 +1,141 @@
+{
+  "scope": "HANDSHAKE_DONE protocol repair with current lifecycle fixes; native correctness retention, not official ranking",
+  "binary_sha256": "298bf8277e7b1edc32f7e1ab1ce64729a52e8884e97e9486a77a56a20f4cabc4",
+  "samples": [
+    {
+      "name": "initial",
+      "time": 1792320536.609036,
+      "rss": 53125120,
+      "private": 50839552
+    },
+    {
+      "name": "round-1-idle-2s",
+      "time": 1792320539.8922756,
+      "rss": 181727232,
+      "private": 179372032
+    },
+    {
+      "name": "round-2-idle-2s",
+      "time": 1792320543.0040562,
+      "rss": 195866624,
+      "private": 193511424
+    },
+    {
+      "name": "round-3-idle-2s",
+      "time": 1792320545.990817,
+      "rss": 204259328,
+      "private": 201904128
+    },
+    {
+      "name": "round-4-idle-2s",
+      "time": 1792320549.2257257,
+      "rss": 201060352,
+      "private": 198705152
+    },
+    {
+      "name": "round-5-idle-2s",
+      "time": 1792320552.1847668,
+      "rss": 203935744,
+      "private": 201580544
+    },
+    {
+      "name": "round-6-idle-2s",
+      "time": 1792320555.1336706,
+      "rss": 209080320,
+      "private": 206725120
+    },
+    {
+      "name": "round-7-idle-2s",
+      "time": 1792320558.3434982,
+      "rss": 209055744,
+      "private": 206700544
+    },
+    {
+      "name": "round-8-idle-2s",
+      "time": 1792320561.4453957,
+      "rss": 205934592,
+      "private": 203579392
+    },
+    {
+      "name": "round-9-idle-2s",
+      "time": 1792320564.570211,
+      "rss": 210632704,
+      "private": 208277504
+    },
+    {
+      "name": "round-10-idle-2s",
+      "time": 1792320567.5835426,
+      "rss": 216035328,
+      "private": 213680128
+    },
+    {
+      "name": "round-11-idle-2s",
+      "time": 1792320570.58707,
+      "rss": 224485376,
+      "private": 222130176
+    },
+    {
+      "name": "round-12-idle-2s",
+      "time": 1792320573.5948715,
+      "rss": 216621056,
+      "private": 214265856
+    },
+    {
+      "name": "final-idle-37s",
+      "time": 1792320608.5958674,
+      "rss": 216358912,
+      "private": 214003712
+    }
+  ],
+  "rounds": [
+    {
+      "index": 1,
+      "requests": 200000
+    },
+    {
+      "index": 2,
+      "requests": 200000
+    },
+    {
+      "index": 3,
+      "requests": 200000
+    },
+    {
+      "index": 4,
+      "requests": 200000
+    },
+    {
+      "index": 5,
+      "requests": 200000
+    },
+    {
+      "index": 6,
+      "requests": 200000
+    },
+    {
+      "index": 7,
+      "requests": 200000
+    },
+    {
+      "index": 8,
+      "requests": 200000
+    },
+    {
+      "index": 9,
+      "requests": 200000
+    },
+    {
+      "index": 10,
+      "requests": 200000
+    },
+    {
+      "index": 11,
+      "requests": 200000
+    },
+    {
+      "index": 12,
+      "requests": 200000
+    }
+  ],
+  "valid": true
+}

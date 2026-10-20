@@ -1,0 +1,70 @@
+{
+  "actual-dirty-source.patch": {
+    "bytes": 239682,
+    "sha256": "c5606ae3c0a0d0d07c7106c371a3385dc41de2a3c7ce6e3d4edeef48d0845e41"
+  },
+  "assessment.json": {
+    "bytes": 2999,
+    "sha256": "95062a710dac5216e38ed9dc490f2d59f2b0c3057d083ae86f383c501637d479"
+  },
+  "cnetmod-h3-current-perf.py": {
+    "bytes": 10766,
+    "sha256": "56f6cd345af55029234464e3cc0f3c3780865424b3eaaaa1e9496d4ad3668e89"
+  },
+  "cnetmod-h3-perf-offline-recover.py": {
+    "bytes": 4803,
+    "sha256": "7138d2def12364dbe6dfb99bb022540609297791c9be9274919add1da5f643e8"
+  },
+  "external-inputs.json": {
+    "bytes": 861,
+    "sha256": "78ccfd583ec43f427e29497884a6b91987a23e2802a63be75f1c341440a31e13"
+  },
+  "h2load.log": {
+    "bytes": 24145,
+    "sha256": "73508a2b5df6d3b988ca710a6665253ce736f10d972cc308ac900cb26ab94ab5"
+  },
+  "perf-record.log": {
+    "bytes": 191,
+    "sha256": "ed16ae28014cdaa3ad778fa3ad36070d4d7f128656933803e10a2295078afd94"
+  },
+  "readiness.log": {
+    "bytes": 1697,
+    "sha256": "3fd7d9950ed417561587189bd01ebce7f72c4050dba63ceea28055bfc1879e53"
+  },
+  "self-compact.tsv": {
+    "bytes": 85097,
+    "sha256": "5dc8300ad68a306308ba2b499fceaef62f194f1e22aaa9f78e2515499ace3a6f"
+  },
+  "self-sample-counts.json": {
+    "bytes": 144404,
+    "sha256": "ddd6373ba30788100b01822a422a1a4c2254ebfa53c30c9480229bced2e55d4b"
+  },
+  "server.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "static-perf-header.txt": {
+    "bytes": 15169,
+    "sha256": "7888b080e2821956ec60c5b84c788483282fe076651819c2c70444100c4808ae"
+  },
+  "static-perf-self.txt": {
+    "bytes": 148172,
+    "sha256": "e5de0efe61bbebfa8009870cfa1042eadc322b16a3a246b4c0ebf04740f67ba0"
+  },
+  "static-perf-stacks.txt.gz": {
+    "bytes": 200601,
+    "sha256": "f4374a72c8e6de9a1f7e27d979c6e7daa8b12023163f181fb30f4204c40d28b9"
+  },
+  "summary.json": {
+    "bytes": 312311,
+    "sha256": "b6b2d8291c6141092ab316dcccfc2a72f0c5c7428bd76783a984e585beb0f80b"
+  },
+  "supplied-source-metadata.json": {
+    "bytes": 233299,
+    "sha256": "426b93bade91f906caf04c537e95d4e4cd866d737868ea6d0ca410c1c88cd6bd"
+  },
+  "top-symbols.json": {
+    "bytes": 16948,
+    "sha256": "c5e0d1ee2f8b52d2e7f6c5722a0f1be28f0fe689dafaeaacb637fe4fe4645033"
+  }
+}

@@ -1,0 +1,124 @@
+5ceefecad000-5ceefecce000 r--p 00000000 00:5f 766178                     /usr/local/bin/agensio
+5ceefecce000-5ceefefa5000 r-xp 00021000 00:5f 766178                     /usr/local/bin/agensio
+5ceefefa5000-5ceeff021000 r--p 002f8000 00:5f 766178                     /usr/local/bin/agensio
+5ceeff021000-5ceeff02c000 r--p 00373000 00:5f 766178                     /usr/local/bin/agensio
+5ceeff02c000-5ceeff02d000 rw-p 0037e000 00:5f 766178                     /usr/local/bin/agensio
+5cef2b237000-5cef2b476000 rw-p 00000000 00:00 0                          [heap]
+7c71c68fe000-7c71c68ff000 ---p 00000000 00:00 0 
+7c71c68ff000-7c71c70ff000 rw-p 00000000 00:00 0 
+7c71c70ff000-7c71c7100000 ---p 00000000 00:00 0 
+7c71c7100000-7c71c7900000 rw-p 00000000 00:00 0 
+7c71c7900000-7c71c7901000 ---p 00000000 00:00 0 
+7c71c7901000-7c71c8101000 rw-p 00000000 00:00 0 
+7c71c8101000-7c71c8102000 ---p 00000000 00:00 0 
+7c71c8102000-7c71c8902000 rw-p 00000000 00:00 0 
+7c71c8902000-7c71c8903000 ---p 00000000 00:00 0 
+7c71c8903000-7c71c9103000 rw-p 00000000 00:00 0 
+7c71c9103000-7c71c9104000 ---p 00000000 00:00 0 
+7c71c9104000-7c71c9904000 rw-p 00000000 00:00 0 
+7c71c9904000-7c71c9905000 ---p 00000000 00:00 0 
+7c71c9905000-7c71ca105000 rw-p 00000000 00:00 0 
+7c71ca105000-7c71ca106000 ---p 00000000 00:00 0 
+7c71ca106000-7c71ca906000 rw-p 00000000 00:00 0 
+7c71ca906000-7c71ca907000 ---p 00000000 00:00 0 
+7c71ca907000-7c71cb107000 rw-p 00000000 00:00 0 
+7c71cb107000-7c71cb108000 ---p 00000000 00:00 0 
+7c71cb108000-7c71cb908000 rw-p 00000000 00:00 0 
+7c71cb908000-7c71cb909000 ---p 00000000 00:00 0 
+7c71cb909000-7c71cc109000 rw-p 00000000 00:00 0 
+7c71cc109000-7c71cc10a000 ---p 00000000 00:00 0 
+7c71cc10a000-7c71cc90a000 rw-p 00000000 00:00 0 
+7c71cc90a000-7c71cc90b000 ---p 00000000 00:00 0 
+7c71cc90b000-7c71cd10b000 rw-p 00000000 00:00 0 
+7c71cd10b000-7c71cd10c000 ---p 00000000 00:00 0 
+7c71cd10c000-7c71cd90c000 rw-p 00000000 00:00 0 
+7c71cd90c000-7c71cd90d000 ---p 00000000 00:00 0 
+7c71cd90d000-7c71ce10d000 rw-p 00000000 00:00 0 
+7c71ce10d000-7c71ce10e000 ---p 00000000 00:00 0 
+7c71ce10e000-7c71ce90e000 rw-p 00000000 00:00 0 
+7c71ce90e000-7c71ce90f000 ---p 00000000 00:00 0 
+7c71ce90f000-7c71cf10f000 rw-p 00000000 00:00 0 
+7c71cf10f000-7c71cf110000 ---p 00000000 00:00 0 
+7c71cf110000-7c71cf910000 rw-p 00000000 00:00 0 
+7c71cf910000-7c71cf911000 ---p 00000000 00:00 0 
+7c71cf911000-7c71d0111000 rw-p 00000000 00:00 0 
+7c71d0111000-7c71d0112000 ---p 00000000 00:00 0 
+7c71d0112000-7c71d0912000 rw-p 00000000 00:00 0 
+7c71d0912000-7c71d0913000 ---p 00000000 00:00 0 
+7c71d0913000-7c71d1113000 rw-p 00000000 00:00 0 
+7c71d1113000-7c71d1114000 ---p 00000000 00:00 0 
+7c71d1114000-7c71d1914000 rw-p 00000000 00:00 0 
+7c71d1914000-7c71d1915000 ---p 00000000 00:00 0 
+7c71d1915000-7c71d2115000 rw-p 00000000 00:00 0 
+7c71d2115000-7c71d2116000 ---p 00000000 00:00 0 
+7c71d2116000-7c71d2916000 rw-p 00000000 00:00 0 
+7c71d2916000-7c71d2917000 ---p 00000000 00:00 0 
+7c71d2917000-7c71d3117000 rw-p 00000000 00:00 0 
+7c71d3117000-7c71d3118000 ---p 00000000 00:00 0 
+7c71d3118000-7c71d3918000 rw-p 00000000 00:00 0 
+7c71d3918000-7c71d3919000 ---p 00000000 00:00 0 
+7c71d3919000-7c71d4119000 rw-p 00000000 00:00 0 
+7c71d4119000-7c71d411a000 ---p 00000000 00:00 0 
+7c71d411a000-7c71d491a000 rw-p 00000000 00:00 0 
+7c71d491a000-7c71d491b000 ---p 00000000 00:00 0 
+7c71d491b000-7c71d511b000 rw-p 00000000 00:00 0 
+7c71d511b000-7c71d511c000 ---p 00000000 00:00 0 
+7c71d511c000-7c71d591c000 rw-p 00000000 00:00 0 
+7c71d591c000-7c71d591d000 ---p 00000000 00:00 0 
+7c71d591d000-7c71d611d000 rw-p 00000000 00:00 0 
+7c71d611d000-7c71da162000 rw-p 00000000 00:00 0 
+7c71da162000-7c71da173000 r--p 00000000 00:5f 509158                     /usr/lib/x86_64-linux-gnu/libm.so.6
+7c71da173000-7c71da1f0000 r-xp 00011000 00:5f 509158                     /usr/lib/x86_64-linux-gnu/libm.so.6
+7c71da1f0000-7c71da250000 r--p 0008e000 00:5f 509158                     /usr/lib/x86_64-linux-gnu/libm.so.6
+7c71da250000-7c71da251000 r--p 000ed000 00:5f 509158                     /usr/lib/x86_64-linux-gnu/libm.so.6
+7c71da251000-7c71da252000 rw-p 000ee000 00:5f 509158                     /usr/lib/x86_64-linux-gnu/libm.so.6
+7c71da252000-7c71da257000 r--p 00000000 00:5f 509215                     /usr/lib/x86_64-linux-gnu/libzstd.so.1.5.7
+7c71da257000-7c71da306000 r-xp 00005000 00:5f 509215                     /usr/lib/x86_64-linux-gnu/libzstd.so.1.5.7
+7c71da306000-7c71da31a000 r--p 000b4000 00:5f 509215                     /usr/lib/x86_64-linux-gnu/libzstd.so.1.5.7
+7c71da31a000-7c71da31b000 r--p 000c8000 00:5f 509215                     /usr/lib/x86_64-linux-gnu/libzstd.so.1.5.7
+7c71da31b000-7c71da31c000 rw-p 000c9000 00:5f 509215                     /usr/lib/x86_64-linux-gnu/libzstd.so.1.5.7
+7c71da31c000-7c71da344000 r--p 00000000 00:5f 509132                     /usr/lib/x86_64-linux-gnu/libc.so.6
+7c71da344000-7c71da4a7000 r-xp 00028000 00:5f 509132                     /usr/lib/x86_64-linux-gnu/libc.so.6
+7c71da4a7000-7c71da4fd000 r--p 0018b000 00:5f 509132                     /usr/lib/x86_64-linux-gnu/libc.so.6
+7c71da4fd000-7c71da501000 r--p 001e0000 00:5f 509132                     /usr/lib/x86_64-linux-gnu/libc.so.6
+7c71da501000-7c71da503000 rw-p 001e4000 00:5f 509132                     /usr/lib/x86_64-linux-gnu/libc.so.6
+7c71da503000-7c71da510000 rw-p 00000000 00:00 0 
+7c71da510000-7c71da514000 r--p 00000000 00:5f 509147                     /usr/lib/x86_64-linux-gnu/libgcc_s.so.1
+7c71da514000-7c71da537000 r-xp 00004000 00:5f 509147                     /usr/lib/x86_64-linux-gnu/libgcc_s.so.1
+7c71da537000-7c71da53b000 r--p 00027000 00:5f 509147                     /usr/lib/x86_64-linux-gnu/libgcc_s.so.1
+7c71da53b000-7c71da53c000 r--p 0002b000 00:5f 509147                     /usr/lib/x86_64-linux-gnu/libgcc_s.so.1
+7c71da53c000-7c71da53d000 rw-p 0002c000 00:5f 509147                     /usr/lib/x86_64-linux-gnu/libgcc_s.so.1
+7c71da53d000-7c71da53f000 rw-p 00000000 00:00 0 
+7c71da53f000-7c71da5dc000 r--p 00000000 00:5f 509197                     /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33
+7c71da5dc000-7c71da705000 r-xp 0009d000 00:5f 509197                     /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33
+7c71da705000-7c71da793000 r--p 001c6000 00:5f 509197                     /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33
+7c71da793000-7c71da79e000 r--p 00254000 00:5f 509197                     /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33
+7c71da79e000-7c71da7a1000 rw-p 0025f000 00:5f 509197                     /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33
+7c71da7a1000-7c71da7a5000 rw-p 00000000 00:00 0 
+7c71da7a5000-7c71da7a8000 r--p 00000000 00:5f 509213                     /usr/lib/x86_64-linux-gnu/libz.so.1.3.1
+7c71da7a8000-7c71da7bc000 r-xp 00003000 00:5f 509213                     /usr/lib/x86_64-linux-gnu/libz.so.1.3.1
+7c71da7bc000-7c71da7c3000 r--p 00017000 00:5f 509213                     /usr/lib/x86_64-linux-gnu/libz.so.1.3.1
+7c71da7c3000-7c71da7c4000 r--p 0001d000 00:5f 509213                     /usr/lib/x86_64-linux-gnu/libz.so.1.3.1
+7c71da7c4000-7c71da7c5000 rw-p 0001e000 00:5f 509213                     /usr/lib/x86_64-linux-gnu/libz.so.1.3.1
+7c71da7c5000-7c71da8bc000 r--p 00000000 00:5f 509140                     /usr/lib/x86_64-linux-gnu/libcrypto.so.3
+7c71da8bc000-7c71dac40000 r-xp 000f7000 00:5f 509140                     /usr/lib/x86_64-linux-gnu/libcrypto.so.3
+7c71dac40000-7c71dad77000 r--p 0047b000 00:5f 509140                     /usr/lib/x86_64-linux-gnu/libcrypto.so.3
+7c71dad77000-7c71dadfa000 r--p 005b2000 00:5f 509140                     /usr/lib/x86_64-linux-gnu/libcrypto.so.3
+7c71dadfa000-7c71dadfd000 rw-p 00635000 00:5f 509140                     /usr/lib/x86_64-linux-gnu/libcrypto.so.3
+7c71dadfd000-7c71dae00000 rw-p 00000000 00:00 0 
+7c71dae00000-7c71dae23000 r--p 00000000 00:5f 509195                     /usr/lib/x86_64-linux-gnu/libssl.so.3
+7c71dae23000-7c71daece000 r-xp 00023000 00:5f 509195                     /usr/lib/x86_64-linux-gnu/libssl.so.3
+7c71daece000-7c71daf01000 r--p 000ce000 00:5f 509195                     /usr/lib/x86_64-linux-gnu/libssl.so.3
+7c71daf01000-7c71daf0c000 r--p 00100000 00:5f 509195                     /usr/lib/x86_64-linux-gnu/libssl.so.3
+7c71daf0c000-7c71daf10000 rw-p 0010b000 00:5f 509195                     /usr/lib/x86_64-linux-gnu/libssl.so.3
+7c71daf11000-7c71daf13000 rw-p 00000000 00:00 0 
+7c71daf13000-7c71daf17000 r--p 00000000 00:00 0                          [vvar]
+7c71daf17000-7c71daf19000 r--p 00000000 00:00 0                          [vvar_vclock]
+7c71daf19000-7c71daf1b000 r-xp 00000000 00:00 0                          [vdso]
+7c71daf1b000-7c71daf1c000 r--p 00000000 00:5f 509112                     /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+7c71daf1c000-7c71daf44000 r-xp 00001000 00:5f 509112                     /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+7c71daf44000-7c71daf4f000 r--p 00029000 00:5f 509112                     /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+7c71daf4f000-7c71daf51000 r--p 00034000 00:5f 509112                     /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+7c71daf51000-7c71daf52000 rw-p 00036000 00:5f 509112                     /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+7c71daf52000-7c71daf53000 rw-p 00000000 00:00 0 
+7fff36e19000-7fff36e3a000 rw-p 00000000 00:00 0                          [stack]

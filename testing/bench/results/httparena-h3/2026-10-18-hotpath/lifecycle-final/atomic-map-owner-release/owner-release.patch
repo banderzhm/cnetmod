@@ -1,0 +1,292 @@
+--- a/src/utils/concurrentContainers/atomic_hash_map.cppm
++++ b/src/utils/concurrentContainers/atomic_hash_map.cppm
+@@ -6,7 +6,8 @@
+ 
+ /// Fixed-capacity, open-addressed map. Nodes are immutable and published with
+ /// atomic shared_ptr CAS, so readers never lock and erased keys remain safe
+-/// tombstones until the map is destroyed.
++/// tombstones until reused or the map is destroyed. A tombstone retains its
++/// key only; the erased value is released after prior reader snapshots retire.
+ export template <class Key, class Value, class Hash = std::hash<Key>, class Equal = std::equal_to<Key>>
+ class atomic_hash_map
+ {
+@@ -46,8 +47,7 @@
+     struct entry
+     {
+         Key key;
+-        Value value;
+-        bool erased{};
++        std::optional<Value> value;
+     };
+ 
+     struct alignas(64) slot
+--- a/src/utils/concurrentContainers/atomic_hash_map.inl
++++ b/src/utils/concurrentContainers/atomic_hash_map.inl
+@@ -51,7 +51,7 @@
+         return false;
+     }
+ 
+-    const auto candidate = std::make_shared<const entry>(entry{std::move(key), std::move(value), false});
++    const auto candidate = std::make_shared<const entry>(entry{std::move(key), std::optional<V>{std::in_place, std::move(value)}});
+     for (;;)
+     {
+         std::optional<std::size_t> first_tombstone;
+@@ -64,7 +64,7 @@
+             {
+                 const auto target = first_tombstone.value_or(index);
+                 auto expected = load_slot(slots_[target]);
+-                if (expected && !expected->erased)
++                if (expected && expected->value.has_value())
+                 {
+                     retry = true;
+                     break;
+@@ -74,12 +74,12 @@
+                 retry = true;
+                 break;
+             }
+-            if (equal_(observed->key, candidate->key) && !observed->erased)
++            if (equal_(observed->key, candidate->key) && observed->value.has_value())
+             {
+                 size_.fetch_sub(1U, std::memory_order_release);
+                 return false;
+             }
+-            if (observed->erased && !first_tombstone)
++            if (!observed->value.has_value() && !first_tombstone)
+                 first_tombstone = index;
+         }
+ 
+@@ -88,7 +88,7 @@
+         if (first_tombstone)
+         {
+             auto expected = load_slot(slots_[*first_tombstone]);
+-            if (expected && expected->erased &&
++            if (expected && !expected->value.has_value() &&
+                 compare_exchange_slot(slots_[*first_tombstone], expected, candidate))
+                 return true;
+             continue;
+@@ -101,7 +101,7 @@
+ template <class K, class V, class H, class E>
+ auto atomic_hash_map<K, V, H, E>::try_insert_or_assign(K key, V value) -> bool
+ {
+-    const auto candidate = std::make_shared<const entry>(entry{std::move(key), std::move(value), false});
++    const auto candidate = std::make_shared<const entry>(entry{std::move(key), std::optional<V>{std::in_place, std::move(value)}});
+     for (;;)
+     {
+         std::optional<std::size_t> first_tombstone;
+@@ -120,7 +120,7 @@
+                 target = index;
+                 break;
+             }
+-            if (observed->erased && !first_tombstone)
++            if (!observed->value.has_value() && !first_tombstone)
+                 first_tombstone = index;
+         }
+ 
+@@ -130,9 +130,9 @@
+             return false;
+ 
+         auto observed = load_slot(slots_[*target]);
+-        if (observed && !observed->erased && !equal_(observed->key, candidate->key))
+-            continue;
+-        const bool grows = !observed || observed->erased;
++        if (observed && observed->value.has_value() && !equal_(observed->key, candidate->key))
++            continue;
++        const bool grows = !observed || !observed->value.has_value();
+         if (compare_exchange_slot(slots_[*target], observed, candidate))
+         {
+             if (grows)
+@@ -158,8 +158,8 @@
+         const auto item = load_slot(slots_[(slot_index(key) + step) & mask_]);
+         if (!item)
+             return std::nullopt;
+-        if (equal_(item->key, key) && !item->erased)
+-            return item->value;
++        if (equal_(item->key, key) && item->value.has_value())
++            return *item->value;
+     }
+     return std::nullopt;
+ }
+@@ -181,9 +181,9 @@
+             return false;
+         if (!equal_(item->key, key))
+             continue;
+-        if (item->erased)
+-            return false;
+-        auto tomb = std::make_shared<const entry>(entry{item->key, item->value, true});
++        if (!item->value.has_value())
++            return false;
++        auto tomb = std::make_shared<const entry>(entry{item->key, std::nullopt});
+         if (compare_exchange_slot(slot, item, tomb))
+         {
+             size_.fetch_sub(1U, std::memory_order_relaxed);
+@@ -204,11 +204,11 @@
+     {
+         auto& slot = slots_[index];
+         auto observed = load_slot(slot);
+-        while (observed && !observed->erased &&
+-            std::invoke(predicate, observed->key, observed->value))
++        while (observed && observed->value.has_value() &&
++            std::invoke(predicate, observed->key, *observed->value))
+         {
+             auto tombstone = std::make_shared<const entry>(
+-                entry{observed->key, observed->value, true});
++                entry{observed->key, std::nullopt});
+             if (compare_exchange_slot(slot, observed, tombstone))
+             {
+                 size_.fetch_sub(1U, std::memory_order_relaxed);
+@@ -232,9 +232,9 @@
+         for (std::size_t index{}; index < capacity_; ++index)
+         {
+             auto observed = load_slot(slots_[index]);
+-            if (!observed || observed->erased)
++            if (!observed || !observed->value.has_value())
+                 continue;
+-            if (!candidate || std::invoke(less, observed->key, observed->value, candidate->key, candidate->value))
++            if (!candidate || std::invoke(less, observed->key, *observed->value, candidate->key, *candidate->value))
+             {
+                 candidate_index = index;
+                 candidate = std::move(observed);
+@@ -244,7 +244,7 @@
+             return false;
+ 
+         auto tombstone = std::make_shared<const entry>(
+-            entry{candidate->key, candidate->value, true});
++            entry{candidate->key, std::nullopt});
+         if (compare_exchange_slot(slots_[candidate_index], candidate, tombstone))
+         {
+             size_.fetch_sub(1U, std::memory_order_relaxed);
+--- a/testing/tests/test_concurrent_containers.cpp
++++ b/testing/tests/test_concurrent_containers.cpp
+@@ -262,4 +262,132 @@
+     ASSERT_EQ(fallback.size(), 128U);
+ }
+ 
++
++namespace {
++struct owner_collision_hash
++{
++    auto operator()(int) const noexcept -> std::size_t { return 0U; }
++};
++
++using owner_collision_map = cnetmod::concurrent_containers::atomic_hash_map<
++    int, std::shared_ptr<int>, owner_collision_hash>;
++
++auto erase_owner_entry(owner_collision_map& values, int method) -> bool
++{
++    if (method == 0)
++        return values.erase(7);
++    if (method == 1)
++        return values.erase_if([](int key, const std::shared_ptr<int>&)
++            { return key == 7; }) == 1U;
++    return values.erase_min_by([](int, const std::shared_ptr<int>& left,
++                                   int, const std::shared_ptr<int>& right)
++        { return *left < *right; });
++}
++
++struct non_default_map_value
++{
++    non_default_map_value() = delete;
++    explicit non_default_map_value(int value)
++        : owner(std::make_shared<int>(value)) {}
++    std::shared_ptr<int> owner;
++};
++} // namespace
++
++TEST(atomic_hash_map_each_erase_releases_owned_value)
++{
++    for (int method{}; method < 3; ++method)
++    {
++        owner_collision_map values{4};
++        auto owner = std::make_shared<int>(42);
++        const std::weak_ptr<int> weak = owner;
++        const bool inserted = values.try_emplace(7, owner);
++        ASSERT_TRUE(inserted);
++        if (!inserted)
++            return;
++        owner.reset();
++        ASSERT_FALSE(weak.expired());
++        ASSERT_TRUE(erase_owner_entry(values, method));
++        ASSERT_EQ(values.size(), std::size_t{0});
++        ASSERT_FALSE(values.find(7).has_value());
++        // A tombstone must not own the payload until this slot is reused.
++        ASSERT_TRUE(weak.expired());
++        ASSERT_EQ(values.capacity(), std::size_t{4});
++    }
++}
++
++TEST(atomic_hash_map_erase_preserves_concurrent_reader_snapshot)
++{
++    for (int method{}; method < 3; ++method)
++    {
++        owner_collision_map values{4};
++        auto owner = std::make_shared<int>(42);
++        const std::weak_ptr<int> weak = owner;
++        const bool inserted = values.try_emplace(7, owner);
++        ASSERT_TRUE(inserted);
++        if (!inserted)
++            return;
++        owner.reset();
++        std::atomic<bool> snapshot_ready{};
++        std::atomic<bool> erased{};
++        int observed{};
++        std::jthread reader{[&]
++            {
++                auto snapshot = values.find(7);
++                snapshot_ready.store(true, std::memory_order_release);
++                while (!erased.load(std::memory_order_acquire))
++                    std::this_thread::yield();
++                if (snapshot)
++                    observed = **snapshot;
++                snapshot.reset();
++            }};
++        while (!snapshot_ready.load(std::memory_order_acquire))
++            std::this_thread::yield();
++        ASSERT_TRUE(erase_owner_entry(values, method));
++        ASSERT_EQ(values.size(), std::size_t{0});
++        // Erasure publishes a fresh immutable tombstone. The reader's old
++        // value snapshot remains valid until that reader releases it.
++        ASSERT_FALSE(weak.expired());
++        erased.store(true, std::memory_order_release);
++        reader.join();
++        ASSERT_EQ(observed, 42);
++        ASSERT_TRUE(weak.expired());
++    }
++}
++
++TEST(atomic_hash_map_owner_tombstones_support_non_default_values_and_collisions)
++{
++    cnetmod::concurrent_containers::atomic_hash_map<
++        int, non_default_map_value, owner_collision_hash> values{4};
++    ASSERT_TRUE(values.try_emplace(1, non_default_map_value{10}));
++    ASSERT_TRUE(values.try_emplace(2, non_default_map_value{20}));
++    ASSERT_TRUE(values.try_emplace(3, non_default_map_value{30}));
++    ASSERT_TRUE(values.erase(1));
++    const auto second = values.find(2);
++    const auto third = values.find(3);
++    ASSERT_TRUE(second.has_value());
++    ASSERT_TRUE(third.has_value());
++    if (!second || !third)
++        return;
++    ASSERT_EQ(*second->owner, 20);
++    ASSERT_EQ(*third->owner, 30);
++    ASSERT_TRUE(values.try_emplace(4, non_default_map_value{40}));
++    ASSERT_EQ(values.size(), std::size_t{3});
++    ASSERT_FALSE(values.try_emplace(2, non_default_map_value{200}));
++    ASSERT_TRUE(values.try_insert_or_assign(2, non_default_map_value{21}));
++    ASSERT_TRUE(values.erase_min_by([](int, const non_default_map_value& left,
++                                      int, const non_default_map_value& right)
++        { return *left.owner < *right.owner; }));
++    ASSERT_FALSE(values.contains(2));
++    ASSERT_TRUE(values.contains(3));
++    ASSERT_TRUE(values.contains(4));
++    ASSERT_EQ(values.erase_if([](int, const non_default_map_value&)
++                      { return true; }), std::size_t{2});
++    ASSERT_EQ(values.size(), std::size_t{0});
++    ASSERT_TRUE(values.try_emplace(5, non_default_map_value{50}));
++    const auto last = values.find(5);
++    ASSERT_TRUE(last.has_value());
++    if (last)
++        ASSERT_EQ(*last->owner, 50);
++}
++
+ RUN_TESTS()

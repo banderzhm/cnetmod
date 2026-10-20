@@ -3,6 +3,7 @@ module;
 #include <cnetmod/config.hpp>
 
 #include <cstdlib>
+#include <errno.h>
 #include <fcntl.h>
 #include <liburing.h>
 #include <unistd.h>
@@ -10,6 +11,7 @@ module;
 module cnetmod.io.platform.io_uring;
 
 import std;
+import cnetmod.core.log;
 
 namespace cnetmod {
 
@@ -134,14 +136,16 @@ auto io_uring_context::flush() -> std::expected<int, std::error_code>
 {
     if (pending_sqes_ == 0 || pending_sqes_ < submit_batch_size_)
         return 0;
-    return submit_pending();
+    const auto result = submit_pending();
+    return result ? *result : 0;
 }
 
 auto io_uring_context::flush_pending() -> std::expected<int, std::error_code>
 {
     if (pending_sqes_ == 0)
         return 0;
-    return submit_pending();
+    const auto result = submit_pending();
+    return result ? *result : 0;
 }
 
 auto io_uring_context::submit_batch_size() const noexcept -> unsigned
@@ -151,11 +155,51 @@ auto io_uring_context::submit_batch_size() const noexcept -> unsigned
 
 auto io_uring_context::submit() -> std::expected<int, std::error_code>
 {
-    pending_sqes_ = 0;
-    const int ret = ::io_uring_submit(&ring_);
-    if (ret < 0)
-        return std::unexpected(std::error_code(-ret, std::generic_category()));
-    return ret;
+    return submit_pending();
+}
+
+auto io_uring_context::submission_error() const noexcept -> std::error_code
+{
+    return submission_error_;
+}
+
+void io_uring_context::enqueue_cancel(uring_cancel_request& request)
+{
+    request.next = nullptr;
+    if (cancel_tail_)
+        cancel_tail_->next = &request;
+    else
+        cancel_head_ = &request;
+    cancel_tail_ = &request;
+    drain_cancellations();
+}
+
+void io_uring_context::drain_cancellations()
+{
+    while (cancel_head_)
+    {
+        auto* sqe = prepare_sqe();
+        if (!sqe)
+        {
+            // Retain the request if submission cannot make room yet. The
+            // reactor retries before waiting, including after transient errors.
+            if (auto result = submit_pending(); !result)
+                return;
+            sqe = prepare_sqe();
+            if (!sqe)
+                return;
+        }
+        auto* request = cancel_head_;
+        cancel_head_ = request->next;
+        if (!cancel_head_)
+            cancel_tail_ = nullptr;
+        request->next = nullptr;
+        ::io_uring_prep_cancel(sqe, request->target, 0);
+        ::io_uring_sqe_set_data(sqe, &request->operation);
+    }
+    // Prepared cancellations must not wait for the normal submission threshold.
+    if (pending_sqes_ != 0)
+        (void)submit_pending();
 }
 
 void io_uring_context::wake()
@@ -200,17 +244,43 @@ auto io_uring_context::cqe_tick_limit_from_env() noexcept -> unsigned
 auto io_uring_context::submit_pending() -> std::expected<int, std::error_code>
 {
     const int ret = ::io_uring_submit(&ring_);
+    // This explicit submission includes raw get_sqe() entries. Raw acquisition
+    // alone does not register them for automatic submission. Retain partially
+    // submitted entries and failures once submission has been requested.
+    pending_sqes_ = ::io_uring_sq_ready(&ring_);
     if (ret < 0)
-        return std::unexpected(std::error_code(-ret, std::generic_category()));
-    pending_sqes_ = 0;
+    {
+        const auto error = std::error_code(-ret, std::generic_category());
+        submission_error_ = error;
+        return std::unexpected(error);
+    }
+    submission_error_.clear();
     return ret;
 }
 
 auto io_uring_context::run_one_impl(bool blocking) -> std::size_t
 {
+    if (cancel_head_)
+        drain_cancellations();
     if (pending_sqes_ > 0)
         (void)submit_pending();
-    if (blocking)
+    if (!wake_read_pending_)
+        submit_wake_read();
+    const bool fatal_submission_error = submission_error_ &&
+        submission_error_.value() != EINTR &&
+        submission_error_.value() != EAGAIN &&
+        submission_error_.value() != EBUSY;
+    // A broken ring cannot safely retire prepared operations. Report the error
+    // and return control instead of spinning indefinitely. Stopping is not a
+    // completion/join boundary: callers must retain pending frames and buffers.
+    // After external repair, restart() permits another submission attempt.
+    if (fatal_submission_error &&
+        !stopped_.exchange(true, std::memory_order_relaxed))
+        logger::error{"io_uring submission failed: {} ({}); reactor stopped with queued operations retained",
+            submission_error_.message(), submission_error_.value()};
+    // Blocking here after an unsuccessful submission could strand the only
+    // operation capable of cancelling a blocked send. Keep retrying on ticks.
+    if (blocking && !fatal_submission_error && !cancel_head_ && pending_sqes_ == 0)
     {
         ::io_uring_cqe* cqe = nullptr;
         if (::io_uring_wait_cqe(&ring_, &cqe) < 0)
@@ -248,6 +318,7 @@ auto io_uring_context::run_one_impl(bool blocking) -> std::size_t
                 continue;
             if (ov == &wake_ov_)
             {
+                wake_read_pending_ = false;
                 char buf[64];
                 while (::read(pipe_fds_[0], buf, sizeof(buf)) > 0)
                 {
@@ -274,6 +345,7 @@ void io_uring_context::submit_wake_read()
 {
     if (auto* sqe = prepare_sqe())
     {
+        wake_read_pending_ = true;
         ::io_uring_prep_read(sqe, pipe_fds_[0], &pipe_buf_, 1, 0);
         ::io_uring_sqe_set_data(sqe, &wake_ov_);
         (void)flush_pending();

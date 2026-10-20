@@ -1,0 +1,254 @@
+[
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-awaiter/echo-ws-limited.log",
+    "destination": "raw/cnetmod-ws-awaiter/echo-ws-limited.log",
+    "rounds": 6,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-awaiter/echo-ws-pipeline.log",
+    "destination": "raw/cnetmod-ws-awaiter/echo-ws-pipeline.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-awaiter/echo-ws.log",
+    "destination": "raw/cnetmod-ws-awaiter/echo-ws.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-batch/echo-ws-pipeline.log",
+    "destination": "raw/cnetmod-ws-batch/echo-ws-pipeline.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-batch-affine/echo-ws-limited.log",
+    "destination": "raw/cnetmod-ws-batch-affine/echo-ws-limited.log",
+    "rounds": 6,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-batch-affine/echo-ws-pipeline.log",
+    "destination": "raw/cnetmod-ws-batch-affine/echo-ws-pipeline.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-batch-affine/echo-ws.log",
+    "destination": "raw/cnetmod-ws-batch-affine/echo-ws.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-batch-compact/echo-ws-pipeline.log",
+    "destination": "raw/cnetmod-ws-batch-compact/echo-ws-pipeline.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-batch-epoll/echo-ws-limited.log",
+    "destination": "raw/cnetmod-ws-batch-epoll/echo-ws-limited.log",
+    "rounds": 6,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-batch-epoll/echo-ws-pipeline.log",
+    "destination": "raw/cnetmod-ws-batch-epoll/echo-ws-pipeline.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-batch-epoll/echo-ws.log",
+    "destination": "raw/cnetmod-ws-batch-epoll/echo-ws.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-batch-linked/echo-ws-limited.log",
+    "destination": "raw/cnetmod-ws-batch-linked/echo-ws-limited.log",
+    "rounds": 6,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-batch-linked/echo-ws-pipeline.log",
+    "destination": "raw/cnetmod-ws-batch-linked/echo-ws-pipeline.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-batch-linked/echo-ws.log",
+    "destination": "raw/cnetmod-ws-batch-linked/echo-ws.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-batch-multishot/echo-ws-pipeline.log",
+    "destination": "raw/cnetmod-ws-batch-multishot/echo-ws-pipeline.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-batch-nodelay/echo-ws-pipeline.log",
+    "destination": "raw/cnetmod-ws-batch-nodelay/echo-ws-pipeline.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-batch-ready/echo-ws-pipeline.log",
+    "destination": "raw/cnetmod-ws-batch-ready/echo-ws-pipeline.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-batch-sharded/echo-ws-limited.log",
+    "destination": "raw/cnetmod-ws-batch-sharded/echo-ws-limited.log",
+    "rounds": 6,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-batch-sharded/echo-ws-pipeline.log",
+    "destination": "raw/cnetmod-ws-batch-sharded/echo-ws-pipeline.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-batch-small/echo-ws-limited.log",
+    "destination": "raw/cnetmod-ws-batch-small/echo-ws-limited.log",
+    "rounds": 6,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-batch-small/echo-ws-pipeline.log",
+    "destination": "raw/cnetmod-ws-batch-small/echo-ws-pipeline.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-batch-small/echo-ws.log",
+    "destination": "raw/cnetmod-ws-batch-small/echo-ws.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-duplex/echo-ws-pipeline.log",
+    "destination": "raw/cnetmod-ws-duplex/echo-ws-pipeline.log",
+    "parse_status": "invalid_or_partial",
+    "reason": "incomplete round ('cnetmod-ws-duplex', 'echo-ws-pipeline', 4096) round=2: /mnt/c/Users/25007/.codex/worktrees/3aad/cnetmod/testing/bench/results/websocket/2026-10-20-optimization/raw/cnetmod-ws-duplex/echo-ws-pipeline.log"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-duplex-v2/echo-ws\r.log",
+    "destination": "raw/cnetmod-ws-duplex-v2/echo-ws_0x0d_.log",
+    "parse_status": "invalid_or_partial",
+    "reason": "no completed official rounds: /mnt/c/Users/25007/.codex/worktrees/3aad/cnetmod/testing/bench/results/websocket/2026-10-20-optimization/raw/cnetmod-ws-duplex-v2/echo-ws_0x0d_.log"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-duplex-v2/echo-ws-limited.log",
+    "destination": "raw/cnetmod-ws-duplex-v2/echo-ws-limited.log",
+    "rounds": 6,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-duplex-v2/echo-ws-pipeline.log",
+    "destination": "raw/cnetmod-ws-duplex-v2/echo-ws-pipeline.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-final/echo-ws-limited.log",
+    "destination": "raw/cnetmod-ws-final/echo-ws-limited.log",
+    "rounds": 6,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-final/echo-ws-pipeline.log",
+    "destination": "raw/cnetmod-ws-final/echo-ws-pipeline.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-final/echo-ws.log",
+    "destination": "raw/cnetmod-ws-final/echo-ws.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-final24-b64/echo-ws-limited.log",
+    "destination": "raw/cnetmod-ws-final24-b64/echo-ws-limited.log",
+    "rounds": 6,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-final24-b64/echo-ws-pipeline.log",
+    "destination": "raw/cnetmod-ws-final24-b64/echo-ws-pipeline.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-final24-b64/echo-ws.log",
+    "destination": "raw/cnetmod-ws-final24-b64/echo-ws.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-poll-first/echo-ws-limited.log",
+    "destination": "raw/cnetmod-ws-poll-first/echo-ws-limited.log",
+    "rounds": 6,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-poll-first/echo-ws-pipeline.log",
+    "destination": "raw/cnetmod-ws-poll-first/echo-ws-pipeline.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-poll-first/echo-ws.log",
+    "destination": "raw/cnetmod-ws-poll-first/echo-ws.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-reviewed16-b64/echo-ws-limited.log",
+    "destination": "raw/cnetmod-ws-reviewed16-b64/echo-ws-limited.log",
+    "rounds": 6,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-reviewed16-b64/echo-ws-pipeline.log",
+    "destination": "raw/cnetmod-ws-reviewed16-b64/echo-ws-pipeline.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-reviewed16-b64/echo-ws.log",
+    "destination": "raw/cnetmod-ws-reviewed16-b64/echo-ws.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-workers16/echo-ws-limited.log",
+    "destination": "raw/cnetmod-ws-workers16/echo-ws-limited.log",
+    "rounds": 6,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-workers16/echo-ws-pipeline.log",
+    "destination": "raw/cnetmod-ws-workers16/echo-ws-pipeline.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/cnetmod-ws-workers16/echo-ws.log",
+    "destination": "raw/cnetmod-ws-workers16/echo-ws.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/results/vanilla-epoll/echo-ws-pipeline.log",
+    "destination": "raw/vanilla-epoll/echo-ws-pipeline.log",
+    "rounds": 9,
+    "parse_status": "parsed"
+  }
+]

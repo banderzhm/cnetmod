@@ -1,0 +1,21 @@
+720: auto encode_frame(const stream_frame& f) -> std::vector<std::byte>
+721: {
+722:     std::vector<std::byte> out;
+723:     out.reserve(24 + f.data.size());
+724: 
+725:     // Build type byte with flags
+726:     std::uint64_t type_byte = 0x08;
+727:     if (f.offset > 0)
+728:         type_byte |= 0x04; // OFF bit
+729:     type_byte |= 0x02;     // LEN bit (always set for encoding)
+730:     if (f.fin)
+731:         type_byte |= 0x01; // FIN bit
+732: 
+733:     append_varint(out, type_byte);
+734:     append_varint(out, f.stream_id);
+735:     if (f.offset > 0)
+736:         append_varint(out, f.offset);
+737:     append_varint(out, f.data.size());
+738:     append_bytes(out, f.data);
+739:     return out;
+740: }

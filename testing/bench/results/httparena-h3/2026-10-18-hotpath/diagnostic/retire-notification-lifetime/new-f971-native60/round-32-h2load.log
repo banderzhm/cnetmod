@@ -1,0 +1,100 @@
+starting benchmark...
+spawning thread #0: 1 total client(s). 3125 total requests
+spawning thread #1: 1 total client(s). 3125 total requests
+spawning thread #2: 1 total client(s). 3125 total requests
+spawning thread #3: 1 total client(s). 3125 total requests
+spawning thread #4: 1 total client(s). 3125 total requests
+spawning thread #5: 1 total client(s). 3125 total requests
+spawning thread #6: 1 total client(s). 3125 total requests
+spawning thread #7: 1 total client(s). 3125 total requests
+spawning thread #8: 1 total client(s). 3125 total requests
+spawning thread #9: 1 total client(s). 3125 total requests
+spawning thread #10: 1 total client(s). 3125 total requests
+spawning thread #11: 1 total client(s). 3125 total requests
+spawning thread #12: 1 total client(s). 3125 total requests
+spawning thread #13: 1 total client(s). 3125 total requests
+spawning thread #14: 1 total client(s). 3125 total requests
+spawning thread #15: 1 total client(s). 3125 total requests
+spawning thread #16: 1 total client(s). 3125 total requests
+spawning thread #17: 1 total client(s). 3125 total requests
+spawning thread #18: 1 total client(s). 3125 total requests
+spawning thread #19: 1 total client(s). 3125 total requests
+spawning thread #20: 1 total client(s). 3125 total requests
+spawning thread #21: 1 total client(s). 3125 total requests
+spawning thread #22: 1 total client(s). 3125 total requests
+spawning thread #23: 1 total client(s). 3125 total requests
+spawning thread #24: 1 total client(s). 3125 total requests
+spawning thread #25: 1 total client(s). 3125 total requests
+spawning thread #26: 1 total client(s). 3125 total requests
+spawning thread #27: 1 total client(s). 3125 total requests
+spawning thread #28: 1 total client(s). 3125 total requests
+spawning thread #29: 1 total client(s). 3125 total requests
+spawning thread #30: 1 total client(s). 3125 total requests
+spawning thread #31: 1 total client(s). 3125 total requests
+spawning thread #32: 1 total client(s). 3125 total requests
+spawning thread #33: 1 total client(s). 3125 total requests
+spawning thread #34: 1 total client(s). 3125 total requests
+spawning thread #35: 1 total client(s). 3125 total requests
+spawning thread #36: 1 total client(s). 3125 total requests
+spawning thread #37: 1 total client(s). 3125 total requests
+spawning thread #38: 1 total client(s). 3125 total requests
+spawning thread #39: 1 total client(s). 3125 total requests
+spawning thread #40: 1 total client(s). 3125 total requests
+spawning thread #41: 1 total client(s). 3125 total requests
+spawning thread #42: 1 total client(s). 3125 total requests
+spawning thread #43: 1 total client(s). 3125 total requests
+spawning thread #44: 1 total client(s). 3125 total requests
+spawning thread #45: 1 total client(s). 3125 total requests
+spawning thread #46: 1 total client(s). 3125 total requests
+spawning thread #47: 1 total client(s). 3125 total requests
+spawning thread #48: 1 total client(s). 3125 total requests
+spawning thread #49: 1 total client(s). 3125 total requests
+spawning thread #50: 1 total client(s). 3125 total requests
+spawning thread #51: 1 total client(s). 3125 total requests
+spawning thread #52: 1 total client(s). 3125 total requests
+spawning thread #53: 1 total client(s). 3125 total requests
+spawning thread #54: 1 total client(s). 3125 total requests
+spawning thread #55: 1 total client(s). 3125 total requests
+spawning thread #56: 1 total client(s). 3125 total requests
+spawning thread #57: 1 total client(s). 3125 total requests
+spawning thread #58: 1 total client(s). 3125 total requests
+spawning thread #59: 1 total client(s). 3125 total requests
+spawning thread #60: 1 total client(s). 3125 total requests
+spawning thread #61: 1 total client(s). 3125 total requests
+spawning thread #62: 1 total client(s). 3125 total requests
+spawning thread #63: 1 total client(s). 3125 total requests
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Certificate: RSA 2048 bits
+Negotiated Group: x25519
+Resumption: no
+Application protocol: h3
+progress: 9% done
+progress: 19% done
+progress: 29% done
+progress: 39% done
+progress: 49% done
+progress: 59% done
+progress: 69% done
+progress: 79% done
+progress: 89% done
+progress: 99% done
+
+finished in 835.68ms, 239327.20 req/s, 3.64GB/s
+requests: 200000 total, 200000 started, 200000 done, 200000 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 200000 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 3.04GB (3262829574) total, 6.77MB (7101688) headers (space savings 54.05%), 3.03GB (3254607580) data
+UDP datagram: 87950 sent, 2409002 received
+                 min         max         median     p95        p99        mean         sd        +/- sd
+request     :      501us     50.30ms      3.15ms    10.68ms    17.65ms     4.25ms      3.21ms    90.27%
+connect     :     2.42ms    649.54ms    323.14ms   618.84ms   649.54ms   324.72ms    191.31ms    57.81%
+TTFB        :     3.07ms    650.57ms    325.17ms   620.19ms   650.57ms   325.97ms    191.56ms    57.81%
+req/s       :    3750.06    28982.90     5696.40   18116.12   28982.90    7594.03     5208.11    87.50%
+min RTT     :        7us      1.79ms        16us      535us     1.79ms      131us       338us    92.19%
+smoothed RTT:      206us      5.79ms       691us     4.26ms     5.79ms     1.10ms      1.18ms    89.06%
+packets sent:        910        1845        1381       1690       1845    1376.16      206.23    65.63%
+packets recv:      37298       37877       37649      37823      37877   37640.66      122.89    70.31%
+packets lost:          0          16           2         11         16       2.64        3.20    87.50%
+GRO packets :          1           1           1          1          1       1.00        0.00   100.00%
+-t: warning: the number of threads is greater than hardware cores.

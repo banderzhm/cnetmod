@@ -5,7 +5,7 @@ module;
 export module cnetmod.protocol.quic:congestion_control;
 
 import std;
-import :types;
+import :foundation;
 
 namespace cnetmod::quic {
 
@@ -22,6 +22,10 @@ public:
     void on_packets_discarded(std::uint64_t bytes);
     void on_congestion_event(std::uint64_t lost_bytes);
     void update_rtt(std::chrono::steady_clock::duration smoothed_rtt);
+    /// Synchronize an ACK-validated per-path UDP payload size. The connection
+    /// publishes only upward discovery; its legacy initial MSS is retained
+    /// until the first successful probe. Never reset current cwnd or flight.
+    void on_max_datagram_size_validated(std::uint64_t bytes) noexcept;
 
     [[nodiscard]] auto can_send(std::uint64_t bytes_in_flight) const noexcept -> bool;
     [[nodiscard]] auto can_send_datagram(std::uint64_t bytes) const noexcept -> bool;
@@ -44,7 +48,7 @@ private:
     std::uint64_t cwnd_{14720};
     std::uint64_t ssthresh_{(std::numeric_limits<std::uint64_t>::max)()};
     std::uint64_t bytes_in_flight_{};
-    static constexpr std::uint64_t mtu_{1472};
+    std::uint64_t max_datagram_size_{1472};
     std::chrono::steady_clock::duration smoothed_rtt_{std::chrono::milliseconds{100}};
     double pacing_rate_{static_cast<double>(cwnd_) * 10.0};
 };
@@ -62,6 +66,10 @@ public:
     void on_packets_discarded(std::uint64_t bytes);
     void on_congestion_event(std::uint64_t lost_bytes);
     void update_rtt(std::chrono::steady_clock::duration smoothed_rtt);
+    /// Synchronize an ACK-validated per-path UDP payload size. The connection
+    /// publishes only upward discovery; its legacy initial MSS is retained
+    /// until the first successful probe. Never reset current cwnd or flight.
+    void on_max_datagram_size_validated(std::uint64_t bytes) noexcept;
 
     [[nodiscard]] auto can_send(std::uint64_t bytes_in_flight) const noexcept -> bool;
     [[nodiscard]] auto can_send_datagram(std::uint64_t bytes) const noexcept -> bool;
@@ -77,7 +85,8 @@ private:
     std::uint64_t ssthresh_{(std::numeric_limits<std::uint64_t>::max)()};
     std::uint64_t bytes_in_flight_{};
     std::uint64_t w_max_{cwnd_};
-    static constexpr std::uint64_t mtu_{1472};
+    bool in_recovery_{};
+    std::uint64_t max_datagram_size_{1472};
     static constexpr double beta_{0.7};
     static constexpr double cubic_c_{0.4};
     std::chrono::steady_clock::duration smoothed_rtt_{std::chrono::milliseconds{100}};
@@ -99,6 +108,10 @@ public:
     void on_packets_discarded(std::uint64_t bytes);
     void on_congestion_event(std::uint64_t lost_bytes);
     void update_rtt(std::chrono::steady_clock::duration smoothed_rtt);
+    /// Synchronize an ACK-validated per-path UDP payload size. The connection
+    /// publishes only upward discovery; its legacy initial MSS is retained
+    /// until the first successful probe. Never reset current cwnd or flight.
+    void on_max_datagram_size_validated(std::uint64_t bytes) noexcept;
 
     [[nodiscard]] auto can_send(std::uint64_t bytes_in_flight) const noexcept -> bool;
     [[nodiscard]] auto can_send_datagram(std::uint64_t bytes) const noexcept -> bool;
@@ -118,14 +131,13 @@ private:
         std::chrono::steady_clock::time_point now);
     void update_pacing_rate();
 
-    static constexpr std::uint64_t mtu_{1472};
-    static constexpr std::uint64_t min_window_{2U * mtu_};
+    std::uint64_t max_datagram_size_{1472};
     static constexpr double startup_gain_{2.885};
     static constexpr double drain_gain_{1.0 / startup_gain_};
     static constexpr double probe_gain_{1.0};
     static constexpr double cwnd_gain_{2.0};
     mode mode_{mode::startup};
-    std::uint64_t cwnd_{10U * mtu_};
+    std::uint64_t cwnd_{14720};
     std::uint64_t bytes_in_flight_{};
     std::chrono::steady_clock::duration smoothed_rtt_{std::chrono::milliseconds{100}};
     std::chrono::steady_clock::duration min_rtt_{std::chrono::milliseconds{100}};
@@ -152,6 +164,10 @@ public:
     void on_packets_discarded(std::uint64_t bytes);
     void on_congestion_event(std::uint64_t lost_bytes);
     void update_rtt(std::chrono::steady_clock::duration smoothed_rtt);
+    /// Synchronize an ACK-validated per-path UDP payload size. The connection
+    /// publishes only upward discovery; its legacy initial MSS is retained
+    /// until the first successful probe. Never reset current cwnd or flight.
+    void on_max_datagram_size_validated(std::uint64_t bytes) noexcept;
 
     [[nodiscard]] auto can_send(std::uint64_t bytes_in_flight) const noexcept -> bool;
     [[nodiscard]] auto can_send_datagram(std::uint64_t bytes) const noexcept -> bool;

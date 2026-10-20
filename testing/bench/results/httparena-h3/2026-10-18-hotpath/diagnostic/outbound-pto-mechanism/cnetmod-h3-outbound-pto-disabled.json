@@ -1,0 +1,30 @@
+[
+  {
+    "case": "pto",
+    "workers": 1,
+    "restart": false,
+    "client_forwarded": 9,
+    "client_blocked": 0,
+    "client_forwarded_while_gated": 0,
+    "server_forwarded_while_gated": 0,
+    "response_datagrams_dropped": 1,
+    "socket_errors": [],
+    "decode_errors": [],
+    "request_fin_acked": true,
+    "gate_at_ms": 101.06526699999563,
+    "client_forwarded_at_gate": 8,
+    "dropped_packet_number": 7,
+    "dropped_datagram_bytes": 60,
+    "dropped_stream_frames": [
+      {
+        "offset": 0,
+        "length": 28,
+        "fin": true
+      }
+    ],
+    "drop_at_ms": 1201.684462000003,
+    "status": "failed",
+    "error": "TimeoutError: ",
+    "server_log": "[2026-10-18 08:56:43.119] [info] [131746457391552] [h3_interop_server.cpp:269] HTTP/3 interop listener started on UDP 42835 with 1 worker\n"
+  }
+]

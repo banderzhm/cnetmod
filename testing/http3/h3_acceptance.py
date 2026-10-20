@@ -103,6 +103,8 @@ def cnetmod_client(binary: Path, port: int) -> None:
     output = reply.stdout + reply.stderr
     if "Status: 200" not in output:
         raise AssertionError(f"unexpected client result: {output!r}")
+    if "Body: ok\n" not in output:
+        raise AssertionError(f"unexpected client response body: {output!r}")
 
 
 def case(name: str, action: Callable[[], None],
@@ -134,7 +136,7 @@ def main() -> int:
                         help="number of cnetmod HTTP/3 server workers (default: 1)")
     parser.add_argument("--port", type=int, default=4433)
     parser.add_argument("--results", type=Path, default=Path("h3-interop-results.json"))
-    parser.add_argument("--nghttp3-client-command", help="external HTTP/3 client command template; use {url}")
+    parser.add_argument("--nghttp3-client-command", help="external HTTP/3 client command template; use {url}, {port}")
     parser.add_argument("--nghttp3-server-command", help="external HTTP/3 server command template; use {port}, {cert}, {key}")
     args = parser.parse_args()
 
@@ -318,7 +320,7 @@ def main() -> int:
             try:
                 wait_for_process(process)
                 command = shlex.split(args.nghttp3_client_command.format(
-                    url=f"https://127.0.0.1:{port}/health"))
+                    url=f"https://127.0.0.1:{port}/health", port=port))
                 completed = run(command, 20)
                 if completed.returncode:
                     raise AssertionError(completed.stderr.strip() or completed.stdout.strip())

@@ -1,0 +1,1 @@
+git diff --check scoped to the three changed files: exit 0

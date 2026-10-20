@@ -1,0 +1,82 @@
+[
+  {
+    "path": "src/protocol/quic/quic_connection.cpp",
+    "bytes": 277693,
+    "sha256": "7681a46f45ee44af9866d6454788ec972f57018e550ae642f96fa1051f7b6cb7"
+  },
+  {
+    "path": "src/protocol/quic/quic_connection.cppm",
+    "bytes": 25000,
+    "sha256": "94f6ccaaef8520332d2d88e77ae67ba6dc5480bf99c00f04921a898914038e54"
+  },
+  {
+    "path": "src/protocol/quic/quic_stream.cpp",
+    "bytes": 17447,
+    "sha256": "13208fbd23056edf005e7b2c4ed93c44b7cc84226f8a484621f580513a411db3"
+  },
+  {
+    "path": "src/protocol/quic/quic_stream.cppm",
+    "bytes": 6280,
+    "sha256": "ff1e9635ca120a2648f8dc0c3f1ab3063b3d10488bf6b2e140954ee4373bd80c"
+  },
+  {
+    "path": "src/utils/concurrentContainers/atomic_hash_map.cppm",
+    "bytes": 3375,
+    "sha256": "393b8f2369d66adffe2ab9557a7142b98fb1566e711a0a62f770930cbb53a4d0"
+  },
+  {
+    "path": "src/utils/concurrentContainers/atomic_hash_map.inl",
+    "bytes": 9245,
+    "sha256": "3bf1f47113a9ef61e628f1d94bc921b23980756f041112f433e51cb69bb0057e"
+  },
+  {
+    "path": "src/executor/async_op.cppm",
+    "bytes": 26456,
+    "sha256": "9832a5ad3b1750947352c699ec5177720993b413ee0e51d0fd915a193651a3db"
+  },
+  {
+    "path": "src/executor/platform/iocp_async_op.cpp",
+    "bytes": 100976,
+    "sha256": "605e0c0a616cc3ea58f0641574bf07c9f159fa43a2c959100b57d8e70e735c69"
+  },
+  {
+    "path": "src/io/platform/iocp_impl.cpp",
+    "bytes": 5566,
+    "sha256": "713fc804f4a06911efbf9de4668e6ab6390ce9ff59716c8c64a9bda806de11d5"
+  },
+  {
+    "path": "testing/tests/test_concurrent_containers.cpp",
+    "bytes": 14648,
+    "sha256": "98e0364c2d4e15de4016f5dcdab4452b48b0bb315aeac417f3f5ff9220535c2f"
+  },
+  {
+    "path": "testing/tests/test_quic_stream.cpp",
+    "bytes": 16563,
+    "sha256": "b40cec1b80f3264ee70f5b77b4bc10e4a347c4410ff8164ba8dab853d4dee5cd"
+  },
+  {
+    "path": "testing/tests/test_quic_loss_detection.cpp",
+    "bytes": 22201,
+    "sha256": "24d58337998e98041be0b6e70df72f104c988028040d671bd136a2d85b76d2e8"
+  },
+  {
+    "path": "testing/http3/http_client_e2e.cpp",
+    "bytes": 60454,
+    "sha256": "00005ec4d10ba8bc9ed0bdf3164a7486b82a0e1e4a51d59c314c7bf66a051ca5"
+  },
+  {
+    "path": "testing/http3/http_client_e2e_server.cpp",
+    "bytes": 30282,
+    "sha256": "41a8c72a554116ee2bddab2a8f7432801c05f94b8cb5fbdaa7546c705112c6e4"
+  },
+  {
+    "path": "testing/http3/CMakeLists.txt",
+    "bytes": 15127,
+    "sha256": "8f6515ae02ff0b9b1310284a31d57de2adb759d18cde7964a926a874b3b06d2d"
+  },
+  {
+    "path": "testing/tests/CMakeLists.txt",
+    "bytes": 27490,
+    "sha256": "c5942b5e1a1d711585bdb492a4bf7ade36fc41901c8f1d64d7f2cde7223e0b99"
+  }
+]

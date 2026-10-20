@@ -1,0 +1,13 @@
+[==========] Running 11 test(s).
+[ RUN      ] qpack_static_table_is_rfc9204_appendix_a
+[       OK ] qpack_static_table_is_rfc9204_appendix_a
+[ RUN      ] qpack_static_and_literal_header_block_round_trip
+[       OK ] qpack_static_and_literal_header_block_round_trip
+[ RUN      ] qpack_dynamic_indexed_header_block_ric_base_and_ack
+[       OK ] qpack_dynamic_indexed_header_block_ric_base_and_ack
+[ RUN      ] qpack_dynamic_header_blocks_remain_decodable_after_acknowledgement
+[       OK ] qpack_dynamic_header_blocks_remain_decodable_after_acknowledgement
+[ RUN      ] qpack_decoder_applies_local_maximum_table_capacity
+[       OK ] qpack_decoder_applies_local_maximum_table_capacity
+[ RUN      ] qpack_acknowledged_entries_stay_pinned_until_each_section_ack
+  ASSERT FAILED: decoded.has_value() at /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/tests/test_http3_qpack.cpp:153

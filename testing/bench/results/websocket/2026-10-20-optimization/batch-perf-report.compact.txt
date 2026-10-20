@@ -1,0 +1,82 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 153K of event 'cpu-clock'
+# Event count (approx.): 154089263643
+#
+# Overhead Shared Object Symbol IPC [IPC Coverage]
+# ........ ................. ................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................. ....................
+#
+14.04% [kernel.kallsyms] [k] _raw_spin_unlock_irqrestore - -
+3.69% bench_ws_server [.] cnetmod::ws::connection@cnetmod.protocol.websocket::async_process_messages(std::__1::function<std::__1::expected<void, std::__1::error_code> (cnetmod::ws::opcode@cnetmod.protocol.websocket, std::__1::span<std::byte const, 18446744073709551615ul>, cnetmod::ws::message_writer@cnetmod.protocol.websocket&)>, unsigned long) [clone .resume] - -
+1.92% [kernel.kallsyms] [k] tcp_ack - -
+1.80% [kernel.kallsyms] [k] skb_release_data - -
+1.72% bench_ws_server [.] cnetmod::ws::append_frame_into@cnetmod.protocol.websocket(std::__1::vector<std::byte, std::__1::allocator<std::byte> >&, cnetmod::ws::opcode@cnetmod.protocol.websocket, std::__1::span<std::byte const, 18446744073709551615ul>, bool, bool) - -
+1.46% bench_ws_server [.] cnetmod::ws::message_writer@cnetmod.protocol.websocket::send(cnetmod::ws::opcode@cnetmod.protocol.websocket, std::__1::span<std::byte const, 18446744073709551615ul>) - -
+1.41% [kernel.kallsyms] [k] _copy_to_iter - -
+1.36% [kernel.kallsyms] [k] skb_defer_free_flush - -
+1.27% [kernel.kallsyms] [k] __inet_lookup_established - -
+1.26% bench_ws_server [.] cnetmod::ws::parse_frame_header@cnetmod.protocol.websocket(std::__1::span<std::byte const, 18446744073709551615ul>) - -
+1.26% [kernel.kallsyms] [k] fget - -
+1.16% [kernel.kallsyms] [k] tcp_recvmsg_locked - -
+1.16% [kernel.kallsyms] [k] tcp_sendmsg_locked - -
+1.07% bench_ws_server [.] cnetmod::ws::apply_mask@cnetmod.protocol.websocket(std::__1::span<std::byte, 18446744073709551615ul>, unsigned int) - -
+1.04% [kernel.kallsyms] [k] skb_attempt_defer_free - -
+0.98% [kernel.kallsyms] [k] selinux_socket_recvmsg - -
+0.97% [kernel.kallsyms] [k] read_tsc - -
+0.96% [kernel.kallsyms] [k] __skb_datagram_iter - -
+0.94% [kernel.kallsyms] [k] __check_object_size - -
+0.87% [kernel.kallsyms] [k] slab_update_freelist.isra.0 - -
+0.84% [kernel.kallsyms] [k] __tcp_transmit_skb - -
+0.82% bench_ws_server [.] cnetmod::ws::is_control@cnetmod.protocol.websocket(cnetmod::ws::opcode@cnetmod.protocol.websocket) - -
+0.81% [kernel.kallsyms] [k] tcp_rcv_established - -
+0.81% [kernel.kallsyms] [k] _raw_spin_unlock_irq - -
+0.80% [kernel.kallsyms] [k] __raw_callee_save___pv_queued_spin_unlock - -
+0.78% [kernel.kallsyms] [k] __dev_queue_xmit - -
+0.77% [kernel.kallsyms] [k] tcp_v4_rcv - -
+0.74% [kernel.kallsyms] [k] io_submit_sqes - -
+0.71% [kernel.kallsyms] [k] kmem_cache_alloc_node_noprof - -
+0.70% [kernel.kallsyms] [k] _raw_spin_lock_bh - -
+0.68% bench_ws_server [.] aligned_alloc - -
+0.66% [kernel.kallsyms] [k] tcp_write_xmit - -
+0.65% [kernel.kallsyms] [k] tcp_rcv_space_adjust - -
+0.65% [kernel.kallsyms] [k] ip_finish_output2 - -
+0.61% [kernel.kallsyms] [k] __io_submit_flush_completions - -
+0.59% [kernel.kallsyms] [k] fput - -
+0.59% [kernel.kallsyms] [k] kmem_cache_free - -
+0.58% bench_ws_server [.] cnetmod::io_uring_context@cnetmod.io.platform.io_uring::run_one_impl(bool) - -
+0.58% [kernel.kallsyms] [k] __rcu_read_unlock - -
+0.57% [kernel.kallsyms] [k] finish_task_switch.isra.0 - -
+0.57% liburing.so.2 [.] 0x0000000000002734 - -
+0.57% bench_ws_server [.] cnetmod::dynamic_buffer@cnetmod.core.buffer::consume(unsigned long) - -
+0.56% [kernel.kallsyms] [k] io_issue_sqe - -
+0.55% [kernel.kallsyms] [k] selinux_socket_sendmsg - -
+0.54% [kernel.kallsyms] [k] skb_page_frag_refill - -
+0.54% [kernel.kallsyms] [k] __rcu_read_lock - -
+0.54% [kernel.kallsyms] [k] tcp_check_space - -
+0.53% [kernel.kallsyms] [k] net_rx_action - -
+0.53% [kernel.kallsyms] [k] ip_rcv_finish_core - -
+0.52% [kernel.kallsyms] [k] __alloc_skb - -
+0.51% [kernel.kallsyms] [k] __pv_queued_spin_lock_slowpath - -
+0.50% [kernel.kallsyms] [k] _copy_from_iter - -
+0.48% [kernel.kallsyms] [k] kfree_skbmem - -
+0.48% [kernel.kallsyms] [k] __pi_memset - -
+0.48% [kernel.kallsyms] [k] __ip_queue_xmit - -
+0.48% bench_ws_server [.] cnetmod::async_read@cnetmod.executor.async_op(cnetmod::io_context@cnetmod.io.io_context&, cnetmod::socket@cnetmod.core.socket&, cnetmod::mutable_buffer@cnetmod.core.buffer) [clone .resume] - -
+0.46% [kernel.kallsyms] [k] do_syscall_64 - -
+0.45% bench_ws_server [.] cnetmod::async_write@cnetmod.executor.async_op(cnetmod::io_context@cnetmod.io.io_context&, cnetmod::socket@cnetmod.core.socket&, cnetmod::const_buffer@cnetmod.core.buffer) [clone .resume] - -
+0.45% bench_ws_server [.] std::__1::__function::__func<(anonymous namespace)::echo(cnetmod::ws::ws_context@cnetmod.protocol.websocket&)::$_0, std::__1::expected<void, std::__1::error_code> (cnetmod::ws::opcode@cnetmod.protocol.websocket, std::__1::span<std::byte const, 18446744073709551615ul>, cnetmod::ws::message_writer@cnetmod.protocol.websocket&)>::operator()(cnetmod::ws::opcode@cnetmod.protocol.websocket&&, std::__1::span<std::byte const, 18446744073709551615ul>&&, cnetmod::ws::message_writer@cnetmod.protocol.websocket&) - -
+0.43% [kernel.kallsyms] [k] kfree - -
+0.43% [kernel.kallsyms] [k] io_send - -
+0.43% [kernel.kallsyms] [k] do_softirq.part.0 - -
+0.43% bench_ws_server [.] cnetmod::ws::connection@cnetmod.protocol.websocket::async_read_some(char*, unsigned long) [clone .resume] - -
+0.41% [kernel.kallsyms] [k] __netif_receive_skb_core.constprop.0 - -
+0.41% bench_ws_server [.] cnetmod::ws::connection@cnetmod.protocol.websocket::async_write_all(char const*, unsigned long) [clone .resume] - -
+0.41% [kernel.kallsyms] [k] llist_reverse_order - -
+
+
+#
+# (Tip: To measure approximate function latency with Processor Trace use perf record -e intel_pt// ... ; perf script --call-ret-trace)
+#

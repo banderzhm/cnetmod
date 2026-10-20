@@ -1,0 +1,1 @@
+Exact hash-bound ELF asm verified: fast owned append_to branches from34d682 to34d6d1, restores registers then tail-jumps vector insert at34d6fa. Fast CLOSE tests first byte at34d5f2 and jne34d5f4 excludes ordinary STREAM before owner cmp34d5f6. Mixed CLOSE owner cmp was34d690 upfront. This establishes instruction changes only, not measured throughput recovery.

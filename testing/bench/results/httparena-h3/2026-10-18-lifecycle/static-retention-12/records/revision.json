@@ -1,0 +1,8 @@
+{
+  "commit": "e1c6da60903444f5a1734ea00636e855e5b446b8",
+  "binary_sha256": "3bbf8402eb9d0cc0afa17455ddbdf0e6a7ae69ea5038a83011f4f4c495eefa9a",
+  "test_token": "explicitly handed over by user for this serial official retest",
+  "profiles": "supplemental cnetmod static-h3 twelve rounds on one process; separate from official comparison",
+  "fix": "QUIC stream state and credit accounting, cancellation ownership, bounded HTTP/3 buffering, scheduler and recovery teardown; immutable response headers retained",
+  "resource_sampling": "supplemental /proc RSS once per second; official Docker peaks unchanged"
+}

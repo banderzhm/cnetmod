@@ -1,0 +1,12 @@
+{
+  "external_quic_archive": "/var/tmp/cnetmod-h3-crypto-old-real-fault/libcnetmod_quic.a",
+  "archive_sha256": "81c9f282b02349eff0441d2a698994cb123bd02604465da7f9ce3fb78c49dfe3",
+  "member_sha256": "be74ea3ff5b55ce6fbf8527416fbf299b8e773a64206f3a4d7f3dfd5b3d90836",
+  "link_map_sha256": "e7081757f9bd6e80c214b03d5e5d896137474e729f4314cd9554b8e8c84ea349",
+  "trace_sha256": "4c7c5c0c51ed9d6dff200004d21e629af2ab73e9143466d816ba7368e12b356b",
+  "archive_seen_in_trace": true,
+  "member_trace": [
+    "trace: /var/tmp/cnetmod-h3-crypto-old-real-fault/libcnetmod_quic.a(quic_connection.cpp.o)"
+  ],
+  "map_role": "ThinLTO output layout; not archive-selection evidence"
+}

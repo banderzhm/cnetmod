@@ -1,0 +1,14 @@
+[
+  "perf",
+  "record",
+  "-e",
+  "cpu-clock",
+  "-F",
+  "99",
+  "--call-graph",
+  "dwarf,16384",
+  "-p",
+  "1109",
+  "-o",
+  "/var/tmp/agensio-reference-observation-dd7463c36c79453ca4d8fd9099ae2cf9/perf/perf.data"
+]

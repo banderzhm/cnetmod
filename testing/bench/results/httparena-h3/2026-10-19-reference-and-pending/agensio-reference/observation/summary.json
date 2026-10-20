@@ -1,0 +1,1909 @@
+{
+  "valid": true,
+  "diagnostic_only": true,
+  "image": "sha256:dd75c50576e08009267603a62a55f01e59b7e79891c6eb81420735a78e28b504",
+  "binary_sha256": "8c0da17c36f77b67357f3769be3af19e36d39ed04aec5286f64c329e6db3e986",
+  "source_head": "e60c61c7643e47c046fbb5136f8b46f7f7f9289b",
+  "measurements": [
+    {
+      "total": 6256445,
+      "started": 6260541,
+      "done": 6256445,
+      "succeeded": 6256445,
+      "status_2xx": 6257524,
+      "header_completion_delta": 1079,
+      "failed": 0,
+      "errored": 0,
+      "timeout": 0,
+      "elapsed_seconds": 5.67,
+      "printed_rps": 1251289.0,
+      "completed_rps": 1103429.4532627866,
+      "valid_2xx_rps": 1103619.7530864198,
+      "p99_ms": 11.76,
+      "median_ms": 2.45,
+      "latency_line": "request     :      286us     49.54ms      2.45ms     7.72ms    11.76ms     3.16ms      2.31ms    83.48%",
+      "udp_sent": 630122,
+      "udp_received": 2594852,
+      "name": "nonperf",
+      "sampled": false,
+      "server_cpu_seconds": 71.42999999999999,
+      "before": {
+        "cpu_seconds": 0.06,
+        "monotonic_ns": 27577118165,
+        "system_cpu_ticks": {
+          "user": 170,
+          "nice": 0,
+          "system": 491,
+          "idle": 87180,
+          "iowait": 120,
+          "irq": 0,
+          "softirq": 130,
+          "steal": 0,
+          "guest": 0,
+          "guest_nice": 0
+        },
+        "clock_ticks_per_second": 100,
+        "cpus_allowed_list": "0-31",
+        "threads": {
+          "743": {
+            "comm": "agensio",
+            "cpu_seconds": 0.05,
+            "cpus_allowed_list": "0-31"
+          },
+          "895": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "896": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "897": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "898": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "899": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "900": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "901": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "902": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "903": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "904": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "905": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "906": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "907": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "908": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "909": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "910": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "911": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "912": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "913": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "914": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "915": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "916": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "917": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "918": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "919": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "920": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "921": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "922": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "923": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "924": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "925": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          }
+        },
+        "memory_kib": {
+          "Rss": 79720,
+          "Pss": 79000,
+          "Private_Clean": 9932,
+          "Private_Dirty": 68356
+        }
+      },
+      "after": {
+        "cpu_seconds": 71.49,
+        "monotonic_ns": 33351779799,
+        "system_cpu_ticks": {
+          "user": 10125,
+          "nice": 0,
+          "system": 3938,
+          "idle": 91005,
+          "iowait": 121,
+          "irq": 0,
+          "softirq": 1444,
+          "steal": 0,
+          "guest": 0,
+          "guest_nice": 0
+        },
+        "clock_ticks_per_second": 100,
+        "cpus_allowed_list": "0-31",
+        "threads": {
+          "743": {
+            "comm": "agensio",
+            "cpu_seconds": 3.4,
+            "cpus_allowed_list": "0-31"
+          },
+          "895": {
+            "comm": "agensio",
+            "cpu_seconds": 4.7,
+            "cpus_allowed_list": "0-31"
+          },
+          "896": {
+            "comm": "agensio",
+            "cpu_seconds": 2.31,
+            "cpus_allowed_list": "0-31"
+          },
+          "897": {
+            "comm": "agensio",
+            "cpu_seconds": 4.04,
+            "cpus_allowed_list": "0-31"
+          },
+          "898": {
+            "comm": "agensio",
+            "cpu_seconds": 2.38,
+            "cpus_allowed_list": "0-31"
+          },
+          "899": {
+            "comm": "agensio",
+            "cpu_seconds": 4.03,
+            "cpus_allowed_list": "0-31"
+          },
+          "900": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "901": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "902": {
+            "comm": "agensio",
+            "cpu_seconds": 2.4,
+            "cpus_allowed_list": "0-31"
+          },
+          "903": {
+            "comm": "agensio",
+            "cpu_seconds": 3.24,
+            "cpus_allowed_list": "0-31"
+          },
+          "904": {
+            "comm": "agensio",
+            "cpu_seconds": 3.06,
+            "cpus_allowed_list": "0-31"
+          },
+          "905": {
+            "comm": "agensio",
+            "cpu_seconds": 1.46,
+            "cpus_allowed_list": "0-31"
+          },
+          "906": {
+            "comm": "agensio",
+            "cpu_seconds": 3.09,
+            "cpus_allowed_list": "0-31"
+          },
+          "907": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "908": {
+            "comm": "agensio",
+            "cpu_seconds": 3.24,
+            "cpus_allowed_list": "0-31"
+          },
+          "909": {
+            "comm": "agensio",
+            "cpu_seconds": 1.42,
+            "cpus_allowed_list": "0-31"
+          },
+          "910": {
+            "comm": "agensio",
+            "cpu_seconds": 2.41,
+            "cpus_allowed_list": "0-31"
+          },
+          "911": {
+            "comm": "agensio",
+            "cpu_seconds": 2.31,
+            "cpus_allowed_list": "0-31"
+          },
+          "912": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "913": {
+            "comm": "agensio",
+            "cpu_seconds": 3.23,
+            "cpus_allowed_list": "0-31"
+          },
+          "914": {
+            "comm": "agensio",
+            "cpu_seconds": 2.45,
+            "cpus_allowed_list": "0-31"
+          },
+          "915": {
+            "comm": "agensio",
+            "cpu_seconds": 2.34,
+            "cpus_allowed_list": "0-31"
+          },
+          "916": {
+            "comm": "agensio",
+            "cpu_seconds": 2.36,
+            "cpus_allowed_list": "0-31"
+          },
+          "917": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "918": {
+            "comm": "agensio",
+            "cpu_seconds": 3.18,
+            "cpus_allowed_list": "0-31"
+          },
+          "919": {
+            "comm": "agensio",
+            "cpu_seconds": 2.35,
+            "cpus_allowed_list": "0-31"
+          },
+          "920": {
+            "comm": "agensio",
+            "cpu_seconds": 2.46,
+            "cpus_allowed_list": "0-31"
+          },
+          "921": {
+            "comm": "agensio",
+            "cpu_seconds": 3.26,
+            "cpus_allowed_list": "0-31"
+          },
+          "922": {
+            "comm": "agensio",
+            "cpu_seconds": 2.38,
+            "cpus_allowed_list": "0-31"
+          },
+          "923": {
+            "comm": "agensio",
+            "cpu_seconds": 2.35,
+            "cpus_allowed_list": "0-31"
+          },
+          "924": {
+            "comm": "agensio",
+            "cpu_seconds": 1.38,
+            "cpus_allowed_list": "0-31"
+          },
+          "925": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          }
+        },
+        "memory_kib": {
+          "Rss": 105436,
+          "Pss": 104716,
+          "Private_Clean": 9932,
+          "Private_Dirty": 94072
+        }
+      },
+      "thread_deltas": [
+        {
+          "tid": 743,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.05,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 3.4,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 3.35
+        },
+        {
+          "tid": 895,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 4.7,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 4.7
+        },
+        {
+          "tid": 896,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 2.31,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 2.31
+        },
+        {
+          "tid": 897,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 4.04,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 4.04
+        },
+        {
+          "tid": 898,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 2.38,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 2.38
+        },
+        {
+          "tid": 899,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 4.03,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 4.03
+        },
+        {
+          "tid": 900,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 0.0
+        },
+        {
+          "tid": 901,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 0.0
+        },
+        {
+          "tid": 902,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 2.4,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 2.4
+        },
+        {
+          "tid": 903,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 3.24,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 3.24
+        },
+        {
+          "tid": 904,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 3.06,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 3.06
+        },
+        {
+          "tid": 905,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 1.46,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 1.46
+        },
+        {
+          "tid": 906,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 3.09,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 3.09
+        },
+        {
+          "tid": 907,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 0.0
+        },
+        {
+          "tid": 908,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 3.24,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 3.24
+        },
+        {
+          "tid": 909,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 1.42,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 1.42
+        },
+        {
+          "tid": 910,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 2.41,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 2.41
+        },
+        {
+          "tid": 911,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 2.31,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 2.31
+        },
+        {
+          "tid": 912,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 0.0
+        },
+        {
+          "tid": 913,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 3.23,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 3.23
+        },
+        {
+          "tid": 914,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 2.45,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 2.45
+        },
+        {
+          "tid": 915,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 2.34,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 2.34
+        },
+        {
+          "tid": 916,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 2.36,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 2.36
+        },
+        {
+          "tid": 917,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 0.0
+        },
+        {
+          "tid": 918,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 3.18,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 3.18
+        },
+        {
+          "tid": 919,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 2.35,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 2.35
+        },
+        {
+          "tid": 920,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 2.46,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 2.46
+        },
+        {
+          "tid": 921,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 3.26,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 3.26
+        },
+        {
+          "tid": 922,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 2.38,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 2.38
+        },
+        {
+          "tid": 923,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 2.35,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 2.35
+        },
+        {
+          "tid": 924,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 1.38,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 1.38
+        },
+        {
+          "tid": 925,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 0.0
+        }
+      ],
+      "system_cpu_delta": {
+        "ticks": {
+          "user": 9955,
+          "nice": 0,
+          "system": 3447,
+          "idle": 3825,
+          "iowait": 1,
+          "irq": 0,
+          "softirq": 1314,
+          "steal": 0
+        },
+        "total_ticks_excluding_guest": 18542,
+        "busy_ticks": 14716,
+        "idle_ticks": 3825,
+        "iowait_ticks": 1,
+        "monotonic_elapsed_seconds": 5.774661634,
+        "clock_ticks_per_second": 100,
+        "scope": "whole host CPU aggregate, including load generator and unrelated work; no affinity changes",
+        "busy_fraction": 0.7936576421098047,
+        "idle_fraction": 0.2062884262754827,
+        "iowait_fraction": 5.3931614712544494e-05,
+        "average_busy_cpu_equivalents": 25.48374421343628,
+        "average_idle_cpu_equivalents": 6.623764719787562
+      },
+      "cpu_us_per_complete": 11.417026762003022
+    },
+    {
+      "total": 5720598,
+      "started": 5724694,
+      "done": 5720598,
+      "succeeded": 5720598,
+      "status_2xx": 5721687,
+      "header_completion_delta": 1089,
+      "failed": 0,
+      "errored": 0,
+      "timeout": 0,
+      "elapsed_seconds": 5.67,
+      "printed_rps": 1144119.6,
+      "completed_rps": 1008923.8095238096,
+      "valid_2xx_rps": 1009115.873015873,
+      "p99_ms": 13.03,
+      "median_ms": 2.67,
+      "latency_line": "request     :      239us     49.43ms      2.67ms     8.50ms    13.03ms     3.46ms      2.56ms    83.32%",
+      "udp_sent": 572277,
+      "udp_received": 2345055,
+      "name": "perf",
+      "sampled": true,
+      "server_cpu_seconds": 70.22999999999999,
+      "before": {
+        "cpu_seconds": 0.04,
+        "monotonic_ns": 39830790689,
+        "system_cpu_ticks": {
+          "user": 10152,
+          "nice": 0,
+          "system": 4008,
+          "idle": 111603,
+          "iowait": 131,
+          "irq": 0,
+          "softirq": 1496,
+          "steal": 0,
+          "guest": 0,
+          "guest_nice": 0
+        },
+        "clock_ticks_per_second": 100,
+        "cpus_allowed_list": "0-31",
+        "threads": {
+          "1109": {
+            "comm": "agensio",
+            "cpu_seconds": 0.04,
+            "cpus_allowed_list": "0-31"
+          },
+          "1245": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1246": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1247": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1248": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1249": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1250": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1251": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1252": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1253": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1254": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1255": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1256": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1257": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1258": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1259": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1260": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1261": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1262": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1263": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1264": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1265": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1266": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1267": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1268": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1269": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1270": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1271": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1272": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1273": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1274": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1275": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          }
+        },
+        "memory_kib": {
+          "Rss": 79412,
+          "Pss": 78702,
+          "Private_Clean": 9644,
+          "Private_Dirty": 68356
+        }
+      },
+      "after": {
+        "cpu_seconds": 70.27,
+        "monotonic_ns": 45852114609,
+        "system_cpu_ticks": {
+          "user": 19886,
+          "nice": 0,
+          "system": 7567,
+          "idle": 116296,
+          "iowait": 131,
+          "irq": 0,
+          "softirq": 2799,
+          "steal": 0,
+          "guest": 0,
+          "guest_nice": 0
+        },
+        "clock_ticks_per_second": 100,
+        "cpus_allowed_list": "0-31",
+        "threads": {
+          "1109": {
+            "comm": "agensio",
+            "cpu_seconds": 3.96,
+            "cpus_allowed_list": "0-31"
+          },
+          "1245": {
+            "comm": "agensio",
+            "cpu_seconds": 3.95,
+            "cpus_allowed_list": "0-31"
+          },
+          "1246": {
+            "comm": "agensio",
+            "cpu_seconds": 4.05,
+            "cpus_allowed_list": "0-31"
+          },
+          "1247": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1248": {
+            "comm": "agensio",
+            "cpu_seconds": 1.44,
+            "cpus_allowed_list": "0-31"
+          },
+          "1249": {
+            "comm": "agensio",
+            "cpu_seconds": 3.05,
+            "cpus_allowed_list": "0-31"
+          },
+          "1250": {
+            "comm": "agensio",
+            "cpu_seconds": 3.16,
+            "cpus_allowed_list": "0-31"
+          },
+          "1251": {
+            "comm": "agensio",
+            "cpu_seconds": 3.21,
+            "cpus_allowed_list": "0-31"
+          },
+          "1252": {
+            "comm": "agensio",
+            "cpu_seconds": 1.4,
+            "cpus_allowed_list": "0-31"
+          },
+          "1253": {
+            "comm": "agensio",
+            "cpu_seconds": 1.4,
+            "cpus_allowed_list": "0-31"
+          },
+          "1254": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1255": {
+            "comm": "agensio",
+            "cpu_seconds": 3.87,
+            "cpus_allowed_list": "0-31"
+          },
+          "1256": {
+            "comm": "agensio",
+            "cpu_seconds": 3.12,
+            "cpus_allowed_list": "0-31"
+          },
+          "1257": {
+            "comm": "agensio",
+            "cpu_seconds": 2.33,
+            "cpus_allowed_list": "0-31"
+          },
+          "1258": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1259": {
+            "comm": "agensio",
+            "cpu_seconds": 2.32,
+            "cpus_allowed_list": "0-31"
+          },
+          "1260": {
+            "comm": "agensio",
+            "cpu_seconds": 1.43,
+            "cpus_allowed_list": "0-31"
+          },
+          "1261": {
+            "comm": "agensio",
+            "cpu_seconds": 2.3,
+            "cpus_allowed_list": "0-31"
+          },
+          "1262": {
+            "comm": "agensio",
+            "cpu_seconds": 2.35,
+            "cpus_allowed_list": "0-31"
+          },
+          "1263": {
+            "comm": "agensio",
+            "cpu_seconds": 3.04,
+            "cpus_allowed_list": "0-31"
+          },
+          "1264": {
+            "comm": "agensio",
+            "cpu_seconds": 1.46,
+            "cpus_allowed_list": "0-31"
+          },
+          "1265": {
+            "comm": "agensio",
+            "cpu_seconds": 1.44,
+            "cpus_allowed_list": "0-31"
+          },
+          "1266": {
+            "comm": "agensio",
+            "cpu_seconds": 3.97,
+            "cpus_allowed_list": "0-31"
+          },
+          "1267": {
+            "comm": "agensio",
+            "cpu_seconds": 1.42,
+            "cpus_allowed_list": "0-31"
+          },
+          "1268": {
+            "comm": "agensio",
+            "cpu_seconds": 1.43,
+            "cpus_allowed_list": "0-31"
+          },
+          "1269": {
+            "comm": "agensio",
+            "cpu_seconds": 1.41,
+            "cpus_allowed_list": "0-31"
+          },
+          "1270": {
+            "comm": "agensio",
+            "cpu_seconds": 1.36,
+            "cpus_allowed_list": "0-31"
+          },
+          "1271": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "1272": {
+            "comm": "agensio",
+            "cpu_seconds": 3.81,
+            "cpus_allowed_list": "0-31"
+          },
+          "1273": {
+            "comm": "agensio",
+            "cpu_seconds": 1.4,
+            "cpus_allowed_list": "0-31"
+          },
+          "1274": {
+            "comm": "agensio",
+            "cpu_seconds": 1.4,
+            "cpus_allowed_list": "0-31"
+          },
+          "1275": {
+            "comm": "agensio",
+            "cpu_seconds": 4.52,
+            "cpus_allowed_list": "0-31"
+          }
+        },
+        "memory_kib": {
+          "Rss": 107808,
+          "Pss": 107066,
+          "Private_Clean": 9728,
+          "Private_Dirty": 96604
+        }
+      },
+      "thread_deltas": [
+        {
+          "tid": 1109,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.04,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 3.96,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 3.92
+        },
+        {
+          "tid": 1245,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 3.95,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 3.95
+        },
+        {
+          "tid": 1246,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 4.05,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 4.05
+        },
+        {
+          "tid": 1247,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 0.0
+        },
+        {
+          "tid": 1248,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 1.44,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 1.44
+        },
+        {
+          "tid": 1249,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 3.05,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 3.05
+        },
+        {
+          "tid": 1250,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 3.16,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 3.16
+        },
+        {
+          "tid": 1251,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 3.21,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 3.21
+        },
+        {
+          "tid": 1252,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 1.4,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 1.4
+        },
+        {
+          "tid": 1253,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 1.4,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 1.4
+        },
+        {
+          "tid": 1254,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 0.0
+        },
+        {
+          "tid": 1255,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 3.87,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 3.87
+        },
+        {
+          "tid": 1256,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 3.12,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 3.12
+        },
+        {
+          "tid": 1257,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 2.33,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 2.33
+        },
+        {
+          "tid": 1258,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 0.0
+        },
+        {
+          "tid": 1259,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 2.32,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 2.32
+        },
+        {
+          "tid": 1260,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 1.43,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 1.43
+        },
+        {
+          "tid": 1261,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 2.3,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 2.3
+        },
+        {
+          "tid": 1262,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 2.35,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 2.35
+        },
+        {
+          "tid": 1263,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 3.04,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 3.04
+        },
+        {
+          "tid": 1264,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 1.46,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 1.46
+        },
+        {
+          "tid": 1265,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 1.44,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 1.44
+        },
+        {
+          "tid": 1266,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 3.97,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 3.97
+        },
+        {
+          "tid": 1267,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 1.42,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 1.42
+        },
+        {
+          "tid": 1268,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 1.43,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 1.43
+        },
+        {
+          "tid": 1269,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 1.41,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 1.41
+        },
+        {
+          "tid": 1270,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 1.36,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 1.36
+        },
+        {
+          "tid": 1271,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 0.0
+        },
+        {
+          "tid": 1272,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 3.81,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 3.81
+        },
+        {
+          "tid": 1273,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 1.4,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 1.4
+        },
+        {
+          "tid": 1274,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 1.4,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 1.4
+        },
+        {
+          "tid": 1275,
+          "before": {
+            "comm": "agensio",
+            "cpu_seconds": 0.0,
+            "cpus_allowed_list": "0-31"
+          },
+          "after": {
+            "comm": "agensio",
+            "cpu_seconds": 4.52,
+            "cpus_allowed_list": "0-31"
+          },
+          "cpu_seconds_delta": 4.52
+        }
+      ],
+      "system_cpu_delta": {
+        "ticks": {
+          "user": 9734,
+          "nice": 0,
+          "system": 3559,
+          "idle": 4693,
+          "iowait": 0,
+          "irq": 0,
+          "softirq": 1303,
+          "steal": 0
+        },
+        "total_ticks_excluding_guest": 19289,
+        "busy_ticks": 14596,
+        "idle_ticks": 4693,
+        "iowait_ticks": 0,
+        "monotonic_elapsed_seconds": 6.02132392,
+        "clock_ticks_per_second": 100,
+        "scope": "whole host CPU aggregate, including load generator and unrelated work; no affinity changes",
+        "busy_fraction": 0.7567007102493649,
+        "idle_fraction": 0.24329928975063508,
+        "iowait_fraction": 0.0,
+        "average_busy_cpu_equivalents": 24.240516195315397,
+        "average_idle_cpu_equivalents": 7.793967011826196
+      },
+      "cpu_us_per_complete": 12.276688555986627
+    }
+  ],
+  "commands": [
+    [
+      "docker",
+      "run",
+      "--pull=never",
+      "-d",
+      "--name",
+      "agensio-ref-net-dd7463c36c79453ca4d8fd9099ae2cf9",
+      "--label",
+      "agensio.reference.run=dd7463c36c79453ca4d8fd9099ae2cf9",
+      "--network",
+      "none",
+      "--entrypoint",
+      "/bin/sleep",
+      "sha256:dd75c50576e08009267603a62a55f01e59b7e79891c6eb81420735a78e28b504",
+      "infinity"
+    ],
+    [
+      "nsenter",
+      "-t",
+      "665",
+      "-n",
+      "ip",
+      "link",
+      "set",
+      "lo",
+      "up"
+    ],
+    [
+      "docker",
+      "run",
+      "--pull=never",
+      "-d",
+      "--name",
+      "agensio-ref-nonperf-dd7463c36c79453ca4d8fd9099ae2cf9",
+      "--label",
+      "agensio.reference.run=dd7463c36c79453ca4d8fd9099ae2cf9",
+      "--network",
+      "container:agensio-ref-net-dd7463c36c79453ca4d8fd9099ae2cf9",
+      "--security-opt",
+      "seccomp=unconfined",
+      "--ulimit",
+      "memlock=-1:-1",
+      "--ulimit",
+      "nofile=1048576:1048576",
+      "--cpus=32",
+      "-v",
+      "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307675/arena/data/dataset.json:/data/dataset.json:ro",
+      "-v",
+      "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307675/arena/data/static:/data/static:ro",
+      "-v",
+      "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307675/arena/certs:/certs:ro",
+      "sha256:dd75c50576e08009267603a62a55f01e59b7e79891c6eb81420735a78e28b504"
+    ],
+    [
+      "docker",
+      "rm",
+      "-f",
+      "agensio-ref-nonperf-dd7463c36c79453ca4d8fd9099ae2cf9"
+    ],
+    [
+      "docker",
+      "run",
+      "--pull=never",
+      "-d",
+      "--name",
+      "agensio-ref-perf-dd7463c36c79453ca4d8fd9099ae2cf9",
+      "--label",
+      "agensio.reference.run=dd7463c36c79453ca4d8fd9099ae2cf9",
+      "--network",
+      "container:agensio-ref-net-dd7463c36c79453ca4d8fd9099ae2cf9",
+      "--security-opt",
+      "seccomp=unconfined",
+      "--ulimit",
+      "memlock=-1:-1",
+      "--ulimit",
+      "nofile=1048576:1048576",
+      "--cpus=32",
+      "-v",
+      "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307675/arena/data/dataset.json:/data/dataset.json:ro",
+      "-v",
+      "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307675/arena/data/static:/data/static:ro",
+      "-v",
+      "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307675/arena/certs:/certs:ro",
+      "sha256:dd75c50576e08009267603a62a55f01e59b7e79891c6eb81420735a78e28b504"
+    ],
+    [
+      "docker",
+      "rm",
+      "-f",
+      "agensio-ref-perf-dd7463c36c79453ca4d8fd9099ae2cf9"
+    ]
+  ],
+  "limitations": [
+    "One unprofiled observation and one separately sampled observation; not three-round official acceptance.",
+    "No current fast profile exists. Historical guard sample percentages are not fast percentages.",
+    "DWARF callgraphs sampled separately at 99Hz; sampled throughput is not an acceptance result; inclusive percentages must not be summed.",
+    "No agensio MTU/GSO/env settings changed; default original image configuration retained."
+  ],
+  "client_cpus": "16-31",
+  "server_cpu_limit": "--cpus=32 official cpuset-fallback on 32CPU host",
+  "host_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31
+  ],
+  "worker_verification": [
+    {
+      "measurement": "nonperf",
+      "quic_listener_sockets": 32,
+      "distinct_fds": 32,
+      "pid": 743,
+      "threads": 32,
+      "method": "Runtime ss maps 32 distinct QUIC8443 listener FDs to exact agensioPID; startup log retained."
+    },
+    {
+      "measurement": "perf",
+      "quic_listener_sockets": 32,
+      "distinct_fds": 32,
+      "pid": 1109,
+      "threads": 32,
+      "method": "Runtime ss maps 32 distinct QUIC8443 listener FDs to exact agensioPID; startup log retained."
+    }
+  ],
+  "inputs_unchanged": true,
+  "cleanup": {
+    "returncode": 0,
+    "stdout": "agensio-ref-net-dd7463c36c79453ca4d8fd9099ae2cf9\n",
+    "stderr": "",
+    "remaining": []
+  }
+}

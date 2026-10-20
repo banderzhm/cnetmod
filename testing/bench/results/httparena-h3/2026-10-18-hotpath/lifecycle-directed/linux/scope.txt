@@ -1,0 +1,3 @@
+Directed regression of shutdown/backend/credit fixes. Precedes GOAWAY sentinel correction and final cross-platform full regression. Not official performance or retention acceptance.
+The active-restart case exposed an invalid GOAWAY stream ID (code 71) despite meeting the old termination assertion. That defect and stronger assertions are pending the subsequent final build; do not report this stage as graceful protocol-close acceptance.
+Credit negative control disables only retire notification, uses the same module layout, and must fail both modes.

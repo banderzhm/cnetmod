@@ -1,0 +1,252 @@
+{
+  "status": "passed",
+  "checks": [
+    {
+      "path": "/baseline2?a=13&b=42",
+      "accept_encoding": "",
+      "bytes": 2,
+      "sha256": "02d20bbd7e394ad5999a4cebabac9619732c343a4cac99470c03e23ba2bdc2bc"
+    },
+    {
+      "path": "/static/reset.css",
+      "accept_encoding": "identity",
+      "bytes": 8192,
+      "sha256": "f731d01f45d63ab02fdeccb914312be604856504daaa4338896a9c9aea1d2d25"
+    },
+    {
+      "path": "/static/reset.css",
+      "accept_encoding": "br;q=1, gzip;q=0.8",
+      "bytes": 2420,
+      "sha256": "4db7e9531292b7674c79313a584793d36975d5c14fb98b7a29cc3f0b57381da0"
+    },
+    {
+      "path": "/static/layout.css",
+      "accept_encoding": "identity",
+      "bytes": 25600,
+      "sha256": "a9f7c3190ad26efcc38ac87b00f4520598312f918ab5177ee7d9434777552673"
+    },
+    {
+      "path": "/static/layout.css",
+      "accept_encoding": "br;q=1, gzip;q=0.8",
+      "bytes": 5615,
+      "sha256": "e82e88eb35ec1748adb63d29659bfa9fa1cc878855fa09a1963502708601edff"
+    },
+    {
+      "path": "/static/theme.css",
+      "accept_encoding": "identity",
+      "bytes": 18432,
+      "sha256": "b1f9a0efe8bfd9346c13193ff12ef69f54449910682f894fecc5f0d68acb2e50"
+    },
+    {
+      "path": "/static/theme.css",
+      "accept_encoding": "br;q=1, gzip;q=0.8",
+      "bytes": 4520,
+      "sha256": "3418b7dad6e4b6b7b5d848c5ee51401bc576fac4bc7452bf9bbcd009c82f578f"
+    },
+    {
+      "path": "/static/components.css",
+      "accept_encoding": "identity",
+      "bytes": 204800,
+      "sha256": "fae69f80bae3e3e6dde17854e0a2e065d8851f10f5dec409408dd43e2ce397c1"
+    },
+    {
+      "path": "/static/components.css",
+      "accept_encoding": "br;q=1, gzip;q=0.8",
+      "bytes": 33268,
+      "sha256": "02fe6c4948e9399e4a74b8375900ec46f919e57a418bc087a6e611548d1f6d79"
+    },
+    {
+      "path": "/static/utilities.css",
+      "accept_encoding": "identity",
+      "bytes": 61440,
+      "sha256": "66173b25f20d1c407f95d3705632c19abba5b70dfa7fe25846f9071ee8bd76ed"
+    },
+    {
+      "path": "/static/utilities.css",
+      "accept_encoding": "br;q=1, gzip;q=0.8",
+      "bytes": 11595,
+      "sha256": "19b48bbdcd292500a0bf9b87cb66f36b5ba645e6280ffa3c2e57d39a6de8f157"
+    },
+    {
+      "path": "/static/analytics.js",
+      "accept_encoding": "identity",
+      "bytes": 12288,
+      "sha256": "43a194d5c406e110fa339260a659b1b28ee74774b0d1c32b5ddb99abe1a24322"
+    },
+    {
+      "path": "/static/analytics.js",
+      "accept_encoding": "br;q=1, gzip;q=0.8",
+      "bytes": 3899,
+      "sha256": "59664c88b5281371bdd82dcfa66968a4fed53c83884635aede98cfbf324fd445"
+    },
+    {
+      "path": "/static/helpers.js",
+      "accept_encoding": "identity",
+      "bytes": 22528,
+      "sha256": "04205023cba9a17fede68370d586f2fe3831de1d6222078a1f52dc61c822f789"
+    },
+    {
+      "path": "/static/helpers.js",
+      "accept_encoding": "br;q=1, gzip;q=0.8",
+      "bytes": 6612,
+      "sha256": "0bb28831297ca8e0e2a78b7f90344d2d7e8a6bdd6add2ecb1621953e09420fc9"
+    },
+    {
+      "path": "/static/app.js",
+      "accept_encoding": "identity",
+      "bytes": 204800,
+      "sha256": "f7a305355b4e26ca50d3b2a98b3b804ac69f6150f83d988ad71c36e4787f3a35"
+    },
+    {
+      "path": "/static/app.js",
+      "accept_encoding": "br;q=1, gzip;q=0.8",
+      "bytes": 47275,
+      "sha256": "ec9fe75a6380b136e1c10e595f7d7a945fc29cf147b6a308fdd2a5c67082b281"
+    },
+    {
+      "path": "/static/vendor.js",
+      "accept_encoding": "identity",
+      "bytes": 307200,
+      "sha256": "f038876d1de9e392dfa2985616c340f032488d45fbd8bfa8def532e738a31fc6"
+    },
+    {
+      "path": "/static/vendor.js",
+      "accept_encoding": "br;q=1, gzip;q=0.8",
+      "bytes": 67294,
+      "sha256": "4b07ad33e37ab1e2e491450d52ae6c51de728800e77a6888ddf539b4d835faaf"
+    },
+    {
+      "path": "/static/router.js",
+      "accept_encoding": "identity",
+      "bytes": 35840,
+      "sha256": "3a9fd7b7ebd2e71794558dfd8a876b8d2c51fdd9f11f0fc549c9c1fc016e2c7b"
+    },
+    {
+      "path": "/static/router.js",
+      "accept_encoding": "br;q=1, gzip;q=0.8",
+      "bytes": 9665,
+      "sha256": "4940bcd6174015453b64d55acab687591320e881f1ac8e1cb2626a7d5be61e2e"
+    },
+    {
+      "path": "/static/header.html",
+      "accept_encoding": "identity",
+      "bytes": 122880,
+      "sha256": "7064366652dfc2e2cf3f36537ac018fd9758d8a2093dcdd00b50da905bb9a78a"
+    },
+    {
+      "path": "/static/header.html",
+      "accept_encoding": "br;q=1, gzip;q=0.8",
+      "bytes": 9390,
+      "sha256": "537f1457e287089919b8ff84f16c1e310481fb703e13f0ffe12e809828cc073c"
+    },
+    {
+      "path": "/static/footer.html",
+      "accept_encoding": "identity",
+      "bytes": 56320,
+      "sha256": "9826f40f7679145c8563c774f82b4db8b9997bae3aa3c233d183022a53480282"
+    },
+    {
+      "path": "/static/footer.html",
+      "accept_encoding": "br;q=1, gzip;q=0.8",
+      "bytes": 6974,
+      "sha256": "97aaaccac685f6d4944eb967ba4142085fe4fd45e691a07f7ca2c37ffd93acec"
+    },
+    {
+      "path": "/static/regular.woff2",
+      "accept_encoding": "identity",
+      "bytes": 18432,
+      "sha256": "be0e98060033adb46c4a57e128357bfd07f89538e7f574b13cb965f5ebabd540"
+    },
+    {
+      "path": "/static/regular.woff2",
+      "accept_encoding": "br;q=1, gzip;q=0.8",
+      "bytes": 18432,
+      "sha256": "be0e98060033adb46c4a57e128357bfd07f89538e7f574b13cb965f5ebabd540"
+    },
+    {
+      "path": "/static/bold.woff2",
+      "accept_encoding": "identity",
+      "bytes": 22528,
+      "sha256": "dc4f62329b37a3ed30c85b7dfd657579ef942d6dfc0abed23ddde39e34c584b5"
+    },
+    {
+      "path": "/static/bold.woff2",
+      "accept_encoding": "br;q=1, gzip;q=0.8",
+      "bytes": 22528,
+      "sha256": "dc4f62329b37a3ed30c85b7dfd657579ef942d6dfc0abed23ddde39e34c584b5"
+    },
+    {
+      "path": "/static/logo.svg",
+      "accept_encoding": "identity",
+      "bytes": 15344,
+      "sha256": "7ebd0779bcf635c2e90b8089f43d83af1b57801e225f3ae2dbe6ca9402de3c1a"
+    },
+    {
+      "path": "/static/logo.svg",
+      "accept_encoding": "br;q=1, gzip;q=0.8",
+      "bytes": 3028,
+      "sha256": "76e6834514f3dd115c88c90875a029cf594b266cc09df2f11d87e96d8e7b749c"
+    },
+    {
+      "path": "/static/icon-sprite.svg",
+      "accept_encoding": "identity",
+      "bytes": 71680,
+      "sha256": "eba2848ed1eb2f43ea3c116293933ed985d0205af7b4d85a6a8d5185619c2125"
+    },
+    {
+      "path": "/static/icon-sprite.svg",
+      "accept_encoding": "br;q=1, gzip;q=0.8",
+      "bytes": 11739,
+      "sha256": "fa215965f2434ba877949c917336b0eab1b152f0f648239c1476a8690832f5eb"
+    },
+    {
+      "path": "/static/hero.webp",
+      "accept_encoding": "identity",
+      "bytes": 46080,
+      "sha256": "4b63f2a42ed1d27eb01ea5e634ee3f10ba919893be3b7da6bfff56e8fec81291"
+    },
+    {
+      "path": "/static/hero.webp",
+      "accept_encoding": "br;q=1, gzip;q=0.8",
+      "bytes": 46080,
+      "sha256": "4b63f2a42ed1d27eb01ea5e634ee3f10ba919893be3b7da6bfff56e8fec81291"
+    },
+    {
+      "path": "/static/thumb1.webp",
+      "accept_encoding": "identity",
+      "bytes": 8192,
+      "sha256": "d9afc8adbb9841c883a3c1b4693c0f800cd7fd97e7dfe132d6d6fb4c7d7980fd"
+    },
+    {
+      "path": "/static/thumb1.webp",
+      "accept_encoding": "br;q=1, gzip;q=0.8",
+      "bytes": 8192,
+      "sha256": "d9afc8adbb9841c883a3c1b4693c0f800cd7fd97e7dfe132d6d6fb4c7d7980fd"
+    },
+    {
+      "path": "/static/thumb2.webp",
+      "accept_encoding": "identity",
+      "bytes": 6144,
+      "sha256": "ca93b219faef350794b3a332046e698ff137f0ff8507e310c68768236ec0c02a"
+    },
+    {
+      "path": "/static/thumb2.webp",
+      "accept_encoding": "br;q=1, gzip;q=0.8",
+      "bytes": 6144,
+      "sha256": "ca93b219faef350794b3a332046e698ff137f0ff8507e310c68768236ec0c02a"
+    },
+    {
+      "path": "/static/manifest.json",
+      "accept_encoding": "identity",
+      "bytes": 2883,
+      "sha256": "b2fdd02d07165e824f388ebfb990d31da81ae1f4b4e43e120d8ce0188133d86f"
+    },
+    {
+      "path": "/static/manifest.json",
+      "accept_encoding": "br;q=1, gzip;q=0.8",
+      "bytes": 735,
+      "sha256": "cba141fa8263a3d8fc722a6330b0ce60838f483dca5e9c6b3916cd61b99907e5"
+    }
+  ],
+  "static_missing_status": 404
+}

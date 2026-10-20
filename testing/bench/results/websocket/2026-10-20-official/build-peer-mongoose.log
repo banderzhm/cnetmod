@@ -1,0 +1,48 @@
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+Sending build context to Docker daemon  215.6kB
+Step 1/13 : FROM ubuntu:24.04 AS build
+ ---> 534baea6a22c
+Step 2/13 : RUN apt-get update && apt-get install -y --no-install-recommends         gcc-14 curl ca-certificates libc6-dev libssl-dev     && rm -rf /var/lib/apt/lists/*
+ ---> Running in 1e63b2a6a4b9
+Ign:1 http://security.ubuntu.com/ubuntu noble-security InRelease
+Ign:2 http://archive.ubuntu.com/ubuntu noble InRelease
+Ign:3 http://archive.ubuntu.com/ubuntu noble-updates InRelease
+Ign:1 http://security.ubuntu.com/ubuntu noble-security InRelease
+Ign:4 http://archive.ubuntu.com/ubuntu noble-backports InRelease
+Ign:2 http://archive.ubuntu.com/ubuntu noble InRelease
+Ign:3 http://archive.ubuntu.com/ubuntu noble-updates InRelease
+Ign:4 http://archive.ubuntu.com/ubuntu noble-backports InRelease
+Ign:1 http://security.ubuntu.com/ubuntu noble-security InRelease
+Ign:2 http://archive.ubuntu.com/ubuntu noble InRelease
+Ign:3 http://archive.ubuntu.com/ubuntu noble-updates InRelease
+Ign:4 http://archive.ubuntu.com/ubuntu noble-backports InRelease
+Err:1 http://security.ubuntu.com/ubuntu noble-security InRelease
+  Connection failed [IP: 198.18.0.233 80]
+Err:2 http://archive.ubuntu.com/ubuntu noble InRelease
+  Connection failed [IP: 198.18.0.232 80]
+Err:3 http://archive.ubuntu.com/ubuntu noble-updates InRelease
+  Connection failed [IP: 198.18.0.232 80]
+Err:4 http://archive.ubuntu.com/ubuntu noble-backports InRelease
+  Connection failed [IP: 198.18.0.232 80]
+Reading package lists...
+[91mW: Failed to fetch http://archive.ubuntu.com/ubuntu/dists/noble/InRelease  Connection failed [IP: 198.18.0.232 80]
+W: Failed to fetch http://archive.ubuntu.com/ubuntu/dists/noble-updates/InRelease  Connection failed [IP: 198.18.0.232 80]
+W: Failed to fetch http://archive.ubuntu.com/ubuntu/dists/noble-backports/InRelease  Connection failed [IP: 198.18.0.232 80]
+W: Failed to fetch http://security.ubuntu.com/ubuntu/dists/noble-security/InRelease  Connection failed [IP: 198.18.0.233 80]
+W: Some index files failed to download. They have been ignored, or old ones used instead.
+[0mReading package lists...
+Building dependency tree...
+Reading state information...
+Package ca-certificates is not available, but is referred to by another package.
+This may mean that the package is missing, has been obsoleted, or
+is only available from another source
+
+[91mE: Unable to locate package gcc-14
+E: Unable to locate package curl
+E: Package 'ca-certificates' has no installation candidate
+E: Unable to locate package libc6-dev
+E: Unable to locate package libssl-dev
+[0mThe command '/bin/sh -c apt-get update && apt-get install -y --no-install-recommends         gcc-14 curl ca-certificates libc6-dev libssl-dev     && rm -rf /var/lib/apt/lists/*' returned a non-zero code: 100

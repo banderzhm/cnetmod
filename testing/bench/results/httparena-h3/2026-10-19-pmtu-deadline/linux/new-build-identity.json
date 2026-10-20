@@ -1,0 +1,11 @@
+{
+  "connection_sha256": "50cd8c3ba2cc226c45e83a483ba4c04665e229b76aae69ebf4523170abb7f1c2",
+  "server_sha256": "965f09eb606560d9b6903a6ca6921357d3f55223df546bf7a72fb2934825b49f",
+  "libquic_sha256": "98ff6370db8e264dd3346e67e928ae2c4188617c9dde960b0f3d36248bc092e4",
+  "fixtures": {
+    "quic_pmtu_deadline_server.cpp": "3d46358d5c7808cc672bf143bd17387b9a9a14657690cc5e32801ff23dceabc4",
+    "quic_pmtu_deadline.py": "0a28d27d12edc2a3d0ea94662b8cb3fb5d980494397d50fc65d59852b3a74e9b",
+    "deadline_frame_parser.py": "f799971a6cefab3ce06e135205f3171e5dafed8f904da7279755e477d0963975",
+    "CMakeLists.txt": "d1f4895b403dc1374d976f8bc94b5c55771665a4f94ddb5afae721f29cf7f1cd"
+  }
+}

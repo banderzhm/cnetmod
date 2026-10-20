@@ -1,0 +1,71 @@
+UpdateCTestConfiguration  from :C:/Users/25007/.codex/tmp/cnetmod-h3-windows/DartConfiguration.tcl
+Test project C:/Users/25007/.codex/tmp/cnetmod-h3-windows
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 63
+    Start 63: h3_interop_release_gate
+
+63: Test command: C:\Users\25007\.codex\tmp\cnetmod-h3-windows-python\Scripts\python.exe "C:/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/h3_acceptance.py" "--server" "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/bin/Release/h3_interop_server.exe" "--client" "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/bin/Release/h3_interop_client.exe" "--port" "4433" "--wtransport-probe" "C:/Users/25007/.codex/tmp/cnetmod-h3-wtransport/target/release/webtransport_probe.exe"
+63: Working Directory: C:/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3
+63: Test timeout computed to be: 120
+63: [PASSED] aioquic-server_to_cnetmod-client: request and response validated
+63: [PASSED] aioquic-webtransport_to_cnetmod-server: request and response validated
+63: [PASSED] wtransport-webtransport_to_cnetmod-server: 3 independent connections validated
+63: [SKIPPED] cnetmod-server_to_curl-http3: curl lacks HTTP/3 support
+63: [SKIPPED] cnetmod-server_to_nghttp3-client: --nghttp3-client-command was not supplied
+63: [SKIPPED] nghttp3-server_to_cnetmod-client: --nghttp3-server-command was not supplied
+1/4 Test #63: h3_interop_release_gate ......................   Passed    6.76 sec
+test 64
+    Start 64: h3_interop_multi_worker_release_gate
+
+64: Test command: C:\Users\25007\.codex\tmp\cnetmod-h3-windows-python\Scripts\python.exe "C:/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/h3_acceptance.py" "--server" "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/bin/Release/h3_interop_server.exe" "--client" "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/bin/Release/h3_interop_client.exe" "--server-workers" "2" "--port" "4434" "--wtransport-probe" "C:/Users/25007/.codex/tmp/cnetmod-h3-wtransport/target/release/webtransport_probe.exe"
+64: Working Directory: C:/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3
+64: Test timeout computed to be: 120
+64: [PASSED] aioquic-server_to_cnetmod-client: request and response validated
+64: [PASSED] aioquic-webtransport_to_cnetmod-server: request and response validated
+64: [PASSED] wtransport-webtransport_to_cnetmod-server: 3 independent connections validated
+64: [SKIPPED] cnetmod-server_to_curl-http3: curl lacks HTTP/3 support
+64: [SKIPPED] cnetmod-server_to_nghttp3-client: --nghttp3-client-command was not supplied
+64: [SKIPPED] nghttp3-server_to_cnetmod-client: --nghttp3-server-command was not supplied
+2/4 Test #64: h3_interop_multi_worker_release_gate .........   Passed    6.80 sec
+test 65
+    Start 65: http_client_http3_end_to_end
+
+65: Test command: C:\Users\25007\.codex\tmp\cnetmod-h3-windows-python\Scripts\python.exe "C:/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/http3/Release/http3_e2e_server.exe" "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/http3/Release/http_client_http3_e2e.exe"
+65: Working Directory: C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/http3
+65: Test timeout computed to be: 90
+65: [2026-10-17 12:03:17.419] [info] [10373472638938258790] [http_client_e2e.cpp:659] HTTP/3 priority E2E passed: first foreground=2, first background=1
+65: [2026-10-17 12:03:17.584] [info] [10373472638938258790] [http_client_e2e.cpp:1191] HTTP/3 client end-to-end regression passed
+3/4 Test #65: http_client_http3_end_to_end .................   Passed    0.69 sec
+test 66
+    Start 66: http_client_http3_dynamic_qpack_end_to_end
+
+66: Test command: C:\Users\25007\.codex\tmp\cnetmod-h3-windows-python\Scripts\python.exe "C:/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--dynamic-qpack" "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/http3/Release/http3_e2e_server.exe" "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/http3/Release/http_client_http3_e2e.exe"
+66: Working Directory: C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/http3
+66: Test timeout computed to be: 90
+66: [2026-10-17 12:03:17.983] [info] [4023453163756874386] [http_client_e2e.cpp:659] HTTP/3 priority E2E passed: first foreground=2, first background=1
+66: [2026-10-17 12:03:18.129] [info] [4023453163756874386] [http_client_e2e.cpp:1191] HTTP/3 client end-to-end regression passed
+4/4 Test #66: http_client_http3_dynamic_qpack_end_to_end ...   Passed    0.54 sec
+
+The following tests passed:
+	h3_interop_release_gate
+	h3_interop_multi_worker_release_gate
+	http_client_http3_end_to_end
+	http_client_http3_dynamic_qpack_end_to_end
+
+100% tests passed, 0 tests failed out of 4
+
+Label Time Summary:
+client          =   1.23 sec*proc (2 tests)
+end_to_end      =   1.23 sec*proc (2 tests)
+http3           =  14.79 sec*proc (4 tests)
+interop         =  13.56 sec*proc (2 tests)
+multi_worker    =   6.80 sec*proc (1 test)
+qpack           =   0.54 sec*proc (1 test)
+release_gate    =  13.56 sec*proc (2 tests)
+
+Total Test time (real) =  14.80 sec

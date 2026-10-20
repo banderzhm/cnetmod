@@ -1,0 +1,575 @@
+--- a/src/executor/async_op.cppm
++++ b/src/executor/async_op.cppm
+@@ -399,6 +399,19 @@
+     std::span<const udp_send_datagram> datagrams, cancel_token& token)
+     -> task<std::expected<std::size_t, std::error_code>>;
+ 
++#ifdef CNETMOD_HAS_IO_URING
++/// Explicit Linux segmentation-offload attempt on original UDP datagrams.
++/// Returns accepted original-datagram count, not GSO message count. Native
++/// UDP_CORK/UDP_SEGMENT overrides retain ordinary batch behavior. Callers
++/// must serialize socket-option changes and retain buffers through completion.
++/// Unsupported offload/backpressure falls back to the ordinary cancellable
++/// batch; this never increases an individual datagram's payload or changes
++/// the default async_sendto_batch API.
++export auto async_sendto_segmented_batch(io_context& ctx, socket& sock,
++    std::span<const udp_send_datagram> datagrams, cancel_token& token)
++    -> task<std::expected<std::size_t, std::error_code>>;
++#endif
++
+ /// Pre-initialize the platform UDP backend selected by `socket_options::registered_io`.
+ /// On Windows this creates the RIO queues before a listener becomes visible to
+ /// callers, so an unavailable RIO provider can be replaced by a normal IOCP
+--- a/src/executor/platform/io_uring_async_op.cpp
++++ b/src/executor/platform/io_uring_async_op.cpp
+@@ -10,6 +10,7 @@
+     #include <exec/static_thread_pool.hpp>
+     #include <fcntl.h>
+     #include <liburing.h>
++    #include <linux/udp.h>
+     #include <netinet/in.h>
+     #include <poll.h>
+     #include <sys/socket.h>
+@@ -1716,6 +1717,117 @@
+     return static_cast<std::size_t>(sent);
+ }
+ 
++// Explicit offload path only. All scratch is synchronous syscall storage;
++// no cmsg/iovec pointer is retained by io_uring or a suspended coroutine.
++[[nodiscard]] auto sendto_segmented_batch_now(socket& sock,
++    std::span<const udp_send_datagram> datagrams)
++    -> std::expected<std::size_t, std::error_code>
++{
++#ifndef UDP_SEGMENT
++    return sendto_batch_now(sock, datagrams);
++#else
++    constexpr std::size_t capacity = 16U;
++    constexpr std::size_t maximum_group_bytes = 65507U;
++    const auto count = std::min(datagrams.size(), capacity);
++    if (count < 2U)
++        return sendto_batch_now(sock, datagrams);
++    struct alignas(::cmsghdr) control_buffer
++    {
++        std::array<std::byte, CMSG_SPACE(sizeof(std::uint16_t))> bytes{};
++    };
++    std::array<::iovec, capacity> iovecs{};
++    std::array<::sockaddr_storage, capacity> peers{};
++    std::array<::socklen_t, capacity> peer_lengths{};
++    std::array<::mmsghdr, capacity> messages{};
++    std::array<control_buffer, capacity> controls{};
++    std::array<std::size_t, capacity> original_prefix{};
++    for (std::size_t index{}; index < count; ++index)
++    {
++        iovecs[index] = {const_cast<void*>(datagrams[index].bytes.data),
++            datagrams[index].bytes.size};
++        peer_lengths[index] = fill_sockaddr(datagrams[index].peer, peers[index]);
++    }
++    std::size_t group_count{};
++    bool grouped{};
++    for (std::size_t start{}; start < count;)
++    {
++        const auto stride = datagrams[start].bytes.size;
++        auto end = start + 1U;
++        auto total = stride;
++        if (stride != 0U && stride <= maximum_group_bytes)
++        {
++            while (end < count)
++            {
++                const auto next = datagrams[end].bytes.size;
++                // A short last segment is valid; an interior short/empty
++                // segment cannot preserve the caller's datagram boundaries.
++                if (next == 0U || next > stride ||
++                    next > maximum_group_bytes - total ||
++                    peer_lengths[end] != peer_lengths[start] ||
++                    std::memcmp(&peers[end], &peers[start], peer_lengths[start]) != 0)
++                    break;
++                total += next;
++                ++end;
++                if (next != stride)
++                    break;
++            }
++        }
++        auto& message = messages[group_count].msg_hdr;
++        message.msg_name = &peers[start];
++        message.msg_namelen = peer_lengths[start];
++        message.msg_iov = &iovecs[start];
++        message.msg_iovlen = end - start;
++        if (end - start > 1U)
++        {
++            grouped = true;
++            message.msg_control = controls[group_count].bytes.data();
++            message.msg_controllen = controls[group_count].bytes.size();
++            auto* control = CMSG_FIRSTHDR(&message);
++            control->cmsg_level = IPPROTO_UDP;
++            control->cmsg_type = UDP_SEGMENT;
++            control->cmsg_len = CMSG_LEN(sizeof(std::uint16_t));
++            const auto segment_size = static_cast<std::uint16_t>(stride);
++            std::memcpy(CMSG_DATA(control), &segment_size, sizeof(segment_size));
++        }
++        original_prefix[group_count++] = end;
++        start = end;
++    }
++    if (!grouped)
++        return sendto_batch_now(sock, datagrams);
++
++    // Explicit opt-in still must not override an application's native socket
++    // contract. These read-only checks intentionally precede each grouped
++    // attempt; lifetime-safe option-state caching is not part of this candidate.
++    const auto fd = static_cast<int>(sock.native_handle());
++    int cork{}, native_segment{};
++    ::socklen_t option_size = sizeof(cork);
++    if (::getsockopt(fd, IPPROTO_UDP, UDP_CORK, &cork, &option_size) != 0 || cork != 0)
++        return sendto_batch_now(sock, datagrams);
++    option_size = sizeof(native_segment);
++    if (::getsockopt(fd, IPPROTO_UDP, UDP_SEGMENT, &native_segment, &option_size) != 0 ||
++        native_segment != 0)
++        return sendto_batch_now(sock, datagrams);
++
++    const int sent = ::sendmmsg(fd, messages.data(),
++        static_cast<unsigned int>(group_count), MSG_DONTWAIT | MSG_NOSIGNAL);
++    if (sent > 0)
++        return original_prefix[static_cast<std::size_t>(sent) - 1U];
++    if (sent == 0)
++        return std::size_t{};
++    const auto failure = errno;
++    // No new group was accepted on a negative UDP send. Make one ordinary
++    // attempt, preserving native checksum behavior and reporting its result.
++    // A positive prefix never enters this fallback and can never be resent.
++    // A grouped submission can exceed an offload/route size constraint even
++    // when each original UDP is valid. A real per-datagram PMTU error remains
++    // observable from this one ordinary attempt; never retry a positive prefix.
++    if (failure == ENOPROTOOPT || failure == EOPNOTSUPP || failure == EINVAL ||
++        failure == EIO || failure == EMSGSIZE)
++        return sendto_batch_now(sock, datagrams);
++    return std::unexpected(make_error_code(from_native_error(failure)));
++#endif
++}
++
+ auto drain_recvfrom_batch_now(socket& sock,
+     std::vector<udp_received_datagram>& result,
+     std::size_t maximum, std::size_t max_datagram_size)
+@@ -1884,6 +1996,27 @@
+     co_return remaining ? 1U + *remaining : std::size_t{1};
+ }
+ 
++auto async_sendto_segmented_batch(io_context& ctx, socket& sock,
++    std::span<const udp_send_datagram> datagrams, cancel_token& token)
++    -> task<std::expected<std::size_t, std::error_code>>
++{
++    if (token.is_cancelled())
++        co_return std::unexpected(make_error_code(errc::operation_aborted));
++    if (datagrams.empty())
++        co_return std::size_t{};
++    const auto batch = datagrams.first(std::min(datagrams.size(), std::size_t{16}));
++    const auto sent = sendto_segmented_batch_now(sock, batch);
++    // An accepted original prefix remains progress even if cancel raced with
++    // the synchronous syscall. Only the unaccepted suffix is retried upstream.
++    if (sent && *sent != 0U)
++        co_return *sent;
++    if (!sent && sent.error() != make_error_code(errc::operation_would_block))
++        co_return std::unexpected(sent.error());
++    // Retain original datagrams across existing async completion/cancellation;
++    // never send their logical GSO concatenation as one ordinary UDP packet.
++    co_return co_await async_sendto_batch(ctx, sock, batch, token);
++}
++
+ #endif // CNETMOD_HAS_IO_URING
+ 
+ } // namespace cnetmod
+--- a/src/protocol/quic/quic_foundation.cppm
++++ b/src/protocol/quic/quic_foundation.cppm
+@@ -240,6 +240,11 @@
+     // Kept opt-in until an application has chosen a suitable ceiling for its
+     // network. RFC 9000's 1200-byte baseline remains the safe default.
+     bool enable_path_mtu_discovery{false};
++    /// Explicit Linux io_uring UDP segmentation-offload attempt. Each already
++    /// sealed packet retains its PN, PMTU, AEAD, congestion and recovery state.
++    /// Default off; application path sockets and other backends retain their
++    /// ordinary datagram path. Native UDP option changes must be serialized.
++    bool enable_udp_segmentation_offload{false};
+     /// Largest probe target used by the built-in PLPMTUD state machine. This
+     /// is deliberately conservative for Internet paths; applications with a
+     /// controlled jumbo-frame network can raise it, but it is always capped
+--- a/src/protocol/quic/quic_connection.cpp
++++ b/src/protocol/quic/quic_connection.cpp
+@@ -1334,8 +1334,18 @@
+     std::size_t submitted{};
+     while (submitted != datagrams.size())
+     {
++#ifdef CNETMOD_HAS_IO_URING
++        auto accepted = impl_->config.enable_udp_segmentation_offload
++            ? co_await async_sendto_segmented_batch(impl_->socket_context,
++                  impl_->socket->native_socket(), datagrams.subspan(submitted),
++                  impl_->send_cancel_token)
++            : co_await async_sendto_batch(impl_->socket_context,
++                  impl_->socket->native_socket(), datagrams.subspan(submitted),
++                  impl_->send_cancel_token);
++#else
+         auto accepted = co_await async_sendto_batch(impl_->socket_context,
+             impl_->socket->native_socket(), datagrams.subspan(submitted), impl_->send_cancel_token);
++#endif
+         if (!accepted || *accepted == 0U)
+         {
+             result = std::unexpected(!accepted ? accepted.error()
+--- a/src/protocol/http/v3/http3_server.cppm
++++ b/src/protocol/http/v3/http3_server.cppm
+@@ -123,6 +123,10 @@
+         std::chrono::milliseconds probe_interval = std::chrono::seconds{1},
+         std::chrono::milliseconds initial_probe_delay = {})
+         -> std::expected<void, std::error_code>;
++    /// Explicit Linux io_uring offload attempt before start(). Defaults off;
++    /// independently sealed datagrams and their PMTU limit remain unchanged.
++    auto set_udp_segmentation_offload(bool enabled)
++        -> std::expected<void, std::error_code>;
+     /// Set the largest UDP payload this listener advertises and accepts.
+     /// Configure this before start; the RFC 9000 minimum is 1200 bytes.
+     auto set_max_udp_payload_size(std::uint64_t bytes)
+--- a/src/protocol/http/v3/http3_server.cpp
++++ b/src/protocol/http/v3/http3_server.cpp
+@@ -957,6 +957,21 @@
+             shard->transport_config_.path_mtu_probe_interval = probe_interval;
+             shard->transport_config_.path_mtu_initial_probe_delay = initial_probe_delay;
+         }
++        return {};
++    }
++
++    auto set_udp_segmentation_offload(bool enabled)
++        -> std::expected<void, std::error_code>
++    {
++        if (running_)
++            return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
++#ifndef CNETMOD_HAS_IO_URING
++        if (enabled)
++            return std::unexpected(std::make_error_code(std::errc::operation_not_supported));
++#endif
++        transport_config_.enable_udp_segmentation_offload = enabled;
++        for (auto& shard : shards_)
++            shard->transport_config_.enable_udp_segmentation_offload = enabled;
+         return {};
+     }
+ 
+@@ -2292,6 +2307,12 @@
+         initial_probe_delay);
+ }
+ 
++auto http3_server::set_udp_segmentation_offload(bool enabled)
++    -> std::expected<void, std::error_code>
++{
++    return impl_->set_udp_segmentation_offload(enabled);
++}
++
+ auto http3_server::set_max_udp_payload_size(std::uint64_t bytes)
+     -> std::expected<void, std::error_code>
+ {
+--- a/testing/bench/arena_h3_server.cpp
++++ b/testing/bench/arena_h3_server.cpp
+@@ -215,6 +215,18 @@
+     const cnetmod::endpoint endpoint{cnetmod::ipv4_address::any(), static_cast<std::uint16_t>(port)};
+     auto server = cnetmod::http::v3::make_http3_server(
+         context, *tls, endpoint, std::move(handler));
++    // Explicit same-binary diagnostic switch; ordinary/official runs keep
++    // the established path unless the environment opts in before start.
++    if (const auto* gso = std::getenv("CNETMOD_QUIC_GSO");
++        gso && std::string_view{gso} == "1")
++    {
++        if (const auto configured = server->set_udp_segmentation_offload(true);
++            !configured)
++        {
++            logger::error{"HTTP/3 UDP offload setup failed: {}", configured.error().message()};
++            return 1;
++        }
++    }
+     // HttpArena creates fresh h2load connections for every short run and the
+     // load generator leaves them silent instead of sending CONNECTION_CLOSE.
+     // Reclaim those connections within the official two-second round cooldown
+--- a/testing/tests/test_udp_batch.cpp
++++ b/testing/tests/test_udp_batch.cpp
+@@ -15,6 +15,7 @@
+     #include <arpa/inet.h>
+     #include <errno.h>
+     #include <liburing.h>
++    #include <linux/udp.h>
+     #include <netinet/in.h>
+     #include <sys/socket.h>
+     #include <unistd.h>
+@@ -235,7 +236,7 @@
+ 
+ auto run_udp_batch_layout_case(cnetmod::io_context& context,
+     std::string_view loopback_text, std::span<const std::size_t> sizes,
+-    bool mixed_peers, bool disable_checksum = false)
++    bool mixed_peers, bool disable_checksum = false, bool segmented = false)
+     -> cnetmod::task<std::expected<void, std::error_code>>
+ {
+     const auto loopback = cnetmod::ip_address::from_string(loopback_text);
+@@ -288,10 +289,23 @@
+     }
+ 
+     std::size_t submitted{};
++#ifdef CNETMOD_HAS_IO_URING
++    cnetmod::cancel_token segmented_token;
++#else
++    (void)segmented;
++#endif
+     while (submitted < datagrams.size())
+     {
++#ifdef CNETMOD_HAS_IO_URING
++        const auto sent = segmented
++            ? co_await cnetmod::async_sendto_segmented_batch(context,
++                  sender.native_socket(), std::span<const cnetmod::udp_send_datagram>{datagrams}.subspan(submitted), segmented_token)
++            : co_await cnetmod::async_sendto_batch(context,
++                  sender.native_socket(), std::span<const cnetmod::udp_send_datagram>{datagrams}.subspan(submitted));
++#else
+         const auto sent = co_await cnetmod::async_sendto_batch(context,
+             sender.native_socket(), std::span<const cnetmod::udp_send_datagram>{datagrams}.subspan(submitted));
++#endif
+         if (!sent)
+         {
+ #ifdef CNETMOD_HAS_IO_URING
+@@ -381,19 +395,19 @@
+ }
+ 
+ auto run_udp_batch_layout_probe(cnetmod::io_context& context,
+-    std::string_view loopback_text)
++    std::string_view loopback_text, bool segmented = false)
+     -> cnetmod::task<std::expected<void, std::error_code>>
+ {
+     std::array<std::size_t, 16> equal_sizes{};
+     equal_sizes.fill(1472U);
+     if (auto result = co_await run_udp_batch_layout_case(context, loopback_text,
+-            equal_sizes, false); !result)
++            equal_sizes, false, false, segmented); !result)
+         co_return result;
+ #ifdef CNETMOD_HAS_IO_URING
+     if (loopback_text == "127.0.0.1")
+     {
+         if (auto result = co_await run_udp_batch_layout_case(context, loopback_text,
+-                equal_sizes, false, true); !result)
++                equal_sizes, false, true, segmented); !result)
+             co_return result;
+     }
+ #endif
+@@ -409,7 +423,7 @@
+     mixed_sizes[24] = 0U;
+     mixed_sizes[37] = 23U;
+     if (auto result = co_await run_udp_batch_layout_case(context, loopback_text,
+-            mixed_sizes, true); !result)
++            mixed_sizes, true, false, segmented); !result)
+         co_return result;
+ 
+     // Verify independent large datagrams whose aggregate exceeds 65507 bytes.
+@@ -417,12 +431,12 @@
+     // WSL can route 127.0.0.1 through a host adapter that drops large packets.
+     constexpr std::array<std::size_t, 3> large_sizes{24000U, 24000U, 24000U};
+     co_return co_await run_udp_batch_layout_case(context, loopback_text,
+-        large_sizes, false);
++        large_sizes, false, false, segmented);
+ }
+ 
+ #ifdef CNETMOD_HAS_IO_URING
+ auto run_udp_batch_partial_prefix_probe(cnetmod::io_context& context,
+-    bool cancellable = false)
++    bool cancellable = false, bool segmented = false)
+     -> cnetmod::task<std::expected<void, std::error_code>>
+ {
+     const auto loopback = cnetmod::ip_address::from_string("127.0.0.1");
+@@ -452,6 +466,8 @@
+     const auto send_batch = [&](std::span<const cnetmod::udp_send_datagram> batch)
+         -> cnetmod::task<std::expected<std::size_t, std::error_code>>
+     {
++        if (segmented)
++            return cnetmod::async_sendto_segmented_batch(context, sender.native_socket(), batch, send_token);
+         return cancellable
+             ? cnetmod::async_sendto_batch(context, sender.native_socket(), batch, send_token)
+             : cnetmod::async_sendto_batch(context, sender.native_socket(), batch);
+@@ -472,9 +488,19 @@
+             co_return std::unexpected(std::make_error_code(std::errc::protocol_error));
+     }
+ 
++    // A distinct trailing packet proves the accepted prefix was not resent;
++    // checking just three receives could otherwise leave duplicates unread.
++    constexpr std::array sentinel{std::byte{0xa5}, std::byte{0x5a}};
++    if (segmented)
++    {
++        const auto sent_sentinel = co_await cnetmod::async_sendto(context,
++            sender.native_socket(), cnetmod::const_buffer{sentinel.data(), sentinel.size()}, *peer);
++        if (!sent_sentinel || *sent_sentinel != sentinel.size())
++            co_return std::unexpected(sent_sentinel ? std::make_error_code(std::errc::protocol_error) : sent_sentinel.error());
++    }
+     std::array<std::byte, 1473> received{};
+     cnetmod::cancel_token token;
+-    for (std::size_t index{}; index < 3U; ++index)
++    for (std::size_t index{}; index < (segmented ? 4U : 3U); ++index)
+     {
+         cnetmod::endpoint source;
+         const auto count = co_await cnetmod::with_timeout(context, std::chrono::seconds{2},
+@@ -482,8 +508,11 @@
+                 cnetmod::mutable_buffer{received.data(), received.size()}, source, token), token);
+         if (!count)
+             co_return std::unexpected(count.error());
+-        if (*count != payloads[index].size() ||
+-            !std::ranges::equal(std::span<const std::byte>{received.data(), *count}, payloads[index]))
++        const auto expected = index == 3U
++            ? std::span<const std::byte>{sentinel}
++            : std::span<const std::byte>{payloads[index]};
++        if (*count != expected.size() ||
++            !std::ranges::equal(std::span<const std::byte>{received.data(), *count}, expected))
+             co_return std::unexpected(std::make_error_code(std::errc::protocol_error));
+     }
+     co_return {};
+@@ -798,7 +827,7 @@
+     accepted_prefix_error,
+ };
+ 
+-void check_udp_batch_would_block(batch_wait_probe probe)
++void check_udp_batch_would_block(batch_wait_probe probe, bool segmented = false)
+ {
+     const bool cancel_send = probe == batch_wait_probe::cancel ||
+         probe == batch_wait_probe::full_queue_cancel;
+@@ -867,7 +896,9 @@
+     std::optional<std::expected<std::size_t, std::error_code>> result;
+     auto wrapper = [&]() -> cnetmod::task<void>
+     {
+-        if (cancel_send)
++        if (segmented)
++            result = co_await cnetmod::async_sendto_segmented_batch(*context, sender, datagrams, send_token);
++        else if (cancel_send)
+             result = co_await cnetmod::async_sendto_batch(*context, sender, datagrams, send_token);
+         else
+             result = co_await cnetmod::async_sendto_batch(*context, sender, datagrams);
+@@ -1187,4 +1218,136 @@
+ }
+ #endif
+ 
++#ifdef CNETMOD_HAS_IO_URING
++namespace {
++auto run_udp_segmented_native_options(cnetmod::io_context& context, bool cork)
++    -> cnetmod::task<std::expected<void, std::error_code>>
++{
++    const auto loopback = cnetmod::ip_address::from_string("127.0.0.1");
++    if (!loopback)
++        co_return std::unexpected(loopback.error());
++    cnetmod::udp::udp_socket receiver{context};
++    cnetmod::udp::udp_socket sender{context};
++    if (auto opened = receiver.open(cnetmod::endpoint{*loopback, 0U}); !opened)
++        co_return std::unexpected(opened.error());
++    if (auto opened = sender.open(); !opened)
++        co_return std::unexpected(opened.error());
++    const auto peer = receiver.native_socket().local_endpoint();
++    if (!peer)
++        co_return std::unexpected(peer.error());
++    const auto fd = static_cast<int>(sender.native_socket().native_handle());
++    const int option = cork ? UDP_CORK : UDP_SEGMENT;
++    const int enabled = cork ? 1 : 64;
++    if (::setsockopt(fd, IPPROTO_UDP, option, &enabled, sizeof(enabled)) != 0)
++        co_return std::unexpected(cnetmod::make_error_code(cnetmod::from_native_error(errno)));
++    std::array<std::byte, 128> first{}, second{};
++    first.fill(std::byte{0x31});
++    second.fill(std::byte{0x7e});
++    const std::array datagrams{
++        cnetmod::udp_send_datagram{cnetmod::const_buffer{first.data(), first.size()}, *peer},
++        cnetmod::udp_send_datagram{cnetmod::const_buffer{second.data(), second.size()}, *peer}};
++    cnetmod::cancel_token token;
++    const auto sent = co_await cnetmod::async_sendto_segmented_batch(
++        context, sender.native_socket(), datagrams, token);
++    if (!sent || *sent != 2U)
++        co_return std::unexpected(sent ? std::make_error_code(std::errc::protocol_error) : sent.error());
++    int observed{};
++    ::socklen_t size = sizeof(observed);
++    if (::getsockopt(fd, IPPROTO_UDP, option, &observed, &size) != 0 || observed != enabled)
++        co_return std::unexpected(std::make_error_code(std::errc::protocol_error));
++    if (cork)
++    {
++        const int disabled{};
++        if (::setsockopt(fd, IPPROTO_UDP, UDP_CORK, &disabled, sizeof(disabled)) != 0)
++            co_return std::unexpected(cnetmod::make_error_code(cnetmod::from_native_error(errno)));
++    }
++    // Native CORK emits one combined256-byte UDP; native SEGMENT64 emits
++    // four64-byte UDPs. Explicit optimization must retain either contract.
++    std::array<std::byte, 257> bytes{};
++    for (std::size_t index{}; index < (cork ? 1U : 4U); ++index)
++    {
++        cnetmod::endpoint source;
++        const auto received = co_await cnetmod::with_timeout(context, std::chrono::seconds{2},
++            cnetmod::async_recvfrom(context, receiver.native_socket(),
++                cnetmod::mutable_buffer{bytes.data(), bytes.size()}, source, token), token);
++        if (!received || *received != (cork ? 256U : 64U))
++            co_return std::unexpected(received ? std::make_error_code(std::errc::protocol_error) : received.error());
++        for (std::size_t offset{}; offset < *received; ++offset)
++        {
++            const auto expected = (cork ? offset < 128U : index < 2U)
++                ? std::byte{0x31} : std::byte{0x7e};
++            if (bytes[offset] != expected)
++                co_return std::unexpected(std::make_error_code(std::errc::protocol_error));
++        }
++    }
++    co_return {};
++}
++} // namespace
++
++TEST(udp_segmented_batch_retains_native_cork_and_segment_options)
++{
++    cnetmod::net_init network;
++    for (const bool cork : {false, true})
++    {
++        auto context = cnetmod::make_io_context();
++        std::optional<std::expected<void, std::error_code>> result;
++        auto wrapper = [&]() -> cnetmod::task<void>
++        {
++            result = co_await run_udp_segmented_native_options(*context, cork);
++            context->stop();
++        };
++        auto running = wrapper();
++        running.handle().resume();
++        context->run();
++        ASSERT_TRUE(result.has_value());
++        ASSERT_TRUE(result && *result);
++    }
++}
++
++TEST(udp_segmented_batch_fallback_preserves_pending_cancel_full_queue_and_reuse)
++{
++    check_udp_batch_would_block(batch_wait_probe::writable, true);
++    check_udp_batch_would_block(batch_wait_probe::cancel, true);
++    check_udp_batch_would_block(batch_wait_probe::full_queue_cancel, true);
++    check_udp_batch_would_block(batch_wait_probe::accepted_prefix_error, true);
++}
++
++TEST(udp_segmented_batch_preserves_ipv4_ipv6_tail_empty_peer_and_cap_boundaries)
++{
++    cnetmod::net_init network;
++    for (const auto loopback : {std::string_view{"127.0.0.1"}, std::string_view{"::1"}})
++    {
++        auto context = cnetmod::make_io_context();
++        std::optional<std::expected<void, std::error_code>> result;
++        auto wrapper = [&]() -> cnetmod::task<void>
++        {
++            result = co_await run_udp_batch_layout_probe(*context, loopback, true);
++            context->stop();
++        };
++        auto running = wrapper();
++        running.handle().resume();
++        context->run();
++        ASSERT_TRUE(result.has_value());
++        ASSERT_TRUE(result && *result);
++    }
++}
++
++TEST(udp_segmented_batch_reports_original_prefix_and_preserves_early_cancel)
++{
++    cnetmod::net_init network;
++    auto context = cnetmod::make_io_context();
++    std::optional<std::expected<void, std::error_code>> result;
++    auto wrapper = [&]() -> cnetmod::task<void>
++    {
++        result = co_await run_udp_batch_partial_prefix_probe(*context, true, true);
++        context->stop();
++    };
++    auto running = wrapper();
++    running.handle().resume();
++    context->run();
++    ASSERT_TRUE(result.has_value());
++    ASSERT_TRUE(result && *result);
++}
++#endif
++
+ RUN_TESTS()

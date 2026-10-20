@@ -1,0 +1,12 @@
+[0/2] Re-checking globbed directories...
+[1/210] Scanning /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/http/v3/http3_session.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/http/v3/http3_session.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[2/210] Generating CXX dyndep file CMakeFiles/cnetmod_http.dir/CXX.dd
+[3/9] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v3/http3_session.cpp.o
+[4/9] Linking CXX static library libcnetmod_http.a
+[5/9] Linking CXX executable testing/http3/http3_e2e_server
+[6/9] Linking CXX executable bin/h3_interop_server
+[7/9] Linking CXX executable testing/http3/http_client_http3_e2e
+[8/9] Linking CXX executable testing/bench/arena_h3_server

@@ -1,0 +1,5 @@
+[
+  "/var/tmp/cnetmod-ninja-1.11/bin/ninja",
+  "-j2",
+  "test_quic_loss_detection"
+]

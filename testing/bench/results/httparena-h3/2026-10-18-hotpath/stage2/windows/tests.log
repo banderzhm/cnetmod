@@ -1,0 +1,74 @@
+Test project C:/Users/25007/.codex/tmp/cnetmod-h3-windows
+      Start 44: test_udp_batch
+ 1/25 Test #44: test_udp_batch .......................................   Passed    0.06 sec
+      Start 47: test_quic_varint
+ 2/25 Test #47: test_quic_varint .....................................   Passed    0.01 sec
+      Start 48: test_quic_frame
+ 3/25 Test #48: test_quic_frame ......................................   Passed    0.01 sec
+      Start 49: test_quic_packet
+ 4/25 Test #49: test_quic_packet .....................................   Passed    0.01 sec
+      Start 50: test_quic_stream
+ 5/25 Test #50: test_quic_stream .....................................   Passed    0.03 sec
+      Start 51: test_quic_loss_detection
+ 6/25 Test #51: test_quic_loss_detection .............................   Passed    0.01 sec
+      Start 52: test_quic_congestion
+ 7/25 Test #52: test_quic_congestion .................................   Passed    0.01 sec
+      Start 53: test_quic_early_data
+ 8/25 Test #53: test_quic_early_data .................................   Passed    0.01 sec
+      Start 54: test_http3_qpack
+ 9/25 Test #54: test_http3_qpack .....................................   Passed    0.01 sec
+      Start 55: test_http3_frame
+10/25 Test #55: test_http3_frame .....................................   Passed    0.01 sec
+      Start 62: http3_lifecycle
+11/25 Test #62: http3_lifecycle ......................................   Passed    2.63 sec
+      Start 63: http3_cold_listener_cleanup
+12/25 Test #63: http3_cold_listener_cleanup ..........................   Passed   35.55 sec
+      Start 64: h3_webtransport_aioquic_probe_unit
+13/25 Test #64: h3_webtransport_aioquic_probe_unit ...................   Passed    0.25 sec
+      Start 67: http3_early_data_recovery
+14/25 Test #67: http3_early_data_recovery ............................   Passed    2.02 sec
+      Start 68: http3_streaming_cancellation
+15/25 Test #68: http3_streaming_cancellation .........................   Passed    0.51 sec
+      Start 69: http3_idle_connection_cleanup
+16/25 Test #69: http3_idle_connection_cleanup ........................   Passed   30.91 sec
+      Start 70: http_client_http3_end_to_end
+17/25 Test #70: http_client_http3_end_to_end .........................   Passed    2.22 sec
+      Start 71: http_client_http3_dynamic_qpack_end_to_end
+18/25 Test #71: http_client_http3_dynamic_qpack_end_to_end ...........   Passed    1.32 sec
+      Start 72: http3_multipath_end_to_end
+19/25 Test #72: http3_multipath_end_to_end ...........................   Passed    0.43 sec
+      Start 73: http3_multipath_path_mtu_end_to_end
+20/25 Test #73: http3_multipath_path_mtu_end_to_end ..................   Passed    0.40 sec
+      Start 74: http3_multipath_path_mtu_blackhole_end_to_end
+21/25 Test #74: http3_multipath_path_mtu_blackhole_end_to_end ........   Passed    2.48 sec
+      Start 75: http3_multipath_local_path_close_end_to_end
+22/25 Test #75: http3_multipath_local_path_close_end_to_end ..........   Passed    0.59 sec
+      Start 76: http3_connect_close_end_to_end
+23/25 Test #76: http3_connect_close_end_to_end .......................   Passed    0.16 sec
+      Start 77: http3_multipath_path_validation_timeout_end_to_end
+24/25 Test #77: http3_multipath_path_validation_timeout_end_to_end ...   Passed    3.21 sec
+      Start 78: http3_connection_migration
+25/25 Test #78: http3_connection_migration ...........................   Passed    2.27 sec
+
+100% tests passed, 0 tests failed out of 25
+
+Label Time Summary:
+blackhole       =   2.48 sec*proc (1 test)
+client          =   3.69 sec*proc (3 tests)
+close           =   0.74 sec*proc (2 tests)
+connect         =   0.16 sec*proc (1 test)
+end_to_end      =  10.80 sec*proc (8 tests)
+http3           =  84.95 sec*proc (15 tests)
+interop         =  38.42 sec*proc (3 tests)
+lifecycle       =  69.60 sec*proc (4 tests)
+migration       =   2.27 sec*proc (1 test)
+multipath       =   7.11 sec*proc (5 tests)
+pmtu            =   2.88 sec*proc (2 tests)
+qpack           =   1.32 sec*proc (1 test)
+quic            =  42.99 sec*proc (10 tests)
+recovery        =   2.02 sec*proc (1 test)
+timeout         =   3.21 sec*proc (1 test)
+unit            =   0.25 sec*proc (1 test)
+webtransport    =   0.25 sec*proc (1 test)
+
+Total Test time (real) =  85.14 sec

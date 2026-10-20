@@ -1,9 +1,20 @@
+module;
+#include <cnetmod/config.hpp>
 module cnetmod.protocol.websocket;
 import std;
 import :server;
 import cnetmod.io.io_context;
+import cnetmod.core.log;
+import cnetmod.coro.cancel;
+import cnetmod.coro.wait_group;
 
 namespace cnetmod::ws {
+namespace {
+    void report_connection_failure(std::exception_ptr)
+    {
+        logger::warn{"WebSocket connection task failed"};
+    }
+}
 namespace detail {
     auto parse_ws_pattern(std::string_view pattern) -> std::vector<seg>
     {
@@ -180,8 +191,35 @@ auto server::listen(std::string_view host, std::uint16_t port,
     auto address = ip_address::from_string(host);
     if (!address)
         return std::unexpected(address.error());
-    acc_ = std::make_unique<tcp::acceptor>(ctx_);
     opts.reuse_address = true;
+#ifdef CNETMOD_PLATFORM_LINUX
+    if (sctx_ && sctx_->worker_count() > 1)
+    {
+        opts.reuse_port = true;
+        auto selected = endpoint{*address, port};
+        for (auto* worker : sctx_->worker_ios())
+        {
+            auto listener = std::make_unique<tcp::acceptor>(*worker);
+            if (const auto opened = listener->open(selected, opts); !opened)
+            {
+                worker_acceptors_.clear();
+                worker_cancellations_.clear();
+                return std::unexpected(opened.error());
+            }
+            if (worker_acceptors_.empty() && port == 0)
+            {
+                const auto local = listener->native_socket().local_endpoint();
+                if (!local)
+                    return std::unexpected(local.error());
+                selected = *local;
+            }
+            worker_acceptors_.push_back(std::move(listener));
+            worker_cancellations_.push_back(std::make_shared<cancel_token>());
+        }
+        return {};
+    }
+#endif
+    acc_ = std::make_unique<tcp::acceptor>(ctx_);
     if (auto opened = acc_->open(endpoint{*address, port}, opts); !opened)
         return std::unexpected(opened.error());
     return {};
@@ -195,18 +233,32 @@ void server::on(std::string_view pattern, ws_handler_fn handler)
 
 auto server::run() -> task<void>
 {
+    if (!worker_acceptors_.empty())
+    {
+        async_wait_group completed;
+        completed.add(static_cast<int>(worker_acceptors_.size()));
+        running_ = true;
+        for (std::size_t i = 0; i < worker_acceptors_.size(); ++i)
+            spawn_guarded<report_connection_failure>(worker_acceptors_[i]->context(),
+                run_accept_shard(i, completed));
+        co_await completed.wait();
+        co_return;
+    }
     if (!acc_)
         co_return;
+    accept_cancellation_->reset();
     running_ = true;
     while (running_)
     {
-        auto accepted = co_await async_accept(ctx_, acc_->native_socket());
+        auto accepted = co_await async_accept(ctx_, acc_->native_socket(), *accept_cancellation_);
         if (!accepted)
         {
             if (!running_)
                 break;
             continue;
         }
+        if (!running_)
+            break;
         if (sctx_)
         {
             auto& worker = sctx_->next_worker_io();
@@ -215,13 +267,63 @@ auto server::run() -> task<void>
         else
             spawn(ctx_, handle_connection(std::move(*accepted), ctx_));
     }
+    acc_->close();
+}
+
+auto server::run_accept_shard(std::size_t index, async_wait_group& completed) -> task<void>
+{
+    struct completion_guard
+    {
+        async_wait_group& group;
+        ~completion_guard() { group.done(); }
+    } completion{completed};
+    auto& listener = *worker_acceptors_[index];
+    auto& io = listener.context();
+    auto cancellation = worker_cancellations_[index];
+    cancellation->reset();
+    while (running_)
+    {
+        auto accepted = co_await async_accept(io, listener.native_socket(), *cancellation);
+        if (!accepted)
+            continue;
+        if (!running_)
+            break;
+        dispatch_guarded<report_connection_failure>(io, handle_connection(std::move(*accepted), io));
+        for (unsigned count = 1; running_ && count < 64; ++count)
+        {
+            auto next = listener.try_accept();
+            if (!next || !*next)
+                break;
+            dispatch_guarded<report_connection_failure>(io, handle_connection(std::move(**next), io));
+        }
+    }
+    listener.close();
 }
 
 void server::stop()
 {
     running_ = false;
+    auto cancel_on_owner = [](io_context& io, std::shared_ptr<cancel_token> cancellation)
+    {
+        cancellation->request_cancel();
+        if (io.running_in_this_thread())
+            cancellation->dispatch_cancel();
+        else
+        {
+            struct pending_cancel { std::shared_ptr<cancel_token> token; };
+            auto pending = std::make_unique<pending_cancel>(std::move(cancellation));
+            io.post([](void* value)
+                {
+                    std::unique_ptr<pending_cancel> owner{static_cast<pending_cancel*>(value)};
+                    owner->token->dispatch_cancel();
+                }, pending.get(), [](void* value) { delete static_cast<pending_cancel*>(value); });
+            (void)pending.release();
+        }
+    };
+    for (std::size_t i = 0; i < worker_acceptors_.size(); ++i)
+        cancel_on_owner(worker_acceptors_[i]->context(), worker_cancellations_[i]);
     if (acc_)
-        acc_->close();
+        cancel_on_owner(ctx_, accept_cancellation_);
 }
 
 auto server::handle_connection(socket client, io_context& io) -> task<void>
@@ -265,8 +367,22 @@ auto server::handle_connection(socket client, io_context& io) -> task<void>
     }
 #endif
 
-    http::request_parser req_parser;
-    std::array<std::byte, 4096> buf{};
+    connection conn(io);
+    auto accepted = co_await accept_connection(std::move(client), conn, io);
+    if (!accepted.route)
+        co_return;
+    co_await accepted.route->handler(*accepted.context);
+    if (conn.is_open())
+        (void)co_await conn.async_close();
+}
+
+auto server::accept_connection(socket client, connection& conn, io_context& io)
+    -> task<accepted_connection>
+{
+    // Release handshake parsing state before entering the potentially
+    // long-lived message handler, rather than retaining it per connection.
+    http::request_parser req_parser(1024);
+    std::array<std::byte, 1024> buf;
     while (!req_parser.ready())
     {
         auto rd =
@@ -274,14 +390,14 @@ auto server::handle_connection(socket client, io_context& io) -> task<void>
         if (!rd || *rd == 0)
         {
             client.close();
-            co_return;
+            co_return accepted_connection{};
         }
         auto consumed =
             req_parser.consume(reinterpret_cast<const char*>(buf.data()), *rd);
         if (!consumed)
         {
             client.close();
-            co_return;
+            co_return accepted_connection{};
         }
     }
 
@@ -317,7 +433,7 @@ auto server::handle_connection(socket client, io_context& io) -> task<void>
         (void)co_await async_write_all(io, client,
             const_buffer{data.data(), data.size()});
         client.close();
-        co_return;
+        co_return accepted_connection{};
     }
 
     auto accept_key = validate_upgrade_request(req_parser);
@@ -329,7 +445,7 @@ auto server::handle_connection(socket client, io_context& io) -> task<void>
         (void)co_await async_write_all(io, client,
             const_buffer{data.data(), data.size()});
         client.close();
-        co_return;
+        co_return accepted_connection{};
     }
 
     auto upgrade_resp = build_upgrade_response(*accept_key);
@@ -339,15 +455,15 @@ auto server::handle_connection(socket client, io_context& io) -> task<void>
     if (!wr)
     {
         client.close();
-        co_return;
+        co_return accepted_connection{};
     }
 
-    connection conn(io);
-    conn.attach(std::move(client), true);
-    ws_context wctx(conn, std::move(path), req_parser.headers(), std::move(query),
-        std::move(rp));
-    co_await matched->handler(wctx);
-    if (conn.is_open())
-        (void)co_await conn.async_close();
+    const auto pending = req_parser.take_buffered_data();
+    conn.attach(std::move(client), true, std::as_bytes(std::span{pending}));
+    accepted_connection result;
+    result.route = matched;
+    result.context.emplace(conn, std::move(path), req_parser.take_headers(),
+        std::move(query), std::move(rp));
+    co_return result;
 }
 } // namespace cnetmod::ws

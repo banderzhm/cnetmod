@@ -1,0 +1,14 @@
+{
+  "peer_socket_trace": "Full startup plus static traffic: UDP_GRO enabled; no socket-default UDP_SEGMENT observed.",
+  "unconditional_post": "Rejected: high-concurrency throughput improved, but single-connection single-stream regressed. These are diagnostic results, not final official scores.",
+  "startup_timeout": "Retained failed startup evidence; subsequent run checked all listener sockets before readiness.",
+  "conditional_post": "Retained candidate: about 1.527M to 2.912M baseline valid RPS in controlled diagnostic A/B; static did not improve. Fixed-CPU single-stream median remained 39us. Not final official scores.",
+  "transparent_gso": "Rejected on semantic review: generic sockets, native UDP_SEGMENT/UDP_CORK options, timestamps and partial stream writes cannot safely be assumed compatible. Production retains ordinary sendmmsg only.",
+  "large_datagram_test": "Host-route run failed sending the 24000-byte GSO candidate (EMSGSIZE); a separate ordinary 24000-byte UDP send succeeded but receive timed out. Host 127.0.0.1 routed through loopback0, not lo. This does not establish payload corruption. Final boundary validation requires isolated true loopback.",
+  "memory_counter": "Diagnostic aliases use the same mimalloc implementation with live usable-byte counters. Known C/C++/aligned/DSO/realloc tests passed. The first workload attempt stopped on round 6 with 2175 errors; no final 35s snapshot, so it does not establish a retention plateau.",
+  "windows_stage2": "25/25 passed in 85.14s before the bounded recovery-node reuse candidate. Logs in ../stage2/windows.",
+  "native_retention": "The uninstrumented frozen conditional binary also failed: round 2 had 2834 errors out of 200000 requests. The run stopped, retained the process for a 35s idle sample, and cannot be treated as a passing retention regression. This failure is not attributable solely to allocator instrumentation.",
+  "outbound_pto_mechanism": "Same-layout observer-disabled control drops a real delayed response STREAM and times out at 2s; enabled 1/2-worker restart cases recover at about 1.23s with no client ingress. Earlier 200ms fixture is not a PTO negative: a residual handshake timer masked the missing notification. These results precede final shutdown/locked-snapshot changes.",
+  "observer_retention": "Build1 observer+nodecache uninstrumented diagnostic still fails: run 1792314190 round2 has 3923 failed/errored out of 200000 requests, zero h2load timeout. After 35s RSS remains 207044608 bytes. This is not a passing retention/performance acceptance run. Initial preceding attempt omitted the existing gai.conf mount wrapper and failed readiness without workload.",
+  "coldclose_provenance": "Cold-close run summaries retain an inherited inaccurate native-frozen scope. See coldclose-build/provenance.txt: these binaries have cold diagnostic logging. The later 12-round success does not disprove the earlier failed run."
+}

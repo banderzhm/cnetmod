@@ -1,0 +1,518 @@
+{
+  "cnetmod-official-optimized/baseline-h3": {
+    "rounds": [
+      {
+        "round": 1,
+        "total": 6772041,
+        "started": 6776137,
+        "done": 6772041,
+        "succeeded": 6772041,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 6772041,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.66,
+        "headline_rps": 1354408.2,
+        "valid_rps_from_printed_elapsed": 1196473.6749116608,
+        "cpu_percent": 1874.6,
+        "memory_peak": "143MiB"
+      },
+      {
+        "round": 2,
+        "total": 6076685,
+        "started": 6080781,
+        "done": 6076685,
+        "succeeded": 6076685,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 6076685,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.66,
+        "headline_rps": 1215337.0,
+        "valid_rps_from_printed_elapsed": 1073619.25795053,
+        "cpu_percent": 1977.9,
+        "memory_peak": "163MiB"
+      },
+      {
+        "round": 3,
+        "total": 5946735,
+        "started": 5950831,
+        "done": 5946735,
+        "succeeded": 5946735,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 5946735,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.67,
+        "headline_rps": 1189347.0,
+        "valid_rps_from_printed_elapsed": 1048806.8783068783,
+        "cpu_percent": 1980.3,
+        "memory_peak": "168MiB"
+      }
+    ],
+    "official_selected": {
+      "framework": "cnetmod-official-optimized",
+      "language": "C++",
+      "rps": 1196473,
+      "avg_latency": "3.71ms",
+      "p99_latency": "19.19ms",
+      "cpu": "1874.6%",
+      "memory": "143MiB",
+      "connections": 64,
+      "threads": 64,
+      "duration": "5s",
+      "pipeline": 1,
+      "bandwidth": "11.63MB/s",
+      "reconnects": 0,
+      "status_2xx": 6772041,
+      "status_3xx": 0,
+      "status_4xx": 0,
+      "status_5xx": 0
+    }
+  },
+  "cnetmod-official-static/static-h3": {
+    "rounds": [
+      {
+        "round": 1,
+        "total": 1545902,
+        "started": 1549998,
+        "done": 1545902,
+        "succeeded": 1545902,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 1545961,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.66,
+        "headline_rps": 309180.4,
+        "valid_rps_from_printed_elapsed": 273137.9858657244,
+        "cpu_percent": 1737.1,
+        "memory_peak": "187MiB"
+      },
+      {
+        "round": 2,
+        "total": 1465853,
+        "started": 1469949,
+        "done": 1465853,
+        "succeeded": 1465853,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 1465918,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.66,
+        "headline_rps": 293170.6,
+        "valid_rps_from_printed_elapsed": 258996.11307420494,
+        "cpu_percent": 1732.1,
+        "memory_peak": "200MiB"
+      },
+      {
+        "round": 3,
+        "total": 1496249,
+        "started": 1500345,
+        "done": 1496249,
+        "succeeded": 1496249,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 1496313,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.68,
+        "headline_rps": 299249.8,
+        "valid_rps_from_printed_elapsed": 263435.38732394367,
+        "cpu_percent": 1769.1,
+        "memory_peak": "200MiB"
+      }
+    ],
+    "official_selected": {
+      "framework": "cnetmod-official-static",
+      "language": "C++",
+      "rps": 273137,
+      "avg_latency": "14.05ms",
+      "p99_latency": "66.33ms",
+      "cpu": "1737.1%",
+      "memory": "187MiB",
+      "connections": 64,
+      "threads": 64,
+      "duration": "5s",
+      "pipeline": 1,
+      "bandwidth": "4.70GB/s",
+      "reconnects": 0,
+      "status_2xx": 1545961,
+      "status_3xx": 0,
+      "status_4xx": 0,
+      "status_5xx": 0
+    }
+  },
+  "agensio-official-h3/baseline-h3": {
+    "rounds": [
+      {
+        "round": 1,
+        "total": 38447936,
+        "started": 38452032,
+        "done": 38447936,
+        "succeeded": 38447936,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 38447936,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.66,
+        "headline_rps": 7689587.2,
+        "valid_rps_from_printed_elapsed": 6792921.554770318,
+        "cpu_percent": 849.2,
+        "memory_peak": "124MiB"
+      },
+      {
+        "round": 2,
+        "total": 35862528,
+        "started": 35866624,
+        "done": 35862528,
+        "succeeded": 35862528,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 35862528,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.66,
+        "headline_rps": 7172505.6,
+        "valid_rps_from_printed_elapsed": 6336135.689045936,
+        "cpu_percent": 882.3,
+        "memory_peak": "126MiB"
+      },
+      {
+        "round": 3,
+        "total": 36581248,
+        "started": 36585344,
+        "done": 36581248,
+        "succeeded": 36581248,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 36581248,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.66,
+        "headline_rps": 7316249.6,
+        "valid_rps_from_printed_elapsed": 6463118.021201413,
+        "cpu_percent": 903.6,
+        "memory_peak": "128MiB"
+      }
+    ],
+    "official_selected": {
+      "framework": "agensio-official-h3",
+      "language": "C++",
+      "rps": 6792921,
+      "avg_latency": "491us",
+      "p99_latency": "1.41ms",
+      "cpu": "849.2%",
+      "memory": "124MiB",
+      "connections": 64,
+      "threads": 64,
+      "duration": "5s",
+      "pipeline": 1,
+      "bandwidth": "132.93MB/s",
+      "reconnects": 0,
+      "status_2xx": 38447936,
+      "status_3xx": 0,
+      "status_4xx": 0,
+      "status_5xx": 0
+    }
+  },
+  "agensio-official-h3/static-h3": {
+    "rounds": [
+      {
+        "round": 1,
+        "total": 5643633,
+        "started": 5647729,
+        "done": 5643633,
+        "succeeded": 5643633,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 5644770,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.67,
+        "headline_rps": 1128726.6,
+        "valid_rps_from_printed_elapsed": 995550.2645502646,
+        "cpu_percent": 1195.1,
+        "memory_peak": "124MiB"
+      },
+      {
+        "round": 2,
+        "total": 5634537,
+        "started": 5638633,
+        "done": 5634537,
+        "succeeded": 5634537,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 5635655,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.67,
+        "headline_rps": 1126907.4,
+        "valid_rps_from_printed_elapsed": 993942.6807760141,
+        "cpu_percent": 1251.9,
+        "memory_peak": "127MiB"
+      },
+      {
+        "round": 3,
+        "total": 5228474,
+        "started": 5232570,
+        "done": 5228474,
+        "succeeded": 5228474,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 5229561,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.66,
+        "headline_rps": 1045694.8,
+        "valid_rps_from_printed_elapsed": 923950.7067137809,
+        "cpu_percent": 1274.0,
+        "memory_peak": "128MiB"
+      }
+    ],
+    "official_selected": {
+      "framework": "agensio-official-h3",
+      "language": "C++",
+      "rps": 995550,
+      "avg_latency": "3.60ms",
+      "p99_latency": "14.02ms",
+      "cpu": "1195.1%",
+      "memory": "124MiB",
+      "connections": 64,
+      "threads": 64,
+      "duration": "5s",
+      "pipeline": 1,
+      "bandwidth": "17.21GB/s",
+      "reconnects": 0,
+      "status_2xx": 5644770,
+      "status_3xx": 0,
+      "status_4xx": 0,
+      "status_5xx": 0
+    }
+  },
+  "genhttp-ioxide-official-h3/baseline-h3": {
+    "rounds": [
+      {
+        "round": 1,
+        "total": 6664131,
+        "started": 6668227,
+        "done": 6664131,
+        "succeeded": 6664131,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 6664277,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.71,
+        "headline_rps": 1332826.2,
+        "valid_rps_from_printed_elapsed": 1167123.8178633975,
+        "cpu_percent": 1585.7,
+        "memory_peak": "1.0GiB"
+      },
+      {
+        "round": 2,
+        "total": 7416251,
+        "started": 7420347,
+        "done": 7416251,
+        "succeeded": 7416251,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 7416393,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.67,
+        "headline_rps": 1483250.2,
+        "valid_rps_from_printed_elapsed": 1308005.8201058202,
+        "cpu_percent": 1803.8,
+        "memory_peak": "1.1GiB"
+      },
+      {
+        "round": 3,
+        "total": 7523449,
+        "started": 7527545,
+        "done": 7523449,
+        "succeeded": 7523449,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 7523611,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.68,
+        "headline_rps": 1504689.8,
+        "valid_rps_from_printed_elapsed": 1324579.4014084507,
+        "cpu_percent": 1838.5,
+        "memory_peak": "1.1GiB"
+      }
+    ],
+    "official_selected": {
+      "framework": "genhttp-ioxide-official-h3",
+      "language": "C#",
+      "rps": 1324579,
+      "avg_latency": "3.13ms",
+      "p99_latency": "12.00ms",
+      "cpu": "1838.5%",
+      "memory": "1.1GiB",
+      "connections": 64,
+      "threads": 64,
+      "duration": "5s",
+      "pipeline": 1,
+      "bandwidth": "18.66MB/s",
+      "reconnects": 0,
+      "status_2xx": 7523611,
+      "status_3xx": 0,
+      "status_4xx": 0,
+      "status_5xx": 0
+    }
+  },
+  "genhttp-ioxide-official-h3/static-h3": {
+    "rounds": [
+      {
+        "round": 1,
+        "total": 1040740,
+        "started": 1044836,
+        "done": 1040740,
+        "succeeded": 1040740,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 1043860,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.66,
+        "headline_rps": 208148.0,
+        "valid_rps_from_printed_elapsed": 184427.56183745584,
+        "cpu_percent": 1645.3,
+        "memory_peak": "1.2GiB"
+      },
+      {
+        "round": 2,
+        "total": 1187325,
+        "started": 1191421,
+        "done": 1187325,
+        "succeeded": 1187325,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 1190599,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.66,
+        "headline_rps": 237465.0,
+        "valid_rps_from_printed_elapsed": 210353.18021201412,
+        "cpu_percent": 1794.2,
+        "memory_peak": "1.4GiB"
+      },
+      {
+        "round": 3,
+        "total": 1192793,
+        "started": 1196889,
+        "done": 1192793,
+        "succeeded": 1192793,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 1195951,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.66,
+        "headline_rps": 238558.6,
+        "valid_rps_from_printed_elapsed": 211298.76325088338,
+        "cpu_percent": 1876.8,
+        "memory_peak": "1.5GiB"
+      }
+    ],
+    "official_selected": {
+      "framework": "genhttp-ioxide-official-h3",
+      "language": "C#",
+      "rps": 211298,
+      "avg_latency": "19.09ms",
+      "p99_latency": "61.73ms",
+      "cpu": "1876.8%",
+      "memory": "1.5GiB",
+      "connections": 64,
+      "threads": 64,
+      "duration": "5s",
+      "pipeline": 1,
+      "bandwidth": "3.62GB/s",
+      "reconnects": 0,
+      "status_2xx": 1195951,
+      "status_3xx": 0,
+      "status_4xx": 0,
+      "status_5xx": 0
+    }
+  }
+}

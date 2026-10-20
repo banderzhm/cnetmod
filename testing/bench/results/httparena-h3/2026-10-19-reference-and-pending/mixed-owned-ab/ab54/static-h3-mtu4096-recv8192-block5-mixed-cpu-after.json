@@ -1,0 +1,356 @@
+{
+  "cpu_seconds": 95.18,
+  "monotonic_ns": 1400107491295,
+  "system_cpu_ticks": {
+    "user": 471364,
+    "nice": 291,
+    "system": 121606,
+    "idle": 3650365,
+    "iowait": 197354,
+    "irq": 0,
+    "softirq": 43267,
+    "steal": 0,
+    "guest": 0,
+    "guest_nice": 0
+  },
+  "clock_ticks_per_second": 100,
+  "cpus_allowed_list": "0-31",
+  "threads": {
+    "5249": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5251": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.52,
+      "cpus_allowed_list": "0-31"
+    },
+    "5252": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5253": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5254": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5255": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5256": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5257": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5258": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5259": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5260": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5261": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5262": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5263": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5264": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5265": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5266": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5267": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5268": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5269": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5270": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5271": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5272": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5273": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5274": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5275": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5276": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5277": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5278": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5279": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5280": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5281": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5282": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5283": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5290": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 2.1,
+      "cpus_allowed_list": "0-31"
+    },
+    "5291": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 3.1,
+      "cpus_allowed_list": "0-31"
+    },
+    "5292": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 1.99,
+      "cpus_allowed_list": "0-31"
+    },
+    "5293": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 3.33,
+      "cpus_allowed_list": "0-31"
+    },
+    "5294": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 2.06,
+      "cpus_allowed_list": "0-31"
+    },
+    "5295": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 2.1,
+      "cpus_allowed_list": "0-31"
+    },
+    "5296": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 3.23,
+      "cpus_allowed_list": "0-31"
+    },
+    "5297": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 3.26,
+      "cpus_allowed_list": "0-31"
+    },
+    "5298": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 3.72,
+      "cpus_allowed_list": "0-31"
+    },
+    "5299": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 2.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5300": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 2.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5301": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 3.04,
+      "cpus_allowed_list": "0-31"
+    },
+    "5302": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 5.04,
+      "cpus_allowed_list": "0-31"
+    },
+    "5303": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 4.56,
+      "cpus_allowed_list": "0-31"
+    },
+    "5304": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5305": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 3.21,
+      "cpus_allowed_list": "0-31"
+    },
+    "5306": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 3.38,
+      "cpus_allowed_list": "0-31"
+    },
+    "5307": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 5.11,
+      "cpus_allowed_list": "0-31"
+    },
+    "5308": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 3.12,
+      "cpus_allowed_list": "0-31"
+    },
+    "5309": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 3.24,
+      "cpus_allowed_list": "0-31"
+    },
+    "5310": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 4.27,
+      "cpus_allowed_list": "0-31"
+    },
+    "5311": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 2.11,
+      "cpus_allowed_list": "0-31"
+    },
+    "5312": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 4.09,
+      "cpus_allowed_list": "0-31"
+    },
+    "5313": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 3.16,
+      "cpus_allowed_list": "0-31"
+    },
+    "5314": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 3.13,
+      "cpus_allowed_list": "0-31"
+    },
+    "5315": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 5.01,
+      "cpus_allowed_list": "0-31"
+    },
+    "5316": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5317": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 2.11,
+      "cpus_allowed_list": "0-31"
+    },
+    "5318": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 4.39,
+      "cpus_allowed_list": "0-31"
+    },
+    "5319": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 2.06,
+      "cpus_allowed_list": "0-31"
+    },
+    "5320": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "5321": {
+      "comm": "arena_h3_server",
+      "cpu_seconds": 4.41,
+      "cpus_allowed_list": "0-31"
+    }
+  },
+  "memory_kib": {
+    "Rss": 78180,
+    "Pss": 75869,
+    "Private_Clean": 4660,
+    "Private_Dirty": 71036
+  }
+}

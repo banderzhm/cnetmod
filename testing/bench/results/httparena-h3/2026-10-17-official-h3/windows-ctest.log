@@ -1,0 +1,43 @@
+Test project C:/Users/25007/.codex/tmp/cnetmod-h3-windows
+      Start 48: test_quic_frame
+ 1/13 Test #48: test_quic_frame ..............................   Passed    0.02 sec
+      Start 49: test_quic_packet
+ 2/13 Test #49: test_quic_packet .............................   Passed    0.01 sec
+      Start 50: test_quic_stream
+ 3/13 Test #50: test_quic_stream .............................   Passed    0.01 sec
+      Start 51: test_quic_loss_detection
+ 4/13 Test #51: test_quic_loss_detection .....................   Passed    0.01 sec
+      Start 52: test_quic_congestion
+ 5/13 Test #52: test_quic_congestion .........................   Passed    0.01 sec
+      Start 54: test_http3_qpack
+ 6/13 Test #54: test_http3_qpack .............................   Passed    0.01 sec
+      Start 55: test_http3_frame
+ 7/13 Test #55: test_http3_frame .............................   Passed    0.01 sec
+      Start 61: arena_h3_measurement_unit
+ 8/13 Test #61: arena_h3_measurement_unit ....................   Passed    0.08 sec
+      Start 62: h3_webtransport_aioquic_probe_unit
+ 9/13 Test #62: h3_webtransport_aioquic_probe_unit ...........   Passed    0.34 sec
+      Start 63: h3_interop_release_gate
+10/13 Test #63: h3_interop_release_gate ......................   Passed    6.77 sec
+      Start 64: h3_interop_multi_worker_release_gate
+11/13 Test #64: h3_interop_multi_worker_release_gate .........   Passed    6.81 sec
+      Start 65: http_client_http3_end_to_end
+12/13 Test #65: http_client_http3_end_to_end .................   Passed   31.64 sec
+      Start 66: http_client_http3_dynamic_qpack_end_to_end
+13/13 Test #66: http_client_http3_dynamic_qpack_end_to_end ...   Passed    1.56 sec
+
+100% tests passed, 0 tests failed out of 13
+
+Label Time Summary:
+benchmark       =   0.08 sec*proc (1 test)
+client          =  33.19 sec*proc (2 tests)
+end_to_end      =  33.19 sec*proc (2 tests)
+http3           =  47.19 sec*proc (6 tests)
+interop         =  13.91 sec*proc (3 tests)
+multi_worker    =   6.81 sec*proc (1 test)
+qpack           =   1.56 sec*proc (1 test)
+release_gate    =  13.58 sec*proc (2 tests)
+unit            =   0.41 sec*proc (2 tests)
+webtransport    =   0.34 sec*proc (1 test)
+
+Total Test time (real) =  47.27 sec

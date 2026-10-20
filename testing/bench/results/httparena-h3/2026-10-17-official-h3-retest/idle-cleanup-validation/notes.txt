@@ -1,0 +1,2 @@
+Windows initial incremental build kept previous CTest registration: four existing tests passed. Explicit CMake configure then registered the new idle-cleanup test, invoked separately with --no-tests=error.
+No timed load after the 27-round token release.

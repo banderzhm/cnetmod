@@ -1,0 +1,8 @@
+{
+  "source": "/var/tmp/cnetmod-h3-cold-qlog-0578225f3b154de899376961c761b54a/round-6/client.0.0.sqlog",
+  "bytes": 15383619,
+  "records": 76821,
+  "last_time_ms": 349,
+  "handshake_done_frames": 0,
+  "scope": "one healthy comparison connection; full raw qlog remains external"
+}

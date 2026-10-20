@@ -1,0 +1,11 @@
+{
+  "old_sha256": "8c6a04b7107c59d650ac658da8f1e30e28b8a7c45fcd6e64d5c309c70a74cbfd",
+  "new_sha256": "cbc3ee33322be13f7ecef61f4c6f5cbfe0af439a7cff3958c38a6003fd949786",
+  "checks": {
+    "certs/server.crt": true,
+    "../escape": true,
+    "/absolute": true,
+    "requests/static-h2-uris.txt": true
+  },
+  "pre_load_failure": "session27076 exit1 before output directory or any load: resolved existing certs/requests symlink outside arena; all content hashes independently matched"
+}

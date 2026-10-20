@@ -1,0 +1,735 @@
+{
+  "3rdparty/mimalloc/include/mimalloc.h": {
+    "sha256": "8ec1bff9902bab6682e3ecbf7613ccc915e082ca743fdd0c396d3954323fe8bf",
+    "excerpts": [
+      {
+        "first_line": 11,
+        "last_line": 11,
+        "lines": [
+          "11: #define MI_MALLOC_VERSION 30503   // major + 2 digits minor + 2 digits patch"
+        ]
+      }
+    ]
+  },
+  "3rdparty/mimalloc/include/mimalloc/types.h": {
+    "sha256": "01abbaf1cc5572675b97f4115f205335e319b93249ee5163fb3bf2ad0fbbceae",
+    "excerpts": [
+      {
+        "first_line": 249,
+        "last_line": 251,
+        "lines": [
+          "249: #define MI_SMALL_PAGE_SIZE                MI_ARENA_MIN_OBJ_SIZE                    // 64 KiB",
+          "250: #define MI_MEDIUM_PAGE_SIZE               (8*MI_SMALL_PAGE_SIZE)                   // 512 KiB  (=byte in the bchunk bitmap)",
+          "251: #define MI_LARGE_PAGE_SIZE                (MI_SIZE_SIZE*MI_MEDIUM_PAGE_SIZE)       // 4 MiB    (=word in the bchunk bitmap)"
+        ]
+      },
+      {
+        "first_line": 444,
+        "last_line": 459,
+        "lines": [
+          "444: // `thread_free` for freed blocks by other threads",
+          "445: // The `local_free` and `thread_free` lists are migrated to the `free` list",
+          "446: // when it is exhausted. The separate `local_free` list is necessary to",
+          "447: // implement a monotonic heartbeat. The `thread_free` list is needed for",
+          "448: // avoiding atomic operations when allocating from the owning thread.",
+          "449: //",
+          "450: // `used - |thread_free|` == actual blocks that are in use (alive)",
+          "451: // `used - |thread_free| + |free| + |local_free| == capacity`",
+          "452: //",
+          "453: // We don't count \"freed\" (as |free|) but use only the `used` field to reduce",
+          "454: // the number of memory accesses in the `mi_page_all_free` function(s).",
+          "455: // Use `_mi_page_free_collect` to collect the thread_free list and update the `used` count.",
+          "456: //",
+          "457: // Notes:",
+          "458: // - Non-atomic fields can only be accessed if having _ownership_ (low bit of `xthread_free` is 1).",
+          "459: //   Combining the `thread_free` list with an ownership bit allows a concurrent `free` to atomically"
+        ]
+      },
+      {
+        "first_line": 508,
+        "last_line": 519,
+        "lines": [
+          "508: #define MI_PAGE_MAX_START_BLOCK_ALIGN2    (4*MI_KiB)                // maximal block alignment for \"power of 2\"-sized blocks (such that we guarantee natural alignment)",
+          "509: #define MI_PAGE_OSPAGE_BLOCK_ALIGN2       (4*MI_KiB)                // also aligns any multiple of this size to avoid TLB misses.",
+          "510: #define MI_PAGE_MAX_OVERALLOC_ALIGN       MI_ARENA_SLICE_SIZE       // (64 KiB) limit for which we overallocate in arena pages, beyond this use OS allocation",
+          "511: ",
+          "512: // The max object sizes are intended to not waste more than ~ 12.5% internally over the page sizes.",
+          "513: #define MI_SMALL_MAX_OBJ_SIZE             ((MI_SMALL_PAGE_SIZE-MI_PAGE_OSPAGE_BLOCK_ALIGN2)/6)   // = 10 KiB",
+          "514: #if MI_ENABLE_LARGE_PAGES",
+          "515: #define MI_MEDIUM_MAX_OBJ_SIZE            ((MI_MEDIUM_PAGE_SIZE-MI_PAGE_OSPAGE_BLOCK_ALIGN2)/6)  // ~ 84 KiB",
+          "516: #define MI_LARGE_MAX_OBJ_SIZE             (MI_LARGE_PAGE_SIZE/8)    // <= 512 KiB. note: this must be a nice power of 2 or we get rounding issues with `_mi_bin`",
+          "517: #else",
+          "518: #define MI_MEDIUM_MAX_OBJ_SIZE            (MI_MEDIUM_PAGE_SIZE/8)   // <= 64 KiB",
+          "519: #define MI_LARGE_MAX_OBJ_SIZE             MI_MEDIUM_MAX_OBJ_SIZE    // note: this must be a nice power of 2 or we get rounding issues with `_mi_bin`"
+        ]
+      }
+    ]
+  },
+  "3rdparty/mimalloc/src/options.c": {
+    "sha256": "5bfe80a0c473371d299840e8ed20831601d4998e4164e2e0bf71303697395824",
+    "excerpts": [
+      {
+        "first_line": 145,
+        "last_line": 167,
+        "lines": [
+          "145:   { 1000,MI_OPTION_UNINIT, MI_OPTION_LEGACY(purge_delay,reset_delay) },  // purge delay in milli-seconds",
+          "146:   { 0,   MI_OPTION_UNINIT, MI_OPTION(use_numa_nodes) },           // 0 = use available numa nodes, otherwise use at most N nodes.",
+          "147:   { 0,   MI_OPTION_UNINIT, MI_OPTION_LEGACY(disallow_os_alloc,limit_os_alloc) },           // 1 = do not use OS memory for allocation (but only reserved arenas)",
+          "148:   { 100, MI_OPTION_UNINIT, MI_OPTION(os_tag) },                   // only apple specific for now but might serve more or less related purpose",
+          "149:   { 32,  MI_OPTION_UNINIT, MI_OPTION(max_errors) },               // maximum errors that are output",
+          "150:   { 32,  MI_OPTION_UNINIT, MI_OPTION(max_warnings) },             // maximum warnings that are output",
+          "151:   { 10,  MI_OPTION_UNINIT, MI_OPTION(deprecated_max_segment_reclaim)},       // max. percentage of the abandoned segments to be reclaimed per try.",
+          "152:   { 0,   MI_OPTION_UNINIT, MI_OPTION(destroy_on_exit)},           // release all OS memory on process exit; careful with dangling pointer or after-exit frees!",
+          "153:   { MI_DEFAULT_ARENA_RESERVE, MI_OPTION_UNINIT, MI_OPTION(arena_reserve) }, // reserve memory N KiB at a time (=1GiB) (use `option_get_size`)",
+          "154:   { 4,   MI_OPTION_UNINIT, MI_OPTION(arena_purge_mult) },         // purge delay multiplier for arena's",
+          "155:   { 1,   MI_OPTION_UNINIT, MI_OPTION_LEGACY(deprecated_purge_extend_delay, decommit_extend_delay) },",
+          "156:   { MI_DEFAULT_DISALLOW_ARENA_ALLOC,   MI_OPTION_UNINIT, MI_OPTION(disallow_arena_alloc) }, // 1 = do not use arena's for allocation (except if using specific arena id's)",
+          "157:   { 400, MI_OPTION_UNINIT, MI_OPTION(retry_on_oom) },             // windows only: retry on out-of-memory for N milli seconds (=400), set to 0 to disable retries.",
+          "158:   { 1,   MI_OPTION_UNINIT, MI_OPTION(deprecated_visit_abandoned) },",
+          "159:   { 0,   MI_OPTION_UNINIT, MI_OPTION(guarded_min) },              // only used when building with MI_GUARDED: minimal rounded object size for guarded objects",
+          "160:   { MI_GiB, MI_OPTION_UNINIT, MI_OPTION(guarded_max) },           // only used when building with MI_GUARDED: maximal rounded object size for guarded objects",
+          "161:   { 0,   MI_OPTION_UNINIT, MI_OPTION(guarded_precise) },          // disregard minimal alignment requirement to always place guarded blocks exactly in front of a guard page (=0)",
+          "162:   { MI_DEFAULT_GUARDED_SAMPLE_RATE,",
+          "163:          MI_OPTION_UNINIT, MI_OPTION(guarded_sample_rate)},       // 1 out of N allocations in the min/max range will be guarded (=4000)",
+          "164:   { 0,   MI_OPTION_UNINIT, MI_OPTION(guarded_sample_seed)},",
+          "165:   { 10000, MI_OPTION_UNINIT, MI_OPTION(generic_collect) },        // collect theaps every N (=10000) generic allocation calls",
+          "166:   { 0,   MI_OPTION_UNINIT, MI_OPTION_LEGACY(page_reclaim_on_free, abandoned_reclaim_on_free) },// reclaim abandoned (small) pages on a free: -1 = disable completely, 0 = only reclaim into the originating theap, 1 = reclaim on free across theaps",
+          "167:   { 2,   MI_OPTION_UNINIT, MI_OPTION(page_full_retain) },         // number of (small) pages to retain in the free page queues"
+        ]
+      }
+    ]
+  },
+  "3rdparty/mimalloc/src/page.c": {
+    "sha256": "ad0df1217e96669ef63539c345ea7dc4d637c3269be2d4de36ac3a5a42fb0c12",
+    "excerpts": [
+      {
+        "first_line": 356,
+        "last_line": 372,
+        "lines": [
+          "356: // Collect the local `thread_free` list using an atomic exchange.",
+          "357: static void mi_page_thread_free_collect(mi_page_t* page)",
+          "358: {",
+          "359:   // atomically capture the thread free list",
+          "360:   mi_block_t* head;",
+          "361:   mi_thread_free_t tfreex;",
+          "362:   mi_thread_free_t tfree = mi_atomic_load_relaxed(&page->xthread_free);",
+          "363:   do {",
+          "364:     head = mi_tf_block(tfree);",
+          "365:     if mi_likely(head == NULL) return; // return if the list is empty",
+          "366:     tfreex = mi_tf_create(NULL,mi_tf_is_owned(tfree));  // set the thread free list to NULL",
+          "367:   } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tfree, tfreex));  // release is enough?",
+          "368:   mi_assert_internal(head != NULL);",
+          "369: ",
+          "370:   // and move it to the local list",
+          "371:   mi_page_thread_collect_to_local(page, head);",
+          "372: }"
+        ]
+      },
+      {
+        "first_line": 595,
+        "last_line": 636,
+        "lines": [
+          "595: #define MI_RETIRE_CYCLES      (16)      /* keep a retired page around for about 16 \"admin cycles\" before free'ing it */",
+          "596: #define MI_RETIRE_MAX_PAGES   (3)       /* keep at most N pages per size bin as retired */",
+          "597: ",
+          "598: // Retire a page with no more used blocks",
+          "599: // Important to not retire too quickly though as new",
+          "600: // allocations might coming.",
+          "601: //",
+          "602: // Note: called from `mi_free` and benchmarks often",
+          "603: // trigger this due to freeing everything and then",
+          "604: // allocating again so careful when changing this.",
+          "605: void _mi_page_retire(mi_page_t* page) mi_attr_noexcept {",
+          "606:   mi_assert_internal(page != NULL);",
+          "607:   mi_assert_expensive(_mi_page_is_valid(page));",
+          "608:   mi_assert_internal(mi_page_all_free(page));",
+          "609: ",
+          "610:   if (page->retire_expire!=0) return;  // already retired, just keep it retired",
+          "611:   mi_page_set_has_interior_pointers(page, false);",
+          "612: ",
+          "613:   // don't retire too often..",
+          "614:   // (or we end up retiring and re-allocating most of the time)",
+          "615:   // NOTE: refine this more: we should not retire if this",
+          "616:   // is the only page left with free blocks. It is not clear",
+          "617:   // how to check this efficiently though...",
+          "618:   // for now, we don't retire if it is the only page left of this size class.",
+          "619:   mi_page_queue_t* pq = mi_page_queue_of(page);",
+          "620:   #if MI_RETIRE_CYCLES > 0",
+          "621:   const size_t bsize = mi_page_block_size(page);",
+          "622:   if mi_likely( pq->count <= MI_RETIRE_MAX_PAGES && !mi_page_queue_is_special(pq)) {  // not full or huge queue?",
+          "623:     if (pq->count==1 || bsize < MI_SMALL_SIZE_MAX) {",
+          "624:       mi_theap_t* theap = mi_page_theap(page);",
+          "625:       mi_theap_stat_counter_increase(theap, pages_retire, 1);",
+          "626:       page->retire_expire = (bsize <= MI_SMALL_MAX_OBJ_SIZE ? MI_RETIRE_CYCLES : MI_RETIRE_CYCLES/4);",
+          "627:       mi_assert_internal(pq >= theap->pages);",
+          "628:       const size_t index = pq - theap->pages;",
+          "629:       mi_assert_internal(index < MI_BIN_FULL && index < MI_BIN_HUGE);",
+          "630:       if (index < theap->page_retired_min) theap->page_retired_min = index;",
+          "631:       if (index > theap->page_retired_max) theap->page_retired_max = index;",
+          "632:       mi_assert_internal(mi_page_all_free(page));",
+          "633:       return; // don't free after all",
+          "634:     }  ",
+          "635:   }",
+          "636:   #endif"
+        ]
+      },
+      {
+        "first_line": 663,
+        "last_line": 699,
+        "lines": [
+          "663:   mi_assert_internal(page!=NULL && page->retire_expire!=0);",
+          "664:   if (mi_page_all_free(page)) {",
+          "665:     page->retire_expire--;",
+          "666:     if (page->retire_expire == 0 || force) {",
+          "667:       _mi_page_free(page, pq);",
+          "668:     }",
+          "669:     else {",
+          "670:       // keep retired, update min/max",
+          "671:       if (bin < *min) *min = bin;",
+          "672:       if (bin > *max) *max = bin;",
+          "673:     }",
+          "674:   }",
+          "675:   else {",
+          "676:     page->retire_expire = 0;",
+          "677:   }  ",
+          "678: }",
+          "679: ",
+          "680: // free retired pages: we don't need to look at the entire queues",
+          "681: // since we only retire pages that are at the head position in a queue.",
+          "682: void _mi_theap_collect_retired(mi_theap_t* theap, bool force) {",
+          "683:   size_t min = MI_BIN_FULL;",
+          "684:   size_t max = 0;",
+          "685:   for(size_t bin = theap->page_retired_min; bin <= theap->page_retired_max; bin++) {",
+          "686:     mi_page_queue_t* pq  = &theap->pages[bin];",
+          "687:     mi_page_t* page      = pq->first;",
+          "688:     for (int i = 0; i<MI_RETIRE_MAX_PAGES && page!=NULL && page->retire_expire!=0; i++) {",
+          "689:       mi_page_t* next = page->next;",
+          "690:       mi_page_try_retire(pq,page,bin,force,&min,&max);",
+          "691:       page = next;",
+          "692:     }",
+          "693:   }",
+          "694:   theap->page_retired_min = min;",
+          "695:   theap->page_retired_max = max;",
+          "696:   if (!theap->allow_page_abandon) {",
+          "697:     mi_theap_collect_full_pages(theap);",
+          "698:   }",
+          "699: }"
+        ]
+      },
+      {
+        "first_line": 949,
+        "last_line": 980,
+        "lines": [
+          "949:   long page_full_retain = (pq->block_size > MI_SMALL_MAX_OBJ_SIZE ? 0 : theap->page_full_retain); // only retain small pages",
+          "950:   mi_page_t* page_candidate = NULL;  // a page with free space",
+          "951:   mi_page_t* page = pq->first;",
+          "952:   mi_page_t* const last = pq->last;",
+          "953: ",
+          "954:   while (page!=NULL)",
+          "955:   {",
+          "956:     mi_page_t* next = page->next; // remember next (as this page can move to another queue)",
+          "957:     count++;",
+          "958:     candidate_limit--;",
+          "959: ",
+          "960:     // search up to N pages for a best candidate",
+          "961: ",
+          "962:     // is the local free list non-empty?",
+          "963:     bool immediate_available = mi_page_immediate_available(page);",
+          "964:     if (!immediate_available) {",
+          "965:       // collect freed blocks by us and other threads to we get a proper use count",
+          "966:       _mi_page_free_collect(page, false);",
+          "967:       immediate_available = mi_page_immediate_available(page);",
+          "968:     }",
+          "969: ",
+          "970:     // if the page is completely full, move it to the `mi_pages_full`",
+          "971:     // queue so we don't visit long-lived pages too often.",
+          "972:     if (!immediate_available && !mi_page_is_expandable(page)) {",
+          "973:       page_full_retain--;",
+          "974:       if (page_full_retain < 0) {",
+          "975:         mi_assert_internal(!mi_page_is_in_full(page) && !mi_page_immediate_available(page));",
+          "976:         mi_page_to_full(page, pq);",
+          "977:       }",
+          "978:       else if (page!=last && pq->last!=page) {",
+          "979:         // avoid revisiting this page for a while",
+          "980:         mi_page_queue_move_to_back(theap, pq, page);"
+        ]
+      },
+      {
+        "first_line": 1209,
+        "last_line": 1241,
+        "lines": [
+          "1209:   if (theap==NULL) return NULL;",
+          "1210:   mi_assert_internal(mi_theap_is_initialized(theap));",
+          "1211: ",
+          "1212:   // do administrative tasks every N generic mallocs",
+          "1213:   if mi_unlikely(theap->generic_count >= 1000) {",
+          "1214:     theap->generic_collect_count += theap->generic_count;",
+          "1215:     theap->generic_count = 0;",
+          "1216: ",
+          "1217:     // check if the profiler is enabled",
+          "1218:     mi_heap_t* const heap = _mi_theap_heap(theap);",
+          "1219:     mi_profiler_t* prof = mi_atomic_load_ptr_relaxed(mi_profiler_t, &heap->profiler);",
+          "1220:     const bool prof_enabled = (prof!=NULL && mi_profiler_is_enabled(prof));",
+          "1221:     if (prof_enabled && theap->profile_sample_rate==0) { ",
+          "1222:       _mi_theap_set_profile_sample_rate(theap,mi_max(1,prof->initial_sample_rate)); // start profiling",
+          "1223:     }",
+          "1224:     else if (!prof_enabled && theap->profile_sample_rate!=0) {",
+          "1225:       _mi_theap_set_profile_sample_rate(theap,0); // stop profiling",
+          "1226:     }",
+          "1227: ",
+          "1228:     // do a full theap collect every once in a while (10000 by default)",
+          "1229:     const long generic_collect = mi_option_get_clamp(mi_option_generic_collect, 1, 1000000L);",
+          "1230:     if (theap->generic_collect_count >= generic_collect) {",
+          "1231:       theap->generic_collect_count = 0;",
+          "1232:       mi_theap_collect(theap, false /* force? */);",
+          "1233:     }",
+          "1234:     // else if (theap->sample_rate != 0) {             // update stats more aggressively if we are sampling",
+          "1235:     //   mi_theap_collect(theap, false /* force? */);  // TODO: make specialized mi_theap_collect_update_stats ?",
+          "1236:     // }",
+          "1237:     else {",
+          "1238:       // otherwise we do a mini-collect",
+          "1239:       _mi_deferred_free(theap, false);         // call potential deferred free routines      ",
+          "1240:       _mi_theap_collect_retired(theap, false); // free retired pages            ",
+          "1241:     }"
+        ]
+      },
+      {
+        "first_line": 1330,
+        "last_line": 1344,
+        "lines": [
+          "1330:   #endif",
+          "1331:   const bool zero = ((zero_huge_alignment & 1) != 0);",
+          "1332:   const size_t huge_alignment = (zero_huge_alignment & ~1);",
+          "1333:   mi_page_t* page = NULL;",
+          "1334: ",
+          "1335:   // fast path objects that fit in a small page",
+          "1336:   if mi_likely(mi_theap_is_initialized(theap) && ++theap->generic_count < 1000 && huge_alignment==0) {",
+          "1337:     const size_t req_size = size - MI_PADDING_SIZE;  // correct for padding_size in case of an overflow on `size`         ",
+          "1338:     if (req_size < MI_SMALL_MAX_OBJ_SIZE)",
+          "1339:     { ",
+          "1340:       #if MI_SAMPLE",
+          "1341:       if mi_likely(!mi_theap_should_sample(theap,req_size)) // ensure we don't need to take a sample",
+          "1342:       #endif",
+          "1343:       {",
+          "1344:         mi_page_queue_t* pq = mi_page_queue(theap, size);"
+        ]
+      }
+    ]
+  },
+  "3rdparty/mimalloc/src/arena.c": {
+    "sha256": "27fce7003a5108fb9d0c61e92e0cd7870f687f7e3cf12ad19c7fb3954b2a0bc2",
+    "excerpts": [
+      {
+        "first_line": 1200,
+        "last_line": 1223,
+        "lines": [
+          "1200:     mi_assert_internal(_mi_is_power_of_two(block_alignment));",
+          "1201:     page = mi_arenas_page_singleton_alloc(theap, block_size, block_alignment);",
+          "1202:   }",
+          "1203:   else if (block_size <= MI_SMALL_MAX_OBJ_SIZE) {",
+          "1204:     page = mi_arenas_page_regular_alloc(theap, mi_slice_count_of_size(MI_SMALL_PAGE_SIZE), block_size);",
+          "1205:   }",
+          "1206:   else if (block_size <= MI_MEDIUM_MAX_OBJ_SIZE) {",
+          "1207:     page = mi_arenas_page_regular_alloc(theap, mi_slice_count_of_size(MI_MEDIUM_PAGE_SIZE), block_size);",
+          "1208:   }",
+          "1209:   #if MI_ENABLE_LARGE_PAGES",
+          "1210:   else if (block_size <= MI_LARGE_MAX_OBJ_SIZE) {",
+          "1211:     page = mi_arenas_page_regular_alloc(theap, mi_slice_count_of_size(MI_LARGE_PAGE_SIZE), block_size);",
+          "1212:   }",
+          "1213:   #endif",
+          "1214:   else {",
+          "1215:     page = mi_arenas_page_singleton_alloc(theap, block_size, block_alignment);",
+          "1216:   }",
+          "1217:   if mi_unlikely(page == NULL) {",
+          "1218:     return NULL;",
+          "1219:   }",
+          "1220:   // mi_assert_internal(page == NULL || _mi_page_segment(page)->subproc == tld->subproc);",
+          "1221:   mi_assert_internal(_mi_is_aligned(mi_page_slice_start(page), MI_PAGE_ALIGN));",
+          "1222:   mi_assert_internal(_mi_ptr_page(mi_page_start(page))==page);",
+          "1223:   mi_assert_internal(block_alignment <= MI_PAGE_MAX_OVERALLOC_ALIGN || _mi_is_aligned(mi_page_start(page), block_alignment));"
+        ]
+      },
+      {
+        "first_line": 1488,
+        "last_line": 1519,
+        "lines": [
+          "1488:       return;",
+          "1489:     }",
+          "1490: ",
+          "1491:     // potentially decommit",
+          "1492:     if (!arena->memid.is_pinned /* && !arena->memid.initially_committed */) { // todo: allow decommit even if initially committed?",
+          "1493:       // (delay) purge the page",
+          "1494:       mi_arena_schedule_purge(arena, slice_index, slice_count);",
+          "1495:     }",
+          "1496: ",
+          "1497:     // and make it available to others again",
+          "1498:     bool all_inuse = mi_bbitmap_setN(arena->slices_free, slice_index, slice_count);",
+          "1499:     if (!all_inuse) {",
+          "1500:       _mi_error_message(EAGAIN, \"trying to free an already freed arena block: %p, size %zu\\n\", mi_arena_slice_start(arena,slice_index), mi_size_of_slices(slice_count));",
+          "1501:       return;",
+          "1502:     };",
+          "1503:   }",
+          "1504:   else if (memid.memkind == MI_MEM_MALLOC) {",
+          "1505:     _mi_free_subproc_safe(p);",
+          "1506:   }",
+          "1507:   else {",
+          "1508:     // arena was none, external, or static; nothing to do",
+          "1509:     mi_assert_internal(mi_memid_needs_no_free(memid));",
+          "1510:   }",
+          "1511: ",
+          "1512:   // try to purge expired decommits",
+          "1513:   // mi_arenas_try_purge(false, false, NULL);",
+          "1514: }",
+          "1515: ",
+          "1516: // Purge the arenas; if `force_purge` is true, amenable parts are purged even if not yet expired",
+          "1517: void _mi_arenas_collect(bool force_purge, bool visit_all, mi_tld_t* tld) {",
+          "1518:   mi_arenas_try_purge(force_purge, visit_all, tld->subproc, tld->thread_seq);",
+          "1519: }"
+        ]
+      },
+      {
+        "first_line": 2266,
+        "last_line": 2277,
+        "lines": [
+          "2266: static long mi_arena_purge_delay(void) {",
+          "2267:   // <0 = no purging allowed, 0=immediate purging, >0=milli-second delay",
+          "2268:   const long delay = mi_option_get(mi_option_purge_delay);",
+          "2269:   const long mult  = mi_option_get(mi_option_arena_purge_mult);",
+          "2270:   if (delay<0 || mult<0)   { return -1; }",
+          "2271:   if (delay==0 || mult==0) { return 0; }",
+          "2272:   size_t total;",
+          "2273:   if (mi_mul_overflow((size_t)delay, (size_t)mult, &total)) { return delay; }",
+          "2274:   if (total > LONG_MAX) { return delay; }",
+          "2275:   return (long)total;",
+          "2276: }",
+          "2277: "
+        ]
+      },
+      {
+        "first_line": 2312,
+        "last_line": 2339,
+        "lines": [
+          "2312: static void mi_arena_schedule_purge(mi_arena_t* arena, size_t slice_index, size_t slice_count) {",
+          "2313:   const long delay = mi_arena_purge_delay();",
+          "2314:   if (arena->memid.is_pinned || delay < 0 || _mi_preloading()) return;  // is purging allowed at all?",
+          "2315: ",
+          "2316:   mi_assert_internal(mi_bbitmap_is_clearN(arena->slices_free, slice_index, slice_count));",
+          "2317:   if (delay == 0) {",
+          "2318:     // purge directly",
+          "2319:     mi_arena_purge(arena, slice_index, slice_count);",
+          "2320:   }",
+          "2321:   else {",
+          "2322:     // schedule purge",
+          "2323:     const mi_msecs_t expire = _mi_clock_now() + delay;",
+          "2324:     mi_msecs_t expire0 = 0;",
+          "2325:     if (mi_atomic_casi64_strong_acq_rel(&arena->purge_expire, &expire0, expire)) {",
+          "2326:       // expiration was not yet set",
+          "2327:       // maybe set the global arenas expire as well (if it wasn't set already)",
+          "2328:       mi_assert_internal(expire0==0);",
+          "2329:       mi_atomic_casi64_strong_acq_rel(&arena->subproc->purge_expire, &expire0, expire);",
+          "2330:     }",
+          "2331:     else {",
+          "2332:       // already an expiration was set",
+          "2333:     }",
+          "2334:     mi_bitmap_setN(arena->slices_purge, slice_index, slice_count, NULL);",
+          "2335:   }",
+          "2336: }",
+          "2337: ",
+          "2338: typedef struct mi_purge_visit_info_s {",
+          "2339:   mi_msecs_t now;"
+        ]
+      },
+      {
+        "first_line": 2413,
+        "last_line": 2431,
+        "lines": [
+          "2413: static void mi_arenas_try_purge(bool force, bool visit_all, mi_subproc_t* subproc, size_t tseq)",
+          "2414: {",
+          "2415:   // try purge can be called often so try to only run when needed",
+          "2416:   const long delay = mi_arena_purge_delay();",
+          "2417:   if (_mi_preloading() || delay <= 0) return;  // nothing will be scheduled",
+          "2418: ",
+          "2419:   // check if any arena needs purging?",
+          "2420:   const mi_msecs_t now = _mi_clock_now();",
+          "2421:   const mi_msecs_t arenas_expire = mi_atomic_loadi64_acquire(&subproc->purge_expire);",
+          "2422:   if (!visit_all && !force && (arenas_expire == 0 || arenas_expire > now)) return;",
+          "2423: ",
+          "2424:   const size_t max_arena = mi_arenas_get_count(subproc);",
+          "2425:   if (max_arena == 0) return;",
+          "2426: ",
+          "2427:   // allow only one thread to purge at a time (todo: allow concurrent purging?)",
+          "2428:   static mi_atomic_guard_t purge_guard;",
+          "2429:   mi_atomic_guard(&purge_guard)",
+          "2430:   {",
+          "2431:     // increase global expire: at most one purge per delay cycle"
+        ]
+      }
+    ]
+  },
+  "3rdparty/mimalloc/src/theap.c": {
+    "sha256": "91271bc76502c743d109f32201c02271f63a9f6ec51ef207f8b533f6de39df27",
+    "excerpts": [
+      {
+        "first_line": 98,
+        "last_line": 109,
+        "lines": [
+          "98:   MI_UNUSED(arg2);",
+          "99:   MI_UNUSED(theap);",
+          "100:   mi_assert_expensive(mi_theap_page_is_valid(theap, pq, page, NULL, NULL));",
+          "101:   mi_collect_t collect = *((mi_collect_t*)arg_collect);",
+          "102:   _mi_page_free_collect(page, collect >= MI_FORCE);  // update used count",
+          "103:   _mi_page_update_stats(page);                       ",
+          "104:   if (mi_page_all_free(page)) {",
+          "105:     // no more used blocks, possibly free the page.",
+          "106:     if (collect >= MI_FORCE || page->retire_expire == 0) {  // either forced/abandon, or not already retired",
+          "107:       // note: this will potentially free retired pages as well.",
+          "108:       _mi_page_free(page, pq);",
+          "109:     }"
+        ]
+      },
+      {
+        "first_line": 124,
+        "last_line": 146,
+        "lines": [
+          "124: static void mi_theap_collect_ex(mi_theap_t* theap, mi_collect_t collect)",
+          "125: {",
+          "126:   if (theap==NULL || !mi_theap_is_initialized(theap)) return;",
+          "127:   mi_assert_expensive(mi_theap_is_valid(theap));",
+          "128: ",
+          "129:   const bool force = (collect >= MI_FORCE);",
+          "130:   _mi_deferred_free(theap, force);",
+          "131: ",
+          "132:   // python/cpython#112532: we may be called from a thread that is not the owner of the theap",
+          "133:   // const bool is_main_thread = (_mi_is_main_thread() && theap->thread_id == _mi_thread_id());",
+          "134: ",
+          "135:   // collect retired pages (and full pages if theap->allow_page_abandon is false)",
+          "136:   _mi_theap_collect_retired(theap, force); ",
+          "137: ",
+          "138:   // collect all pages owned by this thread",
+          "139:   mi_theap_visit_pages(theap, &mi_theap_page_collect, (collect!=MI_NORMAL), &collect, NULL);  // dont normally visit full pages, see issue #1220",
+          "140: ",
+          "141:   // collect arenas (this is program wide so don't force purges on abandonment of threads)",
+          "142:   //mi_atomic_storei64_release(&theap->tld->subproc->purge_expire, 1);",
+          "143:   if (collect != MI_ABANDON) {",
+          "144:     _mi_arenas_collect(collect == MI_FORCE /* force purge? */, collect >= MI_FORCE /* visit all? */, theap->tld);",
+          "145:   }",
+          "146: "
+        ]
+      }
+    ]
+  },
+  "3rdparty/mimalloc/src/free.c": {
+    "sha256": "56a1c57bd08c49359e19e8cdcd2a11b50c30bb12a53063375374fb3f5c8d6189",
+    "excerpts": [
+      {
+        "first_line": 63,
+        "last_line": 96,
+        "lines": [
+          "63: static inline void mi_free_block_mt(mi_page_t* page, mi_block_t* block, bool was_guarded, bool allow_reclaim) mi_attr_noexcept",
+          "64: {",
+          "65:   size_t usable_size;",
+          "66:   if mi_unlikely(!mi_check_padding_on_free(page, block, was_guarded, &usable_size)) return;    // checking padding is safe for mt",
+          "67:   ",
+          "68:   // adjust stats (after padding check )",
+          "69:   // mi_stat_free(page, block);    // stat_free may access the padding",
+          "70:   mi_track_free_size(block, usable_size);",
+          "71: ",
+          "72:   // _mi_padding_shrink(page, block, sizeof(mi_block_t));",
+          "73:   #if (MI_DEBUG>0) && !MI_TRACK_ENABLED  && !MI_TSAN       // note: when tracking, cannot use mi_usable_size with multi-threading",
+          "74:   if (!was_guarded) {",
+          "75:     const size_t dbgsize = (usable_size > MI_MiB ? MI_MiB : usable_size);",
+          "76:     _mi_memset_aligned(block, MI_DEBUG_FREED, dbgsize);",
+          "77:   }",
+          "78:   #endif",
+          "79: ",
+          "80:   // push atomically on the page thread free list",
+          "81:   // mi_theap_t* theap = _mi_page_associated_theap_peek(page);",
+          "82:   mi_thread_free_t tf_new;",
+          "83:   mi_thread_free_t tf_old = mi_atomic_load_relaxed(&page->xthread_free);",
+          "84:   do {",
+          "85:     mi_block_set_next(page, block, mi_tf_block(tf_old));",
+          "86:     tf_new = mi_tf_create(block, true);",
+          "87:   } while (!mi_atomic_cas_weak_acq_rel(&page->xthread_free, &tf_old, tf_new)); ",
+          "88: ",
+          "89:   // and atomically try to collect the page if it was abandoned",
+          "90:   const bool is_newly_owned = mi_tf_is_owned(tf_new) && !mi_tf_is_owned(tf_old);",
+          "91:   if (is_newly_owned) {",
+          "92:     mi_assert_internal(mi_page_is_abandoned(page));",
+          "93:     // mi_assert_internal(!mi_page_is_abandoned_mapped(page));",
+          "94:     mi_free_try_collect_mt(page, block, allow_reclaim);",
+          "95:   }",
+          "96: }"
+        ]
+      }
+    ]
+  },
+  "3rdparty/mimalloc/src/alloc-aligned.c": {
+    "sha256": "8390ff8d0e6c2954db1d95bfc1a4388b302605a1c5102c0495e5163838186e7f",
+    "excerpts": [
+      {
+        "first_line": 19,
+        "last_line": 27,
+        "lines": [
+          "19:   // certain blocks are always allocated at a certain natural alignment.",
+          "20:   // (see also `arena.c:mi_arenas_page_alloc_fresh`).",
+          "21:   mi_assert_internal(mi_alignment_is_valid(alignment));",
+          "22:   if (alignment > size) return false;",
+          "23:   const size_t bsize = mi_good_size(size);",
+          "24:   const bool ok = (bsize <= MI_PAGE_MAX_START_BLOCK_ALIGN2 && _mi_is_power_of_two(bsize)) ||             // power-of-two under N",
+          "25:                   (alignment==MI_PAGE_OSPAGE_BLOCK_ALIGN2 && (bsize % MI_PAGE_OSPAGE_BLOCK_ALIGN2)==0);  // or multiple of N",
+          "26:   if (ok) { mi_assert_internal((bsize & (alignment-1)) == 0); } // since both power of 2 and alignment <= size",
+          "27:   return ok;"
+        ]
+      },
+      {
+        "first_line": 76,
+        "last_line": 82,
+        "lines": [
+          "76:   else {",
+          "77:     // otherwise over-allocate",
+          "78:     mi_assert_internal(size <= (MI_MAX_ALLOC_SIZE - MI_PADDING_SIZE) && alignment <= MI_PAGE_MAX_OVERALLOC_ALIGN);",
+          "79:     mi_assert_internal(size < SIZE_MAX - alignment); // `oversize` cannot overflow",
+          "80:     oversize = (size < MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : size) + alignment - 1;  // adjust for size <= 16; with size 0 and alignment 64k, we would allocate a 64k block and pointing just beyond that.",
+          "81:     p = _mi_theap_malloc_zero(theap, oversize, zero, 0, &page);",
+          "82:     if (p == NULL) return NULL;"
+        ]
+      }
+    ]
+  },
+  "src/coro/task.cppm": {
+    "sha256": "0f529ac66b53b53653a58bc3056db1637719d7627124f79b9f4b3369ae02b33c",
+    "excerpts": [
+      {
+        "first_line": 18,
+        "last_line": 36,
+        "lines": [
+          "18: public:",
+          "19:     // Clang can place vectorized aggregate initialization in a coroutine frame",
+          "20:     // and emit aligned AVX/AVX-512 stores for it. The ordinary allocation",
+          "21:     // function only guarantees max_align_t, which is insufficient for those",
+          "22:     // frame slots on x86. Keep every task frame cache-line aligned so optimized",
+          "23:     // CPU targets remain correct without disabling vector code generation.",
+          "24:     static auto operator new(std::size_t size) -> void*",
+          "25:     {",
+          "26:         return ::operator new(size, std::align_val_t{64});",
+          "27:     }",
+          "28: ",
+          "29:     static void operator delete(void* address) noexcept",
+          "30:     {",
+          "31:         ::operator delete(address, std::align_val_t{64});",
+          "32:     }",
+          "33: ",
+          "34:     static void operator delete(void* address, std::size_t size) noexcept",
+          "35:     {",
+          "36:         ::operator delete(address, size, std::align_val_t{64});"
+        ]
+      }
+    ]
+  },
+  "src/utils/concurrentContainers/bounded_mpmc_queue.cppm": {
+    "sha256": "d4b3f1df88513f803519424bb63e387fc5b932e02964eb7f41d98a90dc189dca",
+    "excerpts": [
+      {
+        "first_line": 33,
+        "last_line": 51,
+        "lines": [
+          "33:             return std::launder(reinterpret_cast<T*>(storage));",
+          "34:         }",
+          "35:     };",
+          "36: ",
+          "37:     struct alignas(64) cursor",
+          "38:     {",
+          "39:         std::atomic<std::size_t> value{};",
+          "40:     };",
+          "41: ",
+          "42:     std::unique_ptr<cell[]> cells_;",
+          "43:     std::size_t capacity_{};",
+          "44:     std::size_t mask_{};",
+          "45:     cursor enqueue_pos_;",
+          "46:     cursor dequeue_pos_;",
+          "47: };",
+          "48: ",
+          "49: } // namespace cnetmod::concurrent_containers",
+          "50: ",
+          "51: #include \"bounded_mpmc_queue.inl\""
+        ]
+      }
+    ]
+  },
+  "src/utils/concurrentContainers/bounded_mpmc_queue.inl": {
+    "sha256": "66fdea9b4bb676d13e59417f20087b9b3b4ecd1ba76ff8e3ce596a512a7ae987",
+    "excerpts": [
+      {
+        "first_line": 3,
+        "last_line": 13,
+        "lines": [
+          "3: template <class T>",
+          "4: bounded_mpmc_queue<T>::bounded_mpmc_queue(std::size_t capacity)",
+          "5: {",
+          "6:     if (capacity < 2U)",
+          "7:         capacity = 2U;",
+          "8:     capacity_ = std::bit_ceil(capacity);",
+          "9:     mask_ = capacity_ - 1U;",
+          "10:     cells_ = std::make_unique<cell[]>(capacity_);",
+          "11:     for (std::size_t index{}; index < capacity_; ++index)",
+          "12:         cells_[index].sequence.store(index, std::memory_order_relaxed);",
+          "13: }"
+        ]
+      }
+    ]
+  },
+  "src/protocol/quic/quic_write_queue.cpp": {
+    "sha256": "83ee3af91d35f786a1a4ee152b62ed55d3f9e01011ea238f112e337a9a304823",
+    "excerpts": [
+      {
+        "first_line": 78,
+        "last_line": 88,
+        "lines": [
+          "78: quic_write_queue::quic_write_queue()",
+          "79:     : slots_(std::make_unique<quic_write_completion[]>(capacity)),",
+          "80:       available_(capacity),",
+          "81:       commands_(capacity)",
+          "82: {",
+          "83:     for (std::size_t index{}; index < capacity; ++index)",
+          "84:         (void)available_.try_enqueue(std::addressof(slots_[index]));",
+          "85: }",
+          "86: ",
+          "87: auto quic_write_queue::try_acquire() noexcept -> quic_write_completion*",
+          "88: {"
+        ]
+      }
+    ]
+  },
+  "src/protocol/quic/quic_write_queue.cppm": {
+    "sha256": "37a96c49603774832526c78e576e769ab846c934419e1a7c0fc1bbe81195f2ee",
+    "excerpts": [
+      {
+        "first_line": 69,
+        "last_line": 89,
+        "lines": [
+          "69: /// producers do not allocate synchronization state on the response hot path.",
+          "70: export class quic_write_queue",
+          "71: {",
+          "72: public:",
+          "73:     static constexpr std::size_t capacity{512U};",
+          "74: ",
+          "75:     quic_write_queue();",
+          "76:     [[nodiscard]] auto try_acquire() noexcept -> quic_write_completion*;",
+          "77:     auto release(quic_write_completion& completion) noexcept -> void;",
+          "78:     [[nodiscard]] auto try_enqueue(quic_write_command command) noexcept -> bool;",
+          "79:     [[nodiscard]] auto try_dequeue() noexcept -> std::optional<quic_write_command>;",
+          "80:     [[nodiscard]] auto approximate_size() const noexcept -> std::size_t;",
+          "81:     auto fail_all(std::error_code error) noexcept -> void;",
+          "82: ",
+          "83: private:",
+          "84:     std::unique_ptr<quic_write_completion[]> slots_;",
+          "85:     concurrent_containers::bounded_mpmc_queue<quic_write_completion*> available_;",
+          "86:     concurrent_containers::bounded_mpmc_queue<quic_write_command> commands_;",
+          "87: };",
+          "88: ",
+          "89: } // namespace cnetmod::quic"
+        ]
+      }
+    ]
+  }
+}

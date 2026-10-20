@@ -1,0 +1,27 @@
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+Sending build context to Docker daemon   29.7kB
+Step 1/13 : FROM ubuntu:24.04 AS build
+ ---> 534baea6a22c
+Step 2/13 : RUN apt-get update && apt-get install -y --no-install-recommends         gcc-14 curl ca-certificates libc6-dev libssl-dev     && rm -rf /var/lib/apt/lists/*
+ ---> Running in a3db0e5c3272
+Err:1 http://archive.ubuntu.com/ubuntu noble InRelease
+  502  Bad Gateway [IP: 127.0.0.1 7897]
+Err:2 http://security.ubuntu.com/ubuntu noble-security InRelease
+  502  Bad Gateway [IP: 127.0.0.1 7897]
+Err:3 http://archive.ubuntu.com/ubuntu noble-updates InRelease
+  502  Bad Gateway [IP: 127.0.0.1 7897]
+Err:4 http://archive.ubuntu.com/ubuntu noble-backports InRelease
+  502  Bad Gateway [IP: 127.0.0.1 7897]
+Reading package lists...
+[91mE: The repository 'http://archive.ubuntu.com/ubuntu noble InRelease' is not signed.
+E: Failed to fetch http://archive.ubuntu.com/ubuntu/dists/noble/InRelease  502  Bad Gateway [IP: 127.0.0.1 7897]
+E: The repository 'http://security.ubuntu.com/ubuntu noble-security InRelease' is not signed.
+E: Failed to fetch http://security.ubuntu.com/ubuntu/dists/noble-security/InRelease  502  Bad Gateway [IP: 127.0.0.1 7897]
+E: Failed to fetch http://archive.ubuntu.com/ubuntu/dists/noble-updates/InRelease  502  Bad Gateway [IP: 127.0.0.1 7897]
+E: The repository 'http://archive.ubuntu.com/ubuntu noble-updates InRelease' is not signed.
+E: Failed to fetch http://archive.ubuntu.com/ubuntu/dists/noble-backports/InRelease  502  Bad Gateway [IP: 127.0.0.1 7897]
+E: The repository 'http://archive.ubuntu.com/ubuntu noble-backports InRelease' is not signed.
+[0mThe command '/bin/sh -c apt-get update && apt-get install -y --no-install-recommends         gcc-14 curl ca-certificates libc6-dev libssl-dev     && rm -rf /var/lib/apt/lists/*' returned a non-zero code: 100

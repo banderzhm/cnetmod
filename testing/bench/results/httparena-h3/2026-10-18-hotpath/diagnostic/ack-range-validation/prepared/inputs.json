@@ -1,0 +1,17 @@
+[
+  {
+    "path": "src/protocol/quic/loss_detection.cppm",
+    "before_sha256": "0bd16c5cc653b15da74a85a36c6761e15d09cbd9e6c3fc0ddbe4d22f9b8e342c",
+    "candidate_lf_sha256": "f0f78a6f5943d0928d6b740515bf1e008eae073e0850a4b404f726ee5083d86e"
+  },
+  {
+    "path": "src/protocol/quic/loss_detection.cpp",
+    "before_sha256": "701c254bf894966ff52a28a850848df63f0f4ae3eeaeeab04baa6c8125817cfb",
+    "candidate_lf_sha256": "2733f79df46771849c8f45256b4a38537a32412fbf8099ded045415df16d338c"
+  },
+  {
+    "path": "testing/tests/test_quic_loss_detection.cpp",
+    "before_sha256": "5d662a495c13eb949c069ab59af6836bc3db827653ac23c3cc5c9ab5dabe20df",
+    "candidate_lf_sha256": "46a121b5a977c2079cbfed8c23eb578a2481c3fcc9774a5d7fe7685d6337f682"
+  }
+]

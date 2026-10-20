@@ -1,0 +1,79 @@
+--- a/src/worker.c
++++ b/src/worker.c
+@@ -8,6 +8,9 @@
+ #include <sys/socket.h>
+ #include <netinet/tcp.h>
+ #include <fcntl.h>
++#include <stdatomic.h>
++static _Atomic unsigned long diag_send[4096];
++static _Atomic unsigned long diag_http,diag_underflow;
+ /* io_uring implementation inspired by zerg - https://github.com/MDA2AV/zerg */
+ 
+ static inline struct io_uring_sqe *sqe_get(struct io_uring *ring)
+@@ -24,7 +27,7 @@
+ {
+     uint8_t *addr = w->buf_slab + (size_t)bid * w->recv_buf_size;
+     io_uring_buf_ring_add(w->buf_ring, addr, w->recv_buf_size,
+-                          bid, w->buf_mask, w->buf_index++);
++                          bid, w->buf_mask, 0);
+     io_uring_buf_ring_advance(w->buf_ring, 1);
+ }
+ 
+@@ -449,6 +452,7 @@
+             case UD_SEND: {
+                 if (res < 0) {
+                     c->send_inflight = 0;
++                    if (-res < 4096) atomic_fetch_add(&diag_send[-res],1);
+                     w->stats.read_errors++;
+                     reconnect(w, conn_idx);
+                     break;
+@@ -510,6 +514,12 @@
+                     completed = http_parse_responses(&c->parser, buf, res);
+                     if (completed < 0) {
+                         /* Unrecoverable parse failure — drop and reconnect */
++                        unsigned long event = atomic_fetch_add(&diag_http,1);
++                        if (event < 8) {
++                            char path[128]; snprintf(path,sizeof(path),"/root/cnetmod-ws-20261020/correctness-20261020/bad-%lu.bin",event);
++                            FILE *f=fopen(path,"wb"); if(f) { fwrite(buf,1,res,f); fclose(f); }
++                            fprintf(stderr,"DIAG bad=%lu worker=%d conn=%d gen=%u bytes=%d state=%d header_len=%d status=%d completed=%d\n",event,w->id,conn_idx,c->gen,res,c->parser.state,c->parser.header_buf_len,c->parser.status_code,c->parser.completed_count);
++                        }
+                         w->stats.read_errors++;
+                         return_buffer(w, bid);
+                         reconnect(w, conn_idx);
+@@ -554,6 +564,12 @@
+                     if (completed < 0) {
+                         /* Unrecoverable parse failure (oversized headers or
+                            malformed response) — drop and reconnect */
++                        unsigned long event = atomic_fetch_add(&diag_http,1);
++                        if (event < 8) {
++                            char path[128]; snprintf(path,sizeof(path),"/root/cnetmod-ws-20261020/correctness-20261020/bad-%lu.bin",event);
++                            FILE *f=fopen(path,"wb"); if(f) { fwrite(buf,1,res,f); fclose(f); }
++                            fprintf(stderr,"DIAG bad=%lu worker=%d conn=%d gen=%u bytes=%d state=%d header_len=%d status=%d completed=%d\n",event,w->id,conn_idx,c->gen,res,c->parser.state,c->parser.header_buf_len,c->parser.status_code,c->parser.completed_count);
++                        }
+                         w->stats.read_errors++;
+                         return_buffer(w, bid);
+                         reconnect(w, conn_idx);
+@@ -570,8 +586,12 @@
+                     w->stats.tpl_responses[c->tpl_idx]++;
+                     if (c->pipeline_inflight > 0)
+                         c->pipeline_inflight--;
+-                    else
++                    else {
++                        atomic_fetch_add(&diag_underflow,1);
++                        if (atomic_load(&diag_underflow) < 8)
++                            fprintf(stderr,"DIAG underflow conn=%d gen=%u state=%d sent=%d received=%d opcode=%d bytes=%d\n",conn_idx,c->gen,c->state,c->requests_sent,c->responses_recv,c->ws_parser.opcode,res);
+                         w->stats.read_errors++;
++                    }
+                     c->responses_recv++;
+ 
+                     if (w->ws_mode) {
+@@ -651,3 +671,9 @@
+     free(w->conns);
+     free(w->stats.tpl_latency);
+ }
++
++__attribute__((destructor)) static void diag_finish(void) {
++    fprintf(stderr,"DIAG upgrade_parse=%lu inflight_underflow=%lu\n",atomic_load(&diag_http),atomic_load(&diag_underflow));
++    for (int i=0;i<4096;i++) if (atomic_load(&diag_send[i]))
++        fprintf(stderr,"DIAG send_errno=%d count=%lu\n",i,atomic_load(&diag_send[i]));
++}

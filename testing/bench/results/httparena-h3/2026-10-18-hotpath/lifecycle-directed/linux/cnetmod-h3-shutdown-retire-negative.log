@@ -1,0 +1,2 @@
+{"case": "retire_stream_without_ingress", "error": "AssertionError('MAX_STREAMS stayed at one after explicit retire without ingress')", "initial_max_streams": 1, "mode": "observer", "proxy_errors": [], "request_fin_acked": true, "server_stderr": "", "server_stdout": "", "status": "failed"}
+{"case": "retire_stream_without_ingress", "error": "AssertionError('MAX_STREAMS stayed at one after explicit retire without ingress')", "initial_max_streams": 1, "mode": "private", "proxy_errors": [], "request_fin_acked": true, "server_stderr": "", "server_stdout": "", "status": "failed"}

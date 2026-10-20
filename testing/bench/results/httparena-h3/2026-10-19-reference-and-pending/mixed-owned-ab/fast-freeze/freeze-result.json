@@ -1,0 +1,21 @@
+{
+  "valid": true,
+  "source_difference": [
+    "src/protocol/quic/quic_send_pipeline.cpp"
+  ],
+  "source_count": 1321,
+  "candidate": {
+    "binary": "/var/tmp/cnetmod-h3-owned-fast-candidate-fbaeb04a21614732b24a7fdae850fcd0/proof-build-root/testing/bench/arena_h3_server",
+    "binary_sha256": "e73f3dae63639c862512e277e835ec68569bb358af66c27c55e85b71de7022ed",
+    "source_snapshot": "/var/tmp/cnetmod-h3-owned-fast-candidate-fbaeb04a21614732b24a7fdae850fcd0/source-snapshot",
+    "allocator_proof": "/var/tmp/cnetmod-h3-owned-fast-candidate-fbaeb04a21614732b24a7fdae850fcd0/system-allocator/allocator-proof.json",
+    "proof_build_root": "/var/tmp/cnetmod-h3-owned-fast-candidate-fbaeb04a21614732b24a7fdae850fcd0/proof-build-root"
+  },
+  "source_unchanged_during_freeze": true,
+  "baseline_backing_unchanged": true,
+  "scripts": {
+    "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-owned-fast-execution-fbaeb04a21614732b24a7fdae850fcd0/owned-fast-freeze.py": "7d004af0493edea4a56b8d33439694872e0fc3201904b5e27e973de2d225ef1d",
+    "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-owned-fast-execution-fbaeb04a21614732b24a7fdae850fcd0/owned-three-ab.py": "e1fe51d5fbd1a71a72e4bec71f69c6cca30713de5a76a280e2418d53695dde78",
+    "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-owned-fast-execution-fbaeb04a21614732b24a7fdae850fcd0/owned-fastpath.patch": "67a99a5c369662b248d6555195c74734fce912aecb450d6ff2a6d44ee38d9299"
+  }
+}

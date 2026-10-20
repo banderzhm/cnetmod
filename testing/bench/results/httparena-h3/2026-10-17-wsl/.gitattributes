@@ -1,0 +1,4 @@
+# Preserve fixed-width tool output, including its original trailing padding.
+* -text
+*.txt -whitespace
+*.log -whitespace

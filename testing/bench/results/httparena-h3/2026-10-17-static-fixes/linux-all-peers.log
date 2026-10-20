@@ -1,0 +1,7 @@
+[PASSED] aioquic-server_to_cnetmod-client: request and response validated
+[PASSED] aioquic-webtransport_to_cnetmod-server: request and response validated
+[PASSED] wtransport-webtransport_to_cnetmod-server: 3 independent connections validated
+[PASSED] cnetmod-server_to_curl-http3: request and response validated
+[PASSED] cnetmod-server_to_nghttp3-client: request and response validated
+[PASSED] nghttp3-server_to_cnetmod-client: request and response validated
+

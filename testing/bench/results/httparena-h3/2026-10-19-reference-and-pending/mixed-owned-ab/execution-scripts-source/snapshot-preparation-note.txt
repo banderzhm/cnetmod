@@ -1,0 +1,1 @@
+Earlier legacy helper snapshot retained externally but not used:1274 extension-filtered files. New snapshot uses the runner exact source_name filter:1321 inputs. No source changes.

@@ -1,0 +1,88 @@
+[0/2] Re-checking globbed directories...
+[1/2] Re-running CMake...
+-- Found mold linker: /usr/sbin/mold
+-- Configured to use mold linker with Clang
+-- 
+-- Architecture: x64 (64 bit)
+-- Use the C++ compiler to compile (MI_USE_CXX=ON)
+-- Override standard malloc (MI_OVERRIDE=ON)
+-- Disable assertion checks (MI_DEBUG=OFF)
+-- Disable detailed statistics (MI_STATS=OFF)
+-- Disable profiling (MI_PROFILE=OFF)
+-- Enable full transparent huge pages support, where purging avoids splitting huge pages (MI_ALLOW_THP=FULL)
+-- 
+-- Library name     : mimalloc
+-- Version          : 3.5.3
+-- Build type       : release
+-- C++ Compiler     : /usr/sbin/clang++
+-- Compiler flags   : -Wall;-Wextra;-Wno-deprecated;-Wno-unknown-pragmas;-fvisibility=hidden;-ftls-model=initial-exec;-fno-builtin-malloc
+-- Compiler defines : NDEBUG=1;MI_GUARDED=0;MI_STATS=0;MI_PROFILE=0;MI_DEFAULT_ALLOW_THP=2;MI_HAS_EXECINFOH=1;MI_CMAKE_BUILD_TYPE=release;MI_BUILD_RELEASE
+-- Link libraries   : pthread;rt;atomic
+-- Build targets    : static;object
+-- 
+-- Memory allocator: bundled mimalloc 3.5.3
+-- Auto-detected libc++ paths:
+--   Module directory: /usr/share/libc++/v1
+--   Header directory: /usr/include/c++/v1
+-- Using BoringSSL from submodule: /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/3rdparty/boringssl
+-- BoringSSL: Building static libraries
+-- BoringSSL: Assembly optimizations enabled
+-- LLVM FileCheck Found: /usr/sbin/FileCheck
+-- Google Benchmark version: v1.9.5, normalized to 1.9.5
+-- BoringSSL submodule targets found: ssl, crypto
+-- BoringSSL with QUIC API found - QUIC support enabled
+-- I/O backend: io_uring (Linux)
+-- I/O backend: epoll (Linux)
+-- ==========================================
+-- Project: cnetmod v2.1.0
+-- C++ Standard: C++23
+-- Compiler: Clang 23.1.3
+-- Build Type: Release
+-- Platform: Linux
+-- Standard Library Modules: /usr/share/libc++/v1
+-- Linker: mold (high-performance)
+-- Memory Allocator: mimalloc (high-performance)
+-- ==========================================
+-- 
+-- Performance Optimizations Enabled:
+--   mold linker: 10-20x faster linking
+--   mimalloc: 2-3x faster memory allocation
+-- 
+-- Configuring done (28.3s)
+-- Generating done (2.1s)
+-- Build files have been written to: /tmp/cnetmod-h3-arena-build
+[0/2] Re-checking globbed directories...
+[1/376] Generating CXX dyndep file CMakeFiles/cnetmod_runtime.dir/CXX.dd
+[2/240] Generating CXX dyndep file 'CMakeFiles/cnetmod_runtime@synth_0.dir/CXX.dd'
+[3/240] Scanning /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_connection.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_connection.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[4/240] Generating CXX dyndep file CMakeFiles/cnetmod_quic.dir/CXX.dd
+[5/214] Generating CXX dyndep file CMakeFiles/cnetmod_http.dir/CXX.dd
+[6/114] Scanning /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/tests/test_quic_stream.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/tests/test_quic_stream.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[7/114] Generating CXX dyndep file CMakeFiles/cnetmod_application.dir/CXX.dd
+[8/24] Generating CXX dyndep file CMakeFiles/cnetmod_core.dir/CXX.dd
+[9/22] Generating CXX dyndep file 'CMakeFiles/cnetmod_quic@synth_0.dir/CXX.dd'
+[10/22] Generating CXX dyndep file 'CMakeFiles/cnetmod_http@synth_0.dir/CXX.dd'
+[11/22] Generating CXX dyndep file testing/tests/CMakeFiles/test_quic_stream.dir/CXX.dd
+[12/22] Building CXX object testing/tests/CMakeFiles/test_quic_stream.dir/test_quic_stream.cpp.o
+[13/22] Generating CXX dyndep file testing/bench/CMakeFiles/arena_h3_server.dir/CXX.dd
+[14/21] Scanning /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/quic_retire_stream_server.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/quic_retire_stream_server.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[15/21] Generating CXX dyndep file testing/http3/CMakeFiles/quic_retire_stream_server.dir/CXX.dd
+[16/21] Building CXX object testing/http3/CMakeFiles/quic_retire_stream_server.dir/quic_retire_stream_server.cpp.o
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/quic_retire_stream_server.cpp:411:54: warning: missing field 'connection' initializer [-Wmissing-field-initializers]
+  411 |     fixture state{*context, tls, std::move(arguments)};
+      |                                                      ^
+1 warning generated.
+[17/21] Building CXX object CMakeFiles/cnetmod_quic.dir/src/protocol/quic/quic_connection.cpp.o
+[18/21] Linking CXX static library libcnetmod_quic.a
+[19/21] Linking CXX executable testing/tests/test_quic_stream
+[20/21] Linking CXX executable testing/bench/arena_h3_server
+[21/21] Linking CXX executable bin/quic_retire_stream_server

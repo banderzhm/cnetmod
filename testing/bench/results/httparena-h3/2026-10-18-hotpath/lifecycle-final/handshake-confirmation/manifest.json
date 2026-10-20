@@ -1,0 +1,31 @@
+{
+  "stage": "HANDSHAKE_DONE directed freeze; not final acceptance",
+  "inputs": [
+    {
+      "path": "src/protocol/quic/quic_connection.cpp",
+      "sha256": "a29c4a1fe699b641fc8467e21ab5a8364fba23639bb6883b8ac1f38f3dd37e47"
+    },
+    {
+      "path": "testing/http3/quic_retire_stream_server.cpp",
+      "sha256": "5fb2c279919736df27e066f3f59cb1650297bc514d49d72a0392d38fb16e0b11"
+    },
+    {
+      "path": "testing/http3/quic_handshake_confirmation.py",
+      "sha256": "43b74b1d5fdb871cb3de9ece10179c3a0cc4e2d5cc9e83c6167c885ab092d114"
+    }
+  ],
+  "binaries": [
+    {
+      "path": "/var/tmp/cnetmod-h3-boundary-negative/quic_retire_stream_server",
+      "sha256": "f57c8f9f78eb673428a8c39f872767c622da601fde60c0f1db860ac2ecf428da"
+    },
+    {
+      "path": "/var/tmp/cnetmod-h3-arena-build/bin/quic_retire_stream_server",
+      "sha256": "37342af1d4099346ff86d8041d4282a641dceba8075ffde243e0ff62a57d1f62"
+    },
+    {
+      "path": "/var/tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server",
+      "sha256": "298bf8277e7b1edc32f7e1ab1ce64729a52e8884e97e9486a77a56a20f4cabc4"
+    }
+  ]
+}

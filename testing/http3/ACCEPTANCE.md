@@ -1,5 +1,10 @@
 # HTTP/3 / QUIC release acceptance
 
+The [2026-10-17 official-profile reproduction](../bench/arena_h3_official.md)
+includes the large buffered-response/QPACK fixes and final Windows Release
+and six-peer Linux checks. Low-load correctness passes there; the static
+high-load rounds still report failures and do not establish release stability.
+
 No script in this directory treats a missing peer, privileges, or a failed
 request as a pass.  CTest uses exit status `77` for an environmental skip;
 only an actual response validated by the test is a pass.
@@ -57,10 +62,20 @@ body (ngtcp2 1.25.0 binary paths shown as examples):
 ```sh
 python3 testing/http3/h3_acceptance.py ... \
   --nghttp3-client-command \
-    'osslclient --timeout=1s --no-quic-dump --exit-on-first-stream-close 127.0.0.1 4433 {url}' \
+    'osslclient --timeout=1s --no-quic-dump --exit-on-first-stream-close 127.0.0.1 {port} {url}' \
   --nghttp3-server-command \
     'osslserver -q --htdocs {root} 127.0.0.1 {port} {key} {cert}'
 ```
+
+For the 2026-10-17 `fix/http3-arena-performance` follow-up, all six peer cases
+passed on Arch WSL, including both nghttp3 directions and three independent
+Rust wtransport connections. Windows MSVC 19.51 Release passed 13 selected
+CTest entries, including one-worker and two-worker IOCP gates with native
+aioquic and Rust peers. Windows curl HTTP/3 and native nghttp3 were unavailable
+and remain explicit skips there; this follow-up did not run Windows Debug.
+The cnetmod client health check requires both status 200 and the `ok` body.
+See the [platform verification records](../bench/results/httparena-h3/2026-10-17-wsl/platform-peer-followup)
+for commands, exact peer dependencies and detailed results.
 
 ### Rust `wtransport` WebTransport peer
 
@@ -87,6 +102,36 @@ so a cancelled session cannot contaminate the next result.
 
 If Rust/Cargo is not available, this case is recorded as `skipped`, not
 `passed`.
+
+### aioquic locally initiated bidirectional children
+
+The aioquic probe explicitly associates its locally created WebTransport child
+stream with the session. In
+[aioquic 1.7.0](https://github.com/aiortc/aioquic/blob/1.7.0/src/aioquic/h3/connection.py),
+`create_webtransport_stream()` writes the outgoing preface but does not classify
+that stream's receive half. Passing its raw application echo back into the H3
+frame parser closes the connection with `H3_FRAME_ERROR` (262, truncated frame),
+which previously appeared as a later Datagram timeout. The initiator's preface
+does not appear again in the echoed application data; see the
+[WebTransport draft's bidirectional stream format](https://www.ietf.org/archive/id/draft-ietf-webtrans-http3-14.html#section-4.3).
+
+Only the exact locally created child stream bypasses H3 frame parsing in this
+test peer. CONNECT, ordinary HTTP/3 requests, control streams and Datagrams
+still use aioquic's parsers. The probe collects the full child echo until FIN
+and validates `strm` before accepting the Datagram and Close Capsule, so a
+partial, truncated or extra-byte echo cannot produce a passing gate. QUIC
+connection/reset errors are included in timeout diagnostics.
+
+The focused regression suite uses actual aioquic protocol objects without a
+network connection:
+
+```sh
+python3 -m unittest discover -s testing/http3 -p test_webtransport_aioquic_probe.py
+```
+
+CTest registers this as `h3_webtransport_aioquic_probe_unit` when QUIC tests are
+enabled. Like the required acceptance peer, it requires aioquic to be installed
+in the configured `Python3_EXECUTABLE` environment.
 
 ### Connection migration regression
 

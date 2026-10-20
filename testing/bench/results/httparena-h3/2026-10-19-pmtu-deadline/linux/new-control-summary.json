@@ -1,0 +1,142 @@
+[
+  {
+    "case": "new-interval-01",
+    "exit": 0,
+    "status": "passed",
+    "error": null,
+    "measurement": {
+      "ack_to_second_ms": 200.15479999999997,
+      "first_after_connected_ms": 0.29008099999927595,
+      "first_after_traffic_start_ms": 0.2893189999984003,
+      "first_after_traffic_stop_ms": -660.3207110000006,
+      "actual_pings": 33,
+      "max_ping_gap_ms": 25.39204400000017
+    }
+  },
+  {
+    "case": "new-initial-01",
+    "exit": 0,
+    "status": "passed",
+    "error": null,
+    "measurement": {
+      "ack_to_second_ms": 200.19911199999996,
+      "first_after_connected_ms": 200.12870100000058,
+      "first_after_traffic_start_ms": 200.12803600000063,
+      "first_after_traffic_stop_ms": -460.5644469999994,
+      "actual_pings": 33,
+      "max_ping_gap_ms": 21.27115300000071
+    }
+  },
+  {
+    "case": "new-interval-02",
+    "exit": 0,
+    "status": "passed",
+    "error": null,
+    "measurement": {
+      "ack_to_second_ms": 200.10373899999934,
+      "first_after_connected_ms": 0.6025899999997364,
+      "first_after_traffic_start_ms": 0.6019369999989976,
+      "first_after_traffic_stop_ms": -660.4109430000004,
+      "actual_pings": 33,
+      "max_ping_gap_ms": 25.865487999999104
+    }
+  },
+  {
+    "case": "new-initial-02",
+    "exit": 0,
+    "status": "passed",
+    "error": null,
+    "measurement": {
+      "ack_to_second_ms": 200.10827900000015,
+      "first_after_connected_ms": 200.07063999999986,
+      "first_after_traffic_start_ms": 200.06987100000018,
+      "first_after_traffic_stop_ms": -460.43480999999883,
+      "actual_pings": 33,
+      "max_ping_gap_ms": 21.678747000001053
+    }
+  },
+  {
+    "case": "new-interval-03",
+    "exit": 0,
+    "status": "passed",
+    "error": null,
+    "measurement": {
+      "ack_to_second_ms": 200.10939599999844,
+      "first_after_connected_ms": 1.4038749999993883,
+      "first_after_traffic_start_ms": 1.4030310000006097,
+      "first_after_traffic_stop_ms": -659.051848999999,
+      "actual_pings": 33,
+      "max_ping_gap_ms": 25.42786799999952
+    }
+  },
+  {
+    "case": "new-initial-03",
+    "exit": 0,
+    "status": "passed",
+    "error": null,
+    "measurement": {
+      "ack_to_second_ms": 200.11408400000084,
+      "first_after_connected_ms": 200.16569500000082,
+      "first_after_traffic_start_ms": 200.16483200000044,
+      "first_after_traffic_stop_ms": -460.6335579999996,
+      "actual_pings": 33,
+      "max_ping_gap_ms": 26.3731190000005
+    }
+  },
+  {
+    "case": "new-interval-04",
+    "exit": 0,
+    "status": "passed",
+    "error": null,
+    "measurement": {
+      "ack_to_second_ms": 200.19778099999996,
+      "first_after_connected_ms": 0.42258400000072527,
+      "first_after_traffic_start_ms": 0.42196399999916423,
+      "first_after_traffic_stop_ms": -659.781144,
+      "actual_pings": 33,
+      "max_ping_gap_ms": 21.0659919999987
+    }
+  },
+  {
+    "case": "new-initial-04",
+    "exit": 0,
+    "status": "passed",
+    "error": null,
+    "measurement": {
+      "ack_to_second_ms": 200.13015099999976,
+      "first_after_connected_ms": 200.2777309999999,
+      "first_after_traffic_start_ms": 200.27697300000114,
+      "first_after_traffic_stop_ms": -460.7088209999972,
+      "actual_pings": 33,
+      "max_ping_gap_ms": 29.719920000001565
+    }
+  },
+  {
+    "case": "new-interval-05",
+    "exit": 0,
+    "status": "passed",
+    "error": null,
+    "measurement": {
+      "ack_to_second_ms": 200.20707700000173,
+      "first_after_connected_ms": 0.372642000002088,
+      "first_after_traffic_start_ms": 0.3720230000006097,
+      "first_after_traffic_stop_ms": -660.1086519999981,
+      "actual_pings": 33,
+      "max_ping_gap_ms": 24.3978829999989
+    }
+  },
+  {
+    "case": "new-initial-05",
+    "exit": 0,
+    "status": "passed",
+    "error": null,
+    "measurement": {
+      "ack_to_second_ms": 202.9376340000013,
+      "first_after_connected_ms": 200.2078499999982,
+      "first_after_traffic_start_ms": 200.20709599999975,
+      "first_after_traffic_stop_ms": -460.6394510000023,
+      "actual_pings": 33,
+      "max_ping_gap_ms": 30.478711000000658
+    }
+  }
+]

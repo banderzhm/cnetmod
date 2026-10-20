@@ -120,6 +120,7 @@ void io_uring_multishot_recv::on_completion(
 void io_uring_multishot_recv::handle_completion(int32_t result, std::uint32_t flags)
 {
     active_ = (flags & IORING_CQE_F_MORE) != 0;
+    std::coroutine_handle<> next;
 
     if (result > 0 && (flags & IORING_CQE_F_BUFFER) != 0)
     {
@@ -129,7 +130,7 @@ void io_uring_multishot_recv::handle_completion(int32_t result, std::uint32_t fl
             auto* waiter = std::exchange(next_waiter_, nullptr);
             waiter->buffer_id = buffer_id;
             waiter->result = result;
-            waiter->coroutine.resume();
+            next = waiter->coroutine;
         }
         else
         {
@@ -143,7 +144,7 @@ void io_uring_multishot_recv::handle_completion(int32_t result, std::uint32_t fl
         {
             auto* waiter = std::exchange(next_waiter_, nullptr);
             waiter->result = result;
-            waiter->coroutine.resume();
+            next = waiter->coroutine;
         }
     }
     else
@@ -151,12 +152,19 @@ void io_uring_multishot_recv::handle_completion(int32_t result, std::uint32_t fl
         terminal_result_ = -ENOBUFS;
     }
 
+    std::coroutine_handle<> stopped;
     if (!active_ && stop_waiter_ && stop_waiter_->coroutine)
     {
         auto* waiter = std::exchange(stop_waiter_, nullptr);
         waiter->result = 0;
-        waiter->coroutine.resume();
+        stopped = waiter->coroutine;
     }
+    // A resumed terminal consumer may destroy this receiver. Cache every
+    // continuation before resuming, and never access members afterwards.
+    if (next)
+        next.resume();
+    if (stopped)
+        stopped.resume();
 }
 
 auto io_uring_multishot_recv::start() -> std::expected<void, std::error_code>

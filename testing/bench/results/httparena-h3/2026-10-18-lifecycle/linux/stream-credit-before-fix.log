@@ -1,0 +1,31 @@
+[2026-10-18 07:01:12.384] [info] [123682396647872] [h3_interop_server.cpp:196] HTTP/3 interop listener started on UDP 40883 with 1 worker
+
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+Traceback (most recent call last):
+  File "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http3_lifecycle.py", line 323, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http3_lifecycle.py", line 313, in main
+    asyncio.run(run(port))
+    ~~~~~~~~~~~^^^^^^^^^^^
+  File "/usr/lib/python3.14/asyncio/runners.py", line 205, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/asyncio/runners.py", line 128, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/asyncio/base_events.py", line 720, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http3_lifecycle.py", line 298, in run
+    await max_stream_credit_window(port)
+  File "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http3_lifecycle.py", line 282, in max_stream_credit_window
+    assert after_high <= initial + 1, (initial, after_high, streams[-1])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: (100, 200, 396)

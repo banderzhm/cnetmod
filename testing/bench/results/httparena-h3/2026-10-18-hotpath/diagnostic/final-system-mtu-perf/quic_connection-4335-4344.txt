@@ -1,0 +1,10 @@
+4335:             {
+4336:                 impl_->encoded_send_frames.push_front(std::move(frame));
+4337:             }
+4338:             break;
+4339:         }
+4340:         frame.append_to(payload);
+4341:         if (frame_metadata)
+4342:             remember_scheduled_metadata(retransmittable_frames.size(), *frame_metadata);
+4343:         retransmittable_frames.push_back(std::move(frame));
+4344:     }

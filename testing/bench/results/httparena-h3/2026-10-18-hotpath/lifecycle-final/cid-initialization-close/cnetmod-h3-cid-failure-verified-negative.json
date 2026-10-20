@@ -1,0 +1,14 @@
+{
+  "case": "cid_issue_failure",
+  "mode": "observer",
+  "expected_close": "no",
+  "status": "passed",
+  "initial_transmitted": true,
+  "tls_completed": true,
+  "client_handshake_confirmed": false,
+  "observation_seconds": 3,
+  "injected_failure_observed": true,
+  "observed_outcome": "silent_failure_no_close",
+  "server_stdout": "",
+  "server_stderr": "[2026-10-18 11:31:14.897] [error] [123378571334080] [quic_retire_stream_server.cpp:57] retire-stream fixture: expected stream zero\n"
+}

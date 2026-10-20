@@ -1,0 +1,125 @@
+starting benchmark...
+spawning thread #0: 4 total client(s). Timing-based test with 2s of warm-up time and 5s of main duration for measurements.
+spawning thread #1: 4 total client(s). Timing-based test with 2s of warm-up time and 5s of main duration for measurements.
+spawning thread #2: 4 total client(s). Timing-based test with 2s of warm-up time and 5s of main duration for measurements.
+spawning thread #3: 4 total client(s). Timing-based test with 2s of warm-up time and 5s of main duration for measurements.
+spawning thread #4: 4 total client(s). Timing-based test with 2s of warm-up time and 5s of main duration for measurements.
+spawning thread #5: 4 total client(s). Timing-based test with 2s of warm-up time and 5s of main duration for measurements.
+spawning thread #6: 4 total client(s). Timing-based test with 2s of warm-up time and 5s of main duration for measurements.
+spawning thread #7: 4 total client(s). Timing-based test with 2s of warm-up time and 5s of main duration for measurements.
+spawning thread #8: 4 total client(s). Timing-based test with 2s of warm-up time and 5s of main duration for measurements.
+spawning thread #9: 4 total client(s). Timing-based test with 2s of warm-up time and 5s of main duration for measurements.
+spawning thread #10: 4 total client(s). Timing-based test with 2s of warm-up time and 5s of main duration for measurements.
+spawning thread #11: 4 total client(s). Timing-based test with 2s of warm-up time and 5s of main duration for measurements.
+spawning thread #12: 4 total client(s). Timing-based test with 2s of warm-up time and 5s of main duration for measurements.
+spawning thread #13: 4 total client(s). Timing-based test with 2s of warm-up time and 5s of main duration for measurements.
+spawning thread #14: 4 total client(s). Timing-based test with 2s of warm-up time and 5s of main duration for measurements.
+spawning thread #15: 4 total client(s). Timing-based test with 2s of warm-up time and 5s of main duration for measurements.
+Warm-up started for thread #14.
+Warm-up started for thread #9.
+Warm-up started for thread #2.
+Warm-up started for thread #1.
+Warm-up started for thread #15.
+Warm-up started for thread #3.
+Warm-up started for thread #4.
+Warm-up started for thread #7.
+Warm-up started for thread #8.
+Warm-up started for thread #5.
+Warm-up started for thread #6.
+Warm-up started for thread #10.
+Warm-up started for thread #12.
+Warm-up started for thread #11.
+Warm-up started for thread #13.
+Warm-up started for thread #0.
+progress: 25% of clients started
+progress: 50% of clients started
+progress: 75% of clients started
+progress: 100% of clients started
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Certificate: RSA 2048 bits
+Negotiated Group: x25519
+Resumption: no
+Application protocol: h3
+Warm-up phase is over for thread #0.
+Main benchmark duration is started for thread #0.
+Warm-up phase is over for thread #3.
+Main benchmark duration is started for thread #3.
+Warm-up phase is over for thread #5.
+Main benchmark duration is started for thread #5.
+Warm-up phase is over for thread #6.
+Main benchmark duration is started for thread #6.
+Warm-up phase is over for thread #7.
+Main benchmark duration is started for thread #7.
+Warm-up phase is over for thread #8.
+Main benchmark duration is started for thread #8.
+Warm-up phase is over for thread #12.Warm-up phase is over for thread #
+Main benchmark duration is started for thread #12.
+11.
+Main benchmark duration is started for thread #11.
+Warm-up phase is over for thread #2.
+Main benchmark duration is started for thread #2.
+Warm-up phase is over for thread #9.
+Main benchmark duration is started for thread #9.
+Warm-up phase is over for thread #10.
+Main benchmark duration is started for thread #10.
+Warm-up phase is over for thread #13.
+Main benchmark duration is started for thread #13.
+Warm-up phase is over for thread #15.
+Main benchmark duration is started for thread #15.
+Warm-up phase is over for thread #4.
+Main benchmark duration is started for thread #4.
+Warm-up phase is over for thread #14.
+Main benchmark duration is started for thread #14.
+Warm-up phase is over for thread #1.
+Main benchmark duration is started for thread #1.
+Main benchmark duration is over for thread #3. Stopping all clients.
+Stopped all clients for thread #3
+Main benchmark duration is over for thread #6. Stopping all clients.
+Stopped all clients for thread #6
+Main benchmark duration is over for thread #7. Stopping all clients.
+Stopped all clients for thread #7
+Main benchmark duration is over for thread #0. Stopping all clients.
+Stopped all clients for thread #0
+Main benchmark duration is over for thread #5. Stopping all clients.
+Stopped all clients for thread #5
+Main benchmark duration is over for thread #8. Stopping all clients.
+Stopped all clients for thread #8
+Main benchmark duration is over for thread #12. Stopping all clients.
+Stopped all clients for thread #12
+Main benchmark duration is over for thread #1. Stopping all clients.
+Main benchmark duration is over for thread #Stopped all clients for thread #13. Stopping all clients.
+1
+Stopped all clients for thread #13
+Main benchmark duration is over for thread #2. Stopping all clients.
+Stopped all clients for thread #2
+Main benchmark duration is over for thread #10. Stopping all clients.
+Stopped all clients for thread #10
+Main benchmark duration is over for thread #15. Stopping all clients.
+Stopped all clients for thread #15
+Main benchmark duration is over for thread #4. Stopping all clients.
+Stopped all clients for thread #4
+Main benchmark duration is over for thread #11. Stopping all clients.
+Stopped all clients for thread #11
+Main benchmark duration is over for thread #14. Stopping all clients.
+Stopped all clients for thread #14
+Main benchmark duration is over for thread #9. Stopping all clients.
+Stopped all clients for thread #9
+
+finished in 7.00s, 1336913.80 req/s, 11.47MB/s
+requests: 6684569 total, 6684569 started, 6684569 done, 6684569 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 6684569 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 57.37MB (60161121) total, 33.15MB (34760948) headers (space savings 87.50%), 8.29MB (8690237) data
+UDP datagram: 606790 sent, 846266 received
+                 min         max         median     p95        p99        mean         sd        +/- sd
+request     :      397us     20.85ms      2.74ms     5.64ms     7.65ms     3.04ms      1.45ms    74.22%
+connect     :        0us         0us         0us        0us        0us        0us         0us     0.00%
+TTFB        :        0us         0us         0us        0us        0us        0us         0us     0.00%
+req/s       :   11859.77    36153.49    20565.79   29156.04   36153.49   20886.91     6321.47    60.94%
+min RTT     :       15us      1.62ms       323us     1.28ms     1.62ms      425us       359us    75.00%
+smoothed RTT:     1.15ms      4.48ms      2.77ms     4.21ms     4.48ms     2.82ms      1.01ms    53.13%
+packets sent:       5482       14592        9472      13103      14592    9484.09     2377.55    57.81%
+packets recv:       8044       18966       13450      17645      18966   13222.91     2772.64    57.81%
+packets lost:         10         209          52        171        209      67.59       49.59    70.31%
+GRO packets :          1           3           1          1          1       1.00        0.05    99.79%

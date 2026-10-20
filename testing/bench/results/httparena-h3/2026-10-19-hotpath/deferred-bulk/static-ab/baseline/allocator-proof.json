@@ -1,0 +1,20 @@
+{
+  "system_allocator_verified": true,
+  "binary": "/tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server",
+  "binary_sha256": "2fa51db8652cf8a0d166d79ab4d36241c9a5c789aa8ed4c0cb5e57eb56bb7d28",
+  "noargs_returncode": 2,
+  "ld_preload": null,
+  "ld_audit": null,
+  "cmake_use_mimalloc_off": true,
+  "files": {
+    "CMakeCache.txt": "ac8af21f0b9f76a9894ebbcf66b4e9bd60ba27c88c9b592ff96d58ae204fee52",
+    "build.ninja": "72fc8859ca48d00ff7674857fc74f2d9506126ed82fc803dde5386e4f2158473",
+    "libcnetmod_runtime.a": "d17df7b64d1b16371f0f2e4084718ab701c742c46ec635bdac8a8c74a4338e59",
+    "libcnetmod_quic.a": "98ff6370db8e264dd3346e67e928ae2c4188617c9dde960b0f3d36248bc092e4",
+    "libcnetmod_http.a": "9fc87c7164a29fa8dc5975e34c1fb3a71ebacd4ff1a7000e6a48f1c2b6c5bc82",
+    "testing/bench/arena_h3_server": "2fa51db8652cf8a0d166d79ab4d36241c9a5c789aa8ed4c0cb5e57eb56bb7d28",
+    "testing/tests/test_udp_batch": "fb2fb189d0b2e51546d67efa79f08db3c8c3955249b6897f0dda1616fa242933"
+  },
+  "backing_root": "/var/tmp/cnetmod-pmtu-deadline-5afc506d/baseline-guard/allocator-backing",
+  "frozen_binary": "/var/tmp/cnetmod-pmtu-deadline-5afc506d/baseline-guard/arena_h3_server"
+}

@@ -1,0 +1,18 @@
+{
+  "pid": 70936,
+  "command": [
+    "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows-optional-peers\\curl-8.23.0_1-win64-mingw\\bin\\curl.exe",
+    "--noproxy",
+    "*",
+    "--http3-only",
+    "--insecure",
+    "--silent",
+    "--show-error",
+    "--fail",
+    "--write-out",
+    "%{stderr}\nCNETMOD_HTTP_STATUS:%{http_code}\n",
+    "https://127.0.0.1:58939/health"
+  ],
+  "cwd": "C:\\Users\\25007\\.codex\\tmp\\h3-hotpath-windows-final-20261018-193412-0aba7d1e\\run-e282732eda5a4fb688896e41f2f4037b\\cnetmod-server_to_curl-http3",
+  "target_platform": "Windows"
+}

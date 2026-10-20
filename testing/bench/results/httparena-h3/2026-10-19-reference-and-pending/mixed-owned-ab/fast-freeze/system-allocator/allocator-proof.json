@@ -1,0 +1,18 @@
+{
+  "system_allocator_verified": true,
+  "binary": "/var/tmp/cnetmod-h3-owned-fast-candidate-fbaeb04a21614732b24a7fdae850fcd0/proof-build-root/testing/bench/arena_h3_server",
+  "binary_sha256": "e73f3dae63639c862512e277e835ec68569bb358af66c27c55e85b71de7022ed",
+  "noargs_returncode": 2,
+  "ld_preload": null,
+  "ld_audit": null,
+  "cmake_use_mimalloc_off": true,
+  "files": {
+    "CMakeCache.txt": "ac8af21f0b9f76a9894ebbcf66b4e9bd60ba27c88c9b592ff96d58ae204fee52",
+    "build.ninja": "72fc8859ca48d00ff7674857fc74f2d9506126ed82fc803dde5386e4f2158473",
+    "libcnetmod_runtime.a": "d17df7b64d1b16371f0f2e4084718ab701c742c46ec635bdac8a8c74a4338e59",
+    "libcnetmod_quic.a": "51ee78e899a3d14e52b2e4cc00eb93250ec690e9233694fe97aeda5caf338cfc",
+    "libcnetmod_http.a": "9fc87c7164a29fa8dc5975e34c1fb3a71ebacd4ff1a7000e6a48f1c2b6c5bc82",
+    "testing/bench/arena_h3_server": "e73f3dae63639c862512e277e835ec68569bb358af66c27c55e85b71de7022ed",
+    "testing/tests/test_udp_batch": "fb2fb189d0b2e51546d67efa79f08db3c8c3955249b6897f0dda1616fa242933"
+  }
+}

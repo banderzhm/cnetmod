@@ -1,0 +1,20 @@
+[==========] Running 7 test(s).
+[ RUN      ] udp_batch_preserves_boundaries_and_backend_lifetime
+[       OK ] udp_batch_preserves_boundaries_and_backend_lifetime
+[ RUN      ] udp_batch_wait_honors_deadline_cancellation
+[       OK ] udp_batch_wait_honors_deadline_cancellation
+[ RUN      ] udp_batch_short_burst_does_not_wait_for_full_batch
+[       OK ] udp_batch_short_burst_does_not_wait_for_full_batch
+[ RUN      ] udp_batch_segment_runs_preserve_ipv4_and_ipv6_boundaries
+  ASSERT FAILED: result->error().value() == 0 (got: 26 vs 0) at /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/tests/test_udp_batch.cpp:625
+  ASSERT FAILED: result && *result at /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/tests/test_udp_batch.cpp:626
+[  FAILED  ] udp_batch_segment_runs_preserve_ipv4_and_ipv6_boundaries (2 failure(s))
+[ RUN      ] udp_batch_partial_gso_prefix_and_fallback_error_are_preserved
+[       OK ] udp_batch_partial_gso_prefix_and_fallback_error_are_preserved
+[ RUN      ] udp_batch_would_block_enters_async_send_path
+[       OK ] udp_batch_would_block_enters_async_send_path
+[ RUN      ] epoll_directional_waiters_preserve_read_write_cancel_and_hup
+[       OK ] epoll_directional_waiters_preserve_read_write_cancel_and_hup
+[==========] 7 test(s) ran.
+[  PASSED  ] 6 test(s).
+[  FAILED  ] 1 test(s).

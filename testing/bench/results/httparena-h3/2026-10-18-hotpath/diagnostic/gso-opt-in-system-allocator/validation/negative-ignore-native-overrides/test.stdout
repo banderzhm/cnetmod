@@ -1,0 +1,6 @@
+[==========] Running 16 test(s).
+[ RUN      ] udp_segmented_batch_retains_native_cork_and_segment_options
+[  FAILED  ] udp_segmented_batch_retains_native_cork_and_segment_options (2 failure(s))
+[==========] 1 test(s) ran.
+[  PASSED  ] 0 test(s).
+[  FAILED  ] 1 test(s).

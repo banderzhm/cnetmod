@@ -1,0 +1,543 @@
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  async_op.cppm
+  iocp_async_op.cpp
+  iocp_impl.cpp
+  正在编译...
+  async_op.cppm
+  iocp_impl.cpp
+  async_op.cpp
+  ssl_impl.cpp
+  dtls_impl.cpp
+  iocp_async_op.cpp
+  udp_impl.cpp
+  timer.cppm
+  ssl_ktls.cpp
+  executor.cppm
+  dns_impl.cpp
+  task_group.cppm
+  timer_impl.cpp
+  retry.cppm
+  coro.cppm
+  core.cppm
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  test_udp_sendto_on_cancel.cpp
+  正在编译...
+  test_udp_sendto_on_cancel.cpp
+  test_udp_sendto_on_cancel.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_udp_sendto_on_cancel.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  loss_detection.cppm
+  loss_detection.cpp
+  quic_connection.cppm
+  quic_recovery.cppm
+  quic_connection.cpp
+  quic_recovery.cpp
+  正在编译...
+  loss_detection.cppm
+  quic_recovery.cppm
+  quic_connection.cppm
+  quic.cppm
+  loss_detection.cpp
+  quic_crypto.cpp
+  quic_flow_control.cpp
+  congestion_control.cpp
+  quic_packet.cpp
+  quic_frame.cpp
+  quic_recovery.cpp
+  quic_foundation.cpp
+  quic_connection.cpp
+  quic_write_queue.cpp
+  varint.cpp
+  quic_stream.cpp
+D:\runtime\vs\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.51.36231\include\memory(4042,17): warning C4996: 'std::atomic_compare_exchange_weak_explicit': warning STL4029: std::atomic_*() overloads for shared_ptr are deprecated in C++20. The shared_ptr specialization of std::atomic provides superior functionality. You can define _SILENCE_CXX20_OLD_SHARED_PTR_ATOMIC_SUPPORT_DEPRECATION_WARNING or _SILENCE_ALL_CXX20_DEPRECATION_WARNINGS to suppress this warning. [C:\Users\25007\.codex\tmp\cnetmod-h3-windows\cnetmod_quic.vcxproj]
+  (编译源文件“../../worktrees/2c3c/cnetmod/src/protocol/quic/quic_crypto.cpp”)
+      D:\runtime\vs\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.51.36231\include\memory(4042,17):
+      模板实例化上下文(最早的实例化上下文)为
+          C:\Users\25007\.codex\worktrees\2c3c\cnetmod\src\protocol\quic\quic_crypto.cpp(1582,19):
+          查看对正在编译的函数 模板 实例化“bool std::atomic_compare_exchange_strong_explicit<cnetmod::quic::quic_aead_context>(std::shared_ptr<cnetmod::quic::quic_aead_context> *,std::shared_ptr<cnetmod::quic::quic_aead_context> *,std::shared_ptr<cnetmod::quic::quic_aead_context>,std::memory_order,std::memory_order)”的引用
+  
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  http3_server.cpp
+  正在编译...
+  http3_session.cppm
+  session.cppm
+  router.cppm
+  http3_client.cppm
+  http_client.cppm
+  http_server.cppm
+  session.cpp
+  http3_session.cpp
+  http3_server.cppm
+  utils.cppm
+  swagger_ui.cppm
+  swagger.cppm
+  http3_server.cpp
+  http.cppm
+  http3_client.cpp
+  multipart_form.cpp
+  multipart_parser.cpp
+  utils.cpp
+  multipart_disposition.cpp
+  swagger_ui.cpp
+  sse_stream.cpp
+  ip_firewall.cppm
+  multipart_content_type.cpp
+  access_log.cppm
+  client_pool.cppm
+  multipart_builder.cpp
+  swagger.cpp
+  http_v1_parser.cpp
+  sse.cpp
+  http_response.cpp
+  authorization.cppm
+  cookie.cpp
+  http_client.cpp
+  graceful_shutdown.cppm
+  health_check.cppm
+  ip_filter.cppm
+  router.cpp
+  http_cache.cppm
+  http_server.cpp
+  cors.cppm
+  multipart_url.cpp
+  jwt_auth.cppm
+  body_limit.cppm
+  compress.cppm
+  metrics.cppm
+  rate_limiter.cppm
+  recover.cppm
+  request_id.cppm
+  timeout.cppm
+  http_recover.cpp
+  http_request_id.cpp
+  tracing.cppm
+  http_access_log.cpp
+  upload.cppm
+  client_pool.cpp
+  ip_firewall.cpp
+  tracing.cpp
+  http_upload.cpp
+  http_graceful_shutdown.cpp
+  http_ip_filter.cpp
+  http_metrics.cpp
+  http_rate_limiter.cpp
+  http_compress.cpp
+  authorization.cpp
+  http_cache.cpp
+  http_cors.cpp
+  middleware.cppm
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  正在扫描源以查找模块依赖项...
+  正在编译...
+  async_file_template.cppm
+  http_server.cppm
+  http_client.cppm
+  otlp_http_exporter.cppm
+  messaging.cppm
+  json_template.cppm
+  task_supervisor.cppm
+  http_server.cpp
+  async_file_template.cpp
+  task_supervisor.cpp
+  telemetry.cppm
+  http_client.cpp
+  otlp_http_exporter.cpp
+  messaging.cpp
+  observability.cppm
+  telemetry.cpp
+  managed_service.cppm
+  rest_template.cppm
+  rest_template.cpp
+  managed_service.cpp
+  health_registry.cppm
+  service_registry.cppm
+  service_registry.cpp
+  service_lifecycle.cppm
+  health_registry.cpp
+  service_lifecycle.cpp
+  configuration.cppm
+  diagnostics.cppm
+  configuration.cpp
+  auto_configuration.cppm
+  application_runtime.cppm
+  components.cppm
+  application_runtime.cpp
+  http_client.cppm
+  json.cppm
+  auto_configuration.cpp
+  options.cppm
+  http_client.cpp
+  components.cpp
+  builtin_auto_configuration.cpp
+  json.cpp
+  application_module.cppm
+  options.cpp
+  application_host.cppm
+  application_host.cpp
+  application.cppm
+  cnetmod_application.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_application.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_core.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_core.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  quic_retire_stream_server.cpp
+  正在编译...
+  quic_retire_stream_server.cpp
+  quic_retire_stream_server.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\bin\Release\quic_retire_stream_server.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  test_deadline.cpp
+  正在编译...
+  test_deadline.cpp
+  test_deadline.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_deadline.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  test_task_group.cpp
+  正在编译...
+  test_task_group.cpp
+  test_task_group.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_task_group.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  test_wait_group.cpp
+  正在编译...
+  test_wait_group.cpp
+  test_wait_group.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_wait_group.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  test_task.cpp
+  正在编译...
+  test_task.cpp
+C:\Users\25007\.codex\worktrees\2c3c\cnetmod\testing\tests\test_task.cpp(136,1): warning C4033: “throws_on”必须返回值 [C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\test_task.vcxproj]
+      C:\Users\25007\.codex\worktrees\2c3c\cnetmod\testing\tests\test_task.cpp(136,1):
+      当承诺类型“cnetmod::task<int>::promise_type”未声明 "return_void" 时，从协同例程结果末尾关闭流会导致未定义的行为
+  
+  test_task.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_task.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  test_udp_batch.cpp
+  正在编译...
+  test_udp_batch.cpp
+  test_udp_batch.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_udp_batch.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  正在编译...
+  test_quic_varint.cpp
+  test_quic_varint.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_quic_varint.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  正在编译...
+  test_quic_frame.cpp
+  test_quic_frame.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_quic_frame.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  正在编译...
+  test_quic_packet.cpp
+  test_quic_packet.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_quic_packet.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  test_quic_stream.cpp
+  正在编译...
+  test_quic_stream.cpp
+  test_quic_stream.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_quic_stream.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  test_quic_loss_detection.cpp
+  正在编译...
+  test_quic_loss_detection.cpp
+  test_quic_loss_detection.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_quic_loss_detection.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  正在编译...
+  test_quic_congestion.cpp
+  test_quic_congestion.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_quic_congestion.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  正在编译...
+  test_quic_early_data.cpp
+  test_quic_early_data.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_quic_early_data.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  test_http3_qpack.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_http3_qpack.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  正在编译...
+  test_http3_frame.cpp
+  test_http3_frame.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_http3_frame.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_application.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_application.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_core.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_core.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  h3_interop_server.cpp
+  正在编译...
+  h3_interop_server.cpp
+  h3_interop_server.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\bin\Release\h3_interop_server.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_application.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_application.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_core.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_core.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  正在编译...
+  h3_interop_client.cpp
+  h3_interop_client.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\bin\Release\h3_interop_client.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_application.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_application.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_core.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_core.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  1>
+  正在扫描源以查找模块依赖项...
+  正在编译...
+  http_client_e2e_server.cpp
+  http3_e2e_server.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\http3\Release\http3_e2e_server.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_application.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_application.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_core.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_core.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  1>
+  正在扫描源以查找模块依赖项...
+  正在编译...
+  http_client_e2e.cpp
+  http_client_http3_e2e.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\http3\Release\http_client_http3_e2e.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_application.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_application.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_core.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_core.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  1>
+  正在扫描源以查找模块依赖项...
+  正在编译...
+  http3_migration_e2e.cpp
+  http3_migration_e2e.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\http3\Release\http3_migration_e2e.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  正在编译...
+  arena_h3_server.cpp
+  arena_h3_server.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\bench\Release\arena_h3_server.exe

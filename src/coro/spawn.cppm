@@ -177,4 +177,28 @@ void spawn_guarded(io_context& ctx, task<void> task_to_run)
     }(ctx, std::move(task_to_run));
 }
 
+/// Start inline on the owning event loop, otherwise post to it. This is an
+/// explicit dispatch operation; spawn() continues to promise deferred posting.
+export template <auto OnError>
+requires std::invocable<decltype(OnError), std::exception_ptr>
+void dispatch_guarded(io_context& ctx, task<void> task_to_run)
+{
+    if (!ctx.running_in_this_thread())
+    {
+        spawn_guarded<OnError>(ctx, std::move(task_to_run));
+        return;
+    }
+    [](task<void> inner) -> detached_task
+    {
+        try
+        {
+            co_await std::move(inner);
+        }
+        catch (...)
+        {
+            detail::report_static_spawn_failure<OnError>();
+        }
+    }(std::move(task_to_run));
+}
+
 } // namespace cnetmod

@@ -1,0 +1,113 @@
+Test project C:/Users/25007/.codex/tmp/cnetmod-h3-windows
+      Start  5: test_concurrent_containers
+ 1/42 Test  #5: test_concurrent_containers ...........................   Passed    0.04 sec
+      Start 11: test_deadline
+ 2/42 Test #11: test_deadline ........................................   Passed    0.05 sec
+      Start 12: test_task_group
+ 3/42 Test #12: test_task_group ......................................   Passed    0.01 sec
+      Start 13: test_task
+ 4/42 Test #13: test_task ............................................   Passed    0.08 sec
+      Start 21: test_wait_group
+ 5/42 Test #21: test_wait_group ......................................   Passed    0.01 sec
+      Start 44: test_udp_batch
+ 6/42 Test #44: test_udp_batch .......................................   Passed    0.05 sec
+      Start 47: test_quic_varint
+ 7/42 Test #47: test_quic_varint .....................................   Passed    0.01 sec
+      Start 48: test_quic_frame
+ 8/42 Test #48: test_quic_frame ......................................   Passed    0.01 sec
+      Start 49: test_quic_packet
+ 9/42 Test #49: test_quic_packet .....................................   Passed    0.01 sec
+      Start 50: test_quic_stream
+10/42 Test #50: test_quic_stream .....................................   Passed    0.04 sec
+      Start 51: test_quic_loss_detection
+11/42 Test #51: test_quic_loss_detection .............................   Passed    0.01 sec
+      Start 52: test_quic_congestion
+12/42 Test #52: test_quic_congestion .................................   Passed    0.01 sec
+      Start 53: test_quic_early_data
+13/42 Test #53: test_quic_early_data .................................   Passed    0.01 sec
+      Start 54: test_http3_qpack
+14/42 Test #54: test_http3_qpack .....................................   Passed    0.01 sec
+      Start 55: test_http3_frame
+15/42 Test #55: test_http3_frame .....................................   Passed    0.01 sec
+      Start 57: test_udp_sendto_on_cancel
+16/42 Test #57: test_udp_sendto_on_cancel ............................   Passed    0.01 sec
+      Start 62: quic_pmtu_deadline_interval
+17/42 Test #62: quic_pmtu_deadline_interval ..........................   Passed    1.09 sec
+      Start 63: quic_pmtu_deadline_initial
+18/42 Test #63: quic_pmtu_deadline_initial ...........................   Passed    1.02 sec
+      Start 64: quic_datagram_cc_admission
+19/42 Test #64: quic_datagram_cc_admission ...........................   Passed    0.63 sec
+      Start 65: quic_datagram_cc_pto
+20/42 Test #65: quic_datagram_cc_pto .................................   Passed    0.78 sec
+      Start 66: quic_pmtu_cc_large_response_after_loss
+21/42 Test #66: quic_pmtu_cc_large_response_after_loss ...............   Passed    5.42 sec
+      Start 67: http3_lifecycle
+22/42 Test #67: http3_lifecycle ......................................   Passed    3.92 sec
+      Start 68: http3_cold_listener_cleanup
+23/42 Test #68: http3_cold_listener_cleanup ..........................   Passed   35.28 sec
+      Start 69: http3_outbound_pto_close_restart_1
+24/42 Test #69: http3_outbound_pto_close_restart_1 ...................   Passed    4.42 sec
+      Start 70: http3_outbound_pto_close_restart_2
+25/42 Test #70: http3_outbound_pto_close_restart_2 ...................   Passed    4.43 sec
+      Start 71: quic_retire_stream_credit_wakeup
+26/42 Test #71: quic_retire_stream_credit_wakeup .....................   Passed    1.13 sec
+      Start 72: quic_retire_stream_notification_lifetime
+27/42 Test #72: quic_retire_stream_notification_lifetime .............   Passed    0.63 sec
+      Start 73: quic_private_outbound_pto
+28/42 Test #73: quic_private_outbound_pto ............................   Passed    0.51 sec
+      Start 74: quic_handshake_confirmation
+29/42 Test #74: quic_handshake_confirmation ..........................   Passed    1.49 sec
+      Start 75: h3_webtransport_aioquic_probe_unit
+30/42 Test #75: h3_webtransport_aioquic_probe_unit ...................   Passed    0.20 sec
+      Start 78: http3_early_data_recovery
+31/42 Test #78: http3_early_data_recovery ............................   Passed    3.27 sec
+      Start 79: http3_streaming_cancellation
+32/42 Test #79: http3_streaming_cancellation .........................   Passed    0.54 sec
+      Start 80: http3_idle_connection_cleanup
+33/42 Test #80: http3_idle_connection_cleanup ........................   Passed   31.09 sec
+      Start 81: http_client_http3_end_to_end
+34/42 Test #81: http_client_http3_end_to_end .........................   Passed    3.01 sec
+      Start 82: http_client_http3_dynamic_qpack_end_to_end
+35/42 Test #82: http_client_http3_dynamic_qpack_end_to_end ...........   Passed    3.17 sec
+      Start 83: http3_multipath_end_to_end
+36/42 Test #83: http3_multipath_end_to_end ...........................   Passed    0.45 sec
+      Start 84: http3_multipath_path_mtu_end_to_end
+37/42 Test #84: http3_multipath_path_mtu_end_to_end ..................   Passed    0.48 sec
+      Start 85: http3_multipath_path_mtu_blackhole_end_to_end
+38/42 Test #85: http3_multipath_path_mtu_blackhole_end_to_end ........   Passed    2.58 sec
+      Start 86: http3_multipath_local_path_close_end_to_end
+39/42 Test #86: http3_multipath_local_path_close_end_to_end ..........   Passed    0.65 sec
+      Start 87: http3_connect_close_end_to_end
+40/42 Test #87: http3_connect_close_end_to_end .......................   Passed    0.18 sec
+      Start 88: http3_multipath_path_validation_timeout_end_to_end
+41/42 Test #88: http3_multipath_path_validation_timeout_end_to_end ...   Passed    3.25 sec
+      Start 89: http3_connection_migration
+42/42 Test #89: http3_connection_migration ...........................   Passed    2.32 sec
+
+100% tests passed, 0 tests failed out of 42
+
+Label Time Summary:
+blackhole            =   2.58 sec*proc (1 test)
+client               =   6.37 sec*proc (3 tests)
+close                =   0.84 sec*proc (2 tests)
+connect              =   0.18 sec*proc (1 test)
+datagram             =   1.41 sec*proc (2 tests)
+end_to_end           =  13.78 sec*proc (8 tests)
+flow_control         =   1.13 sec*proc (1 test)
+http3                = 111.94 sec*proc (26 tests)
+interop              =  48.25 sec*proc (5 tests)
+lifecycle            =  83.43 sec*proc (10 tests)
+memory               =   0.63 sec*proc (1 test)
+migration            =   2.32 sec*proc (1 test)
+multipath            =   7.41 sec*proc (5 tests)
+pmtu                 =  10.59 sec*proc (5 tests)
+qpack                =   3.17 sec*proc (1 test)
+quic                 =  57.50 sec*proc (19 tests)
+recovery             =  20.95 sec*proc (8 tests)
+test_peer_adapter    =   5.42 sec*proc (1 test)
+timeout              =   3.25 sec*proc (1 test)
+timer                =   2.11 sec*proc (2 tests)
+unit                 =   0.20 sec*proc (1 test)
+webtransport         =   0.20 sec*proc (1 test)
+
+Total Test time (real) = 112.33 sec

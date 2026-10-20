@@ -1,0 +1,280 @@
+*** Dumping AST Record Layout
+         0 | struct std::_FirstPaddingByte<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::slot *>
+         0 |   struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::slot * __v_
+         8 |   char __first_padding_byte_
+           | [sizeof=16, dsize=16, align=8,
+           |  nvsize=16, nvalign=8]
+
+
+*** Dumping AST Record Layout
+         0 | struct std::__1::default_delete<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::slot[]> (empty)
+           | [sizeof=1, dsize=0, align=1,
+           |  nvsize=0, nvalign=1]
+
+
+*** Dumping AST Record Layout
+         0 | struct std::_FirstPaddingByte<struct std::__1::default_delete<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::slot[]> >
+         0 |   struct std::__1::default_delete<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::slot[]> __v_ (empty)
+         0 |   char __first_padding_byte_
+           | [sizeof=1, dsize=1, align=1,
+           |  nvsize=1, nvalign=1]
+
+
+*** Dumping AST Record Layout
+         0 | class std::__compressed_pair_padding<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::slot *> (empty)
+           | [sizeof=1, dsize=1, align=1,
+           |  nvsize=1, nvalign=1]
+
+
+*** Dumping AST Record Layout
+         0 | class std::__compressed_pair_padding<struct std::__1::default_delete<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::slot[]> > (empty)
+           | [sizeof=1, dsize=1, align=1,
+           |  nvsize=1, nvalign=1]
+
+
+*** Dumping AST Record Layout
+         0 | struct std::__1::unique_ptr<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::slot[]>::(anonymous at /usr/include/c++/v1/__memory/unique_ptr.h:419:3)
+         0 |   pointer __ptr_
+         0 |   class std::__compressed_pair_padding<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::slot *> __padding1_419_ (empty)
+         0 |   struct std::__1::default_delete<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::slot[]> __deleter_ (empty)
+         0 |   class std::__compressed_pair_padding<struct std::__1::default_delete<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::slot[]> > __padding2_419_ (empty)
+           | [sizeof=8, dsize=8, align=8,
+           |  nvsize=8, nvalign=8]
+
+
+*** Dumping AST Record Layout
+         0 | class std::__1::unique_ptr<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::slot[]>
+         0 |   struct std::__1::unique_ptr<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::slot[]>::(anonymous at /usr/include/c++/v1/__memory/unique_ptr.h:419:3) 
+         0 |     pointer __ptr_
+         0 |     class std::__compressed_pair_padding<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::slot *> __padding1_419_ (empty)
+         0 |     struct std::__1::default_delete<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::slot[]> __deleter_ (empty)
+         0 |     class std::__compressed_pair_padding<struct std::__1::default_delete<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::slot[]> > __padding2_419_ (empty)
+         0 |   struct std::__unique_ptr_array_bounds_stateless __checker_ (empty)
+           | [sizeof=8, dsize=8, align=8,
+           |  nvsize=8, nvalign=8]
+
+
+*** Dumping AST Record Layout
+         0 | class cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>
+         0 |   class std::__1::unique_ptr<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::slot[]> slots_
+         0 |     struct std::__1::unique_ptr<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::slot[]>::(anonymous at /usr/include/c++/v1/__memory/unique_ptr.h:419:3) 
+         0 |       pointer __ptr_
+         0 |       class std::__compressed_pair_padding<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::slot *> __padding1_419_ (empty)
+         0 |       struct std::__1::default_delete<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::slot[]> __deleter_ (empty)
+         0 |       class std::__compressed_pair_padding<struct std::__1::default_delete<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::slot[]> > __padding2_419_ (empty)
+         0 |     struct std::__unique_ptr_array_bounds_stateless __checker_ (empty)
+         8 |   std::size_t capacity_
+        16 |   std::size_t mask_
+        24 |   struct std::__1::atomic<unsigned long> size_
+        24 |     struct std::__atomic_base<unsigned long> (base)
+        24 |       struct std::__atomic_base<unsigned long, false> (base)
+        24 |         struct std::__cxx_atomic_impl<unsigned long> __a_
+        24 |           struct std::__cxx_atomic_base_impl<unsigned long> (base)
+        24 |             _Atomic(unsigned long) __a_value
+         0 |   struct cnetmod::http::v3::http3_server::impl::inbox_key_hash hash_ (empty)
+         0 |   struct std::__1::equal_to<struct cnetmod::http::v3::http3_server::impl::inbox_key> equal_ (empty)
+         0 |     struct std::__binary_function_keep_layout_base<struct cnetmod::http::v3::http3_server::impl::inbox_key, struct cnetmod::http::v3::http3_server::impl::inbox_key, _Bool> (base) (empty)
+           | [sizeof=32, dsize=32, align=8,
+           |  nvsize=32, nvalign=8]
+
+
+*** Dumping AST Record Layout
+         0 | class std::__1::shared_ptr<const struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry>
+         0 |   element_type * __ptr_
+         8 |   __shared_weak_count * __cntrl_
+           | [sizeof=16, dsize=16, align=8,
+           |  nvsize=16, nvalign=8]
+
+
+*** Dumping AST Record Layout
+         0 | struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::slot
+         0 |   class std::__1::shared_ptr<const struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry> value
+         0 |     element_type * __ptr_
+         8 |     __shared_weak_count * __cntrl_
+           | [sizeof=64, dsize=16, align=64,
+           |  nvsize=16, nvalign=64]
+
+
+*** Dumping AST Record Layout
+         0 | struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry
+         0 |   struct cnetmod::http::v3::http3_server::impl::inbox_key key
+         0 |     quic::quic_connection * connection
+         8 |     class cnetmod::quic::connection_id pending_cid
+         8 |       struct std::__1::array<enum std::byte, 20> data_
+         8 |         enum std::byte[20] __elems_
+        28 |       std::uint8_t length_
+        32 |   class std::__1::optional<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > value
+        32 |     struct std::__optional_move_assign_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base)
+        32 |       struct std::__optional_copy_assign_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base)
+        32 |         struct std::__optional_move_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base)
+        32 |           struct std::__optional_copy_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base)
+        32 |             struct std::__optional_storage_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base)
+        32 |               struct std::__optional_destruct_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base)
+        32 |                 union std::__optional_destruct_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> >::(anonymous at /usr/include/c++/v1/optional:379:3) 
+        32 |                   char __null_state_
+        32 |                   class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> __val_
+        32 |                     element_type * __ptr_
+        40 |                     __shared_weak_count * __cntrl_
+        48 |                 _Bool __engaged_
+        32 |     struct std::__sfinae_ctor_base<true, true> (base) (empty)
+        32 |     struct std::__sfinae_assign_base<true, true> (base) (empty)
+        32 |     struct std::__optional_iterator<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base) (empty)
+           | [sizeof=56, dsize=56, align=8,
+           |  nvsize=56, nvalign=8]
+
+
+*** Dumping AST Record Layout
+         0 | class std::__1::allocator<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry> (empty)
+           | [sizeof=1, dsize=0, align=1,
+           |  nvsize=0, nvalign=1]
+
+
+*** Dumping AST Record Layout
+         0 | class std::__1::allocator<struct std::__shared_ptr_emplace<const struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry, class std::__1::allocator<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry> > > (empty)
+           | [sizeof=1, dsize=0, align=1,
+           |  nvsize=0, nvalign=1]
+
+
+*** Dumping AST Record Layout
+         0 | struct std::__allocation_guard<class std::__1::allocator<struct std::__shared_ptr_emplace<const struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry, class std::__1::allocator<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry> > > >
+         0 |   class std::__1::allocator<struct std::__shared_ptr_emplace<const struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry, class std::__1::allocator<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry> > > __alloc_ (empty)
+         8 |   _Size __n_
+        16 |   _Pointer __ptr_
+           | [sizeof=24, dsize=24, align=8,
+           |  nvsize=24, nvalign=8]
+
+
+*** Dumping AST Record Layout
+         0 | struct std::_FirstPaddingByte<class std::__1::allocator<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry> >
+         0 |   class std::__1::allocator<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry> __v_ (empty)
+         0 |   char __first_padding_byte_
+           | [sizeof=1, dsize=1, align=1,
+           |  nvsize=1, nvalign=1]
+
+
+*** Dumping AST Record Layout
+         0 | struct std::_FirstPaddingByte<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry>
+         0 |   struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry __v_
+         0 |     struct cnetmod::http::v3::http3_server::impl::inbox_key key
+         0 |       quic::quic_connection * connection
+         8 |       class cnetmod::quic::connection_id pending_cid
+         8 |         struct std::__1::array<enum std::byte, 20> data_
+         8 |           enum std::byte[20] __elems_
+        28 |         std::uint8_t length_
+        32 |     class std::__1::optional<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > value
+        32 |       struct std::__optional_move_assign_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base)
+        32 |         struct std::__optional_copy_assign_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base)
+        32 |           struct std::__optional_move_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base)
+        32 |             struct std::__optional_copy_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base)
+        32 |               struct std::__optional_storage_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base)
+        32 |                 struct std::__optional_destruct_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base)
+        32 |                   union std::__optional_destruct_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> >::(anonymous at /usr/include/c++/v1/optional:379:3) 
+        32 |                     char __null_state_
+        32 |                     class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> __val_
+        32 |                       element_type * __ptr_
+        40 |                       __shared_weak_count * __cntrl_
+        48 |                   _Bool __engaged_
+        32 |       struct std::__sfinae_ctor_base<true, true> (base) (empty)
+        32 |       struct std::__sfinae_assign_base<true, true> (base) (empty)
+        32 |       struct std::__optional_iterator<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base) (empty)
+        56 |   char __first_padding_byte_
+           | [sizeof=64, dsize=57, align=8,
+           |  nvsize=57, nvalign=8]
+
+
+*** Dumping AST Record Layout
+         0 | class std::__compressed_pair_padding<class std::__1::allocator<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry> > (empty)
+           | [sizeof=1, dsize=1, align=1,
+           |  nvsize=1, nvalign=1]
+
+
+*** Dumping AST Record Layout
+         0 | class std::__compressed_pair_padding<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry> (empty)
+           | [sizeof=1, dsize=1, align=1,
+           |  nvsize=1, nvalign=1]
+
+
+*** Dumping AST Record Layout
+         0 | struct std::__shared_ptr_emplace<const struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry, class std::__1::allocator<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry> >::_Storage::_Data::(anonymous at /usr/include/c++/v1/__memory/shared_ptr.h:198:7)
+         0 |   class std::__1::allocator<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry> __alloc_ (empty)
+         0 |   class std::__compressed_pair_padding<class std::__1::allocator<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry> > __padding1_198_ (empty)
+         0 |   struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry __elem_
+         0 |     struct cnetmod::http::v3::http3_server::impl::inbox_key key
+         0 |       quic::quic_connection * connection
+         8 |       class cnetmod::quic::connection_id pending_cid
+         8 |         struct std::__1::array<enum std::byte, 20> data_
+         8 |           enum std::byte[20] __elems_
+        28 |         std::uint8_t length_
+        32 |     class std::__1::optional<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > value
+        32 |       struct std::__optional_move_assign_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base)
+        32 |         struct std::__optional_copy_assign_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base)
+        32 |           struct std::__optional_move_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base)
+        32 |             struct std::__optional_copy_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base)
+        32 |               struct std::__optional_storage_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base)
+        32 |                 struct std::__optional_destruct_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base)
+        32 |                   union std::__optional_destruct_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> >::(anonymous at /usr/include/c++/v1/optional:379:3) 
+        32 |                     char __null_state_
+        32 |                     class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> __val_
+        32 |                       element_type * __ptr_
+        40 |                       __shared_weak_count * __cntrl_
+        48 |                   _Bool __engaged_
+        32 |       struct std::__sfinae_ctor_base<true, true> (base) (empty)
+        32 |       struct std::__sfinae_assign_base<true, true> (base) (empty)
+        32 |       struct std::__optional_iterator<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base) (empty)
+         0 |   class std::__compressed_pair_padding<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry> __padding2_198_ (empty)
+           | [sizeof=56, dsize=56, align=8,
+           |  nvsize=56, nvalign=8]
+
+
+*** Dumping AST Record Layout
+         0 | struct std::__shared_ptr_emplace<const struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry, class std::__1::allocator<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry> >::_Storage::_Data
+         0 |   struct std::__shared_ptr_emplace<const struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry, class std::__1::allocator<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry> >::_Storage::_Data::(anonymous at /usr/include/c++/v1/__memory/shared_ptr.h:198:7) 
+         0 |     class std::__1::allocator<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry> __alloc_ (empty)
+         0 |     class std::__compressed_pair_padding<class std::__1::allocator<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry> > __padding1_198_ (empty)
+         0 |     struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry __elem_
+         0 |       struct cnetmod::http::v3::http3_server::impl::inbox_key key
+         0 |         quic::quic_connection * connection
+         8 |         class cnetmod::quic::connection_id pending_cid
+         8 |           struct std::__1::array<enum std::byte, 20> data_
+         8 |             enum std::byte[20] __elems_
+        28 |           std::uint8_t length_
+        32 |       class std::__1::optional<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > value
+        32 |         struct std::__optional_move_assign_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base)
+        32 |           struct std::__optional_copy_assign_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base)
+        32 |             struct std::__optional_move_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base)
+        32 |               struct std::__optional_copy_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base)
+        32 |                 struct std::__optional_storage_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base)
+        32 |                   struct std::__optional_destruct_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base)
+        32 |                     union std::__optional_destruct_base<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> >::(anonymous at /usr/include/c++/v1/optional:379:3) 
+        32 |                       char __null_state_
+        32 |                       class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> __val_
+        32 |                         element_type * __ptr_
+        40 |                         __shared_weak_count * __cntrl_
+        48 |                     _Bool __engaged_
+        32 |         struct std::__sfinae_ctor_base<true, true> (base) (empty)
+        32 |         struct std::__sfinae_assign_base<true, true> (base) (empty)
+        32 |         struct std::__optional_iterator<class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox> > (base) (empty)
+         0 |     class std::__compressed_pair_padding<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry> __padding2_198_ (empty)
+           | [sizeof=56, dsize=56, align=8,
+           |  nvsize=56, nvalign=8]
+
+
+*** Dumping AST Record Layout
+         0 | struct std::__shared_ptr_emplace<const struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry, class std::__1::allocator<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry> >::_Storage
+         0 |   char[56] __buffer_
+           | [sizeof=56, dsize=56, align=8,
+           |  nvsize=56, nvalign=8]
+
+
+*** Dumping AST Record Layout
+         0 | struct std::__shared_ptr_emplace<const struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry, class std::__1::allocator<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry> >
+         0 |   class std::__shared_weak_count (primary base)
+         0 |     class std::__shared_count (primary base)
+         0 |       (__shared_count vtable pointer)
+         8 |       long __shared_owners_
+        16 |     long __shared_weak_owners_
+        24 |   struct std::__shared_ptr_emplace<const struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry, class std::__1::allocator<struct cnetmod::concurrent_containers::atomic_hash_map<struct cnetmod::http::v3::http3_server::impl::inbox_key, class std::__1::shared_ptr<struct cnetmod::http::v3::http3_server::impl::connection_inbox>, struct cnetmod::http::v3::http3_server::impl::inbox_key_hash>::entry> >::_Storage __storage_
+        24 |     char[56] __buffer_
+           | [sizeof=80, dsize=80, align=8,
+           |  nvsize=80, nvalign=8]
+

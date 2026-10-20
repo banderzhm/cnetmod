@@ -1,0 +1,12 @@
+Test project C:/Users/25007/.codex/tmp/cnetmod-h3-windows
+    Start 64: http3_cold_listener_cleanup
+1/1 Test #64: http3_cold_listener_cleanup ......   Passed   35.59 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Label Time Summary:
+http3        =  35.59 sec*proc (1 test)
+interop      =  35.59 sec*proc (1 test)
+lifecycle    =  35.59 sec*proc (1 test)
+
+Total Test time (real) =  35.61 sec

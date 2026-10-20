@@ -1,0 +1,197 @@
+[info] available CPUs: 32
+[info] framework: fulmine (fulmine.js, JS)
+[info] subscribed tests: baseline,latency-1m,latency-10k,latency-500k-8cpu,pipelined,limited-conn,async,json-comp,8gbit,async-db,static-tls,echo-ws,echo-ws-pipeline,echo-ws-limited,json-tls,gateway-64,gateway-h3,production-stack,fortunes
+[info] building image: httparena-fulmine
+[info] skipping system tuning as requested (SKIP_TUNE=true)
+[info] starting postgres sidecar
+[info] postgres ready (seeded)
+
+==============================================
+=== fulmine / echo-ws-limited / 512c (tool=gcannon) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] server ready
+
+[run 1/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     512 (8/thread)
+  Pipeline:  1
+  Req/conn:  10
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency    515us    116us   1.28ms   5.28ms   14.80ms
+
+  3724954 frames sent in 5.00s, 3724680 frames received
+  Throughput: 744.69K req/s
+  Bandwidth:  16.76MB/s
+  WS upgrades: 373970
+  WS frames:   3724680
+  Latency samples: 3724680 / 3724680 responses (100.0%)
+  Reconnects: 372324
+[info] CPU 1193.9% | Mem 1.1GiB
+
+[run 2/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     512 (8/thread)
+  Pipeline:  1
+  Req/conn:  10
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency    532us    123us   1.35ms   6.01ms   12.60ms
+
+  3843144 frames sent in 5.00s, 3842950 frames received
+  Throughput: 768.28K req/s
+  Bandwidth:  17.30MB/s
+  WS upgrades: 390797
+  WS frames:   3842950
+  Latency samples: 3842950 / 3842950 responses (100.0%)
+  Reconnects: 384235
+[info] CPU 1398.3% | Mem 1.1GiB
+
+[run 3/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     512 (8/thread)
+  Pipeline:  1
+  Req/conn:  10
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency    504us    119us   1.27ms   5.80ms   10.80ms
+
+  4121266 frames sent in 5.00s, 4120925 frames received
+  Throughput: 823.77K req/s
+  Bandwidth:  18.55MB/s
+  WS upgrades: 414029
+  WS frames:   4120925
+  Latency samples: 4120925 / 4120925 responses (100.0%)
+  Reconnects: 411952
+[info] CPU 1386.2% | Mem 1.0GiB
+
+=== Best: 824185 req/s (CPU: 1386.2%, Mem: 1.0GiB) ===
+[info] saved results/echo-ws-limited/512/fulmine.json
+httparena-bench-fulmine
+httparena-bench-fulmine
+
+==============================================
+=== fulmine / echo-ws-limited / 4096c (tool=gcannon) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] server ready
+
+[run 1/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     4096 (64/thread)
+  Pipeline:  1
+  Req/conn:  10
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency   4.17ms    702us   12.60ms   35.80ms   66.30ms
+
+  3719260 frames sent in 5.01s, 3716130 frames received
+  Throughput: 742.02K req/s
+  Bandwidth:  16.75MB/s
+  WS upgrades: 373340
+  WS frames:   3716130
+  Latency samples: 3716130 / 3716130 responses (100.0%)
+  Reconnects: 370210
+[info] CPU 1314.0% | Mem 1.2GiB
+
+[run 2/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     4096 (64/thread)
+  Pipeline:  1
+  Req/conn:  10
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency   4.43ms    666us   12.80ms   44.30ms   81.80ms
+
+  3639604 frames sent in 5.01s, 3636549 frames received
+  Throughput: 725.76K req/s
+  Bandwidth:  16.39MB/s
+  WS upgrades: 365657
+  WS frames:   3636549
+  Latency samples: 3636549 / 3636549 responses (100.0%)
+  Reconnects: 362282
+[info] CPU 1527.7% | Mem 1.2GiB
+
+[run 3/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     4096 (64/thread)
+  Pipeline:  1
+  Req/conn:  10
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency   3.87ms    507us   12.40ms   31.70ms   50.60ms
+
+  4183605 frames sent in 5.00s, 4180304 frames received
+  Throughput: 835.54K req/s
+  Bandwidth:  18.86MB/s
+  WS upgrades: 419836
+  WS frames:   4180304
+  Latency samples: 4180304 / 4180304 responses (100.0%)
+  Reconnects: 416535
+[info] CPU 1411.2% | Mem 1.1GiB
+
+=== Best: 836060 req/s (CPU: 1411.2%, Mem: 1.1GiB) ===
+[info] saved results/echo-ws-limited/4096/fulmine.json
+httparena-bench-fulmine
+httparena-bench-fulmine
+[info] rebuilding site/data/*.json
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/frameworks.json
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-baseline.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch.json - 3 new, 3 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-candidate.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-awaiter.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch-affine.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch-compact.json - 3 new, 3 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch-epoll.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch-linked.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch-multishot.json - 3 new, 3 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch-nodelay.json - 3 new, 3 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch-ready.json - 3 new, 3 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch-sharded.json - 5 new, 5 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch-small.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-duplex.json - 1 new, 1 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-duplex-v2.json - 5 new, 5 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-final.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-final24-b64.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-poll-first.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-reviewed16-b64.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-workers16.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/fulmine.js.json - 8 new, 28 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/genhttp-ioxide.json - 8 new, 33 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/vanilla-epoll.json - 8 new, 35 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/current.json
+[info] done
+httparena-postgres

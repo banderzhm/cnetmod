@@ -1,0 +1,277 @@
+{
+  "cnetmod-official-static/static-h3": {
+    "rounds": [
+      {
+        "round": 1,
+        "total": 1366064,
+        "started": 1370160,
+        "done": 1366064,
+        "succeeded": 1366064,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 1366118,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.67,
+        "headline_rps": 273212.8,
+        "valid_rps_from_printed_elapsed": 240937.91887125222,
+        "cpu_percent": 1674.1,
+        "memory_peak": "186MiB"
+      },
+      {
+        "round": 2,
+        "total": 1415950,
+        "started": 1420046,
+        "done": 1415950,
+        "succeeded": 1415950,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 1416008,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.65,
+        "headline_rps": 283190.0,
+        "valid_rps_from_printed_elapsed": 250620.8849557522,
+        "cpu_percent": 1730.6,
+        "memory_peak": "196MiB"
+      },
+      {
+        "round": 3,
+        "total": 1370337,
+        "started": 1374433,
+        "done": 1370337,
+        "succeeded": 1370337,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 1370398,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.67,
+        "headline_rps": 274067.4,
+        "valid_rps_from_printed_elapsed": 241692.76895943563,
+        "cpu_percent": 1775.2,
+        "memory_peak": "200MiB"
+      },
+      {
+        "round": 4,
+        "total": 1462286,
+        "started": 1466382,
+        "done": 1462286,
+        "succeeded": 1462286,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 1462346,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.67,
+        "headline_rps": 292457.2,
+        "valid_rps_from_printed_elapsed": 257909.34744268077,
+        "cpu_percent": 1842.1,
+        "memory_peak": "200MiB"
+      },
+      {
+        "round": 5,
+        "total": 1471945,
+        "started": 1476041,
+        "done": 1471945,
+        "succeeded": 1471945,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 1472005,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.66,
+        "headline_rps": 294389.0,
+        "valid_rps_from_printed_elapsed": 260071.554770318,
+        "cpu_percent": 1853.8,
+        "memory_peak": "200MiB"
+      },
+      {
+        "round": 6,
+        "total": 1533055,
+        "started": 1537151,
+        "done": 1533055,
+        "succeeded": 1533055,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 1533118,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.65,
+        "headline_rps": 306611.0,
+        "valid_rps_from_printed_elapsed": 271348.3185840708,
+        "cpu_percent": 1707.1,
+        "memory_peak": "199MiB"
+      },
+      {
+        "round": 7,
+        "total": 1518653,
+        "started": 1522749,
+        "done": 1518653,
+        "succeeded": 1518653,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 1518707,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.66,
+        "headline_rps": 303730.6,
+        "valid_rps_from_printed_elapsed": 268322.7915194346,
+        "cpu_percent": 1775.2,
+        "memory_peak": "202MiB"
+      },
+      {
+        "round": 8,
+        "total": 1467451,
+        "started": 1471547,
+        "done": 1467451,
+        "succeeded": 1467451,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 1467511,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.66,
+        "headline_rps": 293490.2,
+        "valid_rps_from_printed_elapsed": 259277.5618374558,
+        "cpu_percent": 1797.1,
+        "memory_peak": "205MiB"
+      },
+      {
+        "round": 9,
+        "total": 1501209,
+        "started": 1505305,
+        "done": 1501209,
+        "succeeded": 1501209,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 1501271,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.66,
+        "headline_rps": 300241.8,
+        "valid_rps_from_printed_elapsed": 265242.2261484099,
+        "cpu_percent": 1782.1,
+        "memory_peak": "202MiB"
+      },
+      {
+        "round": 10,
+        "total": 1467381,
+        "started": 1471477,
+        "done": 1467381,
+        "succeeded": 1467381,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 1467444,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.67,
+        "headline_rps": 293476.2,
+        "valid_rps_from_printed_elapsed": 258808.4656084656,
+        "cpu_percent": 1796.3,
+        "memory_peak": "201MiB"
+      },
+      {
+        "round": 11,
+        "total": 1430124,
+        "started": 1434220,
+        "done": 1430124,
+        "succeeded": 1430124,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 1430184,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.66,
+        "headline_rps": 286024.8,
+        "valid_rps_from_printed_elapsed": 252682.6855123675,
+        "cpu_percent": 1842.8,
+        "memory_peak": "206MiB"
+      },
+      {
+        "round": 12,
+        "total": 1474078,
+        "started": 1478174,
+        "done": 1474078,
+        "succeeded": 1474078,
+        "failed": 0,
+        "errored": 0,
+        "timeout": 0,
+        "status": {
+          "2xx": 1474143,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "elapsed_seconds": 5.66,
+        "headline_rps": 294815.6,
+        "valid_rps_from_printed_elapsed": 260449.29328621906,
+        "cpu_percent": 1749.4,
+        "memory_peak": "207MiB"
+      }
+    ],
+    "official_selected": {
+      "framework": "cnetmod-official-static",
+      "language": "C++",
+      "rps": 271348,
+      "avg_latency": "13.97ms",
+      "p99_latency": "55.62ms",
+      "cpu": "1707.1%",
+      "memory": "199MiB",
+      "connections": 64,
+      "threads": 64,
+      "duration": "5s",
+      "pipeline": 1,
+      "bandwidth": "4.66GB/s",
+      "reconnects": 0,
+      "status_2xx": 1533118,
+      "status_3xx": 0,
+      "status_4xx": 0,
+      "status_5xx": 0
+    }
+  }
+}

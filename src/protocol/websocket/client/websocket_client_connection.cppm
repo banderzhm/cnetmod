@@ -36,6 +36,28 @@ export struct connect_options
 #endif
 };
 
+/// Collects complete messages for the current receive burst. All queued frames
+/// are written before the loop waits for more input; no timer delays a reply.
+export class message_writer
+{
+public:
+    auto send(opcode op, std::span<const std::byte> payload)
+        -> std::expected<void, std::error_code>;
+private:
+    friend class connection;
+    message_writer(std::vector<std::byte>& output, bool mask, std::size_t limit);
+    std::vector<std::byte>& output_;
+    bool mask_;
+    std::size_t limit_;
+    std::error_code error_;
+};
+
+/// The payload is borrowed until the callback returns. Copy it before retaining
+/// it. A callback may emit any number of messages through the writer. Use the
+/// ordinary recv/send API when application work needs asynchronous suspension.
+export using message_handler_fn = std::function<std::expected<void, std::error_code>(
+    opcode, std::span<const std::byte>, message_writer&)>;
+
 export class connection
 {
 public:
@@ -65,11 +87,16 @@ public:
         -> task<std::expected<void, std::error_code>>;
 
     auto async_recv() -> task<std::expected<ws_message, std::error_code>>;
+    auto async_process_messages(message_handler_fn handler,
+        std::size_t max_message_size = 16 * 1024 * 1024)
+        -> task<std::expected<void, std::error_code>>;
     auto async_close(std::uint16_t code = close_code::normal,
         std::string_view reason = "")
         -> task<std::expected<void, std::error_code>>;
 
     void attach(socket sock, bool as_server = true) noexcept;
+    /// Adopt a transport together with bytes already read past its HTTP upgrade.
+    void attach(socket sock, bool as_server, std::span<const std::byte> received);
     void set_cancel_token(cancel_token* token) noexcept;
     void clear_cancel_token() noexcept;
 
@@ -101,7 +128,7 @@ private:
     bool connected_ = false;
     bool close_sent_ = false;
     bool close_received_ = false;
-    dynamic_buffer recv_buf_{8192};
+    dynamic_buffer recv_buf_{1024};
     std::vector<std::byte> send_buf_;
     cancel_token* cancel_token_{nullptr};
     std::string handshake_path_;

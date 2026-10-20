@@ -54,6 +54,8 @@ auto make_cluster_key(std::string_view key_namespace,
     return std::format("{}:{{{}}}:{}", key_namespace, partition, key);
 }
 
+cluster_slot_cache::~cluster_slot_cache() = default;
+
 void cluster_slot_cache::clear()
 {
     slots_.fill(std::nullopt);

@@ -19,9 +19,12 @@ import cnetmod.coro.task;
 import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
 import cnetmod.coro.cancel;
+import cnetmod.coro.wait_group;
+import cnetmod.coro.mutex;
 import cnetmod.protocol.udp;
 import cnetmod.executor.async_op;
 import cnetmod.protocol.http.v3.session;
+import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.quic;
 import cnetmod.utils.concurrent_containers.atomic_hash_map;
 import cnetmod.utils.concurrent_containers.atomic_rw_latch;
@@ -409,6 +412,7 @@ public:
             if (record == nullptr)
                 return;
             record->retired_epoch = epoch_.fetch_add(1U, std::memory_order_acq_rel) + 1U;
+            retired_count_.fetch_add(1U, std::memory_order_relaxed);
             push_retired(record);
         }
 
@@ -430,16 +434,33 @@ public:
             {
                 auto* const next = pending->retired_next;
                 if (safe_to_reclaim(pending->retired_epoch))
+                {
                     delete pending;
+                    retired_count_.fetch_sub(1U, std::memory_order_relaxed);
+                }
                 else
                     push_retired(pending);
                 pending = next;
             }
         }
 
+        struct reclaim_guard
+        {
+            dispatch_state& state;
+            bool needed{true};
+
+            ~reclaim_guard()
+            {
+                if (needed)
+                    state.collect_retired();
+            }
+        };
+
         [[nodiscard]] auto replace(const quic::connection_id& cid, route_entry entry,
             bool only_if_absent, std::size_t reader) -> bool
         {
+            // Reclaim only after this operation has left its read epoch.
+            const reclaim_guard reclaim{*this};
             read_guard guard{*this, reader};
             for (;;)
             {
@@ -454,7 +475,6 @@ public:
                         std::memory_order_release, std::memory_order_acquire))
                 {
                     retire(current);
-                    collect_retired();
                     return true;
                 }
                 delete replacement;
@@ -464,6 +484,7 @@ public:
         [[nodiscard]] auto erase_record(const quic::connection_id& cid,
             route_record* expected, std::size_t reader) -> bool
         {
+            const reclaim_guard reclaim{*this};
             read_guard guard{*this, reader};
             auto [index, current] = locate(cid);
             if (index == route_capacity || current != expected ||
@@ -477,17 +498,18 @@ public:
                 return false;
             }
             retire(expected);
-            collect_retired();
             return true;
         }
 
         [[nodiscard]] auto erase_owned(const quic::connection_id& cid,
-            impl& owner, std::size_t reader) -> bool
+            impl& owner, std::size_t reader, bool pending_only = false) -> bool
         {
+            const reclaim_guard reclaim{*this};
             read_guard guard{*this, reader};
             auto [index, current] = locate(cid);
             if (index == route_capacity || current == nullptr || current->tombstone ||
-                current->entry.owner != std::addressof(owner))
+                current->entry.owner != std::addressof(owner) ||
+                (pending_only && !current->entry.expires_at))
                 return false;
             auto* replacement = new route_record{cid, {}, true};
             auto* expected = current;
@@ -498,7 +520,6 @@ public:
                 return false;
             }
             retire(current);
-            collect_retired();
             return true;
         }
 
@@ -516,6 +537,7 @@ public:
         [[nodiscard]] auto select(const quic::connection_id& cid,
             bool retain_pending) -> std::optional<route_entry>
         {
+            reclaim_guard reclaim{*this, false};
             const auto now = std::chrono::steady_clock::now();
             {
                 read_guard guard{*this, 0U};
@@ -530,7 +552,7 @@ public:
                             std::memory_order_release, std::memory_order_acquire))
                     {
                         retire(route);
-                        collect_retired();
+                        reclaim.needed = true;
                     }
                     else
                         delete replacement;
@@ -554,6 +576,7 @@ public:
                     // retransmission apply backpressure instead.
                     return std::nullopt;
                 }
+                selected->retain_pending_route(cid, *target.expires_at);
             }
             return target;
         }
@@ -579,6 +602,22 @@ public:
             (void)erase_owned(cid, owner, owner.route_epoch_slot_);
         }
 
+        auto erase_pending(impl& owner, const quic::connection_id& cid) -> void
+        {
+            (void)erase_owned(cid, owner, owner.route_epoch_slot_, true);
+        }
+
+        auto maintain_retired() noexcept -> bool
+        {
+            collect_retired();
+            return retired_count_.load(std::memory_order_relaxed) != 0U;
+        }
+
+        [[nodiscard]] auto retired_count() const noexcept -> std::size_t
+        {
+            return retired_count_.load(std::memory_order_relaxed);
+        }
+
         dispatch_state() : routes_(std::make_unique<route_slot[]>(route_capacity)) {}
 
         ~dispatch_state()
@@ -599,6 +638,7 @@ public:
         std::array<reader_epoch, maximum_route_readers> readers_{};
         std::atomic<std::uint64_t> epoch_{1U};
         std::atomic<route_record*> retired_{};
+        std::atomic<std::size_t> retired_count_{};
 
     public:
         std::vector<impl*> workers;
@@ -706,7 +746,7 @@ public:
             return tokens->issue_stateless_reset_token(cid);
         };
         shards_.reserve(context.worker_count());
-        #ifdef CNETMOD_PLATFORM_WINDOWS
+#ifdef CNETMOD_PLATFORM_WINDOWS
         dispatcher_ = std::make_shared<dispatch_state>();
         for (unsigned index{}; index < context.worker_count(); ++index)
         {
@@ -716,7 +756,7 @@ public:
             shard->route_epoch_slot_ = dispatcher_->add_worker(*shard);
             shards_.push_back(std::move(shard));
         }
-        #else
+#else
         for (unsigned index{}; index < context.worker_count(); ++index)
         {
             auto& worker = context.next_worker_io();
@@ -725,7 +765,7 @@ public:
             shard->inbox_budget_ = inbox_budget_;
             shards_.push_back(std::move(shard));
         }
-        #endif
+#endif
     }
 
     impl(server_context& context, ssl_context& tls, endpoint listen_endpoint,
@@ -782,15 +822,23 @@ public:
 
     [[nodiscard]] auto start() -> std::expected<void, std::error_code>
     {
+        {
+            concurrent_containers::exclusive_latch_guard guard{state_latch_};
+            if (timers_->stopping)
+                return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
+            if (!timers_->active)
+                timers_ = std::make_shared<connection_timer_state>(state_latch_owner_);
+        }
         if (running_)
             return {};
         // A stopped listener can be started again on a freshly opened UDP
         // socket.  Its shutdown token is one-shot, so clear it before any
         // receive coroutine can arm it.
         listener_receive_wakeup_.reset();
+        listener_send_wakeup_.reset();
         if (!shards_.empty())
         {
-        #ifdef CNETMOD_PLATFORM_WINDOWS
+#ifdef CNETMOD_PLATFORM_WINDOWS
             if (!retry_tokens_->ready())
                 return std::unexpected(std::make_error_code(std::errc::io_error));
             tls_.configure_alpn_server({"h3"});
@@ -810,13 +858,27 @@ public:
                 return std::unexpected(opened.error());
             for (auto& shard : shards_)
             {
+                // Processor shards bypass start(), but stop() cancels both
+                // one-shot tokens. Their previous operations were joined.
+                shard->listener_receive_wakeup_.reset();
+                shard->listener_send_wakeup_.reset();
+                const auto inbox_capacity = std::bit_ceil(std::max<std::size_t>(
+                    8U, shard->inbox_limits_.max_connection_inboxes * 4U));
+                shard->inboxes_ = std::make_unique<inbox_map>(inbox_capacity);
+                {
+                    concurrent_containers::exclusive_latch_guard guard{shard->state_latch_};
+                    if (!shard->timers_->active)
+                        shard->timers_ = std::make_shared<connection_timer_state>(shard->state_latch_owner_);
+                }
                 shard->running_ = true;
-                spawn(shard->context_, shard->run_timer_loop());
+                shard->timers_->loop_completion.add(1U);
+                spawn(shard->context_, shard->run_timer_loop(shard->timers_));
             }
             running_ = true;
-            spawn(context_, run_dispatch_loop());
+            timers_->loop_completion.add(1U);
+            spawn(context_, run_dispatch_loop(timers_));
             return {};
-        #else
+#else
             for (auto& shard : shards_)
             {
                 auto started = shard->start();
@@ -825,7 +887,7 @@ public:
             }
             running_ = true;
             return {};
-        #endif
+#endif
         }
         if (!retry_tokens_->ready())
             return std::unexpected(std::make_error_code(std::errc::io_error));
@@ -843,8 +905,10 @@ public:
         if (!opened)
             return std::unexpected(opened.error());
         running_ = true;
-        spawn(context_, run_loop());
-        spawn(context_, run_timer_loop());
+        timers_->loop_completion.add(1U);
+        spawn(context_, run_loop(timers_));
+        timers_->loop_completion.add(1U);
+        spawn(context_, run_timer_loop(timers_));
         return {};
     }
 
@@ -896,6 +960,35 @@ public:
         return {};
     }
 
+    auto set_udp_segmentation_offload(bool enabled)
+        -> std::expected<void, std::error_code>
+    {
+        if (running_)
+            return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
+#ifndef CNETMOD_HAS_IO_URING
+        if (enabled)
+            return std::unexpected(std::make_error_code(std::errc::operation_not_supported));
+#endif
+        transport_config_.enable_udp_segmentation_offload = enabled;
+        for (auto& shard : shards_)
+            shard->transport_config_.enable_udp_segmentation_offload = enabled;
+        return {};
+    }
+
+    auto set_max_udp_payload_size(std::uint64_t bytes)
+        -> std::expected<void, std::error_code>
+    {
+        if (running_)
+            return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
+        if (bytes < quic::min_initial_pkt_size ||
+            bytes > quic::max_udp_receive_payload)
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        transport_config_.max_udp_payload_size = bytes;
+        for (auto& shard : shards_)
+            shard->transport_config_.max_udp_payload_size = bytes;
+        return {};
+    }
+
     auto set_qpack_settings(std::uint64_t max_table_capacity,
         std::uint64_t max_blocked_streams) -> std::expected<void, std::error_code>
     {
@@ -910,6 +1003,32 @@ public:
             shard->h3_settings_.qpack_max_table_capacity = max_table_capacity;
             shard->h3_settings_.qpack_blocked_streams = max_blocked_streams;
         }
+        return {};
+    }
+
+    auto set_request_body_limits(request_body_stream_options options)
+        -> std::expected<void, std::error_code>
+    {
+        if (running_)
+            return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
+        if (options.max_bytes == 0U || options.chunk_capacity == 0U)
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        request_body_options_ = options;
+        for (auto& shard : shards_)
+            shard->request_body_options_ = options;
+        return {};
+    }
+
+    auto set_idle_timeout(std::chrono::milliseconds timeout)
+        -> std::expected<void, std::error_code>
+    {
+        if (running_)
+            return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
+        if (timeout < std::chrono::milliseconds::zero())
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        transport_config_.idle_timeout = timeout;
+        for (auto& shard : shards_)
+            shard->transport_config_.idle_timeout = timeout;
         return {};
     }
 
@@ -951,7 +1070,9 @@ public:
             return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
         if (limits.per_connection_datagrams < 2U ||
             limits.max_queued_datagrams < 2U ||
-            limits.max_connection_inboxes == 0U)
+            limits.max_connection_inboxes == 0U ||
+            limits.max_connection_inboxes >
+                std::numeric_limits<std::size_t>::max() / 4U)
             return std::unexpected(std::make_error_code(std::errc::invalid_argument));
         inbox_limits_ = limits;
         for (auto& shard : shards_)
@@ -961,49 +1082,134 @@ public:
 
     [[nodiscard]] auto stop() -> task<void>
     {
-        running_ = false;
-        // Closing a UDP descriptor alone does not reliably wake a readiness
-        // awaiter on every backend (notably epoll).  Cancel the listener
-        // receive first so its awaiter unregisters and resumes before this
-        // coroutine eventually releases the socket.
-        listener_receive_wakeup_.cancel();
-        timer_wakeup_.cancel();
-        if (!shards_.empty())
+        std::shared_ptr<connection_timer_state> timers;
+        bool claimed{};
         {
-        #ifdef CNETMOD_PLATFORM_WINDOWS
-            socket_.close();
-        #endif
-            for (auto& shard : shards_)
-                co_await shard->stop();
+            concurrent_containers::exclusive_latch_guard guard{state_latch_};
+            timers = timers_;
+            if (timers->stopped)
+                co_return;
+            if (!timers->stopping)
+            {
+                timers->stopping = true;
+                timers->active = false;
+                timers->stop_completion.add(1U);
+                claimed = true;
+            }
+        }
+        if (!claimed)
+        {
+            co_await timers->stop_completion.wait();
             co_return;
         }
-        std::vector<std::shared_ptr<http3_server_session>> sessions;
-        std::vector<std::shared_ptr<quic::quic_connection>> connections;
+        auto* const resume = io_context::current();
+        if (resume != std::addressof(context_))
+            co_await post_awaitable{context_};
+        running_ = false;
+        // Cancellation is marshalled onto each kernel queue's owner. It is
+        // requested before any connection receive lock can block shutdown.
+        listener_receive_wakeup_.cancel();
+        listener_send_wakeup_.request_cancel();
+        if (std::addressof(context_) != std::addressof(socket_context_))
+            co_await post_awaitable{socket_context_};
+        listener_send_wakeup_.dispatch_cancel();
+        if (std::addressof(context_) != std::addressof(socket_context_))
+            co_await post_awaitable{context_};
         {
-            concurrent_containers::exclusive_latch_guard state_guard{state_latch_};
-            sessions.reserve(sessions_.size());
-            for (auto& [_, session] : sessions_)
-                sessions.push_back(session);
-            connections.reserve(connections_.size());
-            for (auto& [_, connection] : connections_)
-                connections.push_back(connection);
-            sessions_.clear();
-            connections_.clear();
-            published_route_generations_.clear();
-            timer_generations_.clear();
-            timer_queue_ = {};
-            timer_wait_deadline_.reset();
+            concurrent_containers::exclusive_latch_guard guard{timers->latch};
+            timers->queue = {};
+            timers->generations.clear();
+            timers->wait_deadline.reset();
         }
-        for (auto& session : sessions)
+        timers->wakeup.cancel();
+        if (!shards_.empty())
         {
-            co_await session->send_goaway(std::numeric_limits<quic::stream_id>::max());
-            co_await session->close();
-        }
-        for (auto& connection : connections)
-            if (!connection->is_closed())
-                co_await connection->async_close({}, "HTTP/3 listener stopping");
-        if (!processor_only_)
+            // No dispatcher can enqueue into a shard after its gate closes.
+            co_await timers->loop_completion.wait();
+            for (auto& shard : shards_)
+                co_await shard->stop();
             socket_.close();
+        }
+        else
+        {
+            std::vector<std::shared_ptr<http3_server_session>> sessions;
+            auto watchdog = std::make_shared<shutdown_watchdog>();
+            {
+                concurrent_containers::exclusive_latch_guard guard{timers->latch};
+                sessions.reserve(sessions_.size());
+                for (const auto& [_, session] : sessions_)
+                    sessions.push_back(session);
+                std::unordered_set<quic::quic_connection*> seen;
+                for (const auto& [_, connection] : connections_)
+                    if (seen.insert(connection.get()).second)
+                        watchdog->connections.push_back(connection);
+            }
+            // RFC 9000's closing period is three PTOs. Use the initial PTO
+            // budget here, capped by a configured shorter idle timeout; even
+            // disabled idle detection cannot leave stop waiting indefinitely.
+            auto grace = quic::loss_detector{transport_config_}.pto_duration() * 3;
+            if (transport_config_.idle_timeout > std::chrono::milliseconds::zero())
+                grace = std::min(grace, std::chrono::duration_cast<decltype(grace)>(transport_config_.idle_timeout));
+            watchdog->completion.add(1U);
+            spawn(context_, watch_shutdown(watchdog, grace));
+            for (const auto& session : sessions)
+            {
+                co_await session->send_goaway((quic::stream_id{1} << 62U) - 4U);
+                co_await session->close();
+            }
+            for (const auto& connection : watchdog->connections)
+                if (!connection->is_closed())
+                    co_await connection->async_close({}, "HTTP/3 listener stopping");
+            co_await timers->loop_completion.wait();
+            watchdog->timer.cancel();
+            co_await watchdog->completion.wait();
+            {
+                concurrent_containers::exclusive_latch_guard guard{timers->latch};
+                if (dispatcher_)
+                {
+                    for (const auto& [cid, _] : connections_)
+                        dispatcher_->erase(*this, cid);
+                    for (const auto& [cid, _] : reset_routes_)
+                        dispatcher_->erase(*this, cid);
+                    for (const auto& [cid, _] : pending_route_expirations_)
+                        dispatcher_->erase(*this, cid);
+                }
+                sessions_.clear();
+                connections_.clear();
+                published_route_generations_.clear();
+                active_connections_.store(0U, std::memory_order_relaxed);
+                timers->generations.clear();
+                timers->queue = {};
+                timers->wait_deadline.reset();
+                pending_route_expirations_.clear();
+                reset_routes_.clear();
+                timers->maintenance_deadline.reset();
+                if (inboxes_)
+                {
+                    std::unordered_set<connection_inbox*> reclaimed;
+                    (void)inboxes_->erase_if([this, &reclaimed](const auto&,
+                        const std::shared_ptr<connection_inbox>& inbox)
+                        {
+                            if (reclaimed.insert(inbox.get()).second)
+                                while (inbox->datagrams.try_dequeue())
+                                    release_inbox_datagram();
+                            return true;
+                        });
+                    inbox_budget_->active_inboxes.fetch_sub(reclaimed.size(), std::memory_order_release);
+                }
+            }
+            if (!processor_only_)
+                socket_.close();
+        }
+        if (resume && resume != std::addressof(context_))
+            co_await post_awaitable{*resume};
+        {
+            concurrent_containers::exclusive_latch_guard guard{timers->latch};
+            timers->stopped = true;
+            timers->stopping = false;
+        }
+        // Completion may synchronously resume a caller which destroys impl.
+        timers->stop_completion.done();
         co_return;
     }
 
@@ -1025,7 +1231,7 @@ public:
             inbox_budget_->creation_dropped.load(std::memory_order_relaxed),
             pooled_receive_datagrams_.load(std::memory_order_relaxed),
             heap_receive_datagrams_.load(std::memory_order_relaxed)};
-        #ifdef CNETMOD_PLATFORM_WINDOWS
+#ifdef CNETMOD_PLATFORM_WINDOWS
         if (!processor_only_ && datagram_socket_ != nullptr)
         {
             const auto socket_statistics = datagram_socket_->native_socket().async_statistics();
@@ -1034,7 +1240,16 @@ public:
             result.rio_receive_queue_dropped_datagrams = socket_statistics.receive_queue_drops;
             result.rio_fallbacks = socket_statistics.registered_io_fallback ? 1U : 0U;
         }
-        #endif
+#endif
+        result.active_connections = active_connections_.load(std::memory_order_relaxed);
+        {
+            concurrent_containers::shared_latch_guard state_guard{state_latch_};
+            result.retained_reset_routes = reset_routes_.size();
+            result.pending_initial_routes = pending_route_expirations_.size();
+            result.pending_connection_timers = timers_->queue.size();
+        }
+        if (dispatcher_)
+            result.retired_dispatch_routes = dispatcher_->retired_count();
         for (const auto& shard : shards_)
         {
             const auto shard_result = shard->statistics();
@@ -1044,6 +1259,10 @@ public:
             result.inbox_dropped_datagrams += shard_result.inbox_dropped_datagrams;
             result.pooled_receive_datagrams += shard_result.pooled_receive_datagrams;
             result.heap_receive_datagrams += shard_result.heap_receive_datagrams;
+            result.active_connections += shard_result.active_connections;
+            result.retained_reset_routes += shard_result.retained_reset_routes;
+            result.pending_initial_routes += shard_result.pending_initial_routes;
+            result.pending_connection_timers += shard_result.pending_connection_timers;
         }
         return result;
     }
@@ -1060,7 +1279,10 @@ private:
     struct timer_entry
     {
         std::chrono::steady_clock::time_point deadline;
-        std::shared_ptr<quic::quic_connection> connection;
+        // Superseded idle/PTO entries can remain in the heap until their old
+        // deadline. Routing/session state owns live connections; stale timers
+        // must not retain a retired connection's streams, TLS and write pool.
+        std::weak_ptr<quic::quic_connection> connection;
         std::uint64_t generation{};
     };
 
@@ -1079,39 +1301,99 @@ private:
         std::uint64_t generation{};
     };
 
-    auto schedule_connection_timer(const std::shared_ptr<quic::quic_connection>& connection) -> void
+    // The connection observer owns only weak references to this scheduling
+    // state. It can publish after the listener has stopped without retaining
+    // the listener, its socket, or the connection itself.
+    struct connection_timer_state
     {
-        const auto deadline = connection->next_timer_deadline();
-        concurrent_containers::exclusive_latch_guard state_guard{state_latch_};
-        if (!deadline)
+        explicit connection_timer_state(
+            std::shared_ptr<concurrent_containers::atomic_rw_latch> structural_latch)
+            : latch_owner(std::move(structural_latch)), latch(*latch_owner) {}
+        std::shared_ptr<concurrent_containers::atomic_rw_latch> latch_owner;
+        concurrent_containers::atomic_rw_latch& latch;
+        std::unordered_map<quic::quic_connection*, timer_schedule> generations;
+        std::priority_queue<timer_entry, std::vector<timer_entry>, timer_entry_later> queue;
+        std::optional<std::chrono::steady_clock::time_point> wait_deadline;
+        std::optional<std::chrono::steady_clock::time_point> maintenance_deadline;
+        cancel_token wakeup;
+        async_wait_group loop_completion;
+        std::atomic<bool> active{true};
+        bool stopping{};
+        bool stopped{};
+        async_wait_group stop_completion;
+        bool maintenance_wakeup{};
+
+        auto publish(const std::weak_ptr<quic::quic_connection>& weak_connection,
+            std::optional<std::chrono::steady_clock::time_point> deadline) -> void
         {
-            timer_generations_.erase(connection.get());
-            return;
-        }
-        if (const auto existing = timer_generations_.find(connection.get());
-            existing != timer_generations_.end())
-        {
-            // An earlier heap wakeup is still valid when packet activity only
-            // moves the idle deadline later. Let that one poll once, then
-            // publish the new deadline; this prevents one heap allocation per
-            // received datagram on busy long-lived connections.
-            if (*deadline >= existing->second.deadline)
+            // A stale null snapshot must not erase a newer producer's PTO.
+            if (!deadline)
                 return;
+            const auto connection = weak_connection.lock();
+            if (!connection)
+                return;
+            bool wake{};
+            {
+                concurrent_containers::exclusive_latch_guard guard{latch};
+                if (!active)
+                    return;
+                const auto existing = generations.find(connection.get());
+                if (existing != generations.end() && *deadline >= existing->second.deadline)
+                    return;
+                const auto generation = existing != generations.end()
+                    ? existing->second.generation + 1U : 1U;
+                generations.insert_or_assign(connection.get(), timer_schedule{*deadline, generation});
+                queue.push(timer_entry{*deadline, weak_connection, generation});
+                wake = wait_deadline && *deadline < *wait_deadline;
+            }
+            // Cancellation may synchronously resume the timer coroutine.
+            if (wake)
+                wakeup.cancel();
         }
-        const auto generation = timer_generations_.contains(connection.get())
-            ? timer_generations_[connection.get()].generation + 1U
-            : 1U;
-        timer_generations_.insert_or_assign(connection.get(), timer_schedule{*deadline, generation});
-        timer_queue_.push(timer_entry{*deadline, connection, generation});
-        // The timer loop sleeps directly until the heap head. A newly
-        // published earlier deadline must wake it; later work is already
-        // covered by the armed deadline and does not need another wakeup.
-        if (timer_wait_deadline_ && *deadline < *timer_wait_deadline_)
-            timer_wakeup_.cancel();
+    };
+
+    struct loop_completion_guard
+    {
+        async_wait_group& completion;
+        ~loop_completion_guard() { completion.done(); }
+    };
+
+    struct shutdown_watchdog
+    {
+        std::vector<std::shared_ptr<quic::quic_connection>> connections;
+        cancel_token timer;
+        async_wait_group completion;
+    };
+
+    auto watch_shutdown(std::shared_ptr<shutdown_watchdog> watchdog,
+        std::chrono::steady_clock::duration grace) -> task<void>
+    {
+        loop_completion_guard completed{watchdog->completion};
+        const auto waited = co_await async_timer_wait(context_, grace, watchdog->timer);
+        if (!waited || watchdog->timer.is_cancelled())
+            co_return;
+        for (const auto& connection : watchdog->connections)
+            co_await connection->async_stop_io();
     }
+
+    struct maintenance_wake_guard
+    {
+        std::shared_ptr<connection_timer_state> state;
+        ~maintenance_wake_guard()
+        {
+            bool wake{};
+            {
+                concurrent_containers::exclusive_latch_guard guard{state->latch};
+                wake = std::exchange(state->maintenance_wakeup, false);
+            }
+            if (wake)
+                state->wakeup.cancel();
+        }
+    };
 
     auto retain_reset_route(const quic::quic_connection::local_cid_route& route) -> void
     {
+        maintenance_wake_guard wake_guard{timers_};
         if (std::ranges::all_of(route.stateless_reset_token,
                 [](std::byte value)
                 {
@@ -1120,28 +1402,49 @@ private:
             return;
         {
             concurrent_containers::exclusive_latch_guard state_guard{state_latch_};
-            reset_routes_.insert_or_assign(route.cid, stateless_reset_route{route.stateless_reset_token, std::chrono::steady_clock::now() + stateless_reset_retention});
+            const auto expires = std::chrono::steady_clock::now() + stateless_reset_retention;
+            reset_routes_.insert_or_assign(route.cid, stateless_reset_route{route.stateless_reset_token, expires});
+            schedule_maintenance_locked(expires);
         }
-        if (dispatcher_)
+        if (dispatcher_ && inboxes_)
             dispatcher_->retain_reset_route(*this, route.cid);
+    }
+
+    // Cold state has deadlines even when there are no live connections left.
+    // Called with state_latch_ held, just like connection timer publication.
+    auto schedule_maintenance_locked(std::chrono::steady_clock::time_point deadline) -> void
+    {
+        if (!timers_->maintenance_deadline || deadline < *timers_->maintenance_deadline)
+            timers_->maintenance_deadline = deadline;
+        if (timers_->wait_deadline && deadline < *timers_->wait_deadline)
+            timers_->maintenance_wakeup = true;
+    }
+
+    auto retain_pending_route(const quic::connection_id& cid,
+        std::chrono::steady_clock::time_point expires) -> void
+    {
+        maintenance_wake_guard wake_guard{timers_};
+        concurrent_containers::exclusive_latch_guard state_guard{state_latch_};
+        pending_route_expirations_.insert_or_assign(cid, expires);
+        schedule_maintenance_locked(expires);
     }
 
     auto refresh_connection_routes(const std::shared_ptr<quic::quic_connection>& connection) -> void
     {
-        const bool closing = connection->is_closed() ||
-            connection->state() == quic::connection_state::draining;
+        const bool closing = connection->is_closed();
+        const bool draining = connection->state() == quic::connection_state::draining;
         const auto route_generation = connection->local_cid_route_generation();
         bool route_changed{};
         {
             concurrent_containers::shared_latch_guard state_guard{state_latch_};
             const auto known = published_route_generations_.find(connection.get());
             route_changed = known == published_route_generations_.end() ||
-                known->second != route_generation;
+                known->second.generation != route_generation;
         }
         // CID vectors are copied to publish dispatcher snapshots.  This is a
         // rare control-plane action: do not pay for it after every packet
         // when the connection's CID generation is unchanged.
-        if (!route_changed && !closing)
+        if (!route_changed && !closing && !draining)
             return;
 
         const auto retired = connection->take_retired_local_cid_routes();
@@ -1153,7 +1456,7 @@ private:
             concurrent_containers::exclusive_latch_guard state_guard{state_latch_};
             const auto known = published_route_generations_.find(connection.get());
             route_changed = known == published_route_generations_.end() ||
-                known->second != route_generation;
+                known->second.generation != route_generation;
             if (route_changed)
             {
                 std::erase_if(connections_, [&connection](const auto& entry)
@@ -1163,8 +1466,23 @@ private:
 
                 for (const auto& route : routes)
                     connections_.emplace(route.cid, connection);
-                published_route_generations_.insert_or_assign(connection.get(), route_generation);
+                const bool active = known != published_route_generations_.end()
+                    ? known->second.active : !closing && !draining;
+                if (known == published_route_generations_.end() && active)
+                    active_connections_.fetch_add(1U, std::memory_order_relaxed);
+                published_route_generations_.insert_or_assign(connection.get(),
+                    published_connection_route{route_generation, active});
                 replace_dispatcher_routes = dispatcher_ != nullptr;
+            }
+            if (closing || draining)
+            {
+                sessions_.erase(connection.get());
+                if (const auto published = published_route_generations_.find(connection.get());
+                    published != published_route_generations_.end() && published->second.active)
+                {
+                    published->second.active = false;
+                    active_connections_.fetch_sub(1U, std::memory_order_relaxed);
+                }
             }
             if (closing)
             {
@@ -1172,9 +1490,8 @@ private:
                     {
                         return entry.second == connection;
                     });
-                sessions_.erase(connection.get());
                 published_route_generations_.erase(connection.get());
-                timer_generations_.erase(connection.get());
+                timers_->generations.erase(connection.get());
             }
         }
         if (replace_dispatcher_routes)
@@ -1190,42 +1507,70 @@ private:
 
     auto discard_expired_reset_routes() -> void
     {
+        maintenance_wake_guard wake_guard{timers_};
         const auto now = std::chrono::steady_clock::now();
         concurrent_containers::exclusive_latch_guard state_guard{state_latch_};
-        if (now < next_reset_cleanup_)
+        if (!timers_->maintenance_deadline || now < *timers_->maintenance_deadline)
             return;
-        next_reset_cleanup_ = now + std::chrono::seconds{1};
+        timers_->maintenance_deadline.reset();
         std::erase_if(reset_routes_, [this, now](const auto& entry)
             {
                 if (entry.second.expires_at > now)
+                {
+                    if (!timers_->maintenance_deadline || entry.second.expires_at < *timers_->maintenance_deadline)
+                        timers_->maintenance_deadline = entry.second.expires_at;
                     return false;
+                }
                 if (dispatcher_)
                     dispatcher_->erase(*this, entry.first);
                 return true;
             });
-        if (dispatcher_)
+        std::erase_if(pending_route_expirations_, [this, now](const auto& entry)
+            {
+                if (entry.second > now)
+                {
+                    if (!timers_->maintenance_deadline || entry.second < *timers_->maintenance_deadline)
+                        timers_->maintenance_deadline = entry.second;
+                    return false;
+                }
+                // A Retry-validated Initial can already have promoted this
+                // CID to a live connection. Never erase the promoted route.
+                dispatcher_->erase_pending(*this, entry.first);
+                return true;
+            });
+        if (dispatcher_ && inboxes_)
         {
             const auto stale_before = now - std::chrono::seconds{10};
-            const auto removed = inboxes_.erase_if([stale_before](
-                                                       const inbox_key& key,
-                                                       const std::shared_ptr<connection_inbox>& inbox)
+            const auto removed = inboxes_->erase_if([this, stale_before](
+                                                        const inbox_key& key,
+                                                        const std::shared_ptr<connection_inbox>& inbox)
                 {
-                    return key.connection == nullptr &&
-                        inbox->promoted_connection.load(std::memory_order_acquire) == nullptr &&
-                        inbox->created_at <= stale_before;
+                    if (key.connection != nullptr ||
+                        inbox->promoted_connection.load(std::memory_order_acquire) != nullptr)
+                        return false;
+                    if (inbox->created_at <= stale_before)
+                        return true;
+                    const auto expires = inbox->created_at + std::chrono::seconds{10};
+                    if (!timers_->maintenance_deadline || expires < *timers_->maintenance_deadline)
+                        timers_->maintenance_deadline = expires;
+                    return false;
                 });
             if (removed != 0U)
                 inbox_budget_->active_inboxes.fetch_sub(removed, std::memory_order_release);
         }
+        // No reader epoch is held here. If another worker still protects a
+        // retired record, retry only while that concrete reclamation is pending.
+        if (dispatcher_ && dispatcher_->maintain_retired())
+            schedule_maintenance_locked(now + std::chrono::milliseconds{1});
     }
 
     auto ensure_http3_session(const std::shared_ptr<quic::quic_connection>& connection) -> void
     {
-        if (connection->state() != quic::connection_state::connected)
+        if (!running_ || connection->state() != quic::connection_state::connected)
             return;
         {
             concurrent_containers::shared_latch_guard state_guard{state_latch_};
-            if (sessions_.contains(connection.get()))
+            if (!timers_->active || sessions_.contains(connection.get()))
                 return;
         }
         auto session = std::shared_ptr<http3_server_session>{webtransport_handler_ && async_handler_
@@ -1237,11 +1582,12 @@ private:
                 : async_handler_        ? make_http3_server_session(*connection, async_handler_)
                                         : make_http3_server_session(*connection, handler_)};
         session->configure_local_settings(h3_settings_);
+        session->configure_request_body_stream(request_body_options_);
         session->configure_push_cancellation_observer(
             push_cancellation_observer_);
         {
             concurrent_containers::exclusive_latch_guard state_guard{state_latch_};
-            if (sessions_.contains(connection.get()))
+            if (!timers_->active || sessions_.contains(connection.get()))
                 return;
             sessions_.emplace(connection.get(), session);
         }
@@ -1275,16 +1621,20 @@ private:
             (std::to_integer<std::uint8_t>(reset.front()) & 0x3fU) | 0x40U);
         std::copy(route->token.begin(), route->token.end(),
             reset.end() - static_cast<std::ptrdiff_t>(route->token.size()));
+        co_await listener_send_mutex_.lock();
+        async_lock_guard send_guard{listener_send_mutex_, std::adopt_lock};
         if (std::addressof(context_) != std::addressof(socket_context_))
             co_await post_awaitable{socket_context_};
         (void)co_await async_sendto(socket_context_, datagram_socket_->native_socket(),
-            const_buffer{reset.data(), reset.size()}, sender);
+            const_buffer{reset.data(), reset.size()}, sender, listener_send_wakeup_);
         if (std::addressof(context_) != std::addressof(socket_context_))
             co_await post_awaitable{context_};
     }
 
     [[nodiscard]] auto process_incoming(udp_received_datagram incoming) -> task<void>
     {
+        if (!running_)
+            co_return;
         auto& buffer = incoming.bytes;
         const auto& sender = incoming.peer;
         if (buffer.empty())
@@ -1346,23 +1696,13 @@ private:
                         retry_scid, *token, header->dcid);
                     if (!retry)
                         co_return;
+                    co_await listener_send_mutex_.lock();
+                    async_lock_guard send_guard{listener_send_mutex_, std::adopt_lock};
                     if (std::addressof(context_) != std::addressof(socket_context_))
                         co_await post_awaitable{socket_context_};
-                        // A shared Windows RIO receive ring is kept persistent,
-                        // but stateless Retry is a control-plane packet and must
-                        // remain available even if the provider rejects RIO send
-                        // registration. Submit it explicitly through the socket
-                        // context's IOCP and resume there; this also avoids
-                        // mixing a Retry with a connection worker's send queue.
-        #ifdef CNETMOD_HAS_IOCP
-                    (void)co_await async_sendto_on(socket_context_, socket_context_,
-                        datagram_socket_->native_socket(),
-                        const_buffer{retry->data(), retry->size()}, sender);
-        #else
                     (void)co_await async_sendto(socket_context_,
                         datagram_socket_->native_socket(),
-                        const_buffer{retry->data(), retry->size()}, sender);
-        #endif
+                        const_buffer{retry->data(), retry->size()}, sender, listener_send_wakeup_);
 
                     if (std::addressof(context_) != std::addressof(socket_context_))
                         co_await post_awaitable{context_};
@@ -1375,11 +1715,20 @@ private:
                 connection = std::make_shared<quic::quic_connection>(context_,
                     socket_context_, *datagram_socket_, sender, quic::quic_role::server,
                     tls_, transport_config_);
+                connection->set_timer_deadline_observer(
+                    [weak_state = std::weak_ptr{timers_}, weak_connection = std::weak_ptr{connection}](
+                        std::optional<std::chrono::steady_clock::time_point> deadline)
+                    {
+                        if (const auto state = weak_state.lock())
+                            state->publish(weak_connection, deadline);
+                    });
                 if (!connection->register_cid(header->dcid) ||
                     !connection->set_original_destination_connection_id(*original_dcid))
                     co_return;
                 {
                     concurrent_containers::exclusive_latch_guard state_guard{state_latch_};
+                    if (!timers_->active)
+                        co_return;
                     const auto [route, inserted] = connections_.emplace(header->dcid, connection);
                     if (!inserted)
                         connection = route->second;
@@ -1412,16 +1761,16 @@ private:
         if (!connection)
             co_return;
         auto processed = co_await connection->process_datagram(buffer, sender);
+        if (!running_)
+            co_return;
         if (!processed)
         {
 
             refresh_connection_routes(connection);
-            schedule_connection_timer(connection);
             co_return;
         }
         ensure_http3_session(connection);
         refresh_connection_routes(connection);
-        schedule_connection_timer(connection);
     }
 
     void record_receive_buffer(const udp_received_datagram& incoming) noexcept
@@ -1504,8 +1853,10 @@ private:
     auto promote_pending_inbox(const quic::connection_id& pending_cid,
         quic::quic_connection& connection) -> void
     {
+        if (!inboxes_)
+            std::terminate();
         const auto pending_key = inbox_key{nullptr, pending_cid};
-        const auto pending = inboxes_.find(pending_key);
+        const auto pending = inboxes_->find(pending_key);
         if (!pending)
             return;
         // Keep the pending CID as an alias until the connection closes. A
@@ -1515,18 +1866,20 @@ private:
         (*pending)->promoted_connection.store(std::addressof(connection),
             std::memory_order_release);
         const inbox_key connection_key{std::addressof(connection), {}};
-        if (inboxes_.try_emplace(connection_key, *pending))
+        if (inboxes_->try_emplace(connection_key, *pending))
             return;
-        const auto existing = inboxes_.find(connection_key);
+        const auto existing = inboxes_->find(connection_key);
         if (!existing || *existing != *pending)
             logger::error{"HTTP/3 failed to preserve the pending inbox during CID promotion"};
     }
 
     auto remove_connection_inboxes(quic::quic_connection& connection) -> void
     {
-        const auto removed = inboxes_.erase_if([target = std::addressof(connection)](
-                                                   const inbox_key& key,
-                                                   const std::shared_ptr<connection_inbox>& inbox)
+        if (!inboxes_)
+            std::terminate();
+        const auto removed = inboxes_->erase_if([target = std::addressof(connection)](
+                                                    const inbox_key& key,
+                                                    const std::shared_ptr<connection_inbox>& inbox)
             {
                 return key.connection == target ||
                     inbox->promoted_connection.load(std::memory_order_acquire) == target;
@@ -1538,8 +1891,12 @@ private:
     auto enqueue(quic::quic_connection* connection,
         const quic::connection_id& dcid, udp_received_datagram incoming) -> void
     {
+        if (!inboxes_)
+            std::terminate();
+        if (!running_)
+            return;
         const inbox_key key{connection, connection ? quic::connection_id{} : dcid};
-        auto inbox = inboxes_.find(key);
+        auto inbox = inboxes_->find(key);
         if (!inbox)
         {
             const auto previous = inbox_budget_->active_inboxes.fetch_add(1U,
@@ -1552,12 +1909,20 @@ private:
             }
             auto candidate = std::make_shared<connection_inbox>(
                 inbox_limits_.per_connection_datagrams);
-            if (inboxes_.try_emplace(key, candidate))
+            if (inboxes_->try_emplace(key, candidate))
+            {
+                if (connection == nullptr)
+                {
+                    maintenance_wake_guard wake_guard{timers_};
+                    concurrent_containers::exclusive_latch_guard state_guard{state_latch_};
+                    schedule_maintenance_locked(candidate->created_at + std::chrono::seconds{10});
+                }
                 inbox = std::move(candidate);
+            }
             else
             {
                 inbox_budget_->active_inboxes.fetch_sub(1U, std::memory_order_release);
-                inbox = inboxes_.find(key);
+                inbox = inboxes_->find(key);
             }
         }
         if (!inbox)
@@ -1574,21 +1939,32 @@ private:
             return;
         }
 
-        if (!(*inbox)->scheduled.test_and_set(std::memory_order_acq_rel))
-            spawn(context_, drain_inbox(std::move(*inbox)));
+        bool schedule{};
+        {
+            concurrent_containers::exclusive_latch_guard guard{state_latch_};
+            if (timers_->active && !(*inbox)->scheduled.test_and_set(std::memory_order_acq_rel))
+            {
+                timers_->loop_completion.add(1U);
+                schedule = true;
+            }
+        }
+        if (schedule)
+            spawn(context_, drain_inbox(std::move(*inbox), timers_));
         inbox_enqueued_datagrams_.fetch_add(1U, std::memory_order_relaxed);
     }
 
-    [[nodiscard]] auto drain_inbox(std::shared_ptr<connection_inbox> inbox)
+    [[nodiscard]] auto drain_inbox(std::shared_ptr<connection_inbox> inbox,
+        std::shared_ptr<connection_timer_state> timers)
         -> task<void>
     {
+        loop_completion_guard completion{timers->loop_completion};
         // A single busy connection must not retain an executor worker until
         // its queue happens to empty. Keep its QUIC state serialised through
         // `scheduled`, but periodically yield the worker so timers, control
         // streams and other connections can make progress.
         constexpr std::size_t drain_quantum = 64U;
         std::size_t processed_in_quantum{};
-        while (running_)
+        while (timers->active.load(std::memory_order_acquire))
         {
             auto incoming = inbox->datagrams.try_dequeue();
             if (!incoming)
@@ -1615,9 +1991,10 @@ private:
         inbox->scheduled.clear(std::memory_order_release);
     }
 
-    [[nodiscard]] auto run_loop() -> task<void>
+    [[nodiscard]] auto run_loop(std::shared_ptr<connection_timer_state> timers) -> task<void>
     {
-        while (running_)
+        loop_completion_guard completion{timers->loop_completion};
+        while (timers->active.load(std::memory_order_acquire))
         {
             discard_expired_reset_routes();
             // RIO owns a persistent receive ring and can safely return a
@@ -1629,7 +2006,10 @@ private:
                                                           : std::size_t{8U};
             auto received = co_await async_recvfrom_batch(context_,
                 socket_.native_socket(), receive_batch_size,
-                quic::max_udp_receive_payload, listener_receive_wakeup_);
+                static_cast<std::size_t>(transport_config_.max_udp_payload_size),
+                listener_receive_wakeup_);
+            if (!timers->active.load(std::memory_order_acquire))
+                co_return;
             if (!received)
             {
 
@@ -1657,32 +2037,55 @@ private:
         }
     }
 
-    [[nodiscard]] auto run_timer_loop() -> task<void>
+    [[nodiscard]] auto run_timer_loop(std::shared_ptr<connection_timer_state> timers) -> task<void>
     {
+        loop_completion_guard completion{timers->loop_completion};
         while (running_)
         {
+            {
+                concurrent_containers::shared_latch_guard guard{timers->latch};
+                if (!timers->active)
+                    co_return;
+            }
             discard_expired_reset_routes();
             const auto now = std::chrono::steady_clock::now();
             std::vector<std::shared_ptr<quic::quic_connection>> expired;
             {
-                concurrent_containers::exclusive_latch_guard state_guard{state_latch_};
-                while (!timer_queue_.empty() && timer_queue_.top().deadline <= now)
+                concurrent_containers::exclusive_latch_guard state_guard{timers->latch};
+                while (!timers->queue.empty() && timers->queue.top().deadline <= now)
                 {
-                    auto entry = timer_queue_.top();
-                    timer_queue_.pop();
-                    const auto scheduled = timer_generations_.find(entry.connection.get());
-                    if (scheduled == timer_generations_.end() ||
-                        scheduled->second.generation != entry.generation)
+                    auto entry = timers->queue.top();
+                    timers->queue.pop();
+                    auto connection = entry.connection.lock();
+                    if (!connection)
                         continue;
-                    timer_generations_.erase(scheduled);
-                    expired.push_back(std::move(entry.connection));
+                    const auto scheduled = timers->generations.find(connection.get());
+                    if (scheduled == timers->generations.end() ||
+                        scheduled->second.generation != entry.generation ||
+                        scheduled->second.deadline != entry.deadline)
+                        continue;
+                    timers->generations.erase(scheduled);
+                    expired.push_back(std::move(connection));
                 }
             }
             for (auto& connection : expired)
             {
                 co_await connection->async_poll_timers();
-                schedule_connection_timer(connection);
+                {
+                    concurrent_containers::shared_latch_guard guard{timers->latch};
+                    if (!timers->active)
+                        co_return;
+                }
+                // Idle/PTO processing can retire a connection without any
+                // further peer datagram. Reconcile ownership here as well as
+                // on receive, otherwise CID routes retain timed-out peers.
+                refresh_connection_routes(connection);
             }
+
+            // Release the last expired batch before sleeping. The routes
+            // may already be gone, and the next maintenance deadline can be
+            // much later than the connection's actual retirement.
+            expired.clear();
 
             // No periodic scan: sleep until the heap head. Publishing an
             // earlier deadline cancels this wait, so ACK/PTO work remains
@@ -1690,29 +2093,37 @@ private:
             const auto now_after_poll = std::chrono::steady_clock::now();
             std::chrono::steady_clock::time_point deadline;
             {
-                concurrent_containers::exclusive_latch_guard state_guard{state_latch_};
-                deadline = timer_queue_.empty()
+                concurrent_containers::exclusive_latch_guard state_guard{timers->latch};
+                if (!timers->active)
+                    co_return;
+                deadline = timers->queue.empty()
                     ? now_after_poll + std::chrono::hours{24}
-                    : std::max(timer_queue_.top().deadline, now_after_poll);
-                timer_wakeup_.reset();
-                timer_wait_deadline_ = deadline;
+                    : std::max(timers->queue.top().deadline, now_after_poll);
+                if (timers->maintenance_deadline)
+                    deadline = std::min(deadline, std::max(*timers->maintenance_deadline, now_after_poll));
+                timers->wakeup.reset();
+                timers->wait_deadline = deadline;
             }
             (void)co_await async_timer_wait(context_, deadline - now_after_poll,
-                timer_wakeup_);
+                timers->wakeup);
             {
-                concurrent_containers::exclusive_latch_guard state_guard{state_latch_};
-                timer_wait_deadline_.reset();
+                concurrent_containers::exclusive_latch_guard state_guard{timers->latch};
+                timers->wait_deadline.reset();
             }
         }
     }
 
-    [[nodiscard]] auto run_dispatch_loop() -> task<void>
+    [[nodiscard]] auto run_dispatch_loop(std::shared_ptr<connection_timer_state> timers) -> task<void>
     {
-        while (running_)
+        loop_completion_guard completion{timers->loop_completion};
+        while (timers->active.load(std::memory_order_acquire))
         {
             auto received = co_await async_recvfrom_batch(context_,
-                socket_.native_socket(), 64U, quic::max_udp_receive_payload,
+                socket_.native_socket(), 64U,
+                static_cast<std::size_t>(transport_config_.max_udp_payload_size),
                 listener_receive_wakeup_);
+            if (!timers->active.load(std::memory_order_acquire))
+                co_return;
             if (!received)
             {
                 if (!running_)
@@ -1766,22 +2177,33 @@ private:
     // workers.  The maps and heap below form one structural control plane;
     // guard only their short, non-awaiting mutations with the project-owned
     // atomic latch. Packet processing and UDP I/O remain outside this latch.
-    concurrent_containers::atomic_rw_latch state_latch_;
+    // Generations share this lock, so concurrent statistics never locks an
+    // obsolete control-plane latch while start replaces the timer state.
+    std::shared_ptr<concurrent_containers::atomic_rw_latch> state_latch_owner_{
+        std::make_shared<concurrent_containers::atomic_rw_latch>()};
+    concurrent_containers::atomic_rw_latch& state_latch_{*state_latch_owner_};
+    std::shared_ptr<connection_timer_state> timers_{
+        std::make_shared<connection_timer_state>(state_latch_owner_)};
+    std::atomic<std::size_t> active_connections_{};
     std::unordered_map<quic::connection_id, std::shared_ptr<quic::quic_connection>> connections_;
-    std::unordered_map<quic::quic_connection*, std::uint64_t> published_route_generations_;
-    std::unordered_map<quic::quic_connection*, timer_schedule> timer_generations_;
-    std::priority_queue<timer_entry, std::vector<timer_entry>, timer_entry_later> timer_queue_;
-    std::optional<std::chrono::steady_clock::time_point> timer_wait_deadline_;
+    struct published_connection_route
+    {
+        std::uint64_t generation{};
+        bool active{true};
+    };
+    std::unordered_map<quic::quic_connection*, published_connection_route> published_route_generations_;
     // Owns the outstanding listener UDP receive. It is deliberately distinct
     // from per-connection cancellation so server shutdown never depends on
     // closing a descriptor to wake a platform readiness wait.
     cancel_token listener_receive_wakeup_;
-    cancel_token timer_wakeup_;
+    cancel_token listener_send_wakeup_;
+    async_mutex listener_send_mutex_;
     std::unordered_map<quic::quic_connection*, std::shared_ptr<http3_server_session>> sessions_;
     std::unordered_map<quic::connection_id, stateless_reset_route> reset_routes_;
-    std::chrono::steady_clock::time_point next_reset_cleanup_{};
+    std::unordered_map<quic::connection_id, std::chrono::steady_clock::time_point> pending_route_expirations_;
     quic::quic_config transport_config_{};
     http3_settings h3_settings_{};
+    request_body_stream_options request_body_options_{};
     http3_inbox_limits inbox_limits_{};
     std::shared_ptr<detail::retry_token_manager> retry_tokens_;
     std::shared_ptr<dispatch_state> dispatcher_;
@@ -1791,9 +2213,12 @@ private:
     // shard receives its own epoch slot before the listener starts.
     std::size_t route_epoch_slot_{};
     std::vector<std::unique_ptr<impl>> shards_;
-    concurrent_containers::atomic_hash_map<inbox_key, std::shared_ptr<connection_inbox>,
-        inbox_key_hash>
-        inboxes_{dispatch_state::route_capacity};
+    using inbox_map = concurrent_containers::atomic_hash_map<inbox_key,
+        std::shared_ptr<connection_inbox>, inbox_key_hash>;
+    // Only Windows shared-socket workers dispatch across execution contexts.
+    // Linux SO_REUSEPORT shards process their own socket and never allocate
+    // this fixed-capacity table.
+    std::unique_ptr<inbox_map> inboxes_;
     bool processor_only_{};
     bool shared_port_{};
     std::atomic<bool> running_{false};
@@ -1882,10 +2307,34 @@ auto http3_server::set_path_mtu_discovery(std::uint64_t maximum_payload,
         initial_probe_delay);
 }
 
+auto http3_server::set_udp_segmentation_offload(bool enabled)
+    -> std::expected<void, std::error_code>
+{
+    return impl_->set_udp_segmentation_offload(enabled);
+}
+
+auto http3_server::set_max_udp_payload_size(std::uint64_t bytes)
+    -> std::expected<void, std::error_code>
+{
+    return impl_->set_max_udp_payload_size(bytes);
+}
+
 auto http3_server::set_qpack_settings(std::uint64_t max_table_capacity,
     std::uint64_t max_blocked_streams) -> std::expected<void, std::error_code>
 {
     return impl_->set_qpack_settings(max_table_capacity, max_blocked_streams);
+}
+
+auto http3_server::set_request_body_limits(request_body_stream_options options)
+    -> std::expected<void, std::error_code>
+{
+    return impl_->set_request_body_limits(options);
+}
+
+auto http3_server::set_idle_timeout(std::chrono::milliseconds timeout)
+    -> std::expected<void, std::error_code>
+{
+    return impl_->set_idle_timeout(timeout);
 }
 
 auto http3_server::set_inbox_limits(http3_inbox_limits limits)

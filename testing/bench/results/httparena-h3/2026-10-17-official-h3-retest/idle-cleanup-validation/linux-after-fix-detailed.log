@@ -1,0 +1,174 @@
+Start testing: Oct 17 20:01 CST
+----------------------------------------------------------
+65/74 Testing: http3_idle_connection_cleanup
+65/74 Test: http3_idle_connection_cleanup
+Command: "/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http3_idle_cleanup.py" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http3_idle_connection_cleanup" start time: Oct 17 20:01 CST
+Output:
+----------------------------------------------------------
+idle peers reclaimed: 4 -> 1; samples=[(0.0, 4), (1.0, 4), (2.01, 4), (3.01, 4), (4.02, 4), (5.02, 4), (6.02, 4), (7.03, 4), (8.03, 4), (9.03, 4), (10.04, 4), (11.04, 4), (12.05, 4), (13.05, 4), (14.06, 4), (15.06, 4), (16.06, 4), (17.07, 4), (18.07, 4), (19.07, 4), (20.08, 4), (21.08, 4), (22.08, 4), (23.09, 4), (24.09, 4), (25.09, 4), (26.1, 4), (27.1, 4), (28.1, 4), (29.11, 4), (30.11, 1)]
+<end of output>
+Test time =  31.58 sec
+----------------------------------------------------------
+Test Passed.
+"http3_idle_connection_cleanup" end time: Oct 17 20:02 CST
+"http3_idle_connection_cleanup" time elapsed: 00:00:31
+----------------------------------------------------------
+
+66/74 Testing: http_client_http3_end_to_end
+66/74 Test: http_client_http3_end_to_end
+Command: "/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http_client_http3_end_to_end" start time: Oct 17 20:02 CST
+Output:
+----------------------------------------------------------
+[2026-10-17 12:02:31.522] [info] [130884747026944] [http_client_e2e.cpp:659] HTTP/3 priority E2E passed: first foreground=1, first background=49
+[2026-10-17 12:02:31.666] [info] [130884747026944] [http_client_e2e.cpp:1191] HTTP/3 client end-to-end regression passed
+<end of output>
+Test time =   0.84 sec
+----------------------------------------------------------
+Test Passed.
+"http_client_http3_end_to_end" end time: Oct 17 20:02 CST
+"http_client_http3_end_to_end" time elapsed: 00:00:00
+----------------------------------------------------------
+
+67/74 Testing: http_client_http3_dynamic_qpack_end_to_end
+67/74 Test: http_client_http3_dynamic_qpack_end_to_end
+Command: "/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--dynamic-qpack" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http_client_http3_dynamic_qpack_end_to_end" start time: Oct 17 20:02 CST
+Output:
+----------------------------------------------------------
+[2026-10-17 12:02:32.042] [info] [130516036915712] [http_client_e2e.cpp:659] HTTP/3 priority E2E passed: first foreground=1, first background=49
+[2026-10-17 12:02:32.185] [info] [130516036915712] [http_client_e2e.cpp:1191] HTTP/3 client end-to-end regression passed
+<end of output>
+Test time =   0.52 sec
+----------------------------------------------------------
+Test Passed.
+"http_client_http3_dynamic_qpack_end_to_end" end time: Oct 17 20:02 CST
+"http_client_http3_dynamic_qpack_end_to_end" time elapsed: 00:00:00
+----------------------------------------------------------
+
+68/74 Testing: http3_multipath_end_to_end
+68/74 Test: http3_multipath_end_to_end
+Command: "/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--multipath" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http3_multipath_end_to_end" start time: Oct 17 20:02 CST
+Output:
+----------------------------------------------------------
+[2026-10-17 12:02:32.605] [info] [137845281518080] [http_client_e2e.cpp:1191] HTTP/3 client end-to-end regression passed
+<end of output>
+Test time =   0.42 sec
+----------------------------------------------------------
+Test Passed.
+"http3_multipath_end_to_end" end time: Oct 17 20:02 CST
+"http3_multipath_end_to_end" time elapsed: 00:00:00
+----------------------------------------------------------
+
+69/74 Testing: http3_multipath_path_mtu_end_to_end
+69/74 Test: http3_multipath_path_mtu_end_to_end
+Command: "/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--multipath-pmtu" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http3_multipath_path_mtu_end_to_end" start time: Oct 17 20:02 CST
+Output:
+----------------------------------------------------------
+[2026-10-17 12:02:33.188] [info] [139655285785088] [http_client_e2e.cpp:1191] HTTP/3 client end-to-end regression passed
+<end of output>
+Test time =   0.58 sec
+----------------------------------------------------------
+Test Passed.
+"http3_multipath_path_mtu_end_to_end" end time: Oct 17 20:02 CST
+"http3_multipath_path_mtu_end_to_end" time elapsed: 00:00:00
+----------------------------------------------------------
+
+70/74 Testing: http3_multipath_path_mtu_blackhole_end_to_end
+70/74 Test: http3_multipath_path_mtu_blackhole_end_to_end
+Command: "/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--multipath-pmtu-blackhole" "--pmtu-blackhole-proxy" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/pmtu_blackhole_proxy.py" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http3_multipath_path_mtu_blackhole_end_to_end" start time: Oct 17 20:02 CST
+Output:
+----------------------------------------------------------
+[2026-10-17 12:02:35.943] [info] [139690263310848] [http_client_e2e.cpp:1191] HTTP/3 client end-to-end regression passed
+<end of output>
+Test time =   2.76 sec
+----------------------------------------------------------
+Test Passed.
+"http3_multipath_path_mtu_blackhole_end_to_end" end time: Oct 17 20:02 CST
+"http3_multipath_path_mtu_blackhole_end_to_end" time elapsed: 00:00:02
+----------------------------------------------------------
+
+71/74 Testing: http3_multipath_local_path_close_end_to_end
+71/74 Test: http3_multipath_local_path_close_end_to_end
+Command: "/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--multipath-close" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http3_multipath_local_path_close_end_to_end" start time: Oct 17 20:02 CST
+Output:
+----------------------------------------------------------
+[2026-10-17 12:02:36.702] [info] [133694892794368] [http_client_e2e.cpp:1191] HTTP/3 client end-to-end regression passed
+<end of output>
+Test time =   0.76 sec
+----------------------------------------------------------
+Test Passed.
+"http3_multipath_local_path_close_end_to_end" end time: Oct 17 20:02 CST
+"http3_multipath_local_path_close_end_to_end" time elapsed: 00:00:00
+----------------------------------------------------------
+
+72/74 Testing: http3_connect_close_end_to_end
+72/74 Test: http3_connect_close_end_to_end
+Command: "/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--connect-close" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http3_connect_close_end_to_end" start time: Oct 17 20:02 CST
+Output:
+----------------------------------------------------------
+[2026-10-17 12:02:36.878] [info] [126752529359360] [http_client_e2e.cpp:1191] HTTP/3 client end-to-end regression passed
+<end of output>
+Test time =   0.17 sec
+----------------------------------------------------------
+Test Passed.
+"http3_connect_close_end_to_end" end time: Oct 17 20:02 CST
+"http3_connect_close_end_to_end" time elapsed: 00:00:00
+----------------------------------------------------------
+
+73/74 Testing: http3_multipath_path_validation_timeout_end_to_end
+73/74 Test: http3_multipath_path_validation_timeout_end_to_end
+Command: "/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--multipath-timeout" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http3_multipath_path_validation_timeout_end_to_end" start time: Oct 17 20:02 CST
+Output:
+----------------------------------------------------------
+[2026-10-17 12:02:40.125] [info] [139874431681024] [http_client_e2e.cpp:1191] HTTP/3 client end-to-end regression passed
+<end of output>
+Test time =   3.25 sec
+----------------------------------------------------------
+Test Passed.
+"http3_multipath_path_validation_timeout_end_to_end" end time: Oct 17 20:02 CST
+"http3_multipath_path_validation_timeout_end_to_end" time elapsed: 00:00:03
+----------------------------------------------------------
+
+End testing: Oct 17 20:02 CST
+
+blackhole =   2.76 sec*proc
+
+client =   1.54 sec*proc
+
+close =   0.93 sec*proc
+
+connect =   0.17 sec*proc
+
+end_to_end =   9.30 sec*proc
+
+http3 =  40.88 sec*proc
+
+lifecycle =  31.58 sec*proc
+
+multipath =   7.76 sec*proc
+
+pmtu =   3.33 sec*proc
+
+qpack =   0.52 sec*proc
+
+quic =  39.52 sec*proc
+
+timeout =   3.25 sec*proc
+

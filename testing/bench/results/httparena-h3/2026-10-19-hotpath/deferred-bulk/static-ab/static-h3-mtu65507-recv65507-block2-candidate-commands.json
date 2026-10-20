@@ -1,0 +1,42 @@
+{
+  "server": [
+    "nsenter",
+    "-t",
+    "1112",
+    "-n",
+    "/var/tmp/cnetmod-h3-deferred-bulk-ab-e93876177ef648aab86e50e6478b89f4/candidate/arena_h3_server",
+    "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307675/arena/certs/server.crt",
+    "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307675/arena/certs/server.key",
+    "8443",
+    "32",
+    "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307675/arena/data/static"
+  ],
+  "h2load": [
+    "nsenter",
+    "-t",
+    "1112",
+    "-n",
+    "taskset",
+    "-c",
+    "16-31",
+    "/var/tmp/cnetmod-h3-loadgen169/h2load",
+    "--alpn-list=h3",
+    "-i",
+    "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307675/arena/requests/static-h2-uris.txt",
+    "-H",
+    "Accept-Encoding: br;q=1, gzip;q=0.8",
+    "-c",
+    "64",
+    "-m",
+    "64",
+    "-t",
+    "64",
+    "-D",
+    "5s"
+  ],
+  "environment": {
+    "CNETMOD_QUIC_GSO": "1",
+    "CNETMOD_QUIC_MAX_PATH_MTU": "65507",
+    "CNETMOD_QUIC_MAX_UDP_PAYLOAD_SIZE": "65507"
+  }
+}

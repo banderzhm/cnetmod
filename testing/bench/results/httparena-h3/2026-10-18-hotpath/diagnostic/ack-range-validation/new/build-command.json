@@ -1,0 +1,7 @@
+[
+  "/var/tmp/cnetmod-ninja-1.11/bin/ninja",
+  "-j2",
+  "test_quic_loss_detection",
+  "test_quic_congestion",
+  "test_quic_stream"
+]

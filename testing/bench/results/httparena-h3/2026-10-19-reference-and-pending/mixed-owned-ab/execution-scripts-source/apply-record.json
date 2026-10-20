@@ -1,0 +1,25 @@
+{
+  "nonce": "fbaeb04a21614732b24a7fdae850fcd0",
+  "output": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-owned-fast-execution-fbaeb04a21614732b24a7fdae850fcd0",
+  "before": {
+    "src/protocol/quic/quic_connection.cpp": "a3015adadffaa7b39fe65715fce4df212c59249d63ebbd33a453bef83b41b8ac",
+    "src/protocol/quic/quic_send_pipeline.cpp": "bf798ea5600b39002037752eae44d2baef658de88e5fe1860894d1c6d70a51ee",
+    "src/protocol/quic/quic_send_pipeline.cppm": "1efb760fa50c347462479307b7830b311b8fcf30450d2867cae07e7309f73900",
+    "testing/tests/test_quic_frame.cpp": "baeba7f7d74cf2933b0ccd90f7d3bc884bee176af1f9349505e70eecab44986b",
+    "testing/tests/test_quic_loss_detection.cpp": "7f4c836aca296c5915e42ec64a7992f496c0226c877d91792ab12fcae13908f7",
+    "testing/http3/h3-interop-results.json": "ca41c4cb5adcc34ee16042e00ea9c6dfb248b9a17649995dbacfeb43b64d8b66"
+  },
+  "actual_fast_source_sha256": "497ce762561a78851c54103e72ba0ed8f27c7449afb8dce11a01313a75487147",
+  "prepared_normalized_equal": true,
+  "applied_files": [
+    "src/protocol/quic/quic_send_pipeline.cpp"
+  ],
+  "original_script_hashes": {
+    "owned-three-ab.py": "d0bcd3b90962f504ba3b6d2275db6d93f3fa1b5af5f0a8e7c142221f5b3a3ed0",
+    "owned-fast-freeze.py": "25996dc571ce59f0cfb51832069be7055c7738eefb4e0ef63085c97be7f42951"
+  },
+  "scripts": {
+    "owned-three-ab.py": "e1fe51d5fbd1a71a72e4bec71f69c6cca30713de5a76a280e2418d53695dde78",
+    "owned-fast-freeze.py": "7d004af0493edea4a56b8d33439694872e0fc3201904b5e27e973de2d225ef1d"
+  }
+}

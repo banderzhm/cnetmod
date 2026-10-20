@@ -1,0 +1,12 @@
+{
+  "negative_observed": true,
+  "exit_code": 1,
+  "binary_sha256": "c15bf45be1afb872019193aa1b65d8a74a40e2262d94c6b391464078cf753c06",
+  "scope": "new ownership assertions instantiated against old map PCMs with unchanged normal runtime",
+  "expected_failed_cases": [
+    "atomic_hash_map_each_erase_releases_owned_value",
+    "atomic_hash_map_erase_preserves_concurrent_reader_snapshot"
+  ],
+  "expected_total_failed_assertions": 6,
+  "existing_atomic_map_cases_and_nondefault_collision_case_passed": true
+}

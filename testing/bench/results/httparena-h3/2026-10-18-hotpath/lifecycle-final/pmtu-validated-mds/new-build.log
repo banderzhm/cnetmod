@@ -1,0 +1,14 @@
+[0/2] Re-checking globbed directories...
+[1/229] Scanning /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_recovery.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_recovery.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[2/229] Scanning /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_connection.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_connection.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[3/229] Generating CXX dyndep file CMakeFiles/cnetmod_quic.dir/CXX.dd
+[4/7] Building CXX object CMakeFiles/cnetmod_quic.dir/src/protocol/quic/quic_recovery.cpp.o
+[5/7] Building CXX object CMakeFiles/cnetmod_quic.dir/src/protocol/quic/quic_connection.cpp.o
+[6/7] Linking CXX static library libcnetmod_quic.a
+[7/7] Linking CXX executable bin/quic_pmtu_cc_server

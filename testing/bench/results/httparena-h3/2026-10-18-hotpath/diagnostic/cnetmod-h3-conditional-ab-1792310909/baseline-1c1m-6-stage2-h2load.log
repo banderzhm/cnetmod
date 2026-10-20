@@ -1,0 +1,32 @@
+starting benchmark...
+spawning thread #0: 1 total client(s). Timing-based test with 0s of warm-up time and 2s of main duration for measurements.
+Warm-up started for thread #0.
+progress: 100% of clients started
+Warm-up phase is over for thread #0.
+Main benchmark duration is started for thread #0.
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Certificate: RSA 2048 bits
+Negotiated Group: x25519
+Resumption: no
+Application protocol: h3
+Main benchmark duration is over for thread #0. Stopping all clients.
+Stopped all clients for thread #0
+
+finished in 2.01s, 2434.00 req/s, 21.40KB/s
+requests: 4868 total, 4869 started, 4868 done, 4868 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 4868 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 42.79KB (43820) total, 19.02KB (19472) headers (space savings 87.50%), 4.75KB (4868) data
+UDP datagram: 7066 sent, 9844 received
+                 min         max         median     p95        p99        mean         sd        +/- sd
+request     :       29us      2.34ms        67us     1.19ms     1.28ms      409us       510us    68.45%
+connect     :     1.97ms      1.97ms      1.97ms     1.97ms     1.97ms     1.97ms         0us   100.00%
+TTFB        :     2.16ms      2.16ms      2.16ms     2.16ms     2.16ms     2.16ms         0us   100.00%
+req/s       :    2431.30     2431.30     2431.30    2431.30    2431.30    2431.30        0.00   100.00%
+min RTT     :       13us        13us        13us       13us       13us       13us         0us   100.00%
+smoothed RTT:       45us        45us        45us       45us       45us       45us         0us   100.00%
+packets sent:       7069        7069        7069       7069       7069    7069.00        0.00   100.00%
+packets recv:       9844        9844        9844       9844       9844    9844.00        0.00   100.00%
+packets lost:          0           0           0          0          0       0.00        0.00   100.00%
+GRO packets :          1           1           1          1          1       1.00        0.00   100.00%

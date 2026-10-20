@@ -23,6 +23,48 @@ if(CNETMOD_HAS_QUIC)
             RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
     endif()
 
+    add_executable(quic_pmtu_deadline_server quic_pmtu_deadline_server.cpp)
+    target_link_libraries(quic_pmtu_deadline_server PRIVATE cnetmod_core)
+    cnetmod_deploy_mimalloc_runtime(quic_pmtu_deadline_server)
+    set_property(TARGET quic_pmtu_deadline_server PROPERTY CXX_MODULE_GENERATION_MODE SEPARATE)
+    set_target_properties(quic_pmtu_deadline_server PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
+
+    add_executable(quic_pmtu_pending_server quic_pmtu_pending_server.cpp)
+    target_link_libraries(quic_pmtu_pending_server PRIVATE cnetmod_core)
+    cnetmod_deploy_mimalloc_runtime(quic_pmtu_pending_server)
+    set_property(TARGET quic_pmtu_pending_server PROPERTY CXX_MODULE_GENERATION_MODE SEPARATE)
+    set_target_properties(quic_pmtu_pending_server PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
+
+    add_executable(quic_datagram_cc_server quic_datagram_cc_server.cpp)
+    target_link_libraries(quic_datagram_cc_server PRIVATE cnetmod_core)
+    cnetmod_deploy_mimalloc_runtime(quic_datagram_cc_server)
+    set_property(TARGET quic_datagram_cc_server PROPERTY CXX_MODULE_GENERATION_MODE SEPARATE)
+    set_target_properties(quic_datagram_cc_server PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
+
+    add_executable(quic_pmtu_cc_server quic_pmtu_cc_server.cpp)
+    target_link_libraries(quic_pmtu_cc_server PRIVATE cnetmod_core)
+    cnetmod_deploy_mimalloc_runtime(quic_pmtu_cc_server)
+    set_property(TARGET quic_pmtu_cc_server PROPERTY CXX_MODULE_GENERATION_MODE SEPARATE)
+    set_target_properties(quic_pmtu_cc_server PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
+
+    add_executable(quic_initial_credit_server quic_initial_credit_server.cpp)
+    target_link_libraries(quic_initial_credit_server PRIVATE cnetmod_core)
+    cnetmod_deploy_mimalloc_runtime(quic_initial_credit_server)
+    set_property(TARGET quic_initial_credit_server PROPERTY CXX_MODULE_GENERATION_MODE SEPARATE)
+    set_target_properties(quic_initial_credit_server PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
+
+    add_executable(quic_retire_stream_server quic_retire_stream_server.cpp)
+    target_link_libraries(quic_retire_stream_server PRIVATE cnetmod_core)
+    cnetmod_deploy_mimalloc_runtime(quic_retire_stream_server)
+    set_property(TARGET quic_retire_stream_server PROPERTY CXX_MODULE_GENERATION_MODE SEPARATE)
+    set_target_properties(quic_retire_stream_server PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
+
     # Public http::client -> http3_server regression fixture.  This is kept
     # separate from the low-level v3 interop client so the test exercises the
     # same unified API that applications use.
@@ -50,6 +92,85 @@ endif()
 find_package(Python3 COMPONENTS Interpreter QUIET)
 
 if(Python3_Interpreter_FOUND AND CNETMOD_HAS_QUIC)
+    foreach(initial_credit_scenario IN ITEMS credit cancel-final close-count-zero)
+        add_test(NAME quic_initial_credit_${initial_credit_scenario}
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/quic_initial_credit.py"
+                "$<TARGET_FILE:quic_initial_credit_server>" --scenario ${initial_credit_scenario})
+        set_tests_properties(quic_initial_credit_${initial_credit_scenario} PROPERTIES
+            LABELS "http3;quic;flow_control;stream_lifetime" TIMEOUT 45 SKIP_RETURN_CODE 77)
+    endforeach()
+    foreach(pmtu_deadline_scenario IN ITEMS interval initial)
+        add_test(NAME quic_pmtu_deadline_${pmtu_deadline_scenario}
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/quic_pmtu_deadline.py"
+                "$<TARGET_FILE:quic_pmtu_deadline_server>" --scenario ${pmtu_deadline_scenario}
+                --helper-dir "${CMAKE_CURRENT_SOURCE_DIR}")
+        set_tests_properties(quic_pmtu_deadline_${pmtu_deadline_scenario} PROPERTIES
+            LABELS "http3;quic;pmtu;timer" TIMEOUT 30 SKIP_RETURN_CODE 77)
+    endforeach()
+    foreach(pmtu_pending_scenario IN ITEMS ack_only wake)
+        add_test(NAME quic_pmtu_pending_${pmtu_pending_scenario}
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/quic_pmtu_pending.py"
+                "$<TARGET_FILE:quic_pmtu_pending_server>" --scenario ${pmtu_pending_scenario}
+                --helper-dir "${CMAKE_CURRENT_SOURCE_DIR}")
+        set_tests_properties(quic_pmtu_pending_${pmtu_pending_scenario} PROPERTIES
+            LABELS "http3;quic;pmtu;recovery" TIMEOUT 30 SKIP_RETURN_CODE 77)
+    endforeach()
+    foreach(datagram_cc_scenario IN ITEMS admission pto)
+        add_test(NAME quic_datagram_cc_${datagram_cc_scenario}
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/quic_datagram_cc.py"
+                "$<TARGET_FILE:quic_datagram_cc_server>" --scenario ${datagram_cc_scenario})
+        set_tests_properties(quic_datagram_cc_${datagram_cc_scenario} PROPERTIES
+            LABELS "http3;quic;datagram;recovery" TIMEOUT 45 SKIP_RETURN_CODE 77)
+    endforeach()
+    # Explicit process-local cryptography AEAD adapter; this is not stock aioquic interop.
+    add_test(NAME quic_pmtu_cc_large_response_after_loss
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/quic_pmtu_cc.py"
+            "$<TARGET_FILE:quic_pmtu_cc_server>" --large-aead-peer)
+    set_tests_properties(quic_pmtu_cc_large_response_after_loss PROPERTIES
+        LABELS "http3;quic;pmtu;recovery;test_peer_adapter" TIMEOUT 90 SKIP_RETURN_CODE 77)
+    add_test(NAME http3_lifecycle
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/http3_lifecycle.py"
+            "$<TARGET_FILE:h3_interop_server>")
+    set_tests_properties(http3_lifecycle PROPERTIES
+        LABELS "http3;interop;lifecycle" TIMEOUT 60 SKIP_RETURN_CODE 77)
+    add_test(NAME http3_cold_listener_cleanup
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/http3_cold_cleanup.py"
+            "$<TARGET_FILE:h3_interop_server>")
+    set_tests_properties(http3_cold_listener_cleanup PROPERTIES
+        LABELS "http3;interop;lifecycle" TIMEOUT 50 SKIP_RETURN_CODE 77)
+    foreach(outbound_workers IN ITEMS 1 2)
+        add_test(NAME http3_outbound_pto_close_restart_${outbound_workers}
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/http3_outbound_pto.py"
+                "$<TARGET_FILE:h3_interop_server>" --workers ${outbound_workers} --restart)
+        set_tests_properties(http3_outbound_pto_close_restart_${outbound_workers} PROPERTIES
+            LABELS "http3;interop;lifecycle;recovery" TIMEOUT 30 SKIP_RETURN_CODE 77)
+    endforeach()
+    add_test(NAME quic_retire_stream_credit_wakeup
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/quic_retire_stream.py"
+            "$<TARGET_FILE:quic_retire_stream_server>" --mode all)
+    set_tests_properties(quic_retire_stream_credit_wakeup PROPERTIES
+        LABELS "http3;quic;lifecycle;flow_control" TIMEOUT 30 SKIP_RETURN_CODE 77)
+    add_test(NAME quic_retire_stream_notification_lifetime
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/quic_retire_stream.py"
+            "$<TARGET_FILE:quic_retire_stream_server>" --scenario notification-lifetime)
+    set_tests_properties(quic_retire_stream_notification_lifetime PROPERTIES
+        LABELS "http3;quic;lifecycle;memory" TIMEOUT 30 SKIP_RETURN_CODE 77)
+    add_test(NAME quic_private_outbound_pto
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/quic_retire_stream.py"
+            "$<TARGET_FILE:quic_retire_stream_server>" --scenario private-pto)
+    set_tests_properties(quic_private_outbound_pto PROPERTIES
+        LABELS "http3;quic;lifecycle;recovery" TIMEOUT 30 SKIP_RETURN_CODE 77)
+    add_test(NAME quic_handshake_confirmation
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/quic_handshake_confirmation.py"
+            "$<TARGET_FILE:quic_retire_stream_server>")
+    set_tests_properties(quic_handshake_confirmation PROPERTIES
+        LABELS "http3;quic;lifecycle;recovery" TIMEOUT 30 SKIP_RETURN_CODE 77)
+    add_test(NAME h3_webtransport_aioquic_probe_unit
+        COMMAND "${Python3_EXECUTABLE}" -m unittest discover
+            -s "${CMAKE_CURRENT_SOURCE_DIR}" -p test_webtransport_aioquic_probe.py)
+    set_tests_properties(h3_webtransport_aioquic_probe_unit PROPERTIES
+        LABELS "http3;interop;webtransport;unit"
+        TIMEOUT 30)
     set(CNETMOD_WTRANSPORT_PROBE "" CACHE FILEPATH
         "Rust wtransport_probe executable used by the HTTP/3 acceptance gate")
     set(H3_ACCEPTANCE_WTRANSPORT_ARGS)
@@ -87,6 +208,24 @@ if(Python3_Interpreter_FOUND AND CNETMOD_HAS_QUIC)
     endif()
 
     if(TARGET http3_e2e_server AND TARGET http_client_http3_e2e)
+        add_test(NAME http3_early_data_recovery
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/http_client_e2e.py" "--early-data-loss"
+                "$<TARGET_FILE:http3_e2e_server>" "$<TARGET_FILE:http_client_http3_e2e>")
+        set_tests_properties(http3_early_data_recovery PROPERTIES
+            TIMEOUT 90 LABELS "http3;quic;recovery" SKIP_RETURN_CODE 77)
+        add_test(NAME http3_streaming_cancellation
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/http3_streaming_cancellation.py"
+                "$<TARGET_FILE:http3_e2e_server>")
+        set_tests_properties(http3_streaming_cancellation PROPERTIES
+            TIMEOUT 20 LABELS "http3;quic;lifecycle" SKIP_RETURN_CODE 77)
+        add_test(NAME http3_idle_connection_cleanup
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/http3_idle_cleanup.py"
+                "$<TARGET_FILE:http3_e2e_server>")
+        set_tests_properties(http3_idle_connection_cleanup PROPERTIES
+            TIMEOUT 65 LABELS "http3;quic;lifecycle" SKIP_RETURN_CODE 77)
         add_test(NAME http_client_http3_end_to_end
             COMMAND "${Python3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/http_client_e2e.py"
@@ -213,6 +352,12 @@ endif()
 if(CNETMOD_HAS_QUIC)
     foreach(http3_test_target IN ITEMS
             h3_interop_server
+            quic_retire_stream_server
+            quic_initial_credit_server
+            quic_pmtu_cc_server
+            quic_pmtu_deadline_server
+            quic_pmtu_pending_server
+            quic_datagram_cc_server
             h3_interop_client
             http3_e2e_server
             http_client_http3_e2e

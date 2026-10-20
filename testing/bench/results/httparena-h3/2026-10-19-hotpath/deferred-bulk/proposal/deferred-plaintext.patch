@@ -1,0 +1,148 @@
+--- a/src/protocol/quic/quic_connection.cpp
++++ b/src/protocol/quic/quic_connection.cpp
+@@ -4275,6 +4275,10 @@
+         const auto ping = encode_frame(ping_frame{});
+         payload.insert(payload.end(), ping.begin(), ping.end());
+     }
++    // ACK and the optional probe PING stay at the front. Select the remaining
++    // complete frames by exact length, then materialize their bytes only after
++    // the existing whole-packet amplification and congestion checks admit them.
++    auto planned_payload_size = payload.size();
+     if (impl_->connection_role == quic_role::server)
+     {
+         auto& retransmit_crypto = impl_->retransmit_crypto_frames[application_level];
+@@ -4282,7 +4286,7 @@
+         {
+             auto frame = std::move(retransmit_crypto.front());
+             retransmit_crypto.pop_front();
+-            payload.insert(payload.end(), frame.begin(), frame.end());
++            planned_payload_size += frame.size();
+             retransmittable_frames.push_back(
+                 quic_send_frame{std::move(frame)});
+         }
+@@ -4294,14 +4298,14 @@
+                 auto frame = encode_frame(crypto_frame{
+                     impl_->next_send_crypto_offset[application_level], crypto});
+                 impl_->next_send_crypto_offset[application_level] += crypto.size();
+-                payload.insert(payload.end(), frame.begin(), frame.end());
++                planned_payload_size += frame.size();
+                 retransmittable_frames.push_back(
+                     quic_send_frame{std::move(frame)});
+             }
+         }
+     }
+     while ((!impl_->encoded_send_frames.empty() || impl_->has_prioritized_stream_frames()) &&
+-        payload.size() < payload_budget)
++        planned_payload_size < payload_budget)
+     {
+         quic_send_frame frame;
+         std::optional<scheduled_stream_frame_metadata> frame_metadata;
+@@ -4322,7 +4326,7 @@
+         // The next frame must fit as a whole. Checking only the current
+         // payload length can coalesce two full STREAM fragments into an
+         // oversized UDP datagram and strand a multi-packet response.
+-        if (frame.size() > payload_budget - payload.size())
++        if (frame.size() > payload_budget - planned_payload_size)
+         {
+             if (frame_metadata)
+             {
+@@ -4338,42 +4342,51 @@
+             }
+             break;
+         }
+-        frame.append_to(payload);
++        planned_payload_size += frame.size();
+         if (frame_metadata)
+             remember_scheduled_metadata(retransmittable_frames.size(), *frame_metadata);
+         retransmittable_frames.push_back(std::move(frame));
+     }
+-    bool contains_unreliable_datagram = false;
+-    while (!impl_->unreliable_send_frames.empty())
+-    {
+-        const auto& frame = impl_->unreliable_send_frames.front();
+-        if (payload.size() + frame.size() > payload_budget)
++    std::size_t selected_unreliable_datagrams{};
++    for (const auto& frame : impl_->unreliable_send_frames)
++    {
++        if (planned_payload_size + frame.size() > payload_budget)
+             break;
+-        payload.insert(payload.end(), frame.begin(), frame.end());
+-        impl_->unreliable_send_frames.pop_front();
+-        contains_unreliable_datagram = true;
+-    }
++        planned_payload_size += frame.size();
++        ++selected_unreliable_datagrams;
++    }
++    const bool contains_unreliable_datagram = selected_unreliable_datagrams != 0U;
++    const auto discard_selected_datagrams = [&]()
++    {
++        for (std::size_t index{}; index < selected_unreliable_datagrams; ++index)
++            impl_->unreliable_send_frames.pop_front();
++    };
+     if (path_mtu_probe_target)
+     {
+         constexpr std::size_t fixed_packet_overhead = 1U + 4U + 16U;
+         const auto required_payload = *path_mtu_probe_target >
+                 destination_cid->size() + fixed_packet_overhead
+             ? *path_mtu_probe_target - destination_cid->size() - fixed_packet_overhead
+-            : payload.size();
+-        if (payload.size() < required_payload)
+-            payload.resize(required_payload, std::byte{0});
+-    }
+-    if (payload.empty())
++            : planned_payload_size;
++        planned_payload_size = std::max(planned_payload_size, required_payload);
++    }
++    if (planned_payload_size == 0U)
++    {
++        discard_selected_datagrams();
+         return packet_storage;
++    }
+     const auto contains_connection_close = retransmittable_frames.any_of(
+         [](const auto& frame)
+         {
+             return frame.is_connection_close();
+         });
+     const auto estimated_packet_size = 1 + destination_cid->size() + 4 +
+-        payload.size() + keys->tag_len;
++        planned_payload_size + keys->tag_len;
+     if (!impl_->can_send_on_path(path, estimated_packet_size))
+     {
++        // Selected DATAGRAMs are unreliable: drop this prefix when the path
++        // cannot transmit, without copying their bytes into the payload.
++        discard_selected_datagrams();
+         for (std::size_t index = retransmittable_frames.size(); index != 0U; --index)
+         {
+             auto& frame = retransmittable_frames[index - 1U];
+@@ -4398,8 +4411,9 @@
+         !contains_connection_close &&
+         !path.recovery.can_send_datagram(estimated_packet_size))
+     {
+-        // DATAGRAM frames were consumed above. Drop them under congestion
+-        // instead of transmitting beyond cwnd (RFC 9221 section 5.4).
++        // Drop the same selected DATAGRAM prefix under congestion instead
++        // of transmitting beyond cwnd (RFC 9221 section 5.4).
++        discard_selected_datagrams();
+ 
+         for (std::size_t index = retransmittable_frames.size(); index != 0U; --index)
+         {
+@@ -4419,6 +4433,19 @@
+         }
+         return packet_storage;
+     }
++    retransmittable_frames.for_each([&payload](const quic_send_frame& frame)
++    {
++        frame.append_to(payload);
++    });
++    for (std::size_t index{}; index < selected_unreliable_datagrams; ++index)
++    {
++        const auto& frame = impl_->unreliable_send_frames.front();
++        payload.insert(payload.end(), frame.begin(), frame.end());
++        impl_->unreliable_send_frames.pop_front();
++    }
++    // This is the same final probe padding length used for admission above.
++    if (payload.size() < planned_payload_size)
++        payload.resize(planned_payload_size, std::byte{0});
+     constexpr std::size_t pn_length = 4;
+     const auto packet_number = path.next_send_packet_number++;
+     auto packet = std::move(packet_storage);

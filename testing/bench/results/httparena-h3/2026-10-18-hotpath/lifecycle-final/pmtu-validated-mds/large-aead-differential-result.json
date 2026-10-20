@@ -1,0 +1,28 @@
+{
+  "status": "passed",
+  "stock_aioquic_interoperability": false,
+  "aioquic_version": "1.3.0",
+  "cryptography_version": "50.0.1",
+  "backend": "/usr/lib/python3.14/site-packages/aioquic/_crypto.abi3.so",
+  "backend_sha256": "64c07c18ad6a3189a770d53a847b950a6a72495157d7d8a55fe187955d9dd369",
+  "suites": [
+    "aes-128-gcm",
+    "aes-256-gcm",
+    "chacha20-poly1305"
+  ],
+  "differential_cases": 90,
+  "large_roundtrips": 45,
+  "tamper_rejections": 225,
+  "boundary_rejections": 12,
+  "installation": {
+    "kind": "cryptography-large-packet-test-peer",
+    "stock_aioquic_interoperability": false,
+    "aioquic_version": "1.3.0",
+    "cryptography_version": "50.0.1",
+    "original_backend": "/usr/lib/python3.14/site-packages/aioquic/_crypto.abi3.so",
+    "original_backend_sha256": "64c07c18ad6a3189a770d53a847b950a6a72495157d7d8a55fe187955d9dd369",
+    "adapter_sha256": "8edf9cfb2b5720c74db24eb182af4d8c7333d7f7d861b11e0042e89a21e1c104",
+    "header_protection": "unchanged aioquic backend",
+    "scope": "client and independent proxy CryptoContext AEAD factory"
+  }
+}

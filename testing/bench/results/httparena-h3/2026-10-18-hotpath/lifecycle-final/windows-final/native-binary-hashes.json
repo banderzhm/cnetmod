@@ -1,0 +1,27 @@
+[
+  {
+    "file": "arena_h3_server.exe",
+    "bytes": 2529792,
+    "sha256": "9f0b102e3c2731fc4327d8b99f04fa5426d19ff16a1c315d64a55575fd1498e0"
+  },
+  {
+    "file": "h3_interop_client.exe",
+    "bytes": 2494464,
+    "sha256": "65b340df7b60cb0016e468ca113cb734846f7e816abebb5b9b9107dadef7b520"
+  },
+  {
+    "file": "h3_interop_server.exe",
+    "bytes": 2574848,
+    "sha256": "2947d656822524916119c1272dd51eb5743942cb33dd42ed1ef70a46ec30596a"
+  },
+  {
+    "file": "mimalloc-redirect.dll",
+    "bytes": 60416,
+    "sha256": "bc3dfdf51fbc80b88cb62cdb6a6784ecc894164bdd4ae7f3885048d870809491"
+  },
+  {
+    "file": "mimalloc.dll",
+    "bytes": 180224,
+    "sha256": "37b665cf41c779abcb60b665c07fec73fa602e3a6d30a1e84dc65a5b141b56df"
+  }
+]

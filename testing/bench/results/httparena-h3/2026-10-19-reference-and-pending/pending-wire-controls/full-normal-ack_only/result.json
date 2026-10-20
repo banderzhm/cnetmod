@@ -1,0 +1,332 @@
+{
+  "status": "passed",
+  "scenario": "ack_only",
+  "source_sha256": "5a96e66f31830964f5d01aadc56241019388c618b1b2d5ea9e020901cec3dd33",
+  "server_sha256": "6b18471d8bee0dc75b9b2098bceada7ea0503c27610be38a37ea2bf78963f98e",
+  "driver_sha256": "c01b8262be7df5c41b4aacb7f1aa72a74e3e83d4f36270333e7342ffc0765143",
+  "server_cpp_sha256": "79b6f315cd257814c5a0b901f0294988c26c7dd462eacb4e053524367eedf0d5",
+  "parser_sha256": "7341a99b0ee4cd459b996d4d300a60907e729f198a028a2180017e8a4e1c99f8",
+  "aioquic_version": "1.7.0",
+  "peer": "unmodified installed aioquic",
+  "command": [
+    "/var/tmp/cnetmod-pmtu-pending-mixed-20261019/build-recovered/full-normal/quic_pmtu_pending_server",
+    "--port",
+    "44830",
+    "--cert",
+    "/var/tmp/cnetmod-pmtu-pending-mixed-20261019/wire-runtime-v2/full-normal-ack_only/cert.pem",
+    "--key",
+    "/var/tmp/cnetmod-pmtu-pending-mixed-20261019/wire-runtime-v2/full-normal-ack_only/key.pem",
+    "--listening-report",
+    "/var/tmp/cnetmod-pmtu-pending-mixed-20261019/wire-runtime-v2/full-normal-ack_only/listening.txt",
+    "--result-report",
+    "/var/tmp/cnetmod-pmtu-pending-mixed-20261019/wire-runtime-v2/full-normal-ack_only/failure.txt",
+    "--burst-report",
+    "/var/tmp/cnetmod-pmtu-pending-mixed-20261019/wire-runtime-v2/full-normal-ack_only/burst.json",
+    "--attempt-report",
+    "/var/tmp/cnetmod-pmtu-pending-mixed-20261019/wire-runtime-v2/full-normal-ack_only/attempt.json",
+    "--state-report",
+    "/var/tmp/cnetmod-pmtu-pending-mixed-20261019/wire-runtime-v2/full-normal-ack_only/state.json",
+    "--initial-delay-ms",
+    "200",
+    "--interval-ms",
+    "10"
+  ],
+  "measurement": {
+    "burst": {
+      "accepted": 64,
+      "elapsed_us": 230,
+      "finished_us": 337169094,
+      "observed_deadline_us": 337178825,
+      "mds_observed_us": 337168853,
+      "configured_interval_us": 10000
+    },
+    "attempt": {
+      "at_us": 337179106,
+      "next_deadline_us": 337482252,
+      "mds": 1328,
+      "ingress": 5
+    },
+    "report_lag_ms": 1.0339240000121208,
+    "wire_datagram_packets": 14,
+    "wire_datagram_udp_bytes": 15848,
+    "original_public_deadline": 337.482252,
+    "delay_seconds": 0.05,
+    "ping": {
+      "direction": "client",
+      "at": 337.180324327,
+      "bytes": 29,
+      "decoded": true,
+      "pn": 8,
+      "frames": {
+        "streams": [],
+        "datagrams": [],
+        "kinds": [
+          1,
+          0
+        ],
+        "acks": []
+      },
+      "scheduled_forward_at": 337.230351584,
+      "action": "scheduled_forward",
+      "forwarded_at": 337.230404849
+    },
+    "ack": {
+      "direction": "server",
+      "at": 337.230963645,
+      "bytes": 34,
+      "decoded": true,
+      "pn": 16,
+      "frames": {
+        "streams": [],
+        "datagrams": [],
+        "kinds": [
+          2
+        ],
+        "acks": [
+          [
+            8,
+            8
+          ]
+        ]
+      },
+      "scheduled_forward_at": 337.28107965000004,
+      "action": "scheduled_forward",
+      "forwarded_at": 337.282042983
+    },
+    "last_public_state": {
+      "at_us": 337230593,
+      "next_deadline_us": 337230593,
+      "mds": 1328,
+      "ingress": 6
+    },
+    "primary_oracle": "ordinary ACK-only packet before original recovery deadline"
+  },
+  "proxy_errors": [],
+  "forward_delay_proof": [
+    {
+      "direction": "client",
+      "received_at": 336.602148983,
+      "scheduled_forward_at": 336.652152262,
+      "forwarded_at": 336.65237118,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 336.652739734,
+      "scheduled_forward_at": 336.702751336,
+      "forwarded_at": 336.702998642,
+      "released_at": null
+    },
+    {
+      "direction": "client",
+      "received_at": 336.704096768,
+      "scheduled_forward_at": 336.75410084600003,
+      "forwarded_at": 336.754338079,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 336.758111162,
+      "scheduled_forward_at": 336.808121189,
+      "forwarded_at": 336.808423521,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 336.758223181,
+      "scheduled_forward_at": 336.80822700600004,
+      "forwarded_at": 336.808508419,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 336.758264763,
+      "scheduled_forward_at": 336.808267456,
+      "forwarded_at": 336.808520473,
+      "released_at": null
+    },
+    {
+      "direction": "client",
+      "received_at": 336.810875491,
+      "scheduled_forward_at": 336.860884332,
+      "forwarded_at": 336.861259818,
+      "released_at": null
+    },
+    {
+      "direction": "client",
+      "received_at": 336.812491988,
+      "scheduled_forward_at": 336.862498452,
+      "forwarded_at": 336.863555003,
+      "released_at": null
+    },
+    {
+      "direction": "client",
+      "received_at": 336.812546419,
+      "scheduled_forward_at": 336.862550675,
+      "forwarded_at": 336.86357881,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 336.863705438,
+      "scheduled_forward_at": 336.913707663,
+      "forwarded_at": 336.914765182,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 336.863736881,
+      "scheduled_forward_at": 336.913795736,
+      "forwarded_at": 336.914853747,
+      "released_at": null
+    },
+    {
+      "direction": "client",
+      "received_at": 336.917395345,
+      "scheduled_forward_at": 336.96746064,
+      "forwarded_at": 336.968395557,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 337.064362394,
+      "scheduled_forward_at": 337.115472828,
+      "forwarded_at": 337.116253301,
+      "released_at": null
+    },
+    {
+      "direction": "client",
+      "received_at": 337.118461561,
+      "scheduled_forward_at": 337.168529617,
+      "forwarded_at": 337.168682832,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 337.168986165,
+      "scheduled_forward_at": 337.219097936,
+      "forwarded_at": 337.219952378,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 337.169124835,
+      "scheduled_forward_at": 337.219159068,
+      "forwarded_at": 337.220178341,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 337.169177307,
+      "scheduled_forward_at": 337.219200387,
+      "forwarded_at": 337.220191993,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 337.169216064,
+      "scheduled_forward_at": 337.219233955,
+      "forwarded_at": 337.220199948,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 337.169245881,
+      "scheduled_forward_at": 337.21926559900004,
+      "forwarded_at": 337.220206426,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 337.169276316,
+      "scheduled_forward_at": 337.219297394,
+      "forwarded_at": 337.220213887,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 337.169307221,
+      "scheduled_forward_at": 337.219323497,
+      "forwarded_at": 337.220220954,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 337.169334762,
+      "scheduled_forward_at": 337.219351825,
+      "forwarded_at": 337.22022728,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 337.169360957,
+      "scheduled_forward_at": 337.219374522,
+      "forwarded_at": 337.220239275,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 337.169383205,
+      "scheduled_forward_at": 337.219399894,
+      "forwarded_at": 337.220244968,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 337.169422085,
+      "scheduled_forward_at": 337.219438018,
+      "forwarded_at": 337.220249423,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 337.169447327,
+      "scheduled_forward_at": 337.219461435,
+      "forwarded_at": 337.220254804,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 337.169469773,
+      "scheduled_forward_at": 337.219483867,
+      "forwarded_at": 337.220258762,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 337.169496572,
+      "scheduled_forward_at": 337.219510786,
+      "forwarded_at": 337.220263155,
+      "released_at": null
+    },
+    {
+      "direction": "client",
+      "received_at": 337.180324327,
+      "scheduled_forward_at": 337.230351584,
+      "forwarded_at": 337.230404849,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 337.230963645,
+      "scheduled_forward_at": 337.28107965000004,
+      "forwarded_at": 337.282042983,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 337.482478916,
+      "scheduled_forward_at": 337.532620025,
+      "forwarded_at": 337.532910575,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 337.80633334,
+      "scheduled_forward_at": 337.856991317,
+      "forwarded_at": 337.857227143,
+      "released_at": null
+    }
+  ],
+  "server_exit": -15
+}

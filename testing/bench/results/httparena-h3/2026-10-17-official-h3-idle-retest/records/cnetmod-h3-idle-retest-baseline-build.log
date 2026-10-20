@@ -1,0 +1,21 @@
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+Sending build context to Docker daemon  56.08MB
+Step 1/6 : FROM scratch
+ ---> 
+Step 2/6 : COPY program /program
+ ---> 139dd552b151
+Step 3/6 : COPY lib/ /lib/
+ ---> 461e37015ec3
+Step 4/6 : COPY loader /lib64/ld-linux-x86-64.so.2
+ ---> 5037db5b4f7e
+Step 5/6 : COPY gai.conf /etc/gai.conf
+ ---> 4d87d9c2a5db
+Step 6/6 : ENTRYPOINT ["/lib64/ld-linux-x86-64.so.2", "--library-path", "/lib", "/program", "/certs/server.crt", "/certs/server.key", "8443", "32"]
+ ---> Running in 51c2e4426db7
+ ---> Removed intermediate container 51c2e4426db7
+ ---> d3dcb34f7d51
+Successfully built d3dcb34f7d51
+Successfully tagged cnetmod-h3-idle-retest-baseline:latest

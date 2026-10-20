@@ -1,0 +1,15 @@
+[
+  "/var/tmp/cnetmod-h3-crypto-old-real-fault/quic_packet_failure_server",
+  "--port",
+  "41292",
+  "--mode",
+  "observer",
+  "--cert",
+  "/var/tmp/cnetmod-h3-crypto-old-proof/observer-seal/cert.pem",
+  "--key",
+  "/var/tmp/cnetmod-h3-crypto-old-proof/observer-seal/key.pem",
+  "--listening-report",
+  "/var/tmp/cnetmod-h3-crypto-old-proof/observer-seal/listening",
+  "--result-report",
+  "/var/tmp/cnetmod-h3-crypto-old-proof/observer-seal/result"
+]

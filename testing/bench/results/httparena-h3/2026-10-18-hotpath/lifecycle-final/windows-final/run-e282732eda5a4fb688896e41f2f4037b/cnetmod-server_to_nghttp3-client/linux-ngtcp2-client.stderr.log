@@ -1,0 +1,228 @@
+I00000000 0x8683438695f689c679cad3274ad16e3169 con next skip pkn=254629757
+I00000000 0x8683438695f689c679cad3274ad16e3169 pkt tx pkn=254629631 dcid=0x5cf0ee88f3df6d6145d2cc116e12e9b039b4 scid=0x8683438695f689c679cad3274ad16e3169 version=0x00000001 type=Initial len=0
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 Initial CRYPTO(0x6) offset=65 len=66
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 Initial CRYPTO(0x6) offset=231 len=10
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 Initial CRYPTO(0x6) offset=241 len=10
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 Initial CRYPTO(0x6) offset=216 len=5
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 Initial CRYPTO(0x6) offset=251 len=40
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 Initial PADDING(0x0) len=9
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 Initial PADDING(0x0) len=1
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 Initial CRYPTO(0x6) offset=32 len=16
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 Initial CRYPTO(0x6) offset=221 len=10
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 Initial CRYPTO(0x6) offset=211 len=5
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 Initial CRYPTO(0x6) offset=0 len=32
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 Initial CRYPTO(0x6) offset=48 len=17
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 Initial CRYPTO(0x6) offset=131 len=80
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 Initial PADDING(0x0) len=789
+I00000000 0x8683438695f689c679cad3274ad16e3169 ldc loss_detection_timer=15139507421 timeout=999
+Sent packet: local=[127.0.0.1]:41348 remote=[127.0.0.1]:64788 ecn=0x2 1200 bytes
+Timer has already expired: 0.000140061s
+Set timer=0.998752961s
+Received packet: local=[127.0.0.1]:41348 remote=[127.0.0.1]:64788 ecn=0x0 133 bytes
+I00000000 0x8683438695f689c679cad3274ad16e3169 con recv packet len=133
+I00000000 0x8683438695f689c679cad3274ad16e3169 pkt rx pkn=0 dcid=0x8683438695f689c679cad3274ad16e3169 scid=0x9ba24bfa0d716660 version=0x00000001 type=Retry len=0
+I00000000 0x8683438695f689c679cad3274ad16e3169 pkt odcid=0x5cf0ee88f3df6d6145d2cc116e12e9b039b4
+I00000000 0x8683438695f689c679cad3274ad16e3169 ldc pkn=254629631 lost type=Initial sent_ts=14140507421
+I00000000 0x8683438695f689c679cad3274ad16e3169 pkt read packet 133 left 0
+Set timer=2.996014745s
+I00000000 0x8683438695f689c679cad3274ad16e3169 pkt tx pkn=254629632 dcid=0x9ba24bfa0d716660 scid=0x8683438695f689c679cad3274ad16e3169 version=0x00000001 type=Initial len=0
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629632 Initial PADDING(0x0) len=2
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629632 Initial CRYPTO(0x6) offset=0 len=32
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629632 Initial CRYPTO(0x6) offset=98 len=8
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629632 Initial CRYPTO(0x6) offset=48 len=17
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629632 Initial CRYPTO(0x6) offset=171 len=40
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629632 Initial CRYPTO(0x6) offset=114 len=17
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629632 Initial CRYPTO(0x6) offset=32 len=16
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629632 Initial PADDING(0x0) len=9
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629632 Initial CRYPTO(0x6) offset=131 len=40
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629632 Initial CRYPTO(0x6) offset=110 len=4
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629632 Initial CRYPTO(0x6) offset=65 len=33
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629632 Initial CRYPTO(0x6) offset=106 len=4
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629632 Initial CRYPTO(0x6) offset=211 len=80
+I00000000 0x8683438695f689c679cad3274ad16e3169 frm tx 254629632 Initial PADDING(0x0) len=713
+I00000000 0x8683438695f689c679cad3274ad16e3169 ldc loss_detection_timer=15140404754 timeout=999
+Sent packet: local=[127.0.0.1]:41348 remote=[127.0.0.1]:64788 ecn=0x2 1200 bytes
+Set timer=0.000044657s
+Set timer=0.000041301s
+Set timer=0.997887300s
+Received packet: local=[127.0.0.1]:41348 remote=[127.0.0.1]:64788 ecn=0x0 1200 bytes
+I00000003 0x8683438695f689c679cad3274ad16e3169 con recv packet len=1200
+I00000003 0x8683438695f689c679cad3274ad16e3169 pkt rx pkn=0 dcid=0x8683438695f689c679cad3274ad16e3169 scid=0x9ba24bfa0d716660 version=0x00000001 type=Initial len=1165
+I00000003 0x8683438695f689c679cad3274ad16e3169 frm rx 0 Initial CRYPTO(0x6) offset=0 len=90
+I00000003 0x8683438695f689c679cad3274ad16e3169 con the negotiated version is 0x00000001
+I00000003 0x8683438695f689c679cad3274ad16e3169 frm rx 0 Initial ACK(0x2) largest_ack=254629632 ack_delay=0(0) ack_range_count=0
+I00000003 0x8683438695f689c679cad3274ad16e3169 frm rx 0 Initial ACK(0x2) range=[254629632..254629632] len=0
+I00000003 0x8683438695f689c679cad3274ad16e3169 ldc latest_rtt=2 min_rtt=2 smoothed_rtt=2 rttvar=1 ack_delay=0
+I00000003 0x8683438695f689c679cad3274ad16e3169 con path is not ECN capable
+I00000003 0x8683438695f689c679cad3274ad16e3169 cca 1200 bytes acked, slow start cwnd=13200
+I00000003 0x8683438695f689c679cad3274ad16e3169 ldc loss_detection_timer=14150822932 timeout=7
+I00000003 0x8683438695f689c679cad3274ad16e3169 frm rx 0 Initial PADDING(0x0) len=1043
+I00000003 0x8683438695f689c679cad3274ad16e3169 pkt read packet 1200 left 0
+I00000003 0x8683438695f689c679cad3274ad16e3169 con processing buffered handshake packet
+Received packet: local=[127.0.0.1]:41348 remote=[127.0.0.1]:64788 ecn=0x0 1200 bytes
+I00000003 0x8683438695f689c679cad3274ad16e3169 con recv packet len=1200
+I00000003 0x8683438695f689c679cad3274ad16e3169 pkt rx pkn=0 dcid=0x8683438695f689c679cad3274ad16e3169 scid=0x9ba24bfa0d716660 version=0x00000001 type=Handshake len=1166
+I00000003 0x8683438695f689c679cad3274ad16e3169 frm rx 0 Handshake CRYPTO(0x6) offset=0 len=1142
+I00000003 0x8683438695f689c679cad3274ad16e3169 cry remote transport_parameters original_destination_connection_id=0x5cf0ee88f3df6d6145d2cc116e12e9b039b4
+I00000003 0x8683438695f689c679cad3274ad16e3169 cry remote transport_parameters retry_source_connection_id=0x9ba24bfa0d716660
+I00000003 0x8683438695f689c679cad3274ad16e3169 cry remote transport_parameters initial_source_connection_id=0x9ba24bfa0d716660
+I00000003 0x8683438695f689c679cad3274ad16e3169 cry remote transport_parameters initial_max_stream_data_bidi_local=262144
+I00000003 0x8683438695f689c679cad3274ad16e3169 cry remote transport_parameters initial_max_stream_data_bidi_remote=262144
+I00000003 0x8683438695f689c679cad3274ad16e3169 cry remote transport_parameters initial_max_stream_data_uni=262144
+I00000003 0x8683438695f689c679cad3274ad16e3169 cry remote transport_parameters initial_max_data=1048576
+I00000003 0x8683438695f689c679cad3274ad16e3169 cry remote transport_parameters initial_max_streams_bidi=100
+I00000003 0x8683438695f689c679cad3274ad16e3169 cry remote transport_parameters initial_max_streams_uni=100
+I00000003 0x8683438695f689c679cad3274ad16e3169 cry remote transport_parameters max_idle_timeout=30000
+I00000003 0x8683438695f689c679cad3274ad16e3169 cry remote transport_parameters max_udp_payload_size=65527
+I00000003 0x8683438695f689c679cad3274ad16e3169 cry remote transport_parameters ack_delay_exponent=3
+I00000003 0x8683438695f689c679cad3274ad16e3169 cry remote transport_parameters max_ack_delay=25
+I00000003 0x8683438695f689c679cad3274ad16e3169 cry remote transport_parameters active_connection_id_limit=4
+I00000003 0x8683438695f689c679cad3274ad16e3169 cry remote transport_parameters disable_active_migration=0
+I00000003 0x8683438695f689c679cad3274ad16e3169 cry remote transport_parameters max_datagram_frame_size=0
+I00000003 0x8683438695f689c679cad3274ad16e3169 cry remote transport_parameters grease_quic_bit=0
+I00000003 0x8683438695f689c679cad3274ad16e3169 pkt read packet 1200 left 0
+I00000003 0x8683438695f689c679cad3274ad16e3169 con processing buffered handshake packet
+Received packet: local=[127.0.0.1]:41348 remote=[127.0.0.1]:64788 ecn=0x0 100 bytes
+I00000003 0x8683438695f689c679cad3274ad16e3169 con recv packet len=100
+I00000003 0x8683438695f689c679cad3274ad16e3169 pkt rx pkn=1 dcid=0x8683438695f689c679cad3274ad16e3169 scid=0x9ba24bfa0d716660 version=0x00000001 type=Handshake len=66
+I00000003 0x8683438695f689c679cad3274ad16e3169 frm rx 1 Handshake CRYPTO(0x6) offset=1142 len=42
+http: control stream=0x2
+http: QPACK streams encoder=0x6 decoder=0xa
+I00000003 0x8683438695f689c679cad3274ad16e3169 pkt read packet 100 left 0
+I00000003 0x8683438695f689c679cad3274ad16e3169 con processing buffered handshake packet
+QUIC handshake has completed
+Negotiated cipher suite is TLS_CHACHA20_POLY1305_SHA256
+Negotiated group is x25519
+Negotiated ALPN is h3
+http: stream 0x0 submit request headers
+[:method: GET]
+[:scheme: https]
+[:authority: 127.0.0.1:64788]
+[:path: /health]
+[user-agent: nghttp3/ngtcp2 client]
+I00000003 0x8683438695f689c679cad3274ad16e3169 con processing buffered protected packet
+Set timer=0.005072512s
+I00000005 0x8683438695f689c679cad3274ad16e3169 pkt tx pkn=254629633 dcid=0x9ba24bfa0d716660 scid=0x8683438695f689c679cad3274ad16e3169 version=0x00000001 type=Initial len=0
+I00000005 0x8683438695f689c679cad3274ad16e3169 frm tx 254629633 Initial ACK(0x2) largest_ack=0 ack_delay=0(0) ack_range_count=0
+I00000005 0x8683438695f689c679cad3274ad16e3169 frm tx 254629633 Initial ACK(0x2) range=[0..0] len=0
+I00000005 0x8683438695f689c679cad3274ad16e3169 pkt tx pkn=254629631 dcid=0x9ba24bfa0d716660 scid=0x8683438695f689c679cad3274ad16e3169 version=0x00000001 type=Handshake len=0
+I00000005 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 Handshake ACK(0x2) largest_ack=1 ack_delay=0(0) ack_range_count=0
+I00000005 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 Handshake ACK(0x2) range=[1..0] len=1
+I00000005 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 Handshake CRYPTO(0x6) offset=0 len=36
+I00000005 0x8683438695f689c679cad3274ad16e3169 ldc loss_detection_timer=14152822311 timeout=7
+I00000005 0x8683438695f689c679cad3274ad16e3169 con discarding Initial packet number space
+I00000005 0x8683438695f689c679cad3274ad16e3169 ldc loss_detection_timer=14152822311 timeout=7
+Updating traffic key
+I00000005 0x8683438695f689c679cad3274ad16e3169 pkt tx pkn=254629631 dcid=0x9ba24bfa0d716660 type=1RTT k=0
+I00000005 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 1RTT NEW_CONNECTION_ID(0x18) seq=3 cid=0xad7458a3082e550bfbce1707b523d1ab70 retire_prior_to=0 stateless_reset_token=0x2256aae9fd64268bb6e5d7140e9f6285
+I00000005 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 1RTT NEW_CONNECTION_ID(0x18) seq=2 cid=0x7d34e104dfceeb6c96b827aa6aa3fab2ab retire_prior_to=0 stateless_reset_token=0x499c5607a3f5b93d5a65624685dbd6b9
+I00000005 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 1RTT NEW_CONNECTION_ID(0x18) seq=1 cid=0xb33dc2846fa7c18aa56a367671fcab8b21 retire_prior_to=0 stateless_reset_token=0x83e4887dc4af844ca031a224fd8566df
+I00000005 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 1RTT STREAM(0xa) id=0x2 fin=0 offset=0 len=18 uni=1
+I00000005 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 1RTT STREAM(0xa) id=0xa fin=0 offset=0 len=1 uni=1
+I00000005 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 1RTT STREAM(0xa) id=0x6 fin=0 offset=0 len=1 uni=1
+I00000005 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 1RTT STREAM(0xb) id=0x0 fin=1 offset=0 len=44 uni=0
+I00000005 0x8683438695f689c679cad3274ad16e3169 frm tx 254629631 1RTT PADDING(0x0) len=739
+I00000005 0x8683438695f689c679cad3274ad16e3169 ldc loss_detection_timer=14152822311 timeout=7
+Sent packet: local=[127.0.0.1]:41348 remote=[127.0.0.1]:64788 ecn=0x0 1200 bytes
+Timer has already expired: 0.000057609s
+I00000005 0x8683438695f689c679cad3274ad16e3169 con sending PMTUD probe packet len=1406
+I00000005 0x8683438695f689c679cad3274ad16e3169 pkt tx pkn=254629632 dcid=0x9ba24bfa0d716660 type=1RTT k=0
+I00000005 0x8683438695f689c679cad3274ad16e3169 frm tx 254629632 1RTT PING(0x1)
+I00000005 0x8683438695f689c679cad3274ad16e3169 frm tx 254629632 1RTT PADDING(0x0) len=1376
+I00000005 0x8683438695f689c679cad3274ad16e3169 ldc loss_detection_timer=14152822311 timeout=6
+Sent packet: local=[127.0.0.1]:41348 remote=[127.0.0.1]:64788 ecn=0x0 1406 bytes
+Set timer=0.000067107s
+Set timer=0.000062024s
+Set timer=0.006506539s
+Received packet: local=[127.0.0.1]:41348 remote=[127.0.0.1]:64788 ecn=0x0 61 bytes
+I00000005 0x8683438695f689c679cad3274ad16e3169 con recv packet len=61
+I00000005 0x8683438695f689c679cad3274ad16e3169 pkt rx pkn=2 dcid=0x8683438695f689c679cad3274ad16e3169 scid=0x9ba24bfa0d716660 version=0x00000001 type=Handshake len=28
+I00000005 0x8683438695f689c679cad3274ad16e3169 frm rx 2 Handshake ACK(0x2) largest_ack=254629631 ack_delay=0(0) ack_range_count=0
+I00000005 0x8683438695f689c679cad3274ad16e3169 frm rx 2 Handshake ACK(0x2) range=[254629631..254629631] len=0
+I00000005 0x8683438695f689c679cad3274ad16e3169 ldc latest_rtt=0 min_rtt=0 smoothed_rtt=2 rttvar=1 ack_delay=0
+I00000005 0x8683438695f689c679cad3274ad16e3169 ldc loss detection timer canceled
+I00000005 0x8683438695f689c679cad3274ad16e3169 pkt read packet 61 left 0
+Set timer=0.031599360s
+Set timer=0.031596479s
+Received packet: local=[127.0.0.1]:41348 remote=[127.0.0.1]:64788 ecn=0x0 531 bytes
+I00000006 0x8683438695f689c679cad3274ad16e3169 con recv packet len=531
+I00000006 0x8683438695f689c679cad3274ad16e3169 pkt rx pkn=0 dcid=0x8683438695f689c679cad3274ad16e3169 type=1RTT k=0
+I00000006 0x8683438695f689c679cad3274ad16e3169 frm rx 0 1RTT ACK(0x2) largest_ack=254629632 ack_delay=0(0) ack_range_count=0
+I00000006 0x8683438695f689c679cad3274ad16e3169 frm rx 0 1RTT ACK(0x2) range=[254629632..254629631] len=1
+I00000006 0x8683438695f689c679cad3274ad16e3169 ldc latest_rtt=0 min_rtt=0 smoothed_rtt=1 rttvar=1 ack_delay=0
+I00000006 0x8683438695f689c679cad3274ad16e3169 frm rx 0 1RTT CRYPTO(0x6) offset=0 len=396
+I00000006 0x8683438695f689c679cad3274ad16e3169 frm rx 0 1RTT NEW_CONNECTION_ID(0x18) seq=1 cid=0xbc382b4af79e079e retire_prior_to=0 stateless_reset_token=0x67e4607da02e5654992bf7d5a4b426c0
+I00000006 0x8683438695f689c679cad3274ad16e3169 frm rx 0 1RTT NEW_CONNECTION_ID(0x18) seq=2 cid=0x7bb297a73f21b0fd retire_prior_to=0 stateless_reset_token=0x1749da18af3f21eab7bfa661c8d2c09b
+I00000006 0x8683438695f689c679cad3274ad16e3169 frm rx 0 1RTT NEW_CONNECTION_ID(0x18) seq=3 cid=0xa4a5b388c296b650 retire_prior_to=0 stateless_reset_token=0x7faed60cda524ae5453d19cc4b0b840d
+I00000006 0x8683438695f689c679cad3274ad16e3169 frm rx 0 1RTT HANDSHAKE_DONE(0x1e)
+I00000006 0x8683438695f689c679cad3274ad16e3169 con discarding Handshake packet number space
+QUIC handshake has been confirmed
+I00000006 0x8683438695f689c679cad3274ad16e3169 pkt read packet 531 left 0
+Received packet: local=[127.0.0.1]:41348 remote=[127.0.0.1]:64788 ecn=0x0 44 bytes
+I00000006 0x8683438695f689c679cad3274ad16e3169 con recv packet len=44
+I00000006 0x8683438695f689c679cad3274ad16e3169 pkt rx pkn=1 dcid=0x8683438695f689c679cad3274ad16e3169 type=1RTT k=0
+I00000006 0x8683438695f689c679cad3274ad16e3169 frm rx 1 1RTT STREAM(0xa) id=0x3 fin=0 offset=0 len=3 uni=1
+http: remote settings
+http: SETTINGS_MAX_FIELD_SECTION_SIZE=4611686018427387903
+http: SETTINGS_QPACK_MAX_TABLE_CAPACITY=0
+http: SETTINGS_QPACK_BLOCKED_STREAMS=0
+http: SETTINGS_ENABLE_CONNECT_PROTOCOL=0
+http: SETTINGS_H3_DATAGRAM=0
+I00000006 0x8683438695f689c679cad3274ad16e3169 pkt read packet 44 left 0
+Received packet: local=[127.0.0.1]:41348 remote=[127.0.0.1]:64788 ecn=0x0 42 bytes
+I00000006 0x8683438695f689c679cad3274ad16e3169 con recv packet len=42
+I00000006 0x8683438695f689c679cad3274ad16e3169 pkt rx pkn=2 dcid=0x8683438695f689c679cad3274ad16e3169 type=1RTT k=0
+I00000006 0x8683438695f689c679cad3274ad16e3169 frm rx 2 1RTT STREAM(0xa) id=0x7 fin=0 offset=0 len=1 uni=1
+I00000006 0x8683438695f689c679cad3274ad16e3169 pkt read packet 42 left 0
+Set timer=0.000134301s
+I00000006 0x8683438695f689c679cad3274ad16e3169 con sending PMTUD probe packet len=1444
+I00000006 0x8683438695f689c679cad3274ad16e3169 pkt tx pkn=254629633 dcid=0x9ba24bfa0d716660 type=1RTT k=0
+I00000006 0x8683438695f689c679cad3274ad16e3169 frm tx 254629633 1RTT PING(0x1)
+I00000006 0x8683438695f689c679cad3274ad16e3169 frm tx 254629633 1RTT PADDING(0x0) len=1417
+I00000006 0x8683438695f689c679cad3274ad16e3169 ldc loss_detection_timer=14179071694 timeout=32
+Sent packet: local=[127.0.0.1]:41348 remote=[127.0.0.1]:64788 ecn=0x0 1444 bytes
+Set timer=0.000068306s
+I00000006 0x8683438695f689c679cad3274ad16e3169 pkt tx pkn=254629634 dcid=0x9ba24bfa0d716660 type=1RTT k=0
+I00000006 0x8683438695f689c679cad3274ad16e3169 frm tx 254629634 1RTT ACK(0x2) largest_ack=2 ack_delay=0(5) ack_range_count=0
+I00000006 0x8683438695f689c679cad3274ad16e3169 frm tx 254629634 1RTT ACK(0x2) range=[2..0] len=2
+I00000006 0x8683438695f689c679cad3274ad16e3169 frm tx 254629634 1RTT PADDING(0x0) len=8
+Sent packet: local=[127.0.0.1]:41348 remote=[127.0.0.1]:64788 ecn=0x0 39 bytes
+Set timer=0.000050222s
+Received packet: local=[127.0.0.1]:41348 remote=[127.0.0.1]:64788 ecn=0x0 42 bytes
+I00000006 0x8683438695f689c679cad3274ad16e3169 con recv packet len=42
+I00000006 0x8683438695f689c679cad3274ad16e3169 pkt rx pkn=3 dcid=0x8683438695f689c679cad3274ad16e3169 type=1RTT k=0
+I00000006 0x8683438695f689c679cad3274ad16e3169 frm rx 3 1RTT STREAM(0xa) id=0xb fin=0 offset=0 len=1 uni=1
+I00000006 0x8683438695f689c679cad3274ad16e3169 pkt read packet 42 left 0
+Set timer=0.000042658s
+Set timer=0.000041072s
+I00000006 0x8683438695f689c679cad3274ad16e3169 pkt tx pkn=254629635 dcid=0x9ba24bfa0d716660 type=1RTT k=0
+I00000006 0x8683438695f689c679cad3274ad16e3169 frm tx 254629635 1RTT ACK(0x2) largest_ack=3 ack_delay=0(51) ack_range_count=0
+I00000006 0x8683438695f689c679cad3274ad16e3169 frm tx 254629635 1RTT ACK(0x2) range=[3..0] len=3
+I00000006 0x8683438695f689c679cad3274ad16e3169 frm tx 254629635 1RTT PADDING(0x0) len=8
+Sent packet: local=[127.0.0.1]:41348 remote=[127.0.0.1]:64788 ecn=0x0 39 bytes
+Timer has already expired: 0.000039416s
+Set timer=0.031917978s
+Received packet: local=[127.0.0.1]:41348 remote=[127.0.0.1]:64788 ecn=0x0 45 bytes
+I00000006 0x8683438695f689c679cad3274ad16e3169 con recv packet len=45
+I00000006 0x8683438695f689c679cad3274ad16e3169 pkt rx pkn=4 dcid=0x8683438695f689c679cad3274ad16e3169 type=1RTT k=0
+I00000006 0x8683438695f689c679cad3274ad16e3169 frm rx 4 1RTT STREAM(0xe) id=0x7 fin=0 offset=1 len=3 uni=1
+I00000006 0x8683438695f689c679cad3274ad16e3169 pkt read packet 45 left 0
+Received packet: local=[127.0.0.1]:41348 remote=[127.0.0.1]:64788 ecn=0x0 60 bytes
+I00000006 0x8683438695f689c679cad3274ad16e3169 con recv packet len=60
+I00000006 0x8683438695f689c679cad3274ad16e3169 pkt rx pkn=5 dcid=0x8683438695f689c679cad3274ad16e3169 type=1RTT k=0
+I00000006 0x8683438695f689c679cad3274ad16e3169 frm rx 5 1RTT ACK(0x2) largest_ack=254629633 ack_delay=0(0) ack_range_count=0
+I00000006 0x8683438695f689c679cad3274ad16e3169 frm rx 5 1RTT ACK(0x2) range=[254629633..254629633] len=0
+I00000006 0x8683438695f689c679cad3274ad16e3169 ldc latest_rtt=0 min_rtt=0 smoothed_rtt=1 rttvar=1 ack_delay=0
+I00000006 0x8683438695f689c679cad3274ad16e3169 ldc loss detection timer canceled
+I00000006 0x8683438695f689c679cad3274ad16e3169 frm rx 5 1RTT STREAM(0xb) id=0x0 fin=1 offset=0 len=11 uni=0
+http: stream 0x0 response headers started
+http: stream 0x0 [:status: 200]
+http: stream 0x0 [content-type: text/plain]
+http: stream 0x0 headers ended
+QUIC stream 0x0 closed
+HTTP stream 0x0 closed with error codes (RX:(no error), TX:(no error))
+I00000006 0x8683438695f689c679cad3274ad16e3169 pkt read packet 60 left 0
+I00000007 0x8683438695f689c679cad3274ad16e3169 pkt tx pkn=254629636 dcid=0x9ba24bfa0d716660 type=1RTT k=0
+I00000007 0x8683438695f689c679cad3274ad16e3169 frm tx 254629636 1RTT CONNECTION_CLOSE(0x1d) error_code=(unknown)(0x100) frame_type=0x0 reason_len=0 reason=[]
+I00000007 0x8683438695f689c679cad3274ad16e3169 frm tx 254629636 1RTT PADDING(0x0) len=9
+Sent packet: local=[127.0.0.1]:41348 remote=[127.0.0.1]:64788 ecn=0x0 39 bytes
