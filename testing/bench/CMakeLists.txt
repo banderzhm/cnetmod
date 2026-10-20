@@ -22,6 +22,10 @@ set(BENCH_TARGETS
     crosslang_cnetmod_server
 )
 
+if(CNETMOD_ENABLE_POSTGRESQL AND CNETMOD_ENABLE_MYSQL AND CNETMOD_ENABLE_REDIS)
+    list(APPEND BENCH_TARGETS bench_database)
+endif()
+
 if(CNETMOD_ENABLE_HTTP)
     list(APPEND BENCH_TARGETS bench_http_observation bench_http_baseline bench_http_disabled
         bench_http_parser)
@@ -78,7 +82,9 @@ foreach(bench_name ${BENCH_TARGETS})
     elseif(bench_name STREQUAL "bench_http_disabled")
         target_compile_definitions(${bench_name} PRIVATE CNETMOD_BENCH_DISABLED_ONLY=1)
     endif()
-    if(bench_name STREQUAL "grpc_arena_server")
+    if(bench_name STREQUAL "bench_database")
+        target_link_libraries(${bench_name} PRIVATE cnetmod_postgresql cnetmod_mysql cnetmod_redis)
+    elseif(bench_name STREQUAL "grpc_arena_server")
         target_link_libraries(${bench_name} PRIVATE cnetmod_grpc)
     elseif(bench_name MATCHES "^bench_ws_(codec|server)$")
         target_link_libraries(${bench_name} PRIVATE cnetmod_websocket)
