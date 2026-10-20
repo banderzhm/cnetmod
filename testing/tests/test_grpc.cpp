@@ -303,7 +303,7 @@ TEST(grpc_payload_only_adapter_keeps_limits_interceptors_and_admission)
 {
     auto io = cnetmod::make_io_context();
     cnetmod::socket socket;
-    const std::array<cnetmod::http::request_header_view, 3> headers{{{"content-type", "application/grpc"}, {"x-token", "secret"}, {"grpc-timeout", "1S"}}};
+    std::array<cnetmod::http::request_header_view, 3> headers{{{"content-type", "application/grpc"}, {"x-token", "secret"}, {"grpc-timeout", "1S"}}};
     auto frame = encode_frame(byte_buffer{std::byte{1}, std::byte{2}, std::byte{3}});
     ASSERT_TRUE(frame.has_value());
     const std::string_view body{reinterpret_cast<const char*>(frame->data()), frame->size()};
@@ -324,6 +324,12 @@ TEST(grpc_payload_only_adapter_keeps_limits_interceptors_and_admission)
         handler(context);
         return output;
     };
+    headers[2].value = "0n";
+    // Preserve this API's existing zero-means-unlimited timeout convention.
+    ASSERT_EQ(invoke().trailers().at("grpc-status"), std::string{"0"});
+    ASSERT_EQ(calls, std::size_t{1});
+    calls = 0;
+    headers[2].value = "1S";
     ASSERT_EQ(invoke().trailers().at("grpc-status"), std::string{"0"});
     ASSERT_EQ(calls, std::size_t{1});
     router.set_options(server_options{.max_metadata_bytes = 0});
@@ -343,6 +349,7 @@ TEST(grpc_payload_only_adapter_keeps_limits_interceptors_and_admission)
                                               ASSERT_EQ(call.method, std::string{"Echo"});
                                               ASSERT_EQ(call.path, std::string{"/demo.Payload/Echo"});
                                               ASSERT_EQ(metadata_value(call.headers, "x-token"), std::string_view{"secret"});
+                                              ASSERT_NE(call.started.time_since_epoch(), std::chrono::steady_clock::duration::zero());
                                               return {};
                                           }}});
     ASSERT_EQ(invoke().trailers().at("grpc-status"), std::string{"0"});

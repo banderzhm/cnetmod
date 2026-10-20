@@ -295,8 +295,7 @@ auto header_compression::decode_into(std::span<const std::byte> block,
     Container& output)
     -> std::expected<void, std::error_code>
 {
-    if (!decoded_block_.empty() && block.size() == decoded_block_.size() &&
-        std::memcmp(block.data(), decoded_block_.data(), block.size()) == 0)
+    if (!decoded_block_.empty() && std::ranges::equal(block, decoded_block_))
     {
         output.assign(decoded_fields_.begin(), decoded_fields_.end());
         return {};

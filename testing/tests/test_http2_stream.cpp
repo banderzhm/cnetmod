@@ -1015,4 +1015,30 @@ TEST(http2_stream_window_updates_do_not_inflate_connection_window)
             .has_value());
 }
 
+TEST(http2_header_name_validation_checks_the_entire_name)
+{
+    cnetmod::net_init network;
+    for (const auto uppercase_at : std::array{-1, 0, 128})
+    {
+        auto io = cnetmod::make_io_context();
+        cnetmod::socket unused;
+        session connection{*io, unused};
+        ASSERT_TRUE(connection.receive(bytes(preface)).has_value());
+        ASSERT_TRUE(connection.receive(framed({.type = frame_type::settings}, {})).has_value());
+        std::string name(129, 'a');
+        if (uppercase_at >= 0)
+            name[static_cast<std::size_t>(uppercase_at)] = 'A';
+        header_compression encoder;
+        const std::array fields{header_field{":method", "GET"},
+            header_field{":scheme", "http"}, header_field{":path", "/"},
+            header_field{std::move(name), "value"}};
+        auto block = encoder.encode(fields);
+        ASSERT_TRUE(block.has_value());
+        ASSERT_EQ(connection.receive(framed(
+                                         {.type = frame_type::headers, .flags = 5, .stream_id = 1}, *block))
+                      .has_value(),
+            uppercase_at < 0);
+    }
+}
+
 RUN_TESTS()
