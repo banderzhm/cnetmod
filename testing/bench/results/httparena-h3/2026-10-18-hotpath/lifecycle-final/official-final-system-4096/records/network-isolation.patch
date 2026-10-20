@@ -1,0 +1,31 @@
+--- scoped/scripts/benchmark.sh
++++ isolated/scripts/benchmark.sh
+@@ -78,7 +78,7 @@
+     info "load generators: docker mode"
+     GCANNON_MODE=docker
+     DOCKER_FLAGS=(
+-        --rm --network host
++        --rm --network container:cnetmod-final-4c178de9d76f4c63adb15a4ebe898833-netns
+         --cpuset-cpus="$GCANNON_CPUS"
+         --security-opt seccomp=unconfined
+         --ulimit memlock=-1:-1 --ulimit nofile=1048576:1048576
+@@ -152,7 +152,7 @@
+         info "building $ZRK_IMAGE from docker/zrk.Dockerfile (no native zrk on PATH)"
+         docker build -t "$ZRK_IMAGE" -f "$ROOT_DIR/docker/zrk.Dockerfile" "$ROOT_DIR/docker"             || fail "$ZRK_IMAGE build failed — the fixed-rate profiles cannot run without it"
+     fi
+-    ZRK_CMD="docker run --rm --network host --cpuset-cpus=$GCANNON_CPUS --security-opt seccomp=unconfined --ulimit memlock=-1:-1 --ulimit nofile=1048576:1048576 -v $REQUESTS_DIR:$REQUESTS_DIR:ro $ZRK_IMAGE"
++    ZRK_CMD="docker run --rm --network container:cnetmod-final-4c178de9d76f4c63adb15a4ebe898833-netns --cpuset-cpus=$GCANNON_CPUS --security-opt seccomp=unconfined --ulimit memlock=-1:-1 --ulimit nofile=1048576:1048576 -v $REQUESTS_DIR:$REQUESTS_DIR:ro $ZRK_IMAGE"
+     info "zrk: docker mode ($ZRK_IMAGE)"
+ fi
+ 
+--- scoped/scripts/lib/framework.sh
++++ isolated/scripts/lib/framework.sh
+@@ -83,7 +83,7 @@
+     docker rm   -f  "$CONTAINER_NAME" 2>/dev/null || true
+ 
+     local args=(
+-        -d --name "$CONTAINER_NAME" --label cnetmod.official.run=4c178de9d76f4c63adb15a4ebe898833 --label cnetmod.official.role=server --network host
++        -d --name "$CONTAINER_NAME" --label cnetmod.official.run=4c178de9d76f4c63adb15a4ebe898833 --label cnetmod.official.role=server --network container:cnetmod-final-4c178de9d76f4c63adb15a4ebe898833-netns
+         --security-opt seccomp=unconfined
+         --ulimit memlock=-1:-1
+         --ulimit nofile="$HARD_NOFILE:$HARD_NOFILE"

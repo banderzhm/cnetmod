@@ -1,0 +1,19 @@
+{
+  "case": "cid_issue_failure",
+  "mode": "observer",
+  "expected_close": "yes",
+  "status": "passed",
+  "initial_transmitted": true,
+  "tls_completed": true,
+  "peer_close": {
+    "error_code": 1,
+    "frame_type": 6,
+    "reason": "internal error"
+  },
+  "client_handshake_confirmed": false,
+  "observation_seconds": 3,
+  "injected_failure_observed": true,
+  "observed_outcome": "explicit_internal_error_close",
+  "server_stdout": "",
+  "server_stderr": "[2026-10-18 11:31:15.224] [error] [138386749931968] [quic_retire_stream_server.cpp:57] retire-stream fixture: expected stream zero\n"
+}

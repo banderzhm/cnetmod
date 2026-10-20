@@ -1,0 +1,2 @@
+CNETMOD_GSO_FAULT fired mode=observe kernel_messages=1 gso_messages=1 first_stride=1472 first_iovs=16 first_bytes=23552
+CNETMOD_GSO_REAL result=1 errno=0 mode=observe first_gso=1

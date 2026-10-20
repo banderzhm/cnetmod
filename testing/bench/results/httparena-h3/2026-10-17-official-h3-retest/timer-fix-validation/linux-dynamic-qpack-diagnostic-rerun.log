@@ -1,0 +1,13 @@
+Test project /tmp/cnetmod-h3-arena-build
+    Start 66: http_client_http3_dynamic_qpack_end_to_end
+1/1 Test #66: http_client_http3_dynamic_qpack_end_to_end ...   Passed    0.64 sec
+
+100% tests passed out of 1
+
+Label Time Summary:
+client        =   0.64 sec*proc (1 test)
+end_to_end    =   0.64 sec*proc (1 test)
+http3         =   0.64 sec*proc (1 test)
+qpack         =   0.64 sec*proc (1 test)
+
+Total Test time (real) =   0.64 sec

@@ -1,0 +1,398 @@
+{
+  "status": "failed",
+  "expect": "pass",
+  "records": "/mnt/c/Users/25007/.codex/tmp/pmtu-cc-review/window-ack-isolated/old-no-diagnostics",
+  "diagnostics_required": false,
+  "confirmation_requests_per_epoch": 4,
+  "confirmation_interval_seconds": 0.025,
+  "quiet_interval_seconds": 0.075,
+  "server_sha256": "8342f588a6d74d4632f8de36f2fefcf8da02ddd52fa50872012f7e6b9df5c6ee",
+  "peer_aead": {
+    "kind": "cryptography-large-packet-test-peer",
+    "stock_aioquic_interoperability": false,
+    "aioquic_version": "1.3.0",
+    "cryptography_version": "50.0.1",
+    "original_backend": "/usr/lib/python3.14/site-packages/aioquic/_crypto.abi3.so",
+    "original_backend_sha256": "64c07c18ad6a3189a770d53a847b950a6a72495157d7d8a55fe187955d9dd369",
+    "adapter_sha256": "8edf9cfb2b5720c74db24eb182af4d8c7333d7f7d861b11e0042e89a21e1c104",
+    "header_protection": "unchanged aioquic backend",
+    "scope": "client and independent proxy CryptoContext AEAD factory"
+  },
+  "command": [
+    "/mnt/c/Users/25007/.codex/tmp/pmtu-cc-review/window-ack-isolated/binaries/old-no-diagnostics/quic_pmtu_cc_server",
+    "--port",
+    "41213",
+    "--cert",
+    "/mnt/c/Users/25007/.codex/tmp/pmtu-cc-review/window-ack-isolated/old-no-diagnostics/cert.pem",
+    "--key",
+    "/mnt/c/Users/25007/.codex/tmp/pmtu-cc-review/window-ack-isolated/old-no-diagnostics/key.pem",
+    "--listening-report",
+    "/mnt/c/Users/25007/.codex/tmp/pmtu-cc-review/window-ack-isolated/old-no-diagnostics/listening.txt",
+    "--ready-report",
+    "/mnt/c/Users/25007/.codex/tmp/pmtu-cc-review/window-ack-isolated/old-no-diagnostics/ready.txt",
+    "--result-report",
+    "/mnt/c/Users/25007/.codex/tmp/pmtu-cc-review/window-ack-isolated/old-no-diagnostics/failure.txt"
+  ],
+  "peer_receive_limit": "omitted transport parameter; RFC default65527",
+  "peer_outgoing_target": 1200,
+  "server_ceiling": 4096,
+  "epochs": [
+    {
+      "epoch": 0,
+      "stream": 0,
+      "drop": {
+        "at": 376.09955441,
+        "direction": "server",
+        "bytes": 289,
+        "action": "drop",
+        "epoch": 0,
+        "packet_number": 25,
+        "target_stream": 0,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [],
+      "quiet": null
+    },
+    {
+      "epoch": 1,
+      "stream": 20,
+      "drop": {
+        "at": 376.316115271,
+        "direction": "server",
+        "bytes": 289,
+        "action": "drop",
+        "epoch": 1,
+        "packet_number": 38,
+        "target_stream": 20,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [],
+      "quiet": null
+    },
+    {
+      "epoch": 2,
+      "stream": 40,
+      "drop": {
+        "at": 376.534425879,
+        "direction": "server",
+        "bytes": 289,
+        "action": "drop",
+        "epoch": 2,
+        "packet_number": 51,
+        "target_stream": 40,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [],
+      "quiet": null
+    },
+    {
+      "epoch": 3,
+      "stream": 60,
+      "drop": {
+        "at": 376.759011343,
+        "direction": "server",
+        "bytes": 289,
+        "action": "drop",
+        "epoch": 3,
+        "packet_number": 64,
+        "target_stream": 60,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [],
+      "quiet": null
+    },
+    {
+      "epoch": 4,
+      "stream": 80,
+      "drop": {
+        "at": 376.973602953,
+        "direction": "server",
+        "bytes": 290,
+        "action": "drop",
+        "epoch": 4,
+        "packet_number": 76,
+        "target_stream": 80,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [],
+      "quiet": null
+    },
+    {
+      "epoch": 5,
+      "stream": 100,
+      "drop": {
+        "at": 377.197464346,
+        "direction": "server",
+        "bytes": 290,
+        "action": "drop",
+        "epoch": 5,
+        "packet_number": 89,
+        "target_stream": 100,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [],
+      "quiet": null
+    },
+    {
+      "epoch": 6,
+      "stream": 120,
+      "drop": {
+        "at": 377.41025127,
+        "direction": "server",
+        "bytes": 290,
+        "action": "drop",
+        "epoch": 6,
+        "packet_number": 101,
+        "target_stream": 120,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [],
+      "quiet": null
+    },
+    {
+      "epoch": 7,
+      "stream": 140,
+      "drop": {
+        "at": 377.62617424,
+        "direction": "server",
+        "bytes": 290,
+        "action": "drop",
+        "epoch": 7,
+        "packet_number": 114,
+        "target_stream": 140,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [],
+      "quiet": null
+    },
+    {
+      "epoch": 8,
+      "stream": 160,
+      "drop": {
+        "at": 377.846441818,
+        "direction": "server",
+        "bytes": 290,
+        "action": "drop",
+        "epoch": 8,
+        "packet_number": 126,
+        "target_stream": 160,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [],
+      "quiet": null
+    },
+    {
+      "epoch": 9,
+      "stream": 180,
+      "drop": {
+        "at": 378.066020684,
+        "direction": "server",
+        "bytes": 290,
+        "action": "drop",
+        "epoch": 9,
+        "packet_number": 138,
+        "target_stream": 180,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [],
+      "quiet": null
+    },
+    {
+      "epoch": 10,
+      "stream": 200,
+      "drop": {
+        "at": 378.286030417,
+        "direction": "server",
+        "bytes": 290,
+        "action": "drop",
+        "epoch": 10,
+        "packet_number": 150,
+        "target_stream": 200,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [],
+      "quiet": null
+    },
+    {
+      "epoch": 11,
+      "stream": 220,
+      "drop": {
+        "at": 378.499432165,
+        "direction": "server",
+        "bytes": 290,
+        "action": "drop",
+        "epoch": 11,
+        "packet_number": 163,
+        "target_stream": 220,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [],
+      "quiet": null
+    },
+    {
+      "epoch": 12,
+      "stream": 240,
+      "drop": {
+        "at": 378.719985464,
+        "direction": "server",
+        "bytes": 290,
+        "action": "drop",
+        "epoch": 12,
+        "packet_number": 176,
+        "target_stream": 240,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [],
+      "quiet": null
+    },
+    {
+      "epoch": 13,
+      "stream": 260,
+      "drop": {
+        "at": 378.941273696,
+        "direction": "server",
+        "bytes": 290,
+        "action": "drop",
+        "epoch": 13,
+        "packet_number": 189,
+        "target_stream": 260,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [],
+      "quiet": null
+    },
+    {
+      "epoch": 14,
+      "stream": 280,
+      "drop": {
+        "at": 379.172846961,
+        "direction": "server",
+        "bytes": 290,
+        "action": "drop",
+        "epoch": 14,
+        "packet_number": 202,
+        "target_stream": 280,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [],
+      "quiet": null
+    },
+    {
+      "epoch": 15,
+      "stream": 300,
+      "drop": {
+        "at": 379.400873383,
+        "direction": "server",
+        "bytes": 290,
+        "action": "drop",
+        "epoch": 15,
+        "packet_number": 215,
+        "target_stream": 300,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [],
+      "quiet": null
+    }
+  ],
+  "final_elapsed_ms": 2002.677411000036,
+  "final_timed_out": true,
+  "proxy_errors": [],
+  "error": "AssertionError('16KiB response stalled after real loss epochs')",
+  "server_exit_code": -15
+}

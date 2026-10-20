@@ -1,0 +1,6 @@
+Provenance correction for the adjacent coldclose-retention runs:
+Their original summary.json scope strings were copied from the uninstrumented native runner and are inaccurate. These two runs used a diagnostic binary containing cold close-path logging, independently linked against frozen old-layout module/library inputs. They did not use allocator counters or a debugger.
+The 1792312584 run used three close logging points and failed round 4 with 2813 failed requests; the failing connection logged generic timed_out.
+The 1792312916 run additionally logged path/queue/cwnd/PTO state on close and completed 12 x 200000 requests with no failures. This non-reproduction does not invalidate the earlier failure.
+The build script and before/after module inputs in this folder correspond to the later diagnostic rebuild. The first diagnostic executable was subsequently replaced, so do not attribute the later executable hash to the first run.
+These are pre-fix diagnosis, not final performance or retained-memory acceptance results.

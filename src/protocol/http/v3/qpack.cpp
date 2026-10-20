@@ -351,6 +351,22 @@ namespace detail {
         std::uint64_t insert_count{};
         std::deque<dynamic_entry> entries;
 
+        [[nodiscard]] auto can_insert(std::size_t entry_size,
+            std::uint64_t known_received_count) const -> bool
+        {
+            if (entry_size > capacity)
+                return false;
+            auto remaining = size;
+            for (auto entry = entries.rbegin(); remaining + entry_size > capacity;
+                ++entry)
+            {
+                if (entry == entries.rend() || entry->absolute > known_received_count)
+                    return false;
+                remaining -= entry->size;
+            }
+            return true;
+        }
+
         auto set_capacity(std::uint64_t value) -> bool
         {
             capacity = value;
@@ -441,8 +457,9 @@ struct qpack_encoder::impl
     bool capacity_update_pending{true};
     std::uint64_t acknowledged_insert_count{};
     std::uint64_t max_blocked_streams{std::numeric_limits<std::uint64_t>::max()};
-    std::unordered_set<std::uint64_t> cancelled_streams;
-    cnetmod::flat_map<std::uint64_t, std::uint64_t> outstanding_streams;
+    // All referenced sections stay pinned until their own Section ACK,
+    // including sections whose entries are already known to the decoder.
+    cnetmod::flat_map<std::uint64_t, std::deque<std::uint64_t>> outstanding_streams;
     byte_buffer pending_decoder_stream_input;
 };
 
@@ -500,7 +517,10 @@ auto qpack_encoder::encode(std::span<const header_field> headers, std::uint64_t 
     representations.reserve(headers.size());
     for (const auto& h : headers)
     {
-        if (impl_->max_table_capacity != 0U && impl_->outstanding_streams.empty() && h.name.size() + h.value.size() + 32U <= impl_->max_table_capacity && !is_sensitive_header(h.name) && !detail::exact(h.name, h.value))
+        if (impl_->max_table_capacity != 0U && impl_->outstanding_streams.empty() &&
+            impl_->dynamic_table.can_insert(h.name.size() + h.value.size() + 32U,
+                impl_->acknowledged_insert_count) &&
+            !is_sensitive_header(h.name) && !detail::exact(h.name, h.value))
         {
             if (const auto static_name = detail::name(h.name))
             {
@@ -516,13 +536,26 @@ auto qpack_encoder::encode(std::span<const header_field> headers, std::uint64_t 
             }
             (void)impl_->dynamic_table.insert(h);
         }
+    }
+    // Finish insertions before retaining table-entry pointers: a later field
+    // can evict an earlier field in this same section when capacity is small.
+    std::uint64_t required{};
+    for (const auto& h : headers)
+    {
         const bool sensitive = is_sensitive_header(h.name);
         representations.push_back({&h, sensitive ? nullptr : impl_->dynamic_table.exact(h.name, h.value), sensitive ? nullptr : impl_->dynamic_table.by_name(h.name)});
+        const auto& representation = representations.back();
+        if (representation.exact_dynamic)
+            required = std::max(required, representation.exact_dynamic->absolute);
+        else if (!detail::exact(h.name, h.value) && representation.name_dynamic)
+            required = std::max(required, representation.name_dynamic->absolute);
     }
-    auto required = impl_->dynamic_table.insert_count;
     const auto blocked_streams = std::ranges::count_if(impl_->outstanding_streams, [this](const auto& stream)
         {
-            return stream.second > impl_->acknowledged_insert_count;
+            return std::ranges::any_of(stream.second, [this](auto required)
+            {
+                return required > impl_->acknowledged_insert_count;
+            });
         });
     const bool may_reference_dynamic = required <= impl_->acknowledged_insert_count || std::cmp_less(blocked_streams, impl_->max_blocked_streams);
     if (!may_reference_dynamic)
@@ -557,9 +590,38 @@ auto qpack_encoder::encode(std::span<const header_field> headers, std::uint64_t 
             detail::append_string(out, h.value);
         }
     }
-    if (required > impl_->acknowledged_insert_count)
-        impl_->outstanding_streams.insert_or_assign(stream_id, required);
+    if (required != 0U)
+        impl_->outstanding_streams[stream_id].push_back(required);
     return out;
+}
+
+qpack_static_response_headers::qpack_static_response_headers(
+    int status, byte_buffer encoded) noexcept
+    : status_(status), encoded_(std::move(encoded)) {}
+
+auto qpack_static_response_headers::encode(int status,
+    std::span<const header_field> fields)
+    -> std::expected<qpack_static_response_headers, std::error_code>
+{
+    std::vector<header_field> response_fields;
+    response_fields.reserve(fields.size() + 1U);
+    response_fields.push_back({":status", std::to_string(status)});
+    response_fields.insert(response_fields.end(), fields.begin(), fields.end());
+    qpack_encoder encoder;
+    auto section = encoder.encode(response_fields);
+    if (!section)
+        return std::unexpected(section.error());
+    return qpack_static_response_headers{status, std::move(*section)};
+}
+
+auto qpack_static_response_headers::status() const noexcept -> int
+{
+    return status_;
+}
+
+auto qpack_static_response_headers::encoded() const noexcept -> byte_view
+{
+    return encoded_.view();
 }
 
 auto qpack_encoder::take_encoder_instructions() -> byte_buffer
@@ -592,14 +654,20 @@ auto qpack_encoder::process_decoder_instructions(byte_view data)
             auto id = detail::read_int(cursor, 7);
             if (!id)
                 return std::unexpected(id.error());
-            impl_->outstanding_streams.erase(*id);
+            const auto stream = impl_->outstanding_streams.find(*id);
+            if (stream == impl_->outstanding_streams.end() || stream->second.empty())
+                return std::unexpected(detail::error());
+            impl_->acknowledged_insert_count = std::max(
+                impl_->acknowledged_insert_count, stream->second.front());
+            stream->second.pop_front();
+            if (stream->second.empty())
+                impl_->outstanding_streams.erase(stream);
         }
         else if ((first & 0xc0U) == 0x40U)
         {
             auto id = detail::read_int(cursor, 6);
             if (!id)
                 return std::unexpected(id.error());
-            impl_->cancelled_streams.insert(*id);
             impl_->outstanding_streams.erase(*id);
         }
         else if ((first & 0xc0U) == 0x00U)
@@ -739,6 +807,19 @@ auto qpack_decoder::process_encoder_instructions(byte_view data) -> std::expecte
         impl_->pending_encoder_stream_input.begin(),
         impl_->pending_encoder_stream_input.begin() +
             static_cast<std::ptrdiff_t>(consumed));
+    // One unfinished insertion can retain only a table-sized field. Huffman
+    // codes use at most 30 bits per decoded byte; 4x the allowed table size
+    // plus integer/string prefixes is a conservative encoded upper bound.
+    // Apply it after consuming complete instructions, so a large batch of
+    // individually valid insertions does not trip a cumulative traffic cap.
+    constexpr auto storage_max = std::numeric_limits<std::size_t>::max();
+    const auto unfinished_limit = impl_->max_table_capacity > (storage_max - 64U) / 4U
+        ? storage_max : static_cast<std::size_t>(impl_->max_table_capacity * 4U + 64U);
+    if (impl_->pending_encoder_stream_input.size() > unfinished_limit)
+    {
+        impl_->pending_encoder_stream_input.clear();
+        return std::unexpected(detail::error());
+    }
     // Encoder instructions are ordered.  Once their inserts are committed,
     // every retained block is retried in stream-id order; a still-unavailable
     // block remains retained without producing a duplicate acknowledgement.
@@ -958,6 +1039,14 @@ void qpack_decoder::cancel_stream(std::uint64_t stream_id)
 {
     impl_->blocked_header_blocks.erase(stream_id);
     detail::append_int(impl_->pending_decoder_instructions, 0x40U, 6, stream_id);
+}
+
+auto qpack_decoder::cancel_blocked_stream(std::uint64_t stream_id) -> bool
+{
+    if (!impl_->blocked_header_blocks.contains(stream_id))
+        return false;
+    cancel_stream(stream_id);
+    return true;
 }
 
 auto is_sensitive_header(std::string_view n) noexcept -> bool

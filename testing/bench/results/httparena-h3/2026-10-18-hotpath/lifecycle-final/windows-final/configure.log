@@ -1,0 +1,44 @@
+-- Selecting Windows SDK version 10.0.26100.0 to target Windows 10.0.26200.
+-- 
+-- Note: when building with Visual Studio the build type is specified when building.
+-- For example: 'cmake --build . --config=Release
+-- Architecture: x64 (64 bit)
+-- Use the C++ compiler to compile (MI_USE_CXX=ON)
+-- Override standard malloc (MI_OVERRIDE=ON)
+-- Disable detailed statistics (MI_STATS=OFF)
+-- Disable profiling (MI_PROFILE=OFF)
+-- 
+-- Library name     : mimalloc$<$<NOT:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>,$<CONFIG:none>>>:-$<LOWER_CASE:$<CONFIG>>>
+-- Version          : 3.5.3
+-- C++ Compiler     : D:/runtime/vs/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/cl.exe
+-- Compiler flags   : /Zc:__cplusplus
+-- Compiler defines : MI_GUARDED=0;MI_STATS=0;MI_PROFILE=0;MI_CMAKE_BUILD_TYPE=$<LOWER_CASE:$<CONFIG>>;$<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>,$<CONFIG:none>>:MI_BUILD_RELEASE>
+-- Link libraries   : psapi;shell32;user32;advapi32;bcrypt
+-- Build targets    : shared
+-- 
+-- Memory allocator: bundled mimalloc 3.5.3
+-- Using BoringSSL from submodule: C:/Users/25007/.codex/worktrees/2c3c/cnetmod/3rdparty/boringssl
+-- BoringSSL: Building static libraries
+-- BoringSSL: Windows NASM path disabled; using portable C++ implementation
+-- BoringSSL: Assembly optimizations disabled
+-- Google Benchmark version: v1.9.5, normalized to 1.9.5
+-- BoringSSL submodule targets found: ssl, crypto
+-- BoringSSL with QUIC API found - QUIC support enabled
+-- I/O backend: IOCP (Windows)
+-- ==========================================
+-- Project: cnetmod v2.1.0
+-- C++ Standard: C++23
+-- Compiler: MSVC 19.51.36260.0
+-- Build Type: 
+-- Platform: Windows
+-- Standard Library Modules: D:/runtime/vs/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.51.36231/modules
+-- Linker: system default
+-- Memory Allocator: mimalloc (high-performance)
+-- ==========================================
+-- 
+-- Performance Optimizations Enabled:
+--   mimalloc: 2-3x faster memory allocation
+-- 
+-- Configuring done (1.6s)
+-- Generating done (0.8s)
+-- Build files have been written to: C:/Users/25007/.codex/tmp/cnetmod-h3-windows

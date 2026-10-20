@@ -1661,6 +1661,48 @@ auto append_sealed_payload(const quic_level_keys& keys,
     return {};
 }
 
+auto seal_packet_payload_in_place(const quic_level_keys& keys,
+    std::vector<std::byte>& packet, std::size_t header_size,
+    std::uint64_t packet_number, std::uint32_t path_id)
+    -> std::expected<void, std::error_code>
+{
+    if (!keys.valid() || keys.aead == nullptr || keys.aead_key.empty() ||
+        keys.aead_iv.size() != 12)
+        return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
+    if (header_size > packet.size() ||
+        packet_number > ((std::uint64_t{1} << 62) - 1))
+        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+
+    // Check before either output-size addition. Installed QUIC keys use a
+    // bounded tag, but validity alone does not constrain manually built keys.
+    if (keys.tag_len > packet.max_size() - packet.size())
+        return std::unexpected(std::make_error_code(std::errc::message_size));
+    const auto plaintext_size = packet.size() - header_size;
+    // Plaintext is already live vector storage; only the tag is value-initialized.
+    packet.resize(packet.size() + keys.tag_len);
+    const auto nonce = detail::build_nonce(keys.aead_iv, packet_number, path_id);
+    auto context = aead_context_for(keys);
+    if (!context)
+    {
+        packet.resize(header_size);
+        return std::unexpected(context.error());
+    }
+    // Reacquire pointers after resize. BoringSSL permits exactly equal in/out.
+    auto* const plaintext = reinterpret_cast<std::uint8_t*>(packet.data() + header_size);
+    std::size_t output_length{};
+    const auto ok = EVP_AEAD_CTX_seal(&(*context)->context,
+        plaintext, &output_length, plaintext_size + keys.tag_len,
+        nonce.data(), nonce.size(), plaintext, plaintext_size,
+        reinterpret_cast<const std::uint8_t*>(packet.data()), header_size);
+    if (ok != 1)
+    {
+        packet.resize(header_size);
+        return std::unexpected(make_ssl_error());
+    }
+    packet.resize(header_size + output_length);
+    return {};
+}
+
 auto open_payload(const quic_level_keys& keys,
     std::span<const std::byte> protected_payload,
     std::span<const std::byte> header, std::uint64_t packet_number,

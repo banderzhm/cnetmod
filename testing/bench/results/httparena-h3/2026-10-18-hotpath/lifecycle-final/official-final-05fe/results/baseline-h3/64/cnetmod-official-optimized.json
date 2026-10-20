@@ -1,0 +1,19 @@
+{
+  "framework": "cnetmod-official-optimized",
+  "language": "C++",
+  "rps": 2887181,
+  "avg_latency": "1.29ms",
+  "p99_latency": "5.35ms",
+  "cpu": "1757.4%",
+  "memory": "212MiB",
+  "connections": 64,
+  "threads": 64,
+  "duration": "5s",
+  "pipeline": 1,
+  "bandwidth": "28.05MB/s",
+  "reconnects": 0,
+  "status_2xx": 16341446,
+  "status_3xx": 0,
+  "status_4xx": 0,
+  "status_5xx": 0
+}

@@ -1,0 +1,108 @@
+{
+  "scope": "latest frozen lifecycle/backend/credit fixes plus bounded node cache; native diagnostic, not official ranking",
+  "binary_sha256": "96333f69a82f1b62c91c6655cb939064a8048471aa5bbcd567a1a574b15256b5",
+  "samples": [
+    {
+      "name": "initial",
+      "time": 1792317180.8794942,
+      "rss": 53202944,
+      "private": 50798592
+    },
+    {
+      "name": "round-1-idle-2s",
+      "time": 1792317183.866622,
+      "rss": 179638272,
+      "private": 177168384
+    },
+    {
+      "name": "round-2-idle-2s",
+      "time": 1792317186.8458316,
+      "rss": 206938112,
+      "private": 204468224
+    },
+    {
+      "name": "round-3-idle-2s",
+      "time": 1792317189.962983,
+      "rss": 209035264,
+      "private": 206565376
+    },
+    {
+      "name": "round-4-idle-2s",
+      "time": 1792317193.0040152,
+      "rss": 204341248,
+      "private": 201871360
+    },
+    {
+      "name": "round-5-idle-2s",
+      "time": 1792317195.9565246,
+      "rss": 208576512,
+      "private": 206106624
+    },
+    {
+      "name": "round-6-idle-2s",
+      "time": 1792317198.9825802,
+      "rss": 209027072,
+      "private": 206557184
+    },
+    {
+      "name": "round-7-idle-2s",
+      "time": 1792317201.9680007,
+      "rss": 213368832,
+      "private": 210898944
+    },
+    {
+      "name": "round-8-idle-2s",
+      "time": 1792317204.947241,
+      "rss": 208388096,
+      "private": 205918208
+    },
+    {
+      "name": "failure-immediate",
+      "time": 1792317207.1922948,
+      "rss": 209793024,
+      "private": 207323136
+    },
+    {
+      "name": "failure-idle-35s",
+      "time": 1792317242.1930547,
+      "rss": 209793024,
+      "private": 207323136
+    }
+  ],
+  "rounds": [
+    {
+      "index": 1,
+      "requests": 200000
+    },
+    {
+      "index": 2,
+      "requests": 200000
+    },
+    {
+      "index": 3,
+      "requests": 200000
+    },
+    {
+      "index": 4,
+      "requests": 200000
+    },
+    {
+      "index": 5,
+      "requests": 200000
+    },
+    {
+      "index": 6,
+      "requests": 200000
+    },
+    {
+      "index": 7,
+      "requests": 200000
+    },
+    {
+      "index": 8,
+      "requests": 200000
+    }
+  ],
+  "failure": "AssertionError('tal, 197023 started, 196959 done, 196959 succeeded, 3041 failed, 3041 errored, 0 timeout\\nstatus codes: 196982 2xx, 0 3xx, 0 4xx, 0 5xx\\ntraffic: 2.99GB (3213322150) total, 6.67MB (6994132) headers (space savings 54.05%), 2.99GB (3205224576) data\\nUDP datagram: 103094 sent, 2377308 received\\n                 min         max         median     p95        p99        mean         sd        +/- sd\\nrequest     :      468us     51.16ms      3.74ms     9.58ms    16.30ms     4.55ms      2.93ms    87.39%\\nconnect     :     3.42ms    666.10ms    328.13ms   633.71ms   666.10ms   331.40ms    195.08ms    59.38%\\nTTFB        :     4.03ms    667.05ms    329.02ms   634.59ms   667.05ms   332.67ms    195.26ms    59.38%\\nreq/s       :      38.56    28769.75     5447.70   18729.76   28769.75    7386.53     5297.62    85.94%\\nmin RTT     :        6us      1.67ms        18us      128us     1.67ms       74us       214us    95.31%\\nsmoothed RTT:      196us      8.11ms       617us     4.31ms     8.11ms     1.17ms      1.52ms    89.06%\\npackets sent:         47        2049        1670       1910       2049    1613.80      277.80    81.25%\\npackets recv:       1394       37925       37733      37868      37925   37145.44     4541.36    98.44%\\npackets lost:          0          30           1         10         30       3.19        5.53    90.63%\\nGRO packets :          1           1           1          1          1       1.00        0.00   100.00%\\n-t: warning: the number of threads is greater than hardware cores.\\n')",
+  "valid": false
+}

@@ -1,0 +1,1674 @@
+{
+  "backtraceGraph" : 
+  {
+    "commands" : 
+    [
+      "add_test"
+    ],
+    "files" : 
+    [
+      "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/tests/CMakeLists.txt",
+      "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/CMakeLists.txt"
+    ],
+    "nodes" : 
+    [
+      {
+        "file" : 0
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 287,
+        "parent" : 0
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 287,
+        "parent" : 2
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 287,
+        "parent" : 4
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 287,
+        "parent" : 6
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 287,
+        "parent" : 8
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 287,
+        "parent" : 10
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 287,
+        "parent" : 12
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 287,
+        "parent" : 14
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 287,
+        "parent" : 16
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 287,
+        "parent" : 18
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 287,
+        "parent" : 20
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 287,
+        "parent" : 22
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 287,
+        "parent" : 24
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 287,
+        "parent" : 26
+      },
+      {
+        "file" : 0
+      },
+      {
+        "command" : 0,
+        "file" : 0,
+        "line" : 287,
+        "parent" : 28
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 89,
+        "parent" : 30
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 89,
+        "parent" : 32
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 97,
+        "parent" : 34
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 97,
+        "parent" : 36
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 105,
+        "parent" : 38
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 105,
+        "parent" : 40
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 112,
+        "parent" : 42
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 117,
+        "parent" : 44
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 122,
+        "parent" : 46
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 128,
+        "parent" : 48
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 128,
+        "parent" : 50
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 134,
+        "parent" : 52
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 139,
+        "parent" : 54
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 144,
+        "parent" : 56
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 149,
+        "parent" : 58
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 154,
+        "parent" : 60
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 197,
+        "parent" : 62
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 203,
+        "parent" : 64
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 209,
+        "parent" : 66
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 215,
+        "parent" : 68
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 228,
+        "parent" : 70
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 241,
+        "parent" : 72
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 252,
+        "parent" : 74
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 266,
+        "parent" : 76
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 281,
+        "parent" : 78
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 294,
+        "parent" : 80
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 308,
+        "parent" : 82
+      },
+      {
+        "file" : 1
+      },
+      {
+        "command" : 0,
+        "file" : 1,
+        "line" : 322,
+        "parent" : 84
+      }
+    ]
+  },
+  "kind" : "ctestInfo",
+  "tests" : 
+  [
+    {
+      "backtrace" : 1,
+      "command" : 
+      [
+        "/tmp/cnetmod-h3-arena-build/testing/tests/test_concurrent_containers"
+      ],
+      "name" : "test_concurrent_containers",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/tests"
+        }
+      ]
+    },
+    {
+      "backtrace" : 3,
+      "command" : 
+      [
+        "/tmp/cnetmod-h3-arena-build/testing/tests/test_deadline"
+      ],
+      "name" : "test_deadline",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/tests"
+        }
+      ]
+    },
+    {
+      "backtrace" : 5,
+      "command" : 
+      [
+        "/tmp/cnetmod-h3-arena-build/testing/tests/test_task_group"
+      ],
+      "name" : "test_task_group",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/tests"
+        }
+      ]
+    },
+    {
+      "backtrace" : 7,
+      "command" : 
+      [
+        "/tmp/cnetmod-h3-arena-build/testing/tests/test_task"
+      ],
+      "name" : "test_task",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/tests"
+        }
+      ]
+    },
+    {
+      "backtrace" : 9,
+      "command" : 
+      [
+        "/tmp/cnetmod-h3-arena-build/testing/tests/test_wait_group"
+      ],
+      "name" : "test_wait_group",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/tests"
+        }
+      ]
+    },
+    {
+      "backtrace" : 11,
+      "command" : 
+      [
+        "/tmp/cnetmod-h3-arena-build/testing/tests/test_udp_batch"
+      ],
+      "name" : "test_udp_batch",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/tests"
+        }
+      ]
+    },
+    {
+      "backtrace" : 13,
+      "command" : 
+      [
+        "/tmp/cnetmod-h3-arena-build/testing/tests/test_quic_varint"
+      ],
+      "name" : "test_quic_varint",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/tests"
+        }
+      ]
+    },
+    {
+      "backtrace" : 15,
+      "command" : 
+      [
+        "/tmp/cnetmod-h3-arena-build/testing/tests/test_quic_frame"
+      ],
+      "name" : "test_quic_frame",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/tests"
+        }
+      ]
+    },
+    {
+      "backtrace" : 17,
+      "command" : 
+      [
+        "/tmp/cnetmod-h3-arena-build/testing/tests/test_quic_packet"
+      ],
+      "name" : "test_quic_packet",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/tests"
+        }
+      ]
+    },
+    {
+      "backtrace" : 19,
+      "command" : 
+      [
+        "/tmp/cnetmod-h3-arena-build/testing/tests/test_quic_stream"
+      ],
+      "name" : "test_quic_stream",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/tests"
+        }
+      ]
+    },
+    {
+      "backtrace" : 21,
+      "command" : 
+      [
+        "/tmp/cnetmod-h3-arena-build/testing/tests/test_quic_loss_detection"
+      ],
+      "name" : "test_quic_loss_detection",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/tests"
+        }
+      ]
+    },
+    {
+      "backtrace" : 23,
+      "command" : 
+      [
+        "/tmp/cnetmod-h3-arena-build/testing/tests/test_quic_congestion"
+      ],
+      "name" : "test_quic_congestion",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/tests"
+        }
+      ]
+    },
+    {
+      "backtrace" : 25,
+      "command" : 
+      [
+        "/tmp/cnetmod-h3-arena-build/testing/tests/test_quic_early_data"
+      ],
+      "name" : "test_quic_early_data",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/tests"
+        }
+      ]
+    },
+    {
+      "backtrace" : 27,
+      "command" : 
+      [
+        "/tmp/cnetmod-h3-arena-build/testing/tests/test_http3_qpack"
+      ],
+      "name" : "test_http3_qpack",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/tests"
+        }
+      ]
+    },
+    {
+      "backtrace" : 29,
+      "command" : 
+      [
+        "/tmp/cnetmod-h3-arena-build/testing/tests/test_http3_frame"
+      ],
+      "name" : "test_http3_frame",
+      "properties" : 
+      [
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/tests"
+        }
+      ]
+    },
+    {
+      "backtrace" : 31,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/quic_pmtu_deadline.py",
+        "/tmp/cnetmod-h3-arena-build/bin/quic_pmtu_deadline_server",
+        "--scenario",
+        "interval",
+        "--helper-dir",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3"
+      ],
+      "name" : "quic_pmtu_deadline_interval",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "http3",
+            "pmtu",
+            "quic",
+            "timer"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 30.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 33,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/quic_pmtu_deadline.py",
+        "/tmp/cnetmod-h3-arena-build/bin/quic_pmtu_deadline_server",
+        "--scenario",
+        "initial",
+        "--helper-dir",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3"
+      ],
+      "name" : "quic_pmtu_deadline_initial",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "http3",
+            "pmtu",
+            "quic",
+            "timer"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 30.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 35,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/quic_pmtu_pending.py",
+        "/tmp/cnetmod-h3-arena-build/bin/quic_pmtu_pending_server",
+        "--scenario",
+        "ack_only",
+        "--helper-dir",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3"
+      ],
+      "name" : "quic_pmtu_pending_ack_only",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "http3",
+            "pmtu",
+            "quic",
+            "recovery"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 30.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 37,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/quic_pmtu_pending.py",
+        "/tmp/cnetmod-h3-arena-build/bin/quic_pmtu_pending_server",
+        "--scenario",
+        "wake",
+        "--helper-dir",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3"
+      ],
+      "name" : "quic_pmtu_pending_wake",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "http3",
+            "pmtu",
+            "quic",
+            "recovery"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 30.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 39,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/quic_datagram_cc.py",
+        "/tmp/cnetmod-h3-arena-build/bin/quic_datagram_cc_server",
+        "--scenario",
+        "admission"
+      ],
+      "name" : "quic_datagram_cc_admission",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "datagram",
+            "http3",
+            "quic",
+            "recovery"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 45.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 41,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/quic_datagram_cc.py",
+        "/tmp/cnetmod-h3-arena-build/bin/quic_datagram_cc_server",
+        "--scenario",
+        "pto"
+      ],
+      "name" : "quic_datagram_cc_pto",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "datagram",
+            "http3",
+            "quic",
+            "recovery"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 45.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 43,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/quic_pmtu_cc.py",
+        "/tmp/cnetmod-h3-arena-build/bin/quic_pmtu_cc_server",
+        "--large-aead-peer"
+      ],
+      "name" : "quic_pmtu_cc_large_response_after_loss",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "http3",
+            "pmtu",
+            "quic",
+            "recovery",
+            "test_peer_adapter"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 90.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 45,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http3_lifecycle.py",
+        "/tmp/cnetmod-h3-arena-build/bin/h3_interop_server"
+      ],
+      "name" : "http3_lifecycle",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "http3",
+            "interop",
+            "lifecycle"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 60.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 47,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http3_cold_cleanup.py",
+        "/tmp/cnetmod-h3-arena-build/bin/h3_interop_server"
+      ],
+      "name" : "http3_cold_listener_cleanup",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "http3",
+            "interop",
+            "lifecycle"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 50.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 49,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http3_outbound_pto.py",
+        "/tmp/cnetmod-h3-arena-build/bin/h3_interop_server",
+        "--workers",
+        "1",
+        "--restart"
+      ],
+      "name" : "http3_outbound_pto_close_restart_1",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "http3",
+            "interop",
+            "lifecycle",
+            "recovery"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 30.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 51,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http3_outbound_pto.py",
+        "/tmp/cnetmod-h3-arena-build/bin/h3_interop_server",
+        "--workers",
+        "2",
+        "--restart"
+      ],
+      "name" : "http3_outbound_pto_close_restart_2",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "http3",
+            "interop",
+            "lifecycle",
+            "recovery"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 30.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 53,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/quic_retire_stream.py",
+        "/tmp/cnetmod-h3-arena-build/bin/quic_retire_stream_server",
+        "--mode",
+        "all"
+      ],
+      "name" : "quic_retire_stream_credit_wakeup",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "flow_control",
+            "http3",
+            "lifecycle",
+            "quic"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 30.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 55,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/quic_retire_stream.py",
+        "/tmp/cnetmod-h3-arena-build/bin/quic_retire_stream_server",
+        "--scenario",
+        "notification-lifetime"
+      ],
+      "name" : "quic_retire_stream_notification_lifetime",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "http3",
+            "lifecycle",
+            "memory",
+            "quic"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 30.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 57,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/quic_retire_stream.py",
+        "/tmp/cnetmod-h3-arena-build/bin/quic_retire_stream_server",
+        "--scenario",
+        "private-pto"
+      ],
+      "name" : "quic_private_outbound_pto",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "http3",
+            "lifecycle",
+            "quic",
+            "recovery"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 30.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 59,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/quic_handshake_confirmation.py",
+        "/tmp/cnetmod-h3-arena-build/bin/quic_retire_stream_server"
+      ],
+      "name" : "quic_handshake_confirmation",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "http3",
+            "lifecycle",
+            "quic",
+            "recovery"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 30.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 61,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3",
+        "-p",
+        "test_webtransport_aioquic_probe.py"
+      ],
+      "name" : "h3_webtransport_aioquic_probe_unit",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "http3",
+            "interop",
+            "unit",
+            "webtransport"
+          ]
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 30.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 63,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py",
+        "--early-data-loss",
+        "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server",
+        "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+      ],
+      "name" : "http3_early_data_recovery",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "http3",
+            "quic",
+            "recovery"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 90.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 65,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http3_streaming_cancellation.py",
+        "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server"
+      ],
+      "name" : "http3_streaming_cancellation",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "http3",
+            "lifecycle",
+            "quic"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 20.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 67,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http3_idle_cleanup.py",
+        "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server"
+      ],
+      "name" : "http3_idle_connection_cleanup",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "http3",
+            "lifecycle",
+            "quic"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 65.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 69,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py",
+        "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server",
+        "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+      ],
+      "name" : "http_client_http3_end_to_end",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "client",
+            "end_to_end",
+            "http3"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 90.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 71,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py",
+        "--dynamic-qpack",
+        "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server",
+        "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+      ],
+      "name" : "http_client_http3_dynamic_qpack_end_to_end",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "client",
+            "end_to_end",
+            "http3",
+            "qpack"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 90.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 73,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py",
+        "--multipath",
+        "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server",
+        "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+      ],
+      "name" : "http3_multipath_end_to_end",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "end_to_end",
+            "http3",
+            "multipath",
+            "quic"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 90.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 75,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py",
+        "--multipath-pmtu",
+        "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server",
+        "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+      ],
+      "name" : "http3_multipath_path_mtu_end_to_end",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "end_to_end",
+            "http3",
+            "multipath",
+            "pmtu",
+            "quic"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 90.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 77,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py",
+        "--multipath-pmtu-blackhole",
+        "--pmtu-blackhole-proxy",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/pmtu_blackhole_proxy.py",
+        "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server",
+        "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+      ],
+      "name" : "http3_multipath_path_mtu_blackhole_end_to_end",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "blackhole",
+            "end_to_end",
+            "http3",
+            "multipath",
+            "pmtu",
+            "quic"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 90.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 79,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py",
+        "--multipath-close",
+        "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server",
+        "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+      ],
+      "name" : "http3_multipath_local_path_close_end_to_end",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "close",
+            "end_to_end",
+            "http3",
+            "multipath",
+            "quic"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 90.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 81,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py",
+        "--connect-close",
+        "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server",
+        "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+      ],
+      "name" : "http3_connect_close_end_to_end",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "client",
+            "close",
+            "connect",
+            "end_to_end",
+            "http3",
+            "quic"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 90.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 83,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py",
+        "--multipath-timeout",
+        "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server",
+        "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+      ],
+      "name" : "http3_multipath_path_validation_timeout_end_to_end",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "end_to_end",
+            "http3",
+            "multipath",
+            "quic",
+            "timeout"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 90.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    },
+    {
+      "backtrace" : 85,
+      "command" : 
+      [
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/migration_e2e.py",
+        "/tmp/cnetmod-h3-arena-build/bin/h3_interop_server",
+        "/tmp/cnetmod-h3-arena-build/testing/http3/http3_migration_e2e",
+        "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/migration_udp_proxy.py"
+      ],
+      "name" : "http3_connection_migration",
+      "properties" : 
+      [
+        {
+          "name" : "LABELS",
+          "value" : 
+          [
+            "http3",
+            "migration",
+            "quic"
+          ]
+        },
+        {
+          "name" : "SKIP_RETURN_CODE",
+          "value" : 77
+        },
+        {
+          "name" : "TIMEOUT",
+          "value" : 120.0
+        },
+        {
+          "name" : "WORKING_DIRECTORY",
+          "value" : "/tmp/cnetmod-h3-arena-build/testing/http3"
+        }
+      ]
+    }
+  ],
+  "version" : 
+  {
+    "major" : 1,
+    "minor" : 0
+  }
+}

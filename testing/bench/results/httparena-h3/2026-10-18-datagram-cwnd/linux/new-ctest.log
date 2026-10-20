@@ -1,0 +1,21 @@
+Test project /tmp/cnetmod-h3-arena-build
+    Start 62: quic_datagram_cc_admission
+1/2 Test #62: quic_datagram_cc_admission .......***Failed    0.69 sec
+{"aioquic_version": "1.7.0", "command": ["/tmp/cnetmod-h3-arena-build/bin/quic_datagram_cc_server", "--port", "35322", "--cert", "/tmp/quic-datagram-cc-bu6zqqrw/cert.pem", "--key", "/tmp/quic-datagram-cc-bu6zqqrw/key.pem", "--listening-report", "/tmp/quic-datagram-cc-bu6zqqrw/listening.txt", "--ready-report", "/tmp/quic-datagram-cc-bu6zqqrw/ready.txt", "--burst-report", "/tmp/quic-datagram-cc-bu6zqqrw/burst.json", "--result-report", "/tmp/quic-datagram-cc-bu6zqqrw/failure.txt"], "driver_sha256": "f718e565948194f363b3050b993f5030bbc7aa351427cc010c209fce20701097", "error": "AssertionError('failed: invalid setup: invalid first recovery deadline or burst crossed it\\n')", "expect": "pass", "peer_aead": "unmodified installed aioquic", "proxy_errors": [], "scenario": "admission", "server_exit_code": -15, "server_sha256": "9e14a869aee2acc9a1e19732a0435898148de1398c71dde8d40a94337493906b", "status": "failed"}
+
+    Start 63: quic_datagram_cc_pto
+2/2 Test #63: quic_datagram_cc_pto .............   Passed    1.61 sec
+
+50% tests passed, 1 tests failed out of 2
+
+Label Time Summary:
+datagram    =   2.30 sec*proc (2 tests)
+http3       =   2.30 sec*proc (2 tests)
+quic        =   2.30 sec*proc (2 tests)
+recovery    =   2.30 sec*proc (2 tests)
+
+Total Test time (real) =   2.30 sec
+
+The following tests FAILED:
+	 62 - quic_datagram_cc_admission (Failed)               datagram http3 quic recovery
+Errors while running CTest

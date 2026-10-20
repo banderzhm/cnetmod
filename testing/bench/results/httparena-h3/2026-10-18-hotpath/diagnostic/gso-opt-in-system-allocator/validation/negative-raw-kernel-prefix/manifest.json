@@ -1,0 +1,6 @@
+{
+  "variant": "raw-kernel-prefix",
+  "binary_sha256": "a1cffd5b12f55db415a6dc2ee10abd13bc81f5147f13fead584f0f1fec49f2e8",
+  "archive_sha256": "06820578552a7ef971b0a88cafa0c46e312561a00b537360594a356d9f681326",
+  "source_sha256": "0e901ee73cd872a4f098c753023b7243019f4ef5d85f87f2e5f0306e8121b01d"
+}

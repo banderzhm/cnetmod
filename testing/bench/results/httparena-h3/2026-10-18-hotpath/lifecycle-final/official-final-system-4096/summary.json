@@ -1,0 +1,1400 @@
+{
+  "valid": true,
+  "allocator": "system",
+  "binary_sha256": "5bf46aeeee227934742969972dfa3e4705d5fb87e66289c9109f41d89f353470",
+  "path_mtu": 4096,
+  "receive_ceiling": 8192,
+  "gso": 1,
+  "framework_order": [
+    [
+      "cnetmod-official-optimized",
+      [
+        "baseline-h3"
+      ]
+    ],
+    [
+      "cnetmod-official-static",
+      [
+        "static-h3"
+      ]
+    ],
+    [
+      "agensio-official-h3",
+      [
+        "baseline-h3",
+        "static-h3"
+      ]
+    ],
+    [
+      "genhttp-ioxide-official-h3",
+      [
+        "baseline-h3",
+        "static-h3"
+      ]
+    ]
+  ],
+  "profiles": [
+    {
+      "framework": "cnetmod-official-optimized",
+      "profile": "baseline-h3",
+      "raw_h2load_exits": [
+        0,
+        0,
+        0
+      ],
+      "h2load_argv": [
+        [
+          "timeout",
+          "45",
+          "taskset",
+          "-c",
+          "16-31",
+          "/var/tmp/cnetmod-h3-loadgen169/h2load",
+          "--alpn-list=h3",
+          "https://localhost:8443/baseline2?a=1&b=1",
+          "-c",
+          "64",
+          "-m",
+          "64",
+          "-t",
+          "64",
+          "-D",
+          "5s"
+        ],
+        [
+          "timeout",
+          "45",
+          "taskset",
+          "-c",
+          "16-31",
+          "/var/tmp/cnetmod-h3-loadgen169/h2load",
+          "--alpn-list=h3",
+          "https://localhost:8443/baseline2?a=1&b=1",
+          "-c",
+          "64",
+          "-m",
+          "64",
+          "-t",
+          "64",
+          "-D",
+          "5s"
+        ],
+        [
+          "timeout",
+          "45",
+          "taskset",
+          "-c",
+          "16-31",
+          "/var/tmp/cnetmod-h3-loadgen169/h2load",
+          "--alpn-list=h3",
+          "https://localhost:8443/baseline2?a=1&b=1",
+          "-c",
+          "64",
+          "-m",
+          "64",
+          "-t",
+          "64",
+          "-D",
+          "5s"
+        ]
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "total": 16030146,
+          "started": 16034242,
+          "done": 16030146,
+          "succeeded": 16030146,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "status_2xx": 16030146,
+          "header_only_delta": 0,
+          "elapsed_seconds": 5.65,
+          "printed_rps": 3206029.2,
+          "completed_rps": 2837193.9823008846,
+          "official_valid_2xx_rps": 2837193.9823008846
+        },
+        {
+          "round": 2,
+          "total": 16213162,
+          "started": 16217258,
+          "done": 16213162,
+          "succeeded": 16213162,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "status_2xx": 16213162,
+          "header_only_delta": 0,
+          "elapsed_seconds": 5.66,
+          "printed_rps": 3242632.4,
+          "completed_rps": 2864516.254416961,
+          "official_valid_2xx_rps": 2864516.254416961
+        },
+        {
+          "round": 3,
+          "total": 15948264,
+          "started": 15952360,
+          "done": 15948264,
+          "succeeded": 15948264,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "status_2xx": 15948264,
+          "header_only_delta": 0,
+          "elapsed_seconds": 5.66,
+          "printed_rps": 3189652.8,
+          "completed_rps": 2817714.487632509,
+          "official_valid_2xx_rps": 2817714.487632509
+        }
+      ],
+      "selected": {
+        "framework": "cnetmod-official-optimized",
+        "language": "C++",
+        "rps": 2864516,
+        "avg_latency": "1.32ms",
+        "p99_latency": "6.01ms",
+        "cpu": "1876.7%",
+        "memory": "79MiB",
+        "connections": 64,
+        "threads": 64,
+        "duration": "5s",
+        "pipeline": 1,
+        "bandwidth": "27.83MB/s",
+        "reconnects": 0,
+        "status_2xx": 16213162,
+        "status_3xx": 0,
+        "status_4xx": 0,
+        "status_5xx": 0
+      },
+      "official_selection_unchanged": true
+    },
+    {
+      "framework": "cnetmod-official-static",
+      "profile": "static-h3",
+      "raw_h2load_exits": [
+        0,
+        0,
+        0
+      ],
+      "h2load_argv": [
+        [
+          "timeout",
+          "45",
+          "taskset",
+          "-c",
+          "16-31",
+          "/var/tmp/cnetmod-h3-loadgen169/h2load",
+          "--alpn-list=h3",
+          "-i",
+          "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena/requests/static-h2-uris.txt",
+          "-H",
+          "Accept-Encoding: br;q=1, gzip;q=0.8",
+          "-c",
+          "64",
+          "-m",
+          "64",
+          "-t",
+          "64",
+          "-D",
+          "5s"
+        ],
+        [
+          "timeout",
+          "45",
+          "taskset",
+          "-c",
+          "16-31",
+          "/var/tmp/cnetmod-h3-loadgen169/h2load",
+          "--alpn-list=h3",
+          "-i",
+          "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena/requests/static-h2-uris.txt",
+          "-H",
+          "Accept-Encoding: br;q=1, gzip;q=0.8",
+          "-c",
+          "64",
+          "-m",
+          "64",
+          "-t",
+          "64",
+          "-D",
+          "5s"
+        ],
+        [
+          "timeout",
+          "45",
+          "taskset",
+          "-c",
+          "16-31",
+          "/var/tmp/cnetmod-h3-loadgen169/h2load",
+          "--alpn-list=h3",
+          "-i",
+          "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena/requests/static-h2-uris.txt",
+          "-H",
+          "Accept-Encoding: br;q=1, gzip;q=0.8",
+          "-c",
+          "64",
+          "-m",
+          "64",
+          "-t",
+          "64",
+          "-D",
+          "5s"
+        ]
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "total": 3555155,
+          "started": 3559251,
+          "done": 3555155,
+          "succeeded": 3555155,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "status_2xx": 3555212,
+          "header_only_delta": 57,
+          "elapsed_seconds": 5.66,
+          "printed_rps": 711031.0,
+          "completed_rps": 628119.25795053,
+          "official_valid_2xx_rps": 628129.3286219081
+        },
+        {
+          "round": 2,
+          "total": 3452792,
+          "started": 3456888,
+          "done": 3452792,
+          "succeeded": 3452792,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "status_2xx": 3452832,
+          "header_only_delta": 40,
+          "elapsed_seconds": 5.67,
+          "printed_rps": 690558.4,
+          "completed_rps": 608958.024691358,
+          "official_valid_2xx_rps": 608965.0793650794
+        },
+        {
+          "round": 3,
+          "total": 3514472,
+          "started": 3518568,
+          "done": 3514472,
+          "succeeded": 3514472,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "status_2xx": 3514522,
+          "header_only_delta": 50,
+          "elapsed_seconds": 5.67,
+          "printed_rps": 702894.4,
+          "completed_rps": 619836.3315696649,
+          "official_valid_2xx_rps": 619845.1499118166
+        }
+      ],
+      "selected": {
+        "framework": "cnetmod-official-static",
+        "language": "C++",
+        "rps": 628129,
+        "avg_latency": "5.91ms",
+        "p99_latency": "28.60ms",
+        "cpu": "1699.3%",
+        "memory": "117MiB",
+        "connections": 64,
+        "threads": 64,
+        "duration": "5s",
+        "pipeline": 1,
+        "bandwidth": "10.80GB/s",
+        "reconnects": 0,
+        "status_2xx": 3555212,
+        "status_3xx": 0,
+        "status_4xx": 0,
+        "status_5xx": 0
+      },
+      "official_selection_unchanged": true
+    },
+    {
+      "framework": "agensio-official-h3",
+      "profile": "baseline-h3",
+      "raw_h2load_exits": [
+        0,
+        0,
+        0
+      ],
+      "h2load_argv": [
+        [
+          "timeout",
+          "45",
+          "taskset",
+          "-c",
+          "16-31",
+          "/var/tmp/cnetmod-h3-loadgen169/h2load",
+          "--alpn-list=h3",
+          "https://localhost:8443/baseline2?a=1&b=1",
+          "-c",
+          "64",
+          "-m",
+          "64",
+          "-t",
+          "64",
+          "-D",
+          "5s"
+        ],
+        [
+          "timeout",
+          "45",
+          "taskset",
+          "-c",
+          "16-31",
+          "/var/tmp/cnetmod-h3-loadgen169/h2load",
+          "--alpn-list=h3",
+          "https://localhost:8443/baseline2?a=1&b=1",
+          "-c",
+          "64",
+          "-m",
+          "64",
+          "-t",
+          "64",
+          "-D",
+          "5s"
+        ],
+        [
+          "timeout",
+          "45",
+          "taskset",
+          "-c",
+          "16-31",
+          "/var/tmp/cnetmod-h3-loadgen169/h2load",
+          "--alpn-list=h3",
+          "https://localhost:8443/baseline2?a=1&b=1",
+          "-c",
+          "64",
+          "-m",
+          "64",
+          "-t",
+          "64",
+          "-D",
+          "5s"
+        ]
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "total": 39859328,
+          "started": 39863424,
+          "done": 39859328,
+          "succeeded": 39859328,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "status_2xx": 39859328,
+          "header_only_delta": 0,
+          "elapsed_seconds": 5.66,
+          "printed_rps": 7971865.6,
+          "completed_rps": 7042284.098939929,
+          "official_valid_2xx_rps": 7042284.098939929
+        },
+        {
+          "round": 2,
+          "total": 40068288,
+          "started": 40072384,
+          "done": 40068288,
+          "succeeded": 40068288,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "status_2xx": 40068288,
+          "header_only_delta": 0,
+          "elapsed_seconds": 5.66,
+          "printed_rps": 8013657.6,
+          "completed_rps": 7079202.826855123,
+          "official_valid_2xx_rps": 7079202.826855123
+        },
+        {
+          "round": 3,
+          "total": 39246848,
+          "started": 39250944,
+          "done": 39246848,
+          "succeeded": 39246848,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "status_2xx": 39246848,
+          "header_only_delta": 0,
+          "elapsed_seconds": 5.65,
+          "printed_rps": 7849369.6,
+          "completed_rps": 6946344.778761062,
+          "official_valid_2xx_rps": 6946344.778761062
+        }
+      ],
+      "selected": {
+        "framework": "agensio-official-h3",
+        "language": "C++",
+        "rps": 7079202,
+        "avg_latency": "463us",
+        "p99_latency": "1.27ms",
+        "cpu": "908.2%",
+        "memory": "126MiB",
+        "connections": 64,
+        "threads": 64,
+        "duration": "5s",
+        "pipeline": 1,
+        "bandwidth": "138.76MB/s",
+        "reconnects": 0,
+        "status_2xx": 40068288,
+        "status_3xx": 0,
+        "status_4xx": 0,
+        "status_5xx": 0
+      },
+      "official_selection_unchanged": true
+    },
+    {
+      "framework": "agensio-official-h3",
+      "profile": "static-h3",
+      "raw_h2load_exits": [
+        0,
+        0,
+        0
+      ],
+      "h2load_argv": [
+        [
+          "timeout",
+          "45",
+          "taskset",
+          "-c",
+          "16-31",
+          "/var/tmp/cnetmod-h3-loadgen169/h2load",
+          "--alpn-list=h3",
+          "-i",
+          "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena/requests/static-h2-uris.txt",
+          "-H",
+          "Accept-Encoding: br;q=1, gzip;q=0.8",
+          "-c",
+          "64",
+          "-m",
+          "64",
+          "-t",
+          "64",
+          "-D",
+          "5s"
+        ],
+        [
+          "timeout",
+          "45",
+          "taskset",
+          "-c",
+          "16-31",
+          "/var/tmp/cnetmod-h3-loadgen169/h2load",
+          "--alpn-list=h3",
+          "-i",
+          "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena/requests/static-h2-uris.txt",
+          "-H",
+          "Accept-Encoding: br;q=1, gzip;q=0.8",
+          "-c",
+          "64",
+          "-m",
+          "64",
+          "-t",
+          "64",
+          "-D",
+          "5s"
+        ],
+        [
+          "timeout",
+          "45",
+          "taskset",
+          "-c",
+          "16-31",
+          "/var/tmp/cnetmod-h3-loadgen169/h2load",
+          "--alpn-list=h3",
+          "-i",
+          "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena/requests/static-h2-uris.txt",
+          "-H",
+          "Accept-Encoding: br;q=1, gzip;q=0.8",
+          "-c",
+          "64",
+          "-m",
+          "64",
+          "-t",
+          "64",
+          "-D",
+          "5s"
+        ]
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "total": 5911339,
+          "started": 5915435,
+          "done": 5911339,
+          "succeeded": 5911339,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "status_2xx": 5912472,
+          "header_only_delta": 1133,
+          "elapsed_seconds": 5.65,
+          "printed_rps": 1182267.8,
+          "completed_rps": 1046254.6902654867,
+          "official_valid_2xx_rps": 1046455.221238938
+        },
+        {
+          "round": 2,
+          "total": 5863920,
+          "started": 5868016,
+          "done": 5863920,
+          "succeeded": 5863920,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "status_2xx": 5865002,
+          "header_only_delta": 1082,
+          "elapsed_seconds": 5.68,
+          "printed_rps": 1172784.0,
+          "completed_rps": 1032380.281690141,
+          "official_valid_2xx_rps": 1032570.7746478873
+        },
+        {
+          "round": 3,
+          "total": 5931805,
+          "started": 5935901,
+          "done": 5931805,
+          "succeeded": 5931805,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "status_2xx": 5932890,
+          "header_only_delta": 1085,
+          "elapsed_seconds": 5.67,
+          "printed_rps": 1186361.0,
+          "completed_rps": 1046173.7213403881,
+          "official_valid_2xx_rps": 1046365.0793650794
+        }
+      ],
+      "selected": {
+        "framework": "agensio-official-h3",
+        "language": "C++",
+        "rps": 1046455,
+        "avg_latency": "3.31ms",
+        "p99_latency": "12.56ms",
+        "cpu": "1238.9%",
+        "memory": "124MiB",
+        "connections": 64,
+        "threads": 64,
+        "duration": "5s",
+        "pipeline": 1,
+        "bandwidth": "18.03GB/s",
+        "reconnects": 0,
+        "status_2xx": 5912472,
+        "status_3xx": 0,
+        "status_4xx": 0,
+        "status_5xx": 0
+      },
+      "official_selection_unchanged": true
+    },
+    {
+      "framework": "genhttp-ioxide-official-h3",
+      "profile": "baseline-h3",
+      "raw_h2load_exits": [
+        0,
+        0,
+        0
+      ],
+      "h2load_argv": [
+        [
+          "timeout",
+          "45",
+          "taskset",
+          "-c",
+          "16-31",
+          "/var/tmp/cnetmod-h3-loadgen169/h2load",
+          "--alpn-list=h3",
+          "https://localhost:8443/baseline2?a=1&b=1",
+          "-c",
+          "64",
+          "-m",
+          "64",
+          "-t",
+          "64",
+          "-D",
+          "5s"
+        ],
+        [
+          "timeout",
+          "45",
+          "taskset",
+          "-c",
+          "16-31",
+          "/var/tmp/cnetmod-h3-loadgen169/h2load",
+          "--alpn-list=h3",
+          "https://localhost:8443/baseline2?a=1&b=1",
+          "-c",
+          "64",
+          "-m",
+          "64",
+          "-t",
+          "64",
+          "-D",
+          "5s"
+        ],
+        [
+          "timeout",
+          "45",
+          "taskset",
+          "-c",
+          "16-31",
+          "/var/tmp/cnetmod-h3-loadgen169/h2load",
+          "--alpn-list=h3",
+          "https://localhost:8443/baseline2?a=1&b=1",
+          "-c",
+          "64",
+          "-m",
+          "64",
+          "-t",
+          "64",
+          "-D",
+          "5s"
+        ]
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "total": 7241874,
+          "started": 7245970,
+          "done": 7241874,
+          "succeeded": 7241874,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "status_2xx": 7242059,
+          "header_only_delta": 185,
+          "elapsed_seconds": 5.68,
+          "printed_rps": 1448374.8,
+          "completed_rps": 1274977.8169014086,
+          "official_valid_2xx_rps": 1275010.3873239437
+        },
+        {
+          "round": 2,
+          "total": 8785078,
+          "started": 8789174,
+          "done": 8785078,
+          "succeeded": 8785078,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "status_2xx": 8785173,
+          "header_only_delta": 95,
+          "elapsed_seconds": 5.67,
+          "printed_rps": 1757015.6,
+          "completed_rps": 1549396.4726631395,
+          "official_valid_2xx_rps": 1549413.2275132276
+        },
+        {
+          "round": 3,
+          "total": 8760366,
+          "started": 8764462,
+          "done": 8760366,
+          "succeeded": 8760366,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "status_2xx": 8760475,
+          "header_only_delta": 109,
+          "elapsed_seconds": 5.67,
+          "printed_rps": 1752073.2,
+          "completed_rps": 1545038.0952380951,
+          "official_valid_2xx_rps": 1545057.319223986
+        }
+      ],
+      "selected": {
+        "framework": "genhttp-ioxide-official-h3",
+        "language": "C#",
+        "rps": 1549413,
+        "avg_latency": "2.68ms",
+        "p99_latency": "10.74ms",
+        "cpu": "1895.6%",
+        "memory": "1.1GiB",
+        "connections": 64,
+        "threads": 64,
+        "duration": "5s",
+        "pipeline": 1,
+        "bandwidth": "21.78MB/s",
+        "reconnects": 0,
+        "status_2xx": 8785173,
+        "status_3xx": 0,
+        "status_4xx": 0,
+        "status_5xx": 0
+      },
+      "official_selection_unchanged": true
+    },
+    {
+      "framework": "genhttp-ioxide-official-h3",
+      "profile": "static-h3",
+      "raw_h2load_exits": [
+        0,
+        0,
+        0
+      ],
+      "h2load_argv": [
+        [
+          "timeout",
+          "45",
+          "taskset",
+          "-c",
+          "16-31",
+          "/var/tmp/cnetmod-h3-loadgen169/h2load",
+          "--alpn-list=h3",
+          "-i",
+          "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena/requests/static-h2-uris.txt",
+          "-H",
+          "Accept-Encoding: br;q=1, gzip;q=0.8",
+          "-c",
+          "64",
+          "-m",
+          "64",
+          "-t",
+          "64",
+          "-D",
+          "5s"
+        ],
+        [
+          "timeout",
+          "45",
+          "taskset",
+          "-c",
+          "16-31",
+          "/var/tmp/cnetmod-h3-loadgen169/h2load",
+          "--alpn-list=h3",
+          "-i",
+          "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena/requests/static-h2-uris.txt",
+          "-H",
+          "Accept-Encoding: br;q=1, gzip;q=0.8",
+          "-c",
+          "64",
+          "-m",
+          "64",
+          "-t",
+          "64",
+          "-D",
+          "5s"
+        ],
+        [
+          "timeout",
+          "45",
+          "taskset",
+          "-c",
+          "16-31",
+          "/var/tmp/cnetmod-h3-loadgen169/h2load",
+          "--alpn-list=h3",
+          "-i",
+          "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena/requests/static-h2-uris.txt",
+          "-H",
+          "Accept-Encoding: br;q=1, gzip;q=0.8",
+          "-c",
+          "64",
+          "-m",
+          "64",
+          "-t",
+          "64",
+          "-D",
+          "5s"
+        ]
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "total": 1105527,
+          "started": 1109623,
+          "done": 1105527,
+          "succeeded": 1105527,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "status_2xx": 1108604,
+          "header_only_delta": 3077,
+          "elapsed_seconds": 5.72,
+          "printed_rps": 221105.4,
+          "completed_rps": 193273.95104895104,
+          "official_valid_2xx_rps": 193811.8881118881
+        },
+        {
+          "round": 2,
+          "total": 1232024,
+          "started": 1236120,
+          "done": 1232024,
+          "succeeded": 1232024,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "status_2xx": 1235153,
+          "header_only_delta": 3129,
+          "elapsed_seconds": 5.67,
+          "printed_rps": 246404.8,
+          "completed_rps": 217288.18342151676,
+          "official_valid_2xx_rps": 217840.03527336862
+        },
+        {
+          "round": 3,
+          "total": 1219347,
+          "started": 1223443,
+          "done": 1219347,
+          "succeeded": 1219347,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "status_2xx": 1222852,
+          "header_only_delta": 3505,
+          "elapsed_seconds": 5.67,
+          "printed_rps": 243869.4,
+          "completed_rps": 215052.38095238095,
+          "official_valid_2xx_rps": 215670.54673721342
+        }
+      ],
+      "selected": {
+        "framework": "genhttp-ioxide-official-h3",
+        "language": "C#",
+        "rps": 217840,
+        "avg_latency": "18.78ms",
+        "p99_latency": "61.80ms",
+        "cpu": "1823.9%",
+        "memory": "1.4GiB",
+        "connections": 64,
+        "threads": 64,
+        "duration": "5s",
+        "pipeline": 1,
+        "bandwidth": "3.74GB/s",
+        "reconnects": 0,
+        "status_2xx": 1235153,
+        "status_3xx": 0,
+        "status_4xx": 0,
+        "status_5xx": 0
+      },
+      "official_selection_unchanged": true
+    }
+  ],
+  "commands": [
+    {
+      "argv": [
+        "git",
+        "-C",
+        "/var/tmp/cnetmod-http-arena-8977be27",
+        "rev-parse",
+        "HEAD"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "git",
+        "-C",
+        "/var/tmp/cnetmod-http-arena-8977be27",
+        "diff",
+        "--exit-code",
+        "8977be2721a5aba7b320345cddfcd6f6b654e698",
+        "--",
+        "scripts",
+        "requests",
+        "data/static",
+        "data/dataset.json"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "docker",
+        "ps",
+        "-a",
+        "--filter",
+        "name=httparena-",
+        "--format",
+        "{{.Names}}"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "ss",
+        "-H",
+        "-lun",
+        "sport = :8443"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "pgrep",
+        "-x",
+        "h2load|gcannon|wrk|zrk|ghz|oha"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "docker",
+        "image",
+        "inspect",
+        "sha256:dd75c50576e08009267603a62a55f01e59b7e79891c6eb81420735a78e28b504"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "docker",
+        "image",
+        "inspect",
+        "sha256:72d6de94308798c44f38e98576f132ea1daf4bba07463011eadbb2f859beb8be"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "docker",
+        "image",
+        "inspect",
+        "cnetmod-h3-official-loadgen"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "ldd",
+        "/var/tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "docker",
+        "build",
+        "-t",
+        "cnetmod-final-4c178de9d76f4c63adb15a4ebe898833-cnetmod-official-optimized",
+        "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/cnetmod-official-optimized"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "docker",
+        "image",
+        "inspect",
+        "cnetmod-final-4c178de9d76f4c63adb15a4ebe898833-cnetmod-official-optimized"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "ldd",
+        "/var/tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "docker",
+        "build",
+        "-t",
+        "cnetmod-final-4c178de9d76f4c63adb15a4ebe898833-cnetmod-official-static",
+        "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/cnetmod-official-static"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "docker",
+        "image",
+        "inspect",
+        "cnetmod-final-4c178de9d76f4c63adb15a4ebe898833-cnetmod-official-static"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "python",
+        "/mnt/c/Users/25007/.codex/tmp/run_official_h3_isolated.py",
+        "--official",
+        "/var/tmp/cnetmod-http-arena-8977be27",
+        "--stage",
+        "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena",
+        "--h2load",
+        "/var/tmp/cnetmod-h3-loadgen169/h2load",
+        "--images",
+        "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/images.json",
+        "--prepare-only"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "/lib64/ld-linux-x86-64.so.2",
+        "--list",
+        "/var/tmp/cnetmod-h3-loadgen169/h2load"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "uname",
+        "-a"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "lscpu"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "clang++",
+        "--version"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "/var/tmp/cnetmod-h3-loadgen169/h2load",
+        "--version"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "bash",
+        "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena/scripts/validate.sh",
+        "cnetmod-official-optimized"
+      ],
+      "cwd": "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena"
+    },
+    {
+      "argv": [
+        "bash",
+        "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena/scripts/validate.sh",
+        "cnetmod-official-static"
+      ],
+      "cwd": "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena"
+    },
+    {
+      "argv": [
+        "bash",
+        "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena/scripts/validate.sh",
+        "agensio-official-h3"
+      ],
+      "cwd": "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena"
+    },
+    {
+      "argv": [
+        "bash",
+        "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena/scripts/validate.sh",
+        "genhttp-ioxide-official-h3"
+      ],
+      "cwd": "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena"
+    },
+    {
+      "argv": [
+        "docker",
+        "run",
+        "-d",
+        "--name",
+        "cnetmod-final-4c178de9d76f4c63adb15a4ebe898833-netns",
+        "--label",
+        "cnetmod.official.run=4c178de9d76f4c63adb15a4ebe898833",
+        "--network",
+        "none",
+        "--entrypoint",
+        "/bin/sleep",
+        "sha256:dd75c50576e08009267603a62a55f01e59b7e79891c6eb81420735a78e28b504",
+        "infinity"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "docker",
+        "inspect",
+        "cnetmod-final-4c178de9d76f4c63adb15a4ebe898833-netns",
+        "--format",
+        "{{.State.Pid}}"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "nsenter",
+        "-t",
+        "3446",
+        "-n",
+        "ip",
+        "-j",
+        "link",
+        "show",
+        "lo"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "nsenter",
+        "-t",
+        "3446",
+        "-n",
+        "ip",
+        "-j",
+        "address",
+        "show",
+        "lo"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "nsenter",
+        "-t",
+        "3446",
+        "-n",
+        "bash",
+        "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena/scripts/benchmark.sh",
+        "cnetmod-official-optimized",
+        "baseline-h3",
+        "--save"
+      ],
+      "cwd": "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena"
+    },
+    {
+      "argv": [
+        "nsenter",
+        "-t",
+        "3446",
+        "-n",
+        "bash",
+        "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena/scripts/benchmark.sh",
+        "cnetmod-official-static",
+        "static-h3",
+        "--save"
+      ],
+      "cwd": "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena"
+    },
+    {
+      "argv": [
+        "nsenter",
+        "-t",
+        "3446",
+        "-n",
+        "bash",
+        "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena/scripts/benchmark.sh",
+        "agensio-official-h3",
+        "baseline-h3",
+        "--save"
+      ],
+      "cwd": "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena"
+    },
+    {
+      "argv": [
+        "nsenter",
+        "-t",
+        "3446",
+        "-n",
+        "bash",
+        "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena/scripts/benchmark.sh",
+        "agensio-official-h3",
+        "static-h3",
+        "--save"
+      ],
+      "cwd": "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena"
+    },
+    {
+      "argv": [
+        "nsenter",
+        "-t",
+        "3446",
+        "-n",
+        "bash",
+        "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena/scripts/benchmark.sh",
+        "genhttp-ioxide-official-h3",
+        "baseline-h3",
+        "--save"
+      ],
+      "cwd": "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena"
+    },
+    {
+      "argv": [
+        "nsenter",
+        "-t",
+        "3446",
+        "-n",
+        "bash",
+        "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena/scripts/benchmark.sh",
+        "genhttp-ioxide-official-h3",
+        "static-h3",
+        "--save"
+      ],
+      "cwd": "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-4c178de9d76f4c63adb15a4ebe898833/arena"
+    },
+    {
+      "argv": [
+        "docker",
+        "ps",
+        "-aq",
+        "--filter",
+        "label=cnetmod.official.run=4c178de9d76f4c63adb15a4ebe898833"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "docker",
+        "inspect",
+        "1a7c167e66d7"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "docker",
+        "rm",
+        "-f",
+        "-v",
+        "1a7c167e66d7"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "docker",
+        "ps",
+        "-aq",
+        "--filter",
+        "label=cnetmod.official.run=4c178de9d76f4c63adb15a4ebe898833"
+      ],
+      "cwd": null
+    }
+  ],
+  "selection": "original official best valid-2xx RPS of three; completed rates also recorded",
+  "source_count": 2209,
+  "actual_head": "d0d920791a1d226711176df47148b5e98a2f8713",
+  "source_diff_sha256": "100fd1aebf87c080d2afba346e3799d74ae40f23d936aed4f0afe62fd8936d68",
+  "image_proof": {
+    "agensio-official-h3": {
+      "id": "sha256:dd75c50576e08009267603a62a55f01e59b7e79891c6eb81420735a78e28b504",
+      "entrypoint": null,
+      "diagnostic_env": {}
+    },
+    "genhttp-ioxide-official-h3": {
+      "id": "sha256:72d6de94308798c44f38e98576f132ea1daf4bba07463011eadbb2f859beb8be",
+      "entrypoint": [
+        "dotnet",
+        "genhttp.dll"
+      ],
+      "diagnostic_env": {}
+    },
+    "cnetmod-official-optimized": {
+      "id": "sha256:356c8b427c6e59f1626b94b4f53dcd8b373d00deaf84b95e9bbed3bf5035f48e",
+      "entrypoint": [
+        "/lib64/ld-linux-x86-64.so.2",
+        "--library-path",
+        "/lib",
+        "/program",
+        "/certs/server.crt",
+        "/certs/server.key",
+        "8443",
+        "32"
+      ],
+      "diagnostic_env": {
+        "CNETMOD_QUIC_MAX_PATH_MTU": "4096",
+        "CNETMOD_QUIC_MAX_UDP_PAYLOAD_SIZE": "8192",
+        "CNETMOD_QUIC_GSO": "1"
+      }
+    },
+    "cnetmod-official-static": {
+      "id": "sha256:6927d7b98c978cf669ee59e836ecdb8df918e573aeb51a78d13b22fea5dddcb3",
+      "entrypoint": [
+        "/lib64/ld-linux-x86-64.so.2",
+        "--library-path",
+        "/lib",
+        "/program",
+        "/certs/server.crt",
+        "/certs/server.key",
+        "8443",
+        "32",
+        "/data/static"
+      ],
+      "diagnostic_env": {
+        "CNETMOD_QUIC_MAX_PATH_MTU": "4096",
+        "CNETMOD_QUIC_MAX_UDP_PAYLOAD_SIZE": "8192",
+        "CNETMOD_QUIC_GSO": "1"
+      }
+    }
+  },
+  "validation_image": {
+    "id": "sha256:6c9bb39e8233d39dc8d4fc1a939afc88b467d2ae3eaadedefa78204900875691",
+    "entrypoint": [
+      "/lib64/ld-linux-x86-64.so.2",
+      "--library-path",
+      "/lib",
+      "/program"
+    ],
+    "diagnostic_env": {}
+  },
+  "measured_env": {
+    "SKIP_TUNE": "true",
+    "H2LOAD_H3": "/var/tmp/cnetmod-h3-loadgen169/h2load",
+    "H2LOAD_H3_IMAGE": "sha256:6c9bb39e8233d39dc8d4fc1a939afc88b467d2ae3eaadedefa78204900875691",
+    "DURATION": "5s",
+    "RUNS": "3",
+    "H3THREADS": "64",
+    "GCANNON_CPUS": "16-31",
+    "LOADGEN_DOCKER": "false"
+  },
+  "removed_environment_names": [
+    "SSLKEYLOGFILE",
+    "LD_PRELOAD",
+    "LD_AUDIT"
+  ],
+  "loader_environment": {},
+  "command_group_cleanup": [
+    {
+      "group": 769,
+      "before": [
+        772,
+        774
+      ],
+      "after": []
+    },
+    {
+      "group": 1511,
+      "before": [
+        1514,
+        1516
+      ],
+      "after": []
+    },
+    {
+      "group": 2069,
+      "before": [
+        2072,
+        2074
+      ],
+      "after": []
+    },
+    {
+      "group": 2687,
+      "before": [
+        2690,
+        2691
+      ],
+      "after": []
+    }
+  ],
+  "network": {
+    "anchor": "cnetmod-final-4c178de9d76f4c63adb15a4ebe898833-netns",
+    "pid": 3446,
+    "mode": "same isolated loopback for all frameworks/client"
+  },
+  "cleanup": {
+    "removed": [
+      "1a7c167e66d7"
+    ],
+    "remaining": []
+  },
+  "inputs_unchanged": true
+}

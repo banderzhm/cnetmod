@@ -1,0 +1,9 @@
+{
+  "allocation-instructions.json": "962dcedd31dc22e672395d6305276a68e31a98ec229ff9ab93d9998a72ab9e43",
+  "cnetmod-frame-allocation-audit.py": "1fa3fbf1016467c7c2384c99755c5d38927b7a4de54a90d7985ec85496d80d55",
+  "cnetmod-frame-types-audit.py": "87634e1d8ebbe93bd113a7fb5b66e5b9a3d2c94e16db88d43f1c2d81675d50f3",
+  "cold-page-bins.json": "f4000c26810ab9f63a5aedd910c8fadec19dcdaabd6bb655854d8ce8653f0fac",
+  "offline-dwarf-types.json": "eaba053932429d464ab42880999c3be914d24fabc1ca861339ad52c0fbcb790a",
+  "README.md": "995598a9fd19985411ba40ad9382583da8d935a01988c1d961c516ebf6c13887",
+  "layout-candidate-review.md": "f216a65d91055d245b6aa65e8f789aa42b63bf91e6bace16dab22bff329984dd"
+}

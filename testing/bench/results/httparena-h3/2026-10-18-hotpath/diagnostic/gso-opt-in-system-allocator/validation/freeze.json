@@ -1,0 +1,19 @@
+{
+  "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-gso-validation-1fdab0ae660649bf83f09840e8459d4f",
+  "patch_sha256": "0992b679da0d687a4f6c7480e92b90655432c08d1fcc30925caecb79fc257a63",
+  "files": {
+    "src/executor/async_op.cppm": "87f3353aebf47e35bb26abe13db7a2f54cdd9c549a601921b018652caa2f5add",
+    "src/executor/platform/io_uring_async_op.cpp": "9b823f9059d05ccd7f38072bc4177c1052d7f6763b196d802fa36c8f12c0f041",
+    "src/protocol/quic/quic_foundation.cppm": "ef89f2cf49c47947138b4e1e0277a8423c0d2d8332b52b1d758606551e82ec72",
+    "src/protocol/quic/quic_connection.cpp": "557116570fbb076705e2411762bf865434947d848f465b680af39ad6364ccd67",
+    "src/protocol/http/v3/http3_server.cppm": "8ad3484ccf8eb29c21a2357f3f63b76098fceaba5e9cb443a36b4b3a08513581",
+    "src/protocol/http/v3/http3_server.cpp": "44e0144af9b8792e3be6b569f340992ca04fe0278a8d631c2d49f5f473c74d5b",
+    "testing/bench/arena_h3_server.cpp": "9f0b62463961b92b47c29403222db65b4b938ccf6e4263257bffc308ad4dcdb5",
+    "testing/tests/test_udp_batch.cpp": "6dda94675d42ce9ad034f490ee130f339ed22d2209c00e843b9b28d62244b037"
+  },
+  "preserved_phase1": {
+    "src/protocol/quic/quic_recovery.cpp": "45cd8c5230516781d3d7451bde235b56e835bbfa180fd43f1ac2715f0c60374e",
+    "src/protocol/quic/congestion_control.cpp": "ed87ff858f68324822f1e6da3400b95dd94cdca1f7979d8d8f3fef2af2c75e63"
+  },
+  "protected_json_sha256": "ca41c4cb5adcc34ee16042e00ea9c6dfb248b9a17649995dbacfeb43b64d8b66"
+}

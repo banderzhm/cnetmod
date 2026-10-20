@@ -1,0 +1,19 @@
+{
+  "framework": "agensio-official-h3",
+  "language": "C++",
+  "rps": 3808081,
+  "avg_latency": "867us",
+  "p99_latency": "2.41ms",
+  "cpu": "679.4%",
+  "memory": "173MiB",
+  "connections": 64,
+  "threads": 64,
+  "duration": "5s",
+  "pipeline": 1,
+  "bandwidth": "74.21MB/s",
+  "reconnects": 0,
+  "status_2xx": 21629902,
+  "status_3xx": 0,
+  "status_4xx": 0,
+  "status_5xx": 0
+}

@@ -1,0 +1,133 @@
+{
+  "status": "passed",
+  "expect": "pass",
+  "scenario": "all",
+  "server_sha256": "af0a87a07e46c15974bfe96feffed32227d0d6f4820213565ec92bbe427d81cd",
+  "driver_sha256": "f718e565948194f363b3050b993f5030bbc7aa351427cc010c209fce20701097",
+  "aioquic_version": "1.7.0",
+  "peer_aead": "unmodified installed aioquic",
+  "command": [
+    "/var/tmp/cnetmod-datagram-cc-51d443d2/quic_datagram_cc_server.fixed-final",
+    "--port",
+    "34752",
+    "--cert",
+    "/mnt/c/Users/25007/.codex/tmp/datagram-cc-review-51d443d2/stable-new-all/cert.pem",
+    "--key",
+    "/mnt/c/Users/25007/.codex/tmp/datagram-cc-review-51d443d2/stable-new-all/key.pem",
+    "--listening-report",
+    "/mnt/c/Users/25007/.codex/tmp/datagram-cc-review-51d443d2/stable-new-all/listening.txt",
+    "--ready-report",
+    "/mnt/c/Users/25007/.codex/tmp/datagram-cc-review-51d443d2/stable-new-all/ready.txt",
+    "--burst-report",
+    "/mnt/c/Users/25007/.codex/tmp/datagram-cc-review-51d443d2/stable-new-all/burst.json",
+    "--result-report",
+    "/mnt/c/Users/25007/.codex/tmp/datagram-cc-review-51d443d2/stable-new-all/failure.txt"
+  ],
+  "admission": {
+    "prior_server_udp_bytes": 2727,
+    "cwnd_conservative_upper_bound": 17447,
+    "burst_report": {
+      "accepted": 64,
+      "payload_bytes": 1100,
+      "elapsed_us": 73,
+      "first_recovery_deadline_us": 30107
+    },
+    "wire_datagram_packets": 13,
+    "wire_udp_bytes": 14716,
+    "wire_ids": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+    ],
+    "overflow": false,
+    "held_packets": 4,
+    "ack_recovery_marker": true
+  },
+  "pto": {
+    "stream": 20,
+    "repeat": {
+      "original": {
+        "at": 96.316553977,
+        "direction": "server",
+        "bytes": 549,
+        "action": "forward",
+        "phase": "pto",
+        "pn": 83,
+        "frames": {
+          "streams": [
+            {
+              "stream": 20,
+              "offset": 27136,
+              "length": 512,
+              "fin": false,
+              "sha256": "9ea2ca99172f8143d19673eb288cb607ce2e87f09914569ac1285981dcb8803c"
+            }
+          ],
+          "datagrams": [],
+          "kinds": [
+            14
+          ]
+        }
+      },
+      "repeat": {
+        "at": 96.465624468,
+        "direction": "server",
+        "bytes": 1075,
+        "action": "forward",
+        "phase": "pto",
+        "pn": 84,
+        "frames": {
+          "streams": [
+            {
+              "stream": 20,
+              "offset": 27136,
+              "length": 512,
+              "fin": false,
+              "sha256": "9ea2ca99172f8143d19673eb288cb607ce2e87f09914569ac1285981dcb8803c"
+            },
+            {
+              "stream": 20,
+              "offset": 27648,
+              "length": 512,
+              "fin": false,
+              "sha256": "9ea2ca99172f8143d19673eb288cb607ce2e87f09914569ac1285981dcb8803c"
+            }
+          ],
+          "datagrams": [],
+          "kinds": [
+            1,
+            18,
+            19,
+            14,
+            14
+          ]
+        }
+      },
+      "frame": {
+        "stream": 20,
+        "offset": 27136,
+        "length": 512,
+        "fin": false,
+        "sha256": "9ea2ca99172f8143d19673eb288cb607ce2e87f09914569ac1285981dcb8803c"
+      }
+    },
+    "held_packets": 4,
+    "received_before_ack_release": 28672,
+    "repeat_elapsed_ms": 156.22651799999687,
+    "complete_body_bytes": 262144,
+    "complete_body_sha256": "b3bc55b2b3c1738327c7c1ed4b8897cb8489b1d7cd19b3127c25b283cc3c441b",
+    "fin": true
+  },
+  "proxy_errors": [],
+  "server_exit_code": -15
+}

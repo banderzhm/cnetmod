@@ -1,0 +1,262 @@
+--- a/src/protocol/quic/quic_connection.cppm
++++ b/src/protocol/quic/quic_connection.cppm
+@@ -468,10 +468,10 @@
+         connection_state state = connection_state::closed) noexcept -> void;
+ 
+     /// Pack and send packets
+-    [[nodiscard]] auto pack_and_send_packet() -> task<void>;
++    [[nodiscard]] auto pack_and_send_packet() -> task<std::expected<void, std::error_code>>;
+     /// Packet-owner fast path for the common single-path case. It batches only
+     /// datagrams already admitted by the congestion controller and pacer.
+-    [[nodiscard]] auto pack_and_send_packets() -> task<void>;
++    [[nodiscard]] auto pack_and_send_packets() -> task<std::expected<void, std::error_code>>;
+     [[nodiscard]] auto send_initial_packets()
+         -> task<std::expected<std::size_t, std::error_code>>;
+     [[nodiscard]] auto send_handshake_packets()
+@@ -482,14 +482,14 @@
+     [[nodiscard]] auto pack_one_rtt_packet(bool pto_probe = false,
+         std::vector<std::byte> packet_storage = {},
+         std::vector<std::byte>* payload_storage = nullptr)
+-        -> std::vector<std::byte>;
++        -> std::expected<std::vector<std::byte>, std::error_code>;
+     [[nodiscard]] auto pack_path_validation_packet(std::span<const std::byte> frame)
+         -> std::vector<std::byte>;
+ 
+     /// Timer management
+     void schedule_idle_timeout();
+     void handle_idle_timeout();
+-    [[nodiscard]] auto handle_pto() -> task<void>;
++    [[nodiscard]] auto handle_pto() -> task<std::expected<void, std::error_code>>;
+ 
+     [[nodiscard]] auto send_datagram(std::span<const std::byte> datagram,
+         const endpoint& destination, udp::udp_socket* path_socket = nullptr)
+--- a/src/protocol/quic/quic_connection.cpp
++++ b/src/protocol/quic/quic_connection.cpp
+@@ -1496,7 +1496,14 @@
+     // domain is released; otherwise the timer can stall all incoming packets.
+     receive_guard.unlock_and_notify();
+     if (pto_due)
+-        co_await handle_pto();
++    {
++        const auto probed = co_await handle_pto();
++        if (!probed)
++        {
++            close_transport(probed.error());
++            co_return;
++        }
++    }
+     if (flush_requested)
+         co_await flush_send_queue();
+ }
+@@ -1571,7 +1578,9 @@
+             // BoringSSL installs the client early-write secret while creating
+             // the Initial flight.  Send queued replay-safe application bytes
+             // only after that secret exists, in their own 0-RTT long packet.
+-            co_await pack_and_send_packets();
++            const auto early_sent = co_await pack_and_send_packets();
++            if (!early_sent)
++                co_return std::unexpected(early_sent.error());
+         }
+         schedule_idle_timeout();
+     }
+@@ -3475,7 +3484,8 @@
+     co_return;
+ }
+ 
+-auto quic_connection::handle_pto() -> task<void>
++auto quic_connection::handle_pto()
++    -> task<std::expected<void, std::error_code>>
+ {
+     struct pending_probe
+     {
+@@ -3498,7 +3508,7 @@
+               std::get<2>(*application_due)}}
+         : handshake_due;
+     if (!due || due->first > std::chrono::steady_clock::now())
+-        co_return;
++        co_return std::expected<void, std::error_code>{};
+ 
+     const auto level = encryption_level_for(due->second);
+     const bool path_scoped = level == encryption_level::application;
+@@ -3539,7 +3549,7 @@
+                 }
+             }
+         }
+-        co_return;
++        co_return std::expected<void, std::error_code>{};
+     }
+     recovery.on_pto_expired(due->second);
+ 
+@@ -3563,9 +3573,11 @@
+                 impl_->local_max_streams_bidi, true}));
+             impl_->encoded_send_frames.push_front(encode_frame(ping_frame{}));
+             auto packet = pack_one_rtt_packet(true);
+-            if (!packet.empty())
++            if (!packet)
++                co_return std::unexpected(packet.error());
++            if (!packet->empty())
+                 probes.push_back(
+-                    {std::move(packet), application_path.peer, application_path.path_socket});
++                    {std::move(*packet), application_path.peer, application_path.path_socket});
+         }
+         else
+         {
+@@ -3588,14 +3600,14 @@
+         const auto sent = co_await send_datagram(probe.packet, probe.peer, probe.path_socket);
+         if (!sent && !probe.path_socket && is_terminal_udp_send_error(sent.error()))
+         {
+-            close_transport(sent.error());
+-            break;
+-        }
+-    }
+-    co_return;
+-}
+-
+-auto quic_connection::pack_and_send_packet() -> task<void>
++            co_return std::unexpected(sent.error());
++        }
++    }
++    co_return std::expected<void, std::error_code>{};
++}
++
++auto quic_connection::pack_and_send_packet()
++    -> task<std::expected<void, std::error_code>>
+ {
+     std::vector<std::byte> packet;
+     endpoint peer;
+@@ -3635,7 +3647,12 @@
+             impl_->sending_application_path_id = path_id;
+             packet = pack_zero_rtt_packet();
+             if (packet.empty())
+-                packet = pack_one_rtt_packet();
++            {
++                auto built = pack_one_rtt_packet();
++                if (!built)
++                    co_return std::unexpected(built.error());
++                packet = std::move(*built);
++            }
+             if (!packet.empty())
+             {
+                 peer = impl_->sending_application_path().peer;
+@@ -3649,15 +3666,16 @@
+     if (timer_deadline)
+         impl_->timer_deadline_observer(timer_deadline);
+     if (packet.empty())
+-        co_return;
++        co_return std::expected<void, std::error_code>{};
+     co_await await_application_pacing(packet.size());
+     const auto sent = co_await send_datagram(packet, peer, path_socket);
+     if (!sent && !path_socket && is_terminal_udp_send_error(sent.error()))
+-        close_transport(sent.error());
+-    co_return;
+-}
+-
+-auto quic_connection::pack_and_send_packets() -> task<void>
++        co_return std::unexpected(sent.error());
++    co_return std::expected<void, std::error_code>{};
++}
++
++auto quic_connection::pack_and_send_packets()
++    -> task<std::expected<void, std::error_code>>
+ {
+     struct pending_datagram
+     {
+@@ -3691,9 +3709,17 @@
+             {
+                 auto packet = pack_zero_rtt_packet();
+                 if (packet.empty())
+-                    packet = pack_one_rtt_packet(false,
++                {
++                    auto built = pack_one_rtt_packet(false,
+                         std::move(impl_->application_packet_storage[index]),
+                         std::addressof(impl_->application_payload_storage[index]));
++                    // No datagram in this batch has been submitted yet. Abort
++                    // the entire local prefix before pacing, observers, or UDP;
++                    // the caller closes recovery after this lock is released.
++                    if (!built)
++                        co_return std::unexpected(built.error());
++                    packet = std::move(*built);
++                }
+                 if (packet.empty())
+                 {
+                     impl_->application_packet_storage[index] = std::move(packet);
+@@ -3710,11 +3736,10 @@
+         impl_->timer_deadline_observer(timer_deadline);
+     if (!primary_socket_only)
+     {
+-        co_await pack_and_send_packet();
+-        co_return;
++        co_return co_await pack_and_send_packet();
+     }
+     if (pending.empty())
+-        co_return;
++        co_return std::expected<void, std::error_code>{};
+ 
+     // The packer has already limited this burst to the path's available
+     // congestion window. Reserve its aggregate pacing credit with one timer,
+@@ -3740,14 +3765,14 @@
+     // the packer, exactly as on the pre-existing single-send path.
+     const auto sent = co_await send_datagram_batch(datagrams);
+     if (!sent && is_terminal_udp_send_error(sent.error()))
+-        close_transport(sent.error());
++        co_return std::unexpected(sent.error());
+     for (std::size_t index{}; index < pending.size(); ++index)
+     {
+         pending[index].packet.clear();
+         impl_->application_packet_storage[index] =
+             std::move(pending[index].packet);
+     }
+-    co_return;
++    co_return std::expected<void, std::error_code>{};
+ }
+ 
+ auto quic_connection::send_initial_packets()
+@@ -4147,7 +4172,8 @@
+ 
+ auto quic_connection::pack_one_rtt_packet(bool pto_probe,
+     std::vector<std::byte> packet_storage,
+-    std::vector<std::byte>* payload_storage) -> std::vector<std::byte>
++    std::vector<std::byte>* payload_storage)
++    -> std::expected<std::vector<std::byte>, std::error_code>
+ {
+     if (!impl_->tls)
+         return {};
+@@ -4387,10 +4413,16 @@
+     for (int shift = 24; shift >= 0; shift -= 8)
+         packet.push_back(static_cast<std::byte>((packet_number >> shift) & 0xffU));
+     const auto pn_offset = packet.size() - pn_length;
+-    if (!append_sealed_payload(*keys, payload, packet, packet_number, path.id))
+-        return {};
+-    if (!protect_header(*keys, packet, pn_offset, false))
+-        return {};
++    // A crypto failure is terminal work, not an empty/congestion-blocked
++    // packet. Some crypto backends fail without pushing an error-queue entry.
++    if (const auto sealed = append_sealed_payload(*keys, payload, packet, packet_number, path.id);
++        !sealed)
++        return std::unexpected(sealed.error() ? sealed.error()
++            : std::make_error_code(std::errc::io_error));
++    if (const auto protected_header = protect_header(*keys, packet, pn_offset, false);
++        !protected_header)
++        return std::unexpected(protected_header.error() ? protected_header.error()
++            : std::make_error_code(std::errc::io_error));
+     impl_->account_path_send(path, packet.size());
+     // ACK state is cleared only once an authenticated packet containing the
+     // frame has been constructed.  The UDP submission path awaits writability
+@@ -4586,7 +4618,16 @@
+                 impl_->prioritized_stream_frame_count() +
+                 impl_->unreliable_send_frames.size() +
+                 impl_->early_data_send_frames.size();
+-            co_await pack_and_send_packets();
++            const auto sent = co_await pack_and_send_packets();
++            if (!sent)
++            {
++                // The receive lock and packet/path references are gone. Keep
++                // the writer claim until queued producers have been failed;
++                // async_close joins it before reclaiming connection storage.
++                // Existing accepted completions retain their queue semantics.
++                close_transport(sent.error());
++                co_return;
++            }
+             send_ack = false;
+             if (impl_->encoded_send_frames.size() + impl_->prioritized_stream_frame_count() +
+                     impl_->unreliable_send_frames.size() +

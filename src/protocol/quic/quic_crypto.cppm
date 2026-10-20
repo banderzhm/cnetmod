@@ -10,7 +10,7 @@ import std;
 import cnetmod.core.ssl;
 import cnetmod.core.buffer;
 import cnetmod.utils.concurrent_containers.atomic_hash_map;
-import :types;
+import :foundation;
 
 namespace cnetmod::quic {
 
@@ -289,6 +289,13 @@ export [[nodiscard]] auto append_sealed_payload(const quic_level_keys& keys,
     std::span<const std::byte> payload, std::vector<std::byte>& packet,
     std::uint64_t packet_number, std::uint32_t path_id = 0)
     -> std::expected<void, std::error_code>;
+// Internal packet-builder primitive. The existing public sealing API keeps
+// its separate-input contract. The header and plaintext already occupy packet.
+[[nodiscard]] auto seal_packet_payload_in_place(const quic_level_keys& keys,
+    std::vector<std::byte>& packet, std::size_t header_size,
+    std::uint64_t packet_number, std::uint32_t path_id)
+    -> std::expected<void, std::error_code>;
+
 export [[nodiscard]] auto open_payload(const quic_level_keys& keys,
     std::span<const std::byte> protected_payload,
     std::span<const std::byte> header, std::uint64_t packet_number,

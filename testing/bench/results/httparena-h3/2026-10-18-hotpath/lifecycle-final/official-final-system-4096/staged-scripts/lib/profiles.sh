@@ -1,0 +1,175 @@
+# scripts/lib/profiles.sh — profile definitions and parsing.
+#
+# Profile format: "pipeline|req_per_conn|cpu_limit|connections|endpoint"
+#   pipeline      — gcannon -p value (1 for non-pipelined)
+#   req_per_conn  — gcannon -r value (0 = unlimited)
+#   cpu_limit     — container cpuset (e.g. "0-31,64-95") or cpu count
+#   connections   — comma-separated list; each value is a separate run
+#   endpoint      — dispatch key; tells the driver which tool + shape to use
+#
+# Adding a profile: add a line to PROFILES and append to PROFILE_ORDER.
+
+declare -A PROFILES=(
+    [baseline]="1|0|0-31,64-95|4096|"
+    [pipelined]="16|0|0-31,64-95|4096|pipeline"
+    [limited-conn]="1|10|0-31,64-95|4096|"
+    # Async: GET /delay/10 (requests/async-delay.raw), a flat 10ms wait over
+    # 32000 held connections (req_per_conn=0), so every one of them is a
+    # pending timer the server has to carry. #1341 settled it there after the
+    # 15ms/64000 round below; the ceiling is conns/delay = 3.2M rps.
+    #
+    # History, since the delay is the knob everything else hangs off:
+    #   10-30ms draw, 32768/49152c  ceiling 1.64M/2.46M, tokio at 93%/83%
+    #   flat 10ms,    64000c        ceiling 6.4M,        tokio 2240622 (35%)
+    #   flat 15ms,    64000c        ceiling 4.27M
+    # tokio gained 10% for a ceiling that had more than doubled, which is what
+    # capacity-bound looks like — the delay stopped being the limiter at 10ms.
+    #
+    # Which is why 15 and not 5. The delay cuts both ways: an async server is
+    # capped at conns/delay, a blocking one at threads/delay, so shortening it
+    # frees a blocked thread sooner and narrows the gap this profile exists to
+    # show. At 15ms a 64-thread blocking server tops out at 4267 rps against
+    # tokio's measured 2.24M. It also leaves the 3-4ms a sloppy timer costs at
+    # about a quarter of the wait rather than most of it.
+    #
+    # 4.27M sits just under the ~4.4M baseline peak, which puts the ceiling back
+    # in play as a correctness check: nothing can beat conns/delay while
+    # honouring the delay, so a result above it did not wait.
+    #
+    # 64000 rather than 65536: system_tune() widens ip_local_port_range to
+    # 1024-65535 and gcannon needs one ephemeral port per connection, so 64505
+    # are usable after ip_local_reserved_ports. 65536 connections to one
+    # localhost:8080 cannot be established at all — the whole 16-bit port space
+    # is smaller than that. 64000 fits with ~500 ports to spare; if the ramp
+    # ever shows up as connect errors, 61440 is the next stop down.
+    [async]="1|0|0-31,64-95|32000|async"
+    # Latency-1M: the offered rate is pinned at 1M req/s (see ZRK_FIXED_RATE
+    # in tools/zrk.sh) and the measurement is what the server spent to serve
+    # it, read exactly out of the container's cgroup rather than sampled.
+    #
+    # Every other profile here asks how fast a server can go. Real servers
+    # spend almost all of their time nowhere near that, so this asks the
+    # question from the other end: at a load everybody can carry, who carries
+    # it cheaply. 1024 connections because the socket count is part of the
+    # workload — 500K req/s needs only ~15 in flight, so the rest of them are
+    # there to be polled, which is exactly the cost being compared.
+    [latency-1m]="1|0|0-31,64-95|1024|latency-1m"
+    # Latency-10K: latency-1m's shape with the offered rate two orders of
+    # magnitude lower. Same cpuset, same connection count, same endpoint, same
+    # duration -- the rate is the only variable, which is what makes the two
+    # numbers comparable.
+    #
+    # Where latency-1m asks what a server costs at a load only the fastest
+    # entries carry, this asks what it costs while nearly idle, which is where
+    # most services actually sit. At 10K req/s across 64 threads the work is
+    # negligible, so what is left in the CPU figure is the standing cost:
+    # poll loops, timers, background GC, wakeups. A busy box amortises those
+    # away; this one does not.
+    [latency-10k]="1|0|0-31,64-95|1024|latency-10k"
+    # Latency-500K/8: the same GET at a pinned 500K req/s, but the server gets
+    # four cores and their SMT siblings (0-3 and 64-67 on the bench host) instead
+    # of thirty-two. At 64 threads and 1M req/s every thin server sits on the
+    # same per-wakeup floor and only a server that queues can amortise it; on
+    # eight logical CPUs the load is near saturation for most entries, so the
+    # marginal cost per request and the queue it builds are what get measured.
+    # The rate lives in tools/zrk.sh (ZRK_RATE_LATENCY_500K) like the others.
+    [latency-500k-8cpu]="1|0|0-3,64-67|1024|latency-500k-8cpu"
+    [json-comp]="1|0|0-31,64-95|4096,16384|json-compressed"
+    [json-tls]="1|0|0-31,64-95|4096|json-tls"
+    # 8Gbit: 100 KB up and the same 100 KB back, over TLS. The only profile
+    # that loads both directions at once, which is why it exists - upload
+    # measured ingest alone with 8 MB bodies and stopped discriminating (a 7%
+    # spread across 99 entries, because it was measuring memcpy).
+    #
+    # 100 KB rather than more: in+out is 200 KB per request, so the box's
+    # bandwidth ceiling still leaves per-request framework overhead visible.
+    # It is also ~7 TLS records and more than one socket buffer, so partial
+    # reads, multi-record handling and partial writes all get exercised.
+    # Paced, not open-loop: zrk holds a fixed offered rate (ZRK_RATE_8GBIT)
+    # over 512 held connections, so the question stops being "how fast can this
+    # go" and becomes "what did it cost to serve exactly this much". An entry
+    # that cannot hold the rate says so in rate_ratio rather than quietly
+    # reporting a lower number that reads like a like-for-like result.
+    [8gbit]="1|0|0-31,64-95|512|8gbit"
+    [static-tls]="1|200|0-31,64-95|1024|static-tls"
+    [async-db]="1|0|0-31,64-95|1024|async-db"
+    [fortunes]="1|0|0-31,64-95|1024|fortunes"
+    [baseline-h2]="1|0|0-31,64-95|256,1024|h2"
+    [static-h2]="1|0|0-31,64-95|256,1024|static-h2"
+    [baseline-h2c]="1|0|0-31,64-95|256,1024,4096|h2c"
+    [json-h2c]="1|0|0-31,64-95|1024,4096|json-h2c"
+    [baseline-h3]="1|0|0-31,64-95|64|h3"
+    [static-h3]="1|0|0-31,64-95|64|static-h3"
+    [unary-grpc]="1|0|0-31,64-95|256,1024|grpc"
+    [unary-grpc-tls]="1|0|0-31,64-95|256,1024|grpc-tls"
+    [gateway-64]="1|0|0-31,64-95|512,1024|gateway-64"
+    [gateway-h3]="1|0|0-31,64-95|64,256|gateway-h3"
+    [production-stack]="1|0|0-31,64-95|256,1024|production-stack"
+    [echo-ws]="1|0|0-31,64-95|512,4096,16384|ws-echo"
+    [echo-ws-pipeline]="16|0|0-31,64-95|512,4096,16384|ws-echo"
+    [echo-ws-limited]="1|10|0-31,64-95|512,4096|ws-echo"
+)
+
+PROFILE_ORDER=(
+    baseline pipelined limited-conn
+    json-comp json-tls
+    8gbit
+    static-tls async-db
+    fortunes
+    baseline-h2 static-h2
+    baseline-h2c json-h2c
+    baseline-h3 static-h3
+    gateway-64 gateway-h3
+    production-stack
+    unary-grpc unary-grpc-tls
+    echo-ws echo-ws-pipeline echo-ws-limited
+    latency-1m latency-10k latency-500k-8cpu
+    # Last on purpose. It closes ~49K sockets at exit and every one sits in
+    # TIME_WAIT for the kernel's fixed ~60s, so anything scheduled after it
+    # starts against a nearly full port table.
+    async
+)
+
+# ── Parsing + validation ────────────────────────────────────────────────────
+
+# Parse a profile spec string into global fields. Exits on malformed input.
+# Globals set: PROF_PIPELINE, PROF_REQ, PROF_CPU, PROF_CONNS, PROF_ENDPOINT
+parse_profile() {
+    local spec="$1"
+    local n_pipes
+    n_pipes=$(echo "$spec" | tr -cd '|' | wc -c)
+    if [ "$n_pipes" -ne 4 ]; then
+        fail "profile spec '$spec' must have exactly 4 '|' separators, got $n_pipes"
+    fi
+    IFS='|' read -r PROF_PIPELINE PROF_REQ PROF_CPU PROF_CONNS PROF_ENDPOINT <<< "$spec"
+}
+
+# Map an endpoint to the tool name that handles it.
+# Returns one of: gcannon, wrk, zrk, h2load, h2load-h3
+endpoint_tool() {
+    case "$1" in
+        # wrk (lua script rotation)
+        static-tls|json-tls)                 echo "wrk" ;;
+        # zrk — the only paced generator; holds a fixed offered rate
+        latency-1m|latency-10k|latency-500k-8cpu|8gbit)  echo "zrk" ;;
+        # h2load for all HTTP/2 variants (TLS via ALPN + h2c prior-knowledge)
+        h2|static-h2|h2c|json-h2c|gateway-64|grpc|grpc-tls|production-stack)  echo "h2load" ;;
+        # h2load built with ngtcp2 for HTTP/3
+        h3|static-h3|gateway-h3)            echo "h2load-h3" ;;
+        # gcannon for everything else (h1, async-db, async, ws, ...)
+        *)                                  echo "gcannon" ;;
+    esac
+}
+
+# Validate at startup that every PROFILE_ORDER entry has a PROFILES definition.
+# Call this in benchmark.sh before the main loop.
+validate_profiles() {
+    local p ok=true
+    for p in "${PROFILE_ORDER[@]}"; do
+        if [ -z "${PROFILES[$p]+x}" ]; then
+            echo "[profiles] MISSING definition: $p" >&2
+            ok=false
+        fi
+    done
+    $ok || fail "PROFILE_ORDER references profiles that aren't in PROFILES"
+}

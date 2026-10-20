@@ -1,0 +1,18 @@
+{
+  "case": "handshake_confirmation",
+  "mode": "observer",
+  "status": "failed",
+  "done_packets": [],
+  "request_packets": [],
+  "socket_errors": [],
+  "decode_errors": [],
+  "dropped_done": false,
+  "dropped_request": false,
+  "client_packets_blocked_before_confirmation": 0,
+  "client_application_pto_count": 0,
+  "tls_completed": true,
+  "confirmed_after_tls_complete": false,
+  "error": "AssertionError('TLS completed but HANDSHAKE_DONE never confirmed handshake')",
+  "server_stdout": "",
+  "server_stderr": "[2026-10-18 10:48:26.195] [error] [127906264662464] [quic_retire_stream_server.cpp:57] retire-stream fixture: expected stream zero\n"
+}

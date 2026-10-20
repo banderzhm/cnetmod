@@ -1,0 +1,5 @@
+{
+  "before_sha256": "220d90854cac2d723702848eee5f13755f20b7c0210d8e395fe03e3dff1eb37a",
+  "after_sha256": "91f8d7cb66d5927637d6890a901e0333b643fa2cf543bc63aea054a91d08aa37",
+  "scope": "completed MTU archive marker and current pending-retention facts only"
+}

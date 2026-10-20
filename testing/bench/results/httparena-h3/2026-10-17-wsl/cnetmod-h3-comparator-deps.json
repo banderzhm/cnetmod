@@ -1,0 +1,891 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v11.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v11.0": {
+      "genhttp/1.0.0": {
+        "dependencies": {
+          "GenHTTP.Engine.Ioxide": "11.0.5",
+          "GenHTTP.Modules.Compression": "11.0.5",
+          "GenHTTP.Modules.Files": "11.0.5",
+          "GenHTTP.Modules.IO": "11.0.5",
+          "GenHTTP.Modules.Layouting": "11.0.5",
+          "GenHTTP.Modules.Webservices": "11.0.5",
+          "GenHTTP.Modules.Websockets": "11.0.5",
+          "Microsoft.Extensions.Caching.Memory": "11.0.0-preview.5.26302.115",
+          "ioxide.pg": "0.15.251",
+          "ioxide.timer": "0.15.251"
+        },
+        "runtime": {
+          "genhttp.dll": {}
+        }
+      },
+      "Cottle/2.1.0": {
+        "runtime": {
+          "lib/net8.0/Cottle.dll": {
+            "assemblyVersion": "2.1.0.0",
+            "fileVersion": "2.1.0.0",
+            "localPath": "Cottle.dll"
+          }
+        }
+      },
+      "GenHTTP.Api/11.0.5": {
+        "runtime": {
+          "lib/net11.0/GenHTTP.Api.dll": {
+            "assemblyVersion": "11.0.5.0",
+            "fileVersion": "11.0.5.0",
+            "localPath": "GenHTTP.Api.dll"
+          }
+        }
+      },
+      "GenHTTP.Api.Ioxide/11.0.5": {
+        "dependencies": {
+          "ioxide": "0.15.251"
+        },
+        "runtime": {
+          "lib/net11.0/GenHTTP.Api.Ioxide.dll": {
+            "assemblyVersion": "11.0.5.0",
+            "fileVersion": "11.0.5.0",
+            "localPath": "GenHTTP.Api.Ioxide.dll"
+          }
+        }
+      },
+      "GenHTTP.Engine.Ioxide/11.0.5": {
+        "dependencies": {
+          "GenHTTP.Api": "11.0.5",
+          "GenHTTP.Api.Ioxide": "11.0.5",
+          "GenHTTP.Engine.Shared": "11.0.5",
+          "GenHTTP.Modules.IO": "11.0.5",
+          "Glyph11": "0.3.7",
+          "Glyph11.Pico": "0.0.1",
+          "ioxide": "0.15.251",
+          "ioxide.http2": "0.15.251",
+          "ioxide.nghttp3": "0.15.251",
+          "ioxide.ngtcp2": "0.15.251"
+        },
+        "runtime": {
+          "lib/net11.0/GenHTTP.Engine.Ioxide.dll": {
+            "assemblyVersion": "11.0.5.0",
+            "fileVersion": "11.0.5.0",
+            "localPath": "GenHTTP.Engine.Ioxide.dll"
+          }
+        }
+      },
+      "GenHTTP.Engine.Shared/11.0.5": {
+        "dependencies": {
+          "GenHTTP.Api": "11.0.5",
+          "GenHTTP.Modules.ErrorHandling": "11.0.5",
+          "Glyph11": "0.3.7",
+          "Microsoft.Extensions.Logging.Console": "10.0.12"
+        },
+        "runtime": {
+          "lib/net11.0/GenHTTP.Engine.Shared.dll": {
+            "assemblyVersion": "11.0.5.0",
+            "fileVersion": "11.0.5.0",
+            "localPath": "GenHTTP.Engine.Shared.dll"
+          }
+        }
+      },
+      "GenHTTP.Modules.Compression/11.0.5": {
+        "dependencies": {
+          "GenHTTP.Api": "11.0.5",
+          "GenHTTP.Modules.IO": "11.0.5"
+        },
+        "runtime": {
+          "lib/net11.0/GenHTTP.Modules.Compression.dll": {
+            "assemblyVersion": "11.0.5.0",
+            "fileVersion": "11.0.5.0",
+            "localPath": "GenHTTP.Modules.Compression.dll"
+          }
+        }
+      },
+      "GenHTTP.Modules.Conversion/11.0.5": {
+        "dependencies": {
+          "GenHTTP.Api": "11.0.5",
+          "GenHTTP.Modules.IO": "11.0.5",
+          "YamlDotNet": "18.1.0"
+        },
+        "runtime": {
+          "lib/net11.0/GenHTTP.Modules.Conversion.dll": {
+            "assemblyVersion": "11.0.5.0",
+            "fileVersion": "11.0.5.0",
+            "localPath": "GenHTTP.Modules.Conversion.dll"
+          }
+        }
+      },
+      "GenHTTP.Modules.ErrorHandling/11.0.5": {
+        "dependencies": {
+          "GenHTTP.Api": "11.0.5",
+          "GenHTTP.Modules.Conversion": "11.0.5",
+          "GenHTTP.Modules.Pages": "11.0.5"
+        },
+        "runtime": {
+          "lib/net11.0/GenHTTP.Modules.ErrorHandling.dll": {
+            "assemblyVersion": "11.0.5.0",
+            "fileVersion": "11.0.5.0",
+            "localPath": "GenHTTP.Modules.ErrorHandling.dll"
+          }
+        }
+      },
+      "GenHTTP.Modules.Files/11.0.5": {
+        "dependencies": {
+          "GenHTTP.Api": "11.0.5",
+          "GenHTTP.Api.Ioxide": "11.0.5",
+          "GenHTTP.Modules.Compression": "11.0.5",
+          "GenHTTP.Modules.IO": "11.0.5",
+          "ioxide.file": "0.15.251"
+        },
+        "runtime": {
+          "lib/net11.0/GenHTTP.Modules.Files.dll": {
+            "assemblyVersion": "11.0.5.0",
+            "fileVersion": "11.0.5.0",
+            "localPath": "GenHTTP.Modules.Files.dll"
+          }
+        }
+      },
+      "GenHTTP.Modules.IO/11.0.5": {
+        "dependencies": {
+          "GenHTTP.Api": "11.0.5"
+        },
+        "runtime": {
+          "lib/net11.0/GenHTTP.Modules.IO.dll": {
+            "assemblyVersion": "11.0.5.0",
+            "fileVersion": "11.0.5.0",
+            "localPath": "GenHTTP.Modules.IO.dll"
+          }
+        }
+      },
+      "GenHTTP.Modules.Layouting/11.0.5": {
+        "dependencies": {
+          "GenHTTP.Api": "11.0.5",
+          "GenHTTP.Modules.Redirects": "11.0.5"
+        },
+        "runtime": {
+          "lib/net11.0/GenHTTP.Modules.Layouting.dll": {
+            "assemblyVersion": "11.0.5.0",
+            "fileVersion": "11.0.5.0",
+            "localPath": "GenHTTP.Modules.Layouting.dll"
+          }
+        }
+      },
+      "GenHTTP.Modules.Pages/11.0.5": {
+        "dependencies": {
+          "Cottle": "2.1.0",
+          "GenHTTP.Api": "11.0.5",
+          "GenHTTP.Modules.IO": "11.0.5"
+        },
+        "runtime": {
+          "lib/net11.0/GenHTTP.Modules.Pages.dll": {
+            "assemblyVersion": "11.0.5.0",
+            "fileVersion": "11.0.5.0",
+            "localPath": "GenHTTP.Modules.Pages.dll"
+          }
+        }
+      },
+      "GenHTTP.Modules.Redirects/11.0.5": {
+        "dependencies": {
+          "GenHTTP.Api": "11.0.5",
+          "GenHTTP.Modules.IO": "11.0.5"
+        },
+        "runtime": {
+          "lib/net11.0/GenHTTP.Modules.Redirects.dll": {
+            "assemblyVersion": "11.0.5.0",
+            "fileVersion": "11.0.5.0",
+            "localPath": "GenHTTP.Modules.Redirects.dll"
+          }
+        }
+      },
+      "GenHTTP.Modules.Reflection/11.0.5": {
+        "dependencies": {
+          "GenHTTP.Api": "11.0.5",
+          "GenHTTP.Modules.Conversion": "11.0.5",
+          "GenHTTP.Modules.IO": "11.0.5",
+          "GenHTTP.Modules.Pages": "11.0.5",
+          "Microsoft.CodeAnalysis.CSharp": "5.9.0"
+        },
+        "runtime": {
+          "lib/net11.0/GenHTTP.Modules.Reflection.dll": {
+            "assemblyVersion": "11.0.5.0",
+            "fileVersion": "11.0.5.0",
+            "localPath": "GenHTTP.Modules.Reflection.dll"
+          }
+        }
+      },
+      "GenHTTP.Modules.Webservices/11.0.5": {
+        "dependencies": {
+          "GenHTTP.Api": "11.0.5",
+          "GenHTTP.Modules.Conversion": "11.0.5",
+          "GenHTTP.Modules.Layouting": "11.0.5",
+          "GenHTTP.Modules.Reflection": "11.0.5"
+        },
+        "runtime": {
+          "lib/net11.0/GenHTTP.Modules.Webservices.dll": {
+            "assemblyVersion": "11.0.5.0",
+            "fileVersion": "11.0.5.0",
+            "localPath": "GenHTTP.Modules.Webservices.dll"
+          }
+        }
+      },
+      "GenHTTP.Modules.Websockets/11.0.5": {
+        "dependencies": {
+          "GenHTTP.Api": "11.0.5",
+          "GenHTTP.Modules.Conversion": "11.0.5"
+        },
+        "runtime": {
+          "lib/net11.0/GenHTTP.Modules.Websockets.dll": {
+            "assemblyVersion": "11.0.5.0",
+            "fileVersion": "11.0.5.0",
+            "localPath": "GenHTTP.Modules.Websockets.dll"
+          }
+        }
+      },
+      "Glyph11/0.3.7": {
+        "runtime": {
+          "lib/net10.0/Glyph11.dll": {
+            "assemblyVersion": "0.3.7.0",
+            "fileVersion": "0.3.7.0",
+            "localPath": "Glyph11.dll"
+          }
+        }
+      },
+      "Glyph11.Pico/0.0.1": {
+        "dependencies": {
+          "Glyph11": "0.3.7"
+        },
+        "runtime": {
+          "lib/net10.0/Glyph11.Pico.dll": {
+            "assemblyVersion": "0.0.1.0",
+            "fileVersion": "0.0.1.0",
+            "localPath": "Glyph11.Pico.dll"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/linux-arm64/native/libglyph11pico.so": {
+            "rid": "linux-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0",
+            "localPath": "runtimes/linux-arm64/native/libglyph11pico.so"
+          },
+          "runtimes/linux-x64/native/libglyph11pico.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0",
+            "localPath": "runtimes/linux-x64/native/libglyph11pico.so"
+          },
+          "runtimes/osx-arm64/native/libglyph11pico.dylib": {
+            "rid": "osx-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0",
+            "localPath": "runtimes/osx-arm64/native/libglyph11pico.dylib"
+          },
+          "runtimes/osx-x64/native/libglyph11pico.dylib": {
+            "rid": "osx-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0",
+            "localPath": "runtimes/osx-x64/native/libglyph11pico.dylib"
+          },
+          "runtimes/win-arm64/native/glyph11pico.dll": {
+            "rid": "win-arm64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0",
+            "localPath": "runtimes/win-arm64/native/glyph11pico.dll"
+          },
+          "runtimes/win-x64/native/glyph11pico.dll": {
+            "rid": "win-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0",
+            "localPath": "runtimes/win-x64/native/glyph11pico.dll"
+          }
+        }
+      },
+      "ioxide/0.15.251": {
+        "runtime": {
+          "lib/net11.0/ioxide.dll": {
+            "assemblyVersion": "0.15.251.0",
+            "fileVersion": "0.15.251.0",
+            "localPath": "ioxide.dll"
+          }
+        }
+      },
+      "ioxide.file/0.15.251": {
+        "dependencies": {
+          "ioxide": "0.15.251"
+        },
+        "runtime": {
+          "lib/net11.0/ioxide.file.dll": {
+            "assemblyVersion": "0.15.251.0",
+            "fileVersion": "0.15.251.0",
+            "localPath": "ioxide.file.dll"
+          }
+        }
+      },
+      "ioxide.http2/0.15.251": {
+        "dependencies": {
+          "ioxide": "0.15.251"
+        },
+        "runtime": {
+          "lib/net11.0/ioxide.http2.dll": {
+            "assemblyVersion": "0.15.251.0",
+            "fileVersion": "0.15.251.0",
+            "localPath": "ioxide.http2.dll"
+          }
+        }
+      },
+      "ioxide.nghttp3/0.15.251": {
+        "dependencies": {
+          "ioxide": "0.15.251"
+        },
+        "runtime": {
+          "lib/net11.0/ioxide.nghttp3.dll": {
+            "assemblyVersion": "0.15.251.0",
+            "fileVersion": "0.15.251.0",
+            "localPath": "ioxide.nghttp3.dll"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libioxide_nghttp3.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0",
+            "localPath": "runtimes/linux-x64/native/libioxide_nghttp3.so"
+          }
+        }
+      },
+      "ioxide.ngtcp2/0.15.251": {
+        "dependencies": {
+          "ioxide": "0.15.251"
+        },
+        "runtime": {
+          "lib/net11.0/ioxide.ngtcp2.dll": {
+            "assemblyVersion": "0.15.251.0",
+            "fileVersion": "0.15.251.0",
+            "localPath": "ioxide.ngtcp2.dll"
+          }
+        },
+        "runtimeTargets": {
+          "runtimes/linux-x64/native/libioxide_ngtcp2.so": {
+            "rid": "linux-x64",
+            "assetType": "native",
+            "fileVersion": "0.0.0.0",
+            "localPath": "runtimes/linux-x64/native/libioxide_ngtcp2.so"
+          }
+        }
+      },
+      "ioxide.pg/0.15.251": {
+        "dependencies": {
+          "ioxide": "0.15.251"
+        },
+        "runtime": {
+          "lib/net11.0/ioxide.pg.dll": {
+            "assemblyVersion": "0.15.251.0",
+            "fileVersion": "0.15.251.0",
+            "localPath": "ioxide.pg.dll"
+          }
+        }
+      },
+      "ioxide.timer/0.15.251": {
+        "dependencies": {
+          "ioxide": "0.15.251"
+        },
+        "runtime": {
+          "lib/net11.0/ioxide.timer.dll": {
+            "assemblyVersion": "0.15.251.0",
+            "fileVersion": "0.15.251.0",
+            "localPath": "ioxide.timer.dll"
+          }
+        }
+      },
+      "Microsoft.CodeAnalysis.Common/5.9.0": {
+        "runtime": {
+          "lib/net10.0/Microsoft.CodeAnalysis.dll": {
+            "assemblyVersion": "5.9.0.0",
+            "fileVersion": "5.900.26.35703",
+            "localPath": "Microsoft.CodeAnalysis.dll"
+          }
+        },
+        "resources": {
+          "lib/net10.0/cs/Microsoft.CodeAnalysis.resources.dll": {
+            "locale": "cs",
+            "localPath": "cs/Microsoft.CodeAnalysis.resources.dll"
+          },
+          "lib/net10.0/de/Microsoft.CodeAnalysis.resources.dll": {
+            "locale": "de",
+            "localPath": "de/Microsoft.CodeAnalysis.resources.dll"
+          },
+          "lib/net10.0/es/Microsoft.CodeAnalysis.resources.dll": {
+            "locale": "es",
+            "localPath": "es/Microsoft.CodeAnalysis.resources.dll"
+          },
+          "lib/net10.0/fr/Microsoft.CodeAnalysis.resources.dll": {
+            "locale": "fr",
+            "localPath": "fr/Microsoft.CodeAnalysis.resources.dll"
+          },
+          "lib/net10.0/it/Microsoft.CodeAnalysis.resources.dll": {
+            "locale": "it",
+            "localPath": "it/Microsoft.CodeAnalysis.resources.dll"
+          },
+          "lib/net10.0/ja/Microsoft.CodeAnalysis.resources.dll": {
+            "locale": "ja",
+            "localPath": "ja/Microsoft.CodeAnalysis.resources.dll"
+          },
+          "lib/net10.0/ko/Microsoft.CodeAnalysis.resources.dll": {
+            "locale": "ko",
+            "localPath": "ko/Microsoft.CodeAnalysis.resources.dll"
+          },
+          "lib/net10.0/pl/Microsoft.CodeAnalysis.resources.dll": {
+            "locale": "pl",
+            "localPath": "pl/Microsoft.CodeAnalysis.resources.dll"
+          },
+          "lib/net10.0/pt-BR/Microsoft.CodeAnalysis.resources.dll": {
+            "locale": "pt-BR",
+            "localPath": "pt-BR/Microsoft.CodeAnalysis.resources.dll"
+          },
+          "lib/net10.0/ru/Microsoft.CodeAnalysis.resources.dll": {
+            "locale": "ru",
+            "localPath": "ru/Microsoft.CodeAnalysis.resources.dll"
+          },
+          "lib/net10.0/tr/Microsoft.CodeAnalysis.resources.dll": {
+            "locale": "tr",
+            "localPath": "tr/Microsoft.CodeAnalysis.resources.dll"
+          },
+          "lib/net10.0/zh-Hans/Microsoft.CodeAnalysis.resources.dll": {
+            "locale": "zh-Hans",
+            "localPath": "zh-Hans/Microsoft.CodeAnalysis.resources.dll"
+          },
+          "lib/net10.0/zh-Hant/Microsoft.CodeAnalysis.resources.dll": {
+            "locale": "zh-Hant",
+            "localPath": "zh-Hant/Microsoft.CodeAnalysis.resources.dll"
+          }
+        }
+      },
+      "Microsoft.CodeAnalysis.CSharp/5.9.0": {
+        "dependencies": {
+          "Microsoft.CodeAnalysis.Common": "5.9.0"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.CodeAnalysis.CSharp.dll": {
+            "assemblyVersion": "5.9.0.0",
+            "fileVersion": "5.900.26.35703",
+            "localPath": "Microsoft.CodeAnalysis.CSharp.dll"
+          }
+        },
+        "resources": {
+          "lib/net10.0/cs/Microsoft.CodeAnalysis.CSharp.resources.dll": {
+            "locale": "cs",
+            "localPath": "cs/Microsoft.CodeAnalysis.CSharp.resources.dll"
+          },
+          "lib/net10.0/de/Microsoft.CodeAnalysis.CSharp.resources.dll": {
+            "locale": "de",
+            "localPath": "de/Microsoft.CodeAnalysis.CSharp.resources.dll"
+          },
+          "lib/net10.0/es/Microsoft.CodeAnalysis.CSharp.resources.dll": {
+            "locale": "es",
+            "localPath": "es/Microsoft.CodeAnalysis.CSharp.resources.dll"
+          },
+          "lib/net10.0/fr/Microsoft.CodeAnalysis.CSharp.resources.dll": {
+            "locale": "fr",
+            "localPath": "fr/Microsoft.CodeAnalysis.CSharp.resources.dll"
+          },
+          "lib/net10.0/it/Microsoft.CodeAnalysis.CSharp.resources.dll": {
+            "locale": "it",
+            "localPath": "it/Microsoft.CodeAnalysis.CSharp.resources.dll"
+          },
+          "lib/net10.0/ja/Microsoft.CodeAnalysis.CSharp.resources.dll": {
+            "locale": "ja",
+            "localPath": "ja/Microsoft.CodeAnalysis.CSharp.resources.dll"
+          },
+          "lib/net10.0/ko/Microsoft.CodeAnalysis.CSharp.resources.dll": {
+            "locale": "ko",
+            "localPath": "ko/Microsoft.CodeAnalysis.CSharp.resources.dll"
+          },
+          "lib/net10.0/pl/Microsoft.CodeAnalysis.CSharp.resources.dll": {
+            "locale": "pl",
+            "localPath": "pl/Microsoft.CodeAnalysis.CSharp.resources.dll"
+          },
+          "lib/net10.0/pt-BR/Microsoft.CodeAnalysis.CSharp.resources.dll": {
+            "locale": "pt-BR",
+            "localPath": "pt-BR/Microsoft.CodeAnalysis.CSharp.resources.dll"
+          },
+          "lib/net10.0/ru/Microsoft.CodeAnalysis.CSharp.resources.dll": {
+            "locale": "ru",
+            "localPath": "ru/Microsoft.CodeAnalysis.CSharp.resources.dll"
+          },
+          "lib/net10.0/tr/Microsoft.CodeAnalysis.CSharp.resources.dll": {
+            "locale": "tr",
+            "localPath": "tr/Microsoft.CodeAnalysis.CSharp.resources.dll"
+          },
+          "lib/net10.0/zh-Hans/Microsoft.CodeAnalysis.CSharp.resources.dll": {
+            "locale": "zh-Hans",
+            "localPath": "zh-Hans/Microsoft.CodeAnalysis.CSharp.resources.dll"
+          },
+          "lib/net10.0/zh-Hant/Microsoft.CodeAnalysis.CSharp.resources.dll": {
+            "locale": "zh-Hant",
+            "localPath": "zh-Hant/Microsoft.CodeAnalysis.CSharp.resources.dll"
+          }
+        }
+      },
+      "Microsoft.Extensions.Caching.Memory/11.0.0-preview.5.26302.115": {
+        "runtime": {
+          "lib/net11.0/Microsoft.Extensions.Caching.Memory.dll": {
+            "assemblyVersion": "11.0.0.0",
+            "fileVersion": "11.0.26.30315",
+            "localPath": "Microsoft.Extensions.Caching.Memory.dll"
+          }
+        }
+      },
+      "Microsoft.Extensions.Configuration/10.0.12": {
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.Configuration.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.1226.42308",
+            "localPath": "Microsoft.Extensions.Configuration.dll"
+          }
+        }
+      },
+      "Microsoft.Extensions.Configuration.Binder/10.0.12": {
+        "dependencies": {
+          "Microsoft.Extensions.Configuration": "10.0.12"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.Configuration.Binder.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.1226.42308",
+            "localPath": "Microsoft.Extensions.Configuration.Binder.dll"
+          }
+        }
+      },
+      "Microsoft.Extensions.DependencyInjection/10.0.12": {
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.DependencyInjection.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.1226.42308",
+            "localPath": "Microsoft.Extensions.DependencyInjection.dll"
+          }
+        }
+      },
+      "Microsoft.Extensions.Logging/10.0.12": {
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection": "10.0.12"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.Logging.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.1226.42308",
+            "localPath": "Microsoft.Extensions.Logging.dll"
+          }
+        }
+      },
+      "Microsoft.Extensions.Logging.Configuration/10.0.12": {
+        "dependencies": {
+          "Microsoft.Extensions.Configuration": "10.0.12",
+          "Microsoft.Extensions.Configuration.Binder": "10.0.12",
+          "Microsoft.Extensions.Logging": "10.0.12",
+          "Microsoft.Extensions.Options.ConfigurationExtensions": "10.0.12"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.Logging.Configuration.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.1226.42308",
+            "localPath": "Microsoft.Extensions.Logging.Configuration.dll"
+          }
+        }
+      },
+      "Microsoft.Extensions.Logging.Console/10.0.12": {
+        "dependencies": {
+          "Microsoft.Extensions.Logging": "10.0.12",
+          "Microsoft.Extensions.Logging.Configuration": "10.0.12"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.Logging.Console.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.1226.42308",
+            "localPath": "Microsoft.Extensions.Logging.Console.dll"
+          }
+        }
+      },
+      "Microsoft.Extensions.Options.ConfigurationExtensions/10.0.12": {
+        "dependencies": {
+          "Microsoft.Extensions.Configuration.Binder": "10.0.12"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.Extensions.Options.ConfigurationExtensions.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.1226.42308",
+            "localPath": "Microsoft.Extensions.Options.ConfigurationExtensions.dll"
+          }
+        }
+      },
+      "YamlDotNet/18.1.0": {
+        "runtime": {
+          "lib/net10.0/YamlDotNet.dll": {
+            "assemblyVersion": "18.0.0.0",
+            "fileVersion": "18.1.0.0",
+            "localPath": "YamlDotNet.dll"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "genhttp/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Cottle/2.1.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-d49r02/objSu6g6QuKLZtnh2CJOWv2cq6h1v3A5mr3/8MsNST6BYhnDT6Xzum+LMx8fEbU1chF0XYNY4Bgi+7Q==",
+      "path": "cottle/2.1.0",
+      "hashPath": "cottle.2.1.0.nupkg.sha512"
+    },
+    "GenHTTP.Api/11.0.5": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-LTTurfwVXA31IMuiX66zDOjo2DwBJQ/tqESb2IMJYhdN3UX3YdrgzAcEEhLoAbv7/68KnfSf6dAChuXRDG6YDQ==",
+      "path": "genhttp.api/11.0.5",
+      "hashPath": "genhttp.api.11.0.5.nupkg.sha512"
+    },
+    "GenHTTP.Api.Ioxide/11.0.5": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-JW/OeY6ogpDD2K5v7cX1mIZ+3B2F//7vyE9V+pUKQZfdfyY5PY5A2REd3sVtCo7c3AsHl0pZpykzkZGCThkrag==",
+      "path": "genhttp.api.ioxide/11.0.5",
+      "hashPath": "genhttp.api.ioxide.11.0.5.nupkg.sha512"
+    },
+    "GenHTTP.Engine.Ioxide/11.0.5": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-9H1BwhhZfm9Va52/WLuvJvNw8IySUNSn2y5Oh6oPZoAp35JqSZ5gQjOq1DU566ihqLyrzJlxjhaJ876AzDawVg==",
+      "path": "genhttp.engine.ioxide/11.0.5",
+      "hashPath": "genhttp.engine.ioxide.11.0.5.nupkg.sha512"
+    },
+    "GenHTTP.Engine.Shared/11.0.5": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-u2Vmgf2ZLy8UbHq91Tcv2tMV+E+SKvswB2DRn7dj/w29dOooTLGASRftSOUgSzol3fWZ1C0qWZo+BWT+4IbMeg==",
+      "path": "genhttp.engine.shared/11.0.5",
+      "hashPath": "genhttp.engine.shared.11.0.5.nupkg.sha512"
+    },
+    "GenHTTP.Modules.Compression/11.0.5": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-QLLeYP8dS3A8FUN/b4Mw89owOnuTYsaBsPBc+MMhySz9SPU0KcXBgmlqa7QIeZkEL2rh/vvGt+jTNJ7TaxmwYA==",
+      "path": "genhttp.modules.compression/11.0.5",
+      "hashPath": "genhttp.modules.compression.11.0.5.nupkg.sha512"
+    },
+    "GenHTTP.Modules.Conversion/11.0.5": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-iF+g2VrssUj6kdVQTOGbow6oBOLN7RRZFCVRZszya67qU6OGh3mpreIDJGTMRrlnfZLT07xHfedeGy/dceWQaA==",
+      "path": "genhttp.modules.conversion/11.0.5",
+      "hashPath": "genhttp.modules.conversion.11.0.5.nupkg.sha512"
+    },
+    "GenHTTP.Modules.ErrorHandling/11.0.5": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-5mBjCqjC8JjqPXJjP0X5p9wwxSPDqq8mu+pOYFU7Aq/jL2BLmK3Lt+agRe884PXyL0I6Vy+HlS0mceEMisQnLg==",
+      "path": "genhttp.modules.errorhandling/11.0.5",
+      "hashPath": "genhttp.modules.errorhandling.11.0.5.nupkg.sha512"
+    },
+    "GenHTTP.Modules.Files/11.0.5": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-iapYrEY5TUjM5V0dybQ7Nosh/5/qsctNjuMnK9E8fmsDK2Zx4vWY5CK9GHnL0fhCyA0GHkNdchQhX48WbKnsjw==",
+      "path": "genhttp.modules.files/11.0.5",
+      "hashPath": "genhttp.modules.files.11.0.5.nupkg.sha512"
+    },
+    "GenHTTP.Modules.IO/11.0.5": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-sgJOK+72VAr4c+DHgmVCHZL2JMab8xIig7Uis/quqcnKckHba/ji869NuD1w3Xm+nD3d7rxyNDxqIBxbvGbYqQ==",
+      "path": "genhttp.modules.io/11.0.5",
+      "hashPath": "genhttp.modules.io.11.0.5.nupkg.sha512"
+    },
+    "GenHTTP.Modules.Layouting/11.0.5": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-+JVsu05koDZeFSGziShfpqtGXsaigThKzE7YtUTatZCKvCyouqC9ndF42T+/iTpP8SHXlFUZ8q06B0f8NxFfqw==",
+      "path": "genhttp.modules.layouting/11.0.5",
+      "hashPath": "genhttp.modules.layouting.11.0.5.nupkg.sha512"
+    },
+    "GenHTTP.Modules.Pages/11.0.5": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-FWTOh0LGDPAfWL/id7NHWbxfDNdf9CuZPHkwDY0qsORGj4vHb0oBY6V5h+/9tWZGgjSSgQ0M21CCWtRjKQxc0w==",
+      "path": "genhttp.modules.pages/11.0.5",
+      "hashPath": "genhttp.modules.pages.11.0.5.nupkg.sha512"
+    },
+    "GenHTTP.Modules.Redirects/11.0.5": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-X4zSpvWvxqdNVKbJhQLYp69xgDQosDH7JNnwvnwWP2KF8tAANWowDaoX0pIrc5UQBTBXEOpqR1EW+Ui7Y9tRmA==",
+      "path": "genhttp.modules.redirects/11.0.5",
+      "hashPath": "genhttp.modules.redirects.11.0.5.nupkg.sha512"
+    },
+    "GenHTTP.Modules.Reflection/11.0.5": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-MTt0BTZRhWZhlD0lVnqw8d+ZtEKUjGAdfb+CyFK7EFTdjoWzUEi+4zynVws9Yth2R5wcNqo9mjM9f8yjSZTGAQ==",
+      "path": "genhttp.modules.reflection/11.0.5",
+      "hashPath": "genhttp.modules.reflection.11.0.5.nupkg.sha512"
+    },
+    "GenHTTP.Modules.Webservices/11.0.5": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-iH9RRuYY4sORQMzfU746U2bwlokQRylJn2KPifuoYPIzdA2dwYD+34/wuHA9+qi8m2xUaGsWEIVWKsysrI9bGQ==",
+      "path": "genhttp.modules.webservices/11.0.5",
+      "hashPath": "genhttp.modules.webservices.11.0.5.nupkg.sha512"
+    },
+    "GenHTTP.Modules.Websockets/11.0.5": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-neEBD/hqKrbGNQDKQmWmgW5sIoIAYHUw4agUv/Vm8w6l92zSoVcmbHUW2Ooteyf+H3F1L8E6mfyuYugxODcQTg==",
+      "path": "genhttp.modules.websockets/11.0.5",
+      "hashPath": "genhttp.modules.websockets.11.0.5.nupkg.sha512"
+    },
+    "Glyph11/0.3.7": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-zr0FszghJ0bj+D9LT2msB+ZxWY1IgLyNwr4lk7BNLKeGQLRU2CbizyXyIwEVtG3A/rCwqwT9XJGZPDcvL7SKGw==",
+      "path": "glyph11/0.3.7",
+      "hashPath": "glyph11.0.3.7.nupkg.sha512"
+    },
+    "Glyph11.Pico/0.0.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-HxYlEuTgmmTIcFnDzExnK54e/aWAOjsvYB/5p12KakkwNgRigedO2hhLeuxc51dN79UYmVB6hxx2n9d5WBeTWQ==",
+      "path": "glyph11.pico/0.0.1",
+      "hashPath": "glyph11.pico.0.0.1.nupkg.sha512"
+    },
+    "ioxide/0.15.251": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-SJIJbnvAfWOQdHnopOJwkAhLJ2KnhkFP+TsMnGoneh8AW10ZsOkaKIll1FJ8sRZxHmFs1tq3nGEJ9VYsLfoVUQ==",
+      "path": "ioxide/0.15.251",
+      "hashPath": "ioxide.0.15.251.nupkg.sha512"
+    },
+    "ioxide.file/0.15.251": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-C4y5oogXGD8+3m5qOBrWqTKeiu8KcxhnncvJlc+0ftujs4ixiffmUiCyoHIBSi23oOGwDJdN72+BGFciHcGjwA==",
+      "path": "ioxide.file/0.15.251",
+      "hashPath": "ioxide.file.0.15.251.nupkg.sha512"
+    },
+    "ioxide.http2/0.15.251": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-XAbyr1b4LgFOmOoGuObmazFn5A7ETZ8rW2x3OdeDPK3l3aMfzF/6iXCZLKSeXRfJUkZh3zR6ymIDVHxOmnRknw==",
+      "path": "ioxide.http2/0.15.251",
+      "hashPath": "ioxide.http2.0.15.251.nupkg.sha512"
+    },
+    "ioxide.nghttp3/0.15.251": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-SjW4CG1Ff+YO5KqMAe/e0C30oeGpPsAayuTlxLtXxzl23fnUQusmxWP58DT6NJFJmpyfbaB0Gi0ymWbgtupC6A==",
+      "path": "ioxide.nghttp3/0.15.251",
+      "hashPath": "ioxide.nghttp3.0.15.251.nupkg.sha512"
+    },
+    "ioxide.ngtcp2/0.15.251": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-2nDkOz2kr2/US0LOhtofR8ypsmPulL/Ek+Ca+5dEjNi/T32iThH6A4KXbWAV5VXZbM8EhhT5EgcRdPtH+2vOtQ==",
+      "path": "ioxide.ngtcp2/0.15.251",
+      "hashPath": "ioxide.ngtcp2.0.15.251.nupkg.sha512"
+    },
+    "ioxide.pg/0.15.251": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-McRKDPHJQC8UJJMNYnzfrxKjImFhVnibMsLj2aX+FpD2I3DNQiwFQH/oug4GfMzFm5f4oshHNrHaRW0GAr0fIw==",
+      "path": "ioxide.pg/0.15.251",
+      "hashPath": "ioxide.pg.0.15.251.nupkg.sha512"
+    },
+    "ioxide.timer/0.15.251": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-kxExKUXORni/70cKO8bKbF52nene3sagi1Z+w2QbqAAGIOBMV/ezLEpOdKv+EO2RCbxNkfOl18M9P5kFU2YMbg==",
+      "path": "ioxide.timer/0.15.251",
+      "hashPath": "ioxide.timer.0.15.251.nupkg.sha512"
+    },
+    "Microsoft.CodeAnalysis.Common/5.9.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-IYaIaUWdIx539AReKZOBEqTskFusZfCh/wFSPilDvCn5Say8MegLw2LONcSIcVy+v3Gzv53qYBspgvBGSErfbQ==",
+      "path": "microsoft.codeanalysis.common/5.9.0",
+      "hashPath": "microsoft.codeanalysis.common.5.9.0.nupkg.sha512"
+    },
+    "Microsoft.CodeAnalysis.CSharp/5.9.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-7JGDA0UT1+h7k9ZcA3rF4eFC8+QPq1xyYaXxag4p8r/zzPurEJxvdi7aM+MRL/SfP7XADXpWF/pl/eUYXOq/ww==",
+      "path": "microsoft.codeanalysis.csharp/5.9.0",
+      "hashPath": "microsoft.codeanalysis.csharp.5.9.0.nupkg.sha512"
+    },
+    "Microsoft.Extensions.Caching.Memory/11.0.0-preview.5.26302.115": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-f/quLsEDs3YFYwh8ydwHTMt2WyLyWQ55aCn39w4cX3UXR3hlkY+dAnzQptOdc7G9YoAq7qrmyTMOBItoz1CwEw==",
+      "path": "microsoft.extensions.caching.memory/11.0.0-preview.5.26302.115",
+      "hashPath": "microsoft.extensions.caching.memory.11.0.0-preview.5.26302.115.nupkg.sha512"
+    },
+    "Microsoft.Extensions.Configuration/10.0.12": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-e3IPP32CRNL031VZJAUTlCTG0YN7WFh4mN3fsSHTDQCJB+3+f0jGycv4fXk3rrftaY3B85XrQaj7sRthrOsavg==",
+      "path": "microsoft.extensions.configuration/10.0.12",
+      "hashPath": "microsoft.extensions.configuration.10.0.12.nupkg.sha512"
+    },
+    "Microsoft.Extensions.Configuration.Binder/10.0.12": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-dAgIf1TOr8KLs+aBRIbXUZBjHoSH4rDG8+XkX/Q6AZwkQdMA0+yPDKTHsieeXdZDfpOpZVHzOnuAb5Z2nX3KsA==",
+      "path": "microsoft.extensions.configuration.binder/10.0.12",
+      "hashPath": "microsoft.extensions.configuration.binder.10.0.12.nupkg.sha512"
+    },
+    "Microsoft.Extensions.DependencyInjection/10.0.12": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-lXyK2O5GoYvfxW8eCFcD16JFbcoSTM1sJkAM0UHS1jZyl9NYMW64Tqm6OQFT0IDBjZi+xHt95/Zg+nxZhGFhZg==",
+      "path": "microsoft.extensions.dependencyinjection/10.0.12",
+      "hashPath": "microsoft.extensions.dependencyinjection.10.0.12.nupkg.sha512"
+    },
+    "Microsoft.Extensions.Logging/10.0.12": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-6I46fTPfgYkrjRYfRXbho9WOvOelTnNjWuZws/hzGHDASH1LEJeA4VKK9k3wJvido8o7jJSB5WkMTonX7HM1bA==",
+      "path": "microsoft.extensions.logging/10.0.12",
+      "hashPath": "microsoft.extensions.logging.10.0.12.nupkg.sha512"
+    },
+    "Microsoft.Extensions.Logging.Configuration/10.0.12": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-CLHWfKQZWFE6fSzRXfjd4UlGveckkfPtwx/p5yF/o3hEkMSzGsl7MSxNAkI19hjw0rprBqrQC09Dwy6Lh6kweA==",
+      "path": "microsoft.extensions.logging.configuration/10.0.12",
+      "hashPath": "microsoft.extensions.logging.configuration.10.0.12.nupkg.sha512"
+    },
+    "Microsoft.Extensions.Logging.Console/10.0.12": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-nHvaR8gO0CdEfG324KdUsP3Hqgdf1licZb+UlNh5pFYw7+o8QYTmiMgFmwayE/LPSpaqND/Qn3xHa1cI9b8x0w==",
+      "path": "microsoft.extensions.logging.console/10.0.12",
+      "hashPath": "microsoft.extensions.logging.console.10.0.12.nupkg.sha512"
+    },
+    "Microsoft.Extensions.Options.ConfigurationExtensions/10.0.12": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-rqpu4qj5WE9x1IHGXSIgHBKi7IUlQaHyp4aXCYIanG2OghlUMFZpZTgExaXwcvmLAJHsxKQWMPpc7D2WIbCVtA==",
+      "path": "microsoft.extensions.options.configurationextensions/10.0.12",
+      "hashPath": "microsoft.extensions.options.configurationextensions.10.0.12.nupkg.sha512"
+    },
+    "YamlDotNet/18.1.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-5K+9KFg2TdTl7VXv88Qzi/0lqK6JFoNP3lRuImPYGRV7K/QYklDyTrj4+A+KAki1JsQi6qKY+hDyY7d6WRqjrw==",
+      "path": "yamldotnet/18.1.0",
+      "hashPath": "yamldotnet.18.1.0.nupkg.sha512"
+    }
+  }
+}

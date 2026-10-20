@@ -1,0 +1,101 @@
+-- The C compiler identification is GNU 16.2.1
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/sbin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- The CXX compiler identification is GNU 16.2.1
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/sbin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Found OpenSSL: /usr/lib/libcrypto.so (found suitable version "3.6.4", minimum required is "1.1.1")
+-- Found Libev: /usr/lib/libev.so (found suitable version "4.33", minimum required is "4.11")
+-- Found Libnghttp3: /usr/lib/libnghttp3.so (found suitable version "1.18.0", minimum required is "1.18.0")
+-- Found Libbrotlienc: /usr/lib/libbrotlienc.so (found suitable version "1.2.0", minimum required is "1.0.9")
+-- Found Libbrotlidec: /usr/lib/libbrotlidec.so (found suitable version "1.2.0", minimum required is "1.0.9")
+-- Looking for SSL_provide_quic_data
+-- Looking for SSL_provide_quic_data - not found
+-- Looking for SSL_set_quic_tls_cbs
+-- Looking for SSL_set_quic_tls_cbs - found
+-- Looking for arpa/inet.h
+-- Looking for arpa/inet.h - found
+-- Looking for netinet/in.h
+-- Looking for netinet/in.h - found
+-- Looking for netinet/ip.h
+-- Looking for netinet/ip.h - found
+-- Looking for unistd.h
+-- Looking for unistd.h - found
+-- Looking for sys/endian.h
+-- Looking for sys/endian.h - not found
+-- Looking for endian.h
+-- Looking for endian.h - found
+-- Looking for byteswap.h
+-- Looking for byteswap.h - found
+-- Looking for asm/types.h
+-- Looking for asm/types.h - found
+-- Looking for linux/netlink.h
+-- Looking for linux/netlink.h - found
+-- Looking for linux/rtnetlink.h
+-- Looking for linux/rtnetlink.h - found
+-- Looking for sys/types.h
+-- Looking for sys/types.h - found
+-- Looking for stdint.h
+-- Looking for stdint.h - found
+-- Looking for stddef.h
+-- Looking for stddef.h - found
+-- Check size of ssize_t
+-- Check size of ssize_t - done
+-- Looking for be64toh
+-- Looking for be64toh - found
+-- Looking for bswap_64
+-- Looking for bswap_64 - found
+-- Looking for explicit_bzero
+-- Looking for explicit_bzero - found
+-- Looking for memset_s
+-- Looking for memset_s - not found
+-- Performing Test OPT_Wpragmas
+-- Performing Test OPT_Wpragmas - Success
+CMake Warning at crypto/CMakeLists.txt:31 (message):
+  libngtcp2_crypto_quictls library is disabled due to lack of good quictls
+
+
+CMake Warning at crypto/CMakeLists.txt:37 (message):
+  libngtcp2_crypto_libressl library is disabled due to lack of good LibreSSL
+
+
+-- summary of build options:
+
+    Package version: 1.25.0
+    Library version: 27:0:11
+    Install prefix:  /usr/local
+    Target system:   Linux
+    Compiler:
+      Build type:     Release
+      C compiler:     /usr/sbin/cc
+      CFLAGS:         -O3  
+      C++ compiler:   /usr/sbin/c++
+      CXXFLAGS:        
+      WARNCFLAGS:       -W -Wall -Wconversion -Winline -Wmissing-declarations -Wmissing-prototypes -Wnested-externs -Wpointer-arith -Wshadow -Wundef -Wwrite-strings -Waddress -Wattributes -Wcast-align -Wdeclaration-after-statement -Wdiv-by-zero -Wempty-body -Wendif-labels -Wfloat-equal -Wformat-nonliteral -Wformat-security -Wmissing-field-initializers -Wmissing-noreturn -Wno-format-nonliteral -Wredundant-decls -Wsign-conversion -Wstrict-prototypes -Wunreachable-code -Wunused-macros -Wunused-parameter -Wvla -Wclobbered -Wduplicated-branches -Wpragmas
+      WARNCXXFLAGS:     -Wall -Wformat-security -Wno-noexcept-type
+    Library:
+      Shared:         OFF
+      Static:         ON
+    Test:
+      Build Test:     OFF
+    Libs:
+      OpenSSL:        TRUE (LIBS='/usr/lib/libssl.so;/usr/lib/libcrypto.so')
+      Libev:          TRUE (LIBS='/usr/lib/libev.so')
+      Libnghttp3:     TRUE (LIBS='/usr/lib/libnghttp3.so')
+      GnuTLS:         FALSE (LIBS='')
+      BoringSSL:      FALSE (LIBS='')
+      Picotls:        FALSE (LIBS='')
+      wolfSSL:        FALSE (LIBS='')
+      Jemalloc:        (LIBS='')
+      Libbrotlienc:   TRUE (LIBS='/usr/lib/libbrotlienc.so')
+      Libbrotlidec:   TRUE (LIBS='/usr/lib/libbrotlidec.so')
+
+-- Configuring done (13.9s)
+-- Generating done (0.0s)
+-- Build files have been written to: /tmp/cnetmod-h3-ngtcp2-peer-build

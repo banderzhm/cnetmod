@@ -17,6 +17,8 @@ module;
 
 module cnetmod.executor.async_op;
 
+import std;
+
 #ifdef CNETMOD_HAS_IOCP
 import cnetmod.io.platform.iocp;
 import cnetmod.executor.pool;
@@ -842,6 +844,29 @@ struct iocp_sendto_on_suspend
     int destination_length;
     DWORD& bytes_sent;
     bool skip_completion_on_success;
+    cancel_token* token{};
+    bool registered{};
+    // 0: submission owns the frame, 1: suspended, 2: completion arrived.
+    std::atomic<unsigned> handoff{0U};
+    post_node continuation{};
+
+    static void cancel(void* operation) noexcept
+    {
+        auto& self = *static_cast<iocp_sendto_on_suspend*>(operation);
+        ::CancelIoEx(reinterpret_cast<HANDLE>(self.socket_handle), &self.ov);
+    }
+
+    static void complete(iocp_overlapped& operation) noexcept
+    {
+        auto& self = *static_cast<iocp_sendto_on_suspend*>(
+            operation.completion_context);
+        auto* context = std::addressof(self.resume_context);
+        auto* continuation = std::addressof(self.continuation);
+        // Capture everything before publishing completion: either the submitter
+        // or the posted continuation can immediately destroy this frame.
+        if (self.handoff.exchange(2U, std::memory_order_acq_rel) == 1U)
+            context->post_node_raw(continuation);
+    }
 
     auto await_ready() const noexcept -> bool
     {
@@ -852,6 +877,18 @@ struct iocp_sendto_on_suspend
     {
         ov.coroutine = coroutine;
         ov.resume_context = std::addressof(resume_context);
+        ov.completion_context = this;
+        ov.completion_callback = complete;
+        continuation.coroutine = coroutine;
+        if (token)
+        {
+            registered = token->register_callback(this, cancel);
+            if (!registered)
+            {
+                ov.error = make_error_code(errc::operation_aborted);
+                return false;
+            }
+        }
         const int status = ::WSASendTo(socket_handle, &buffer, 1, &bytes_sent, 0,
             reinterpret_cast<const ::sockaddr*>(&destination), destination_length,
             &ov, nullptr);
@@ -869,10 +906,22 @@ struct iocp_sendto_on_suspend
                 return false;
             }
         }
-        return true;
+        // Cancellation can precede submission, when CancelIoEx finds no I/O.
+        // Repeat it after submission while the handoff still pins this frame.
+        if (token && token->is_cancelled())
+            cancel(this);
+        unsigned submitting = 0U;
+        // No frame access after this CAS: a completion on another IOCP worker
+        // can now post and finish the awaiting coroutine before we return.
+        return handoff.compare_exchange_strong(submitting, 1U,
+            std::memory_order_acq_rel, std::memory_order_acquire);
     }
 
-    void await_resume() noexcept {}
+    void await_resume() noexcept
+    {
+        if (registered && !token->complete_callback(this))
+            token->finish_callback(this);
+    }
 };
 
 // Every overlapped operation must publish its continuation before it is
@@ -2229,6 +2278,37 @@ auto async_sendto_on(io_context& socket_context, io_context& resume_context,
     if (ov.error)
         co_return std::unexpected(ov.error);
     co_return static_cast<std::size_t>(ov.bytes_transferred);
+}
+
+auto async_sendto_on(io_context& socket_context, io_context& resume_context,
+    socket& sock, const_buffer buf, const endpoint& peer, cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto& iocp = static_cast<iocp_context&>(socket_context);
+    if (auto result = ensure_associated(iocp, sock); !result)
+        co_return std::unexpected(result.error());
+
+    WSABUF wsabuf{};
+    wsabuf.buf = const_cast<char*>(static_cast<const char*>(buf.data));
+    wsabuf.len = static_cast<ULONG>(buf.size);
+    iocp_overlapped ov;
+    ::sockaddr_storage destination{};
+    const int destination_length = fill_sockaddr(peer, destination);
+    DWORD bytes_sent{};
+
+    co_await iocp_sendto_on_suspend{ov, resume_context, sock.native_handle(),
+        wsabuf, destination, destination_length, bytes_sent,
+        sock.skips_completion_on_success(), std::addressof(token)};
+    // A successful CQE proves the datagram was accepted, even if cancellation
+    // raced its delivery. Preserve that progress for callers tracking a prefix.
+    if (!ov.error)
+        co_return static_cast<std::size_t>(ov.bytes_transferred);
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    co_return std::unexpected(ov.error);
 }
 
 auto async_sendto(io_context& ctx, socket& sock,

@@ -1,0 +1,18 @@
+[
+  {
+    "Path": "C:\\Users\\25007\\.codex\\worktrees\\2c3c\\cnetmod\\testing\\http3\\http_client_e2e.py",
+    "Hash": "38D350594AE3B64D997590B67BCD1FDE37FB4AA308F4F248EA7D411E60A0E8E9"
+  },
+  {
+    "Path": "C:\\Users\\25007\\.codex\\worktrees\\2c3c\\cnetmod\\testing\\http3\\early_data_loss_proxy.py",
+    "Hash": "D38E011F10990E507D84B82BE747B8BA32CE843CB79DF98CD284BEDC01D02C58"
+  },
+  {
+    "Path": "C:\\Users\\25007\\.codex\\worktrees\\2c3c\\cnetmod\\testing\\http3\\h3-interop-results.json",
+    "Hash": "CA41C4CB5ADCC34EE16042E00EA9C6DFB248B9A17649995DBACFEB43B64D8B66"
+  },
+  {
+    "Path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\CMakeCache.txt",
+    "Hash": "B23254F72129688D95C538F5B41712ABC54036F7D661906A67149F3840196044"
+  }
+]

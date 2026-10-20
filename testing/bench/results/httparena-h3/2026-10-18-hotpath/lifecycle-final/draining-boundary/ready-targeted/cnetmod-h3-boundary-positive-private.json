@@ -1,0 +1,45 @@
+[
+  {
+    "case": "private-pto",
+    "mode": "private",
+    "status": "passed",
+    "client_forwarded": 8,
+    "client_blocked": 0,
+    "client_forwarded_while_gated": 0,
+    "server_forwarded_while_gated": 2,
+    "response_datagrams_dropped": 1,
+    "socket_errors": [],
+    "decode_errors": [],
+    "retransmitted_stream_frames": [
+      {
+        "offset": 0,
+        "length": 25,
+        "fin": true
+      },
+      {
+        "offset": 0,
+        "length": 25,
+        "fin": true
+      }
+    ],
+    "control_only_after_drop": 0,
+    "socket_error_events": [],
+    "gate_at_ms": 0.10857000006581075,
+    "client_forwarded_at_gate": 7,
+    "dropped_packet_number": 3,
+    "dropped_datagram_bytes": 57,
+    "dropped_stream_frames": [
+      {
+        "offset": 0,
+        "length": 25,
+        "fin": true
+      }
+    ],
+    "drop_at_ms": 53.28968200001327,
+    "response_at_ms": 83.2063160000871,
+    "pre_send_deadline_ms": 5890,
+    "observer_notifications": 0,
+    "server_stdout": "",
+    "server_stderr": ""
+  }
+]

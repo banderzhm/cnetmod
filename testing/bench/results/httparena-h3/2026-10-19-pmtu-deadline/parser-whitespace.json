@@ -1,0 +1,5 @@
+{
+  "change": "Remove extra EOF blank line only, after full suites and perf; rerun both deadline CTests on each OS.",
+  "before": "f799971a6cefab3ce06e135205f3171e5dafed8f904da7279755e477d0963975",
+  "after": "7341a99b0ee4cd459b996d4d300a60907e729f198a028a2180017e8a4e1c99f8"
+}

@@ -1,0 +1,106 @@
+{
+  "inferior_pid": 0,
+  "types": {
+    "quic_write_completion": {
+      "dwarf_name": "quic_write_completion",
+      "bytes": 88,
+      "fields": [
+        {
+          "name": "rejected_bytes",
+          "offset": 0,
+          "bytes": 24
+        },
+        {
+          "name": "rejected_shared_bytes",
+          "offset": 24,
+          "bytes": 16
+        },
+        {
+          "name": "lock_",
+          "offset": 40,
+          "bytes": 1
+        },
+        {
+          "name": "value_",
+          "offset": 48,
+          "bytes": 32
+        },
+        {
+          "name": "waiter_",
+          "offset": 80,
+          "bytes": 8
+        }
+      ]
+    },
+    "quic_write_command": {
+      "dwarf_name": "quic_write_command",
+      "bytes": 72,
+      "fields": [
+        {
+          "name": "type",
+          "offset": 0,
+          "bytes": 1
+        },
+        {
+          "name": "stream",
+          "offset": 8,
+          "bytes": 8
+        },
+        {
+          "name": "bytes",
+          "offset": 16,
+          "bytes": 24
+        },
+        {
+          "name": "fin",
+          "offset": 40,
+          "bytes": 1
+        },
+        {
+          "name": "urgency",
+          "offset": 41,
+          "bytes": 1
+        },
+        {
+          "name": "incremental",
+          "offset": 42,
+          "bytes": 1
+        },
+        {
+          "name": "completion",
+          "offset": 48,
+          "bytes": 8
+        },
+        {
+          "name": "shared_bytes",
+          "offset": 56,
+          "bytes": 16
+        }
+      ]
+    },
+    "quic_write_queue": {
+      "dwarf_name": "quic_write_queue",
+      "bytes": 448,
+      "fields": [
+        {
+          "name": "slots_",
+          "offset": 0,
+          "bytes": 8
+        },
+        {
+          "name": "available_",
+          "offset": 64,
+          "bytes": 192
+        },
+        {
+          "name": "commands_",
+          "offset": 256,
+          "bytes": 192
+        }
+      ]
+    },
+    "quic_connection_impl": {
+      "unavailable": true
+    }
+  }
+}

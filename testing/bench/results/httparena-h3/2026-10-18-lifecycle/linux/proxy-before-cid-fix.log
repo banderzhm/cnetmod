@@ -1,0 +1,682 @@
+UpdateCTestConfiguration  from :/tmp/cnetmod-h3-arena-build/DartConfiguration.tcl
+Test project /tmp/cnetmod-h3-arena-build
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 47
+      Start 47: test_quic_varint
+
+47: Test command: /tmp/cnetmod-h3-arena-build/testing/tests/test_quic_varint
+47: Working Directory: /tmp/cnetmod-h3-arena-build/testing/tests
+47: Test timeout computed to be: 10000000
+47: [==========] Running 16 test(s).
+47: [ RUN      ] quic_varint_encode_zero
+47: [       OK ] quic_varint_encode_zero
+47: [ RUN      ] quic_varint_encode_1byte_range
+47: [       OK ] quic_varint_encode_1byte_range
+47: [ RUN      ] quic_varint_encode_2byte_range
+47: [       OK ] quic_varint_encode_2byte_range
+47: [ RUN      ] quic_varint_encode_4byte_range
+47: [       OK ] quic_varint_encode_4byte_range
+47: [ RUN      ] quic_varint_encode_max_valid
+47: [       OK ] quic_varint_encode_max_valid
+47: [ RUN      ] quic_varint_encode_exceeds_62bit
+47: [       OK ] quic_varint_encode_exceeds_62bit
+47: [ RUN      ] quic_varint_decode_partial_input
+47: [       OK ] quic_varint_decode_partial_input
+47: [ RUN      ] quic_varint_roundtrip_random
+47: Random round-trip tests: 100 passed, 0 failed
+47: [       OK ] quic_varint_roundtrip_random
+47: [ RUN      ] quic_varint_all_boundary_values
+47: [       OK ] quic_varint_all_boundary_values
+47: [ RUN      ] quic_varint_decode_truncated_2byte_prefix
+47: [       OK ] quic_varint_decode_truncated_2byte_prefix
+47: [ RUN      ] quic_varint_decode_truncated_4byte_prefix
+47: [       OK ] quic_varint_decode_truncated_4byte_prefix
+47: [ RUN      ] quic_varint_decode_truncated_8byte_prefix
+47: [       OK ] quic_varint_decode_truncated_8byte_prefix
+47: [ RUN      ] quic_varint_encode_overflow_error
+47: [       OK ] quic_varint_encode_overflow_error
+47: [ RUN      ] quic_varint_encode_to_buffer_success
+47: [       OK ] quic_varint_encode_to_buffer_success
+47: [ RUN      ] quic_varint_encode_to_buffer_too_small
+47: [       OK ] quic_varint_encode_to_buffer_too_small
+47: [ RUN      ] quic_varint_size_function
+47: [       OK ] quic_varint_size_function
+47: [==========] 16 test(s) ran.
+47: [  PASSED  ] 16 test(s).
+ 1/23 Test #47: test_quic_varint .....................................   Passed    0.01 sec
+test 48
+      Start 48: test_quic_frame
+
+48: Test command: /tmp/cnetmod-h3-arena-build/testing/tests/test_quic_frame
+48: Working Directory: /tmp/cnetmod-h3-arena-build/testing/tests
+48: Test timeout computed to be: 10000000
+48: [==========] Running 33 test(s).
+48: [ RUN      ] quic_ping_frame_roundtrip
+48: [       OK ] quic_ping_frame_roundtrip
+48: [ RUN      ] quic_ack_frame_with_ranges
+48: [       OK ] quic_ack_frame_with_ranges
+48: [ RUN      ] quic_stream_frame_encoding
+48: [       OK ] quic_stream_frame_encoding
+48: [ RUN      ] quic_crypto_frame_roundtrip
+48: [       OK ] quic_crypto_frame_roundtrip
+48: [ RUN      ] quic_connection_close_frame_decode
+48: [       OK ] quic_connection_close_frame_decode
+48: [ RUN      ] quic_path_challenge_roundtrip
+48: [       OK ] quic_path_challenge_roundtrip
+48: [ RUN      ] quic_unknown_frame_type_handling
+48: [       OK ] quic_unknown_frame_type_handling
+48: [ RUN      ] quic_priority_service_budget_bounds_background_starvation
+48: [       OK ] quic_priority_service_budget_bounds_background_starvation
+48: [ RUN      ] quic_shared_send_frame_renders_without_owning_body_copy
+48: [       OK ] quic_shared_send_frame_renders_without_owning_body_copy
+48: [ RUN      ] quic_stream_scheduler_preserves_default_fifo_across_payload_strategies
+48: [       OK ] quic_stream_scheduler_preserves_default_fifo_across_payload_strategies
+48: [ RUN      ] quic_empty_stream_frame
+48: [       OK ] quic_empty_stream_frame
+48: [ RUN      ] quic_large_ack_ranges_list
+48: [       OK ] quic_large_ack_ranges_list
+48: [ RUN      ] quic_max_data_frame_encoding
+48: [       OK ] quic_max_data_frame_encoding
+48: [ RUN      ] quic_new_connection_id_frame_encoding
+48: [       OK ] quic_new_connection_id_frame_encoding
+48: [ RUN      ] quic_padding_frame_encode
+48: [       OK ] quic_padding_frame_encode
+48: [ RUN      ] quic_stream_frame_fin_flag_roundtrip
+48: [       OK ] quic_stream_frame_fin_flag_roundtrip
+48: [ RUN      ] quic_crypto_frame_large_offset
+48: [       OK ] quic_crypto_frame_large_offset
+48: [ RUN      ] quic_handshake_done_frame_roundtrip
+48: [       OK ] quic_handshake_done_frame_roundtrip
+48: [ RUN      ] quic_reset_stream_frame_roundtrip
+48: [       OK ] quic_reset_stream_frame_roundtrip
+48: [ RUN      ] quic_max_stream_data_frame_roundtrip
+48: [       OK ] quic_max_stream_data_frame_roundtrip
+48: [ RUN      ] quic_frame_decode_truncated_data
+48: [       OK ] quic_frame_decode_truncated_data
+48: [ RUN      ] quic_frame_ack_eliciting_check
+48: [       OK ] quic_frame_ack_eliciting_check
+48: [ RUN      ] quic_frame_probing_check
+48: [       OK ] quic_frame_probing_check
+48: [ RUN      ] quic_stop_sending_frame_roundtrip
+48: [       OK ] quic_stop_sending_frame_roundtrip
+48: [ RUN      ] quic_data_blocked_frame_roundtrip
+48: [       OK ] quic_data_blocked_frame_roundtrip
+48: [ RUN      ] quic_retire_connection_id_frame_roundtrip
+48: [       OK ] quic_retire_connection_id_frame_roundtrip
+48: [ RUN      ] quic_datagram_frame_roundtrip
+48: [       OK ] quic_datagram_frame_roundtrip
+48: [ RUN      ] quic_datagram_frame_without_length_consumes_packet_tail
+48: [       OK ] quic_datagram_frame_without_length_consumes_packet_tail
+48: [ RUN      ] multipath_path_ack_frame_roundtrip
+48: [       OK ] multipath_path_ack_frame_roundtrip
+48: [ RUN      ] multipath_path_management_frames_roundtrip
+48: [       OK ] multipath_path_management_frames_roundtrip
+48: [ RUN      ] multipath_path_connection_id_frames_roundtrip
+48: [       OK ] multipath_path_connection_id_frames_roundtrip
+48: [ RUN      ] multipath_frames_reject_path_ids_above_the_nonce_limit
+48: [       OK ] multipath_frames_reject_path_ids_above_the_nonce_limit
+48: [ RUN      ] quic_scheduler_retirement_reclaims_priority_but_preserves_retransmission
+48: [       OK ] quic_scheduler_retirement_reclaims_priority_but_preserves_retransmission
+48: [==========] 33 test(s) ran.
+48: [  PASSED  ] 33 test(s).
+ 2/23 Test #48: test_quic_frame ......................................   Passed    0.01 sec
+test 49
+      Start 49: test_quic_packet
+
+49: Test command: /tmp/cnetmod-h3-arena-build/testing/tests/test_quic_packet
+49: Working Directory: /tmp/cnetmod-h3-arena-build/testing/tests
+49: Test timeout computed to be: 10000000
+49: [==========] Running 34 test(s).
+49: [ RUN      ] long_header_initial_type_detection
+49: [       OK ] long_header_initial_type_detection
+49: [ RUN      ] long_header_handshake_type_detection
+49: [       OK ] long_header_handshake_type_detection
+49: [ RUN      ] short_header_1rtt_type_detection
+49: [       OK ] short_header_1rtt_type_detection
+49: [ RUN      ] zero_rtt_type_detection
+49: [       OK ] zero_rtt_type_detection
+49: [ RUN      ] retry_type_detection
+49: [       OK ] retry_type_detection
+49: [ RUN      ] version_negotiation_detection
+49: [       OK ] version_negotiation_detection
+49: [ RUN      ] long_header_initial_full_parse
+49: [       OK ] long_header_initial_full_parse
+49: [ RUN      ] long_header_handshake_full_parse
+49: [       OK ] long_header_handshake_full_parse
+49: [ RUN      ] long_header_initial_with_token
+49: [       OK ] long_header_initial_with_token
+49: [ RUN      ] long_header_decode_too_short
+49: [       OK ] long_header_decode_too_short
+49: [ RUN      ] long_header_short_header_rejected
+49: [       OK ] long_header_short_header_rejected
+49: [ RUN      ] short_header_1rtt_full_parse
+49: [       OK ] short_header_1rtt_full_parse
+49: [ RUN      ] short_header_key_phase_bit
+49: [       OK ] short_header_key_phase_bit
+49: [ RUN      ] short_header_spin_bit
+49: [       OK ] short_header_spin_bit
+49: [ RUN      ] short_header_too_short_rejected
+49: [       OK ] short_header_too_short_rejected
+49: [ RUN      ] packet_number_decode_basic_recovery
+49: [       OK ] packet_number_decode_basic_recovery
+49: [ RUN      ] packet_number_decode_wraparound
+49: [       OK ] packet_number_decode_wraparound
+49: [ RUN      ] packet_number_decode_first_packet
+49: [       OK ] packet_number_decode_first_packet
+49: [ RUN      ] packet_number_encode_decode_roundtrip
+49: [       OK ] packet_number_encode_decode_roundtrip
+49: [ RUN      ] packet_number_encode_min_bits
+49: [       OK ] packet_number_encode_min_bits
+49: [ RUN      ] coalesced_single_initial_packet
+49: [       OK ] coalesced_single_initial_packet
+49: [ RUN      ] coalesced_two_long_header_packets
+49: [       OK ] coalesced_two_long_header_packets
+49: [ RUN      ] initial_datagram_trailing_padding_is_not_a_short_packet
+49: [       OK ] initial_datagram_trailing_padding_is_not_a_short_packet
+49: [ RUN      ] coalesced_long_then_short
+49: [       OK ] coalesced_long_then_short
+49: [ RUN      ] coalesced_empty_datagram_rejected
+49: [       OK ] coalesced_empty_datagram_rejected
+49: [ RUN      ] long_header_encode_decode_roundtrip
+49: [       OK ] long_header_encode_decode_roundtrip
+49: [ RUN      ] short_header_encode_decode_roundtrip
+49: [       OK ] short_header_encode_decode_roundtrip
+49: [ RUN      ] empty_input_rejected
+49: [       OK ] empty_input_rejected
+49: [ RUN      ] long_header_rejects_connection_id_longer_than_rfc_limit
+49: [       OK ] long_header_rejects_connection_id_longer_than_rfc_limit
+49: [ RUN      ] retry_without_integrity_tag_is_rejected
+49: [       OK ] retry_without_integrity_tag_is_rejected
+49: [ RUN      ] coalesced_packet_with_truncated_declared_payload_is_rejected
+49: [       OK ] coalesced_packet_with_truncated_declared_payload_is_rejected
+49: [ RUN      ] chacha20_header_protection_uses_little_endian_counter
+49: [       OK ] chacha20_header_protection_uses_little_endian_counter
+49: [ RUN      ] multipath_payload_nonce_scopes_packet_numbers_by_path_id
+49: [       OK ] multipath_payload_nonce_scopes_packet_numbers_by_path_id
+49: [ RUN      ] quic_payload_seals_directly_into_packet_storage
+49: [       OK ] quic_payload_seals_directly_into_packet_storage
+49: [==========] 34 test(s) ran.
+49: [  PASSED  ] 34 test(s).
+ 3/23 Test #49: test_quic_packet .....................................   Passed    0.01 sec
+test 50
+      Start 50: test_quic_stream
+
+50: Test command: /tmp/cnetmod-h3-arena-build/testing/tests/test_quic_stream
+50: Working Directory: /tmp/cnetmod-h3-arena-build/testing/tests
+50: Test timeout computed to be: 10000000
+50: [==========] Running 13 test(s).
+50: [ RUN      ] quic_stream_fin_cannot_shrink_received_extent
+50: [       OK ] quic_stream_fin_cannot_shrink_received_extent
+50: [ RUN      ] quic_stream_reset_cannot_exceed_receive_credit
+50: [       OK ] quic_stream_reset_cannot_exceed_receive_credit
+50: [ RUN      ] quic_stream_reset_final_size_is_accounted
+50: [       OK ] quic_stream_reset_final_size_is_accounted
+50: [ RUN      ] quic_stream_out_of_order_gap_is_not_readable
+50: [       OK ] quic_stream_out_of_order_gap_is_not_readable
+50: [ RUN      ] quic_stream_duplicate_fin_is_idempotent
+50: [       OK ] quic_stream_duplicate_fin_is_idempotent
+50: [ RUN      ] quic_stream_initial_peer_send_credit_can_be_zero
+50: [       OK ] quic_stream_initial_peer_send_credit_can_be_zero
+50: [ RUN      ] quic_stream_initial_peer_send_credit_can_exceed_fallback
+50: [       OK ] quic_stream_initial_peer_send_credit_can_exceed_fallback
+50: [ RUN      ] quic_retired_stream_history_coalesces_without_reopening_old_ids
+50: [       OK ] quic_retired_stream_history_coalesces_without_reopening_old_ids
+50: [ RUN      ] quic_retired_stream_history_preserves_gaps_and_merges_out_of_order
+50: [       OK ] quic_retired_stream_history_preserves_gaps_and_merges_out_of_order
+50: [ RUN      ] quic_stream_reset_duplicates_preserve_credit_and_final_size
+50: [       OK ] quic_stream_reset_duplicates_preserve_credit_and_final_size
+50: [ RUN      ] quic_stream_abandoned_receive_accepts_final_size_without_buffering
+50: [       OK ] quic_stream_abandoned_receive_accepts_final_size_without_buffering
+50: [ RUN      ] quic_stream_unidirectional_has_only_one_open_direction
+50: [       OK ] quic_stream_unidirectional_has_only_one_open_direction
+50: [ RUN      ] quic_stream_abandon_after_fin_closes_unconsumed_receive_direction
+50: [       OK ] quic_stream_abandon_after_fin_closes_unconsumed_receive_direction
+50: [==========] 13 test(s) ran.
+50: [  PASSED  ] 13 test(s).
+ 4/23 Test #50: test_quic_stream .....................................   Passed    0.02 sec
+test 51
+      Start 51: test_quic_loss_detection
+
+51: Test command: /tmp/cnetmod-h3-arena-build/testing/tests/test_quic_loss_detection
+51: Working Directory: /tmp/cnetmod-h3-arena-build/testing/tests
+51: Test timeout computed to be: 10000000
+51: [==========] Running 14 test(s).
+51: [ RUN      ] loss_detector_rtt_initialization
+51: [       OK ] loss_detector_rtt_initialization
+51: [ RUN      ] loss_detector_rtt_multiple_samples
+51: [       OK ] loss_detector_rtt_multiple_samples
+51: [ RUN      ] loss_detector_pto_duration_basic
+51: [       OK ] loss_detector_pto_duration_basic
+51: [ RUN      ] loss_detector_pto_increases_with_rtt_var
+51: [       OK ] loss_detector_pto_increases_with_rtt_var
+51: [ RUN      ] loss_detector_packet_sent_tracking
+51: [       OK ] loss_detector_packet_sent_tracking
+51: [ RUN      ] loss_detector_ack_received_processing
+51: [       OK ] loss_detector_ack_received_processing
+51: [ RUN      ] loss_detector_ack_range_may_include_ack_only_packet
+51: [       OK ] loss_detector_ack_range_may_include_ack_only_packet
+51: [ RUN      ] loss_detector_rejects_ack_for_unsent_packet
+51: [       OK ] loss_detector_rejects_ack_for_unsent_packet
+51: [ RUN      ] loss_detector_no_loss_on_immediate_ack
+51: [       OK ] loss_detector_no_loss_on_immediate_ack
+51: [ RUN      ] loss_detector_pn_space_isolation
+51: [       OK ] loss_detector_pn_space_isolation
+51: [ RUN      ] loss_detector_discarded_packet_space_clears_pto_and_bytes
+51: [       OK ] loss_detector_discarded_packet_space_clears_pto_and_bytes
+51: [ RUN      ] loss_detector_rtt_sample_fields
+51: [       OK ] loss_detector_rtt_sample_fields
+51: [ RUN      ] quic_recovery_controller_removes_acknowledged_pto_aliases
+51: [       OK ] quic_recovery_controller_removes_acknowledged_pto_aliases
+51: [ RUN      ] quic_recovery_controller_emits_lost_frames
+51: [       OK ] quic_recovery_controller_emits_lost_frames
+51: [==========] 14 test(s) ran.
+51: [  PASSED  ] 14 test(s).
+ 5/23 Test #51: test_quic_loss_detection .............................   Passed    0.00 sec
+test 52
+      Start 52: test_quic_congestion
+
+52: Test command: /tmp/cnetmod-h3-arena-build/testing/tests/test_quic_congestion
+52: Working Directory: /tmp/cnetmod-h3-arena-build/testing/tests
+52: Test timeout computed to be: 10000000
+52: [==========] Running 19 test(s).
+52: [ RUN      ] congestion_controller_initial_cwnd
+52: [       OK ] congestion_controller_initial_cwnd
+52: [ RUN      ] congestion_controller_initial_ssthresh
+52: [       OK ] congestion_controller_initial_ssthresh
+52: [ RUN      ] congestion_controller_initial_pacing_rate
+52: [       OK ] congestion_controller_initial_pacing_rate
+52: [ RUN      ] congestion_controller_can_send_below_cwnd
+52: [       OK ] congestion_controller_can_send_below_cwnd
+52: [ RUN      ] congestion_controller_can_send_at_cwnd
+52: [       OK ] congestion_controller_can_send_at_cwnd
+52: [ RUN      ] congestion_controller_on_packet_sent
+52: [       OK ] congestion_controller_on_packet_sent
+52: [ RUN      ] congestion_controller_on_packet_acked
+52: [       OK ] congestion_controller_on_packet_acked
+52: [ RUN      ] congestion_controller_discarded_packets_only_release_flight_accounting
+52: [       OK ] congestion_controller_discarded_packets_only_release_flight_accounting
+52: [ RUN      ] congestion_controller_congestion_event_no_crash
+52: [       OK ] congestion_controller_congestion_event_no_crash
+52: [ RUN      ] congestion_controller_multiple_congestion_events
+52: [       OK ] congestion_controller_multiple_congestion_events
+52: [ RUN      ] congestion_controller_recovery_re_entry_prevention
+52: [       OK ] congestion_controller_recovery_re_entry_prevention
+52: [ RUN      ] congestion_controller_cwnd_positive
+52: [       OK ] congestion_controller_cwnd_positive
+52: [ RUN      ] cubic_reduces_window_and_preserves_minimum
+52: [       OK ] cubic_reduces_window_and_preserves_minimum
+52: [ RUN      ] cubic_congestion_event_does_not_reduce_twice_during_recovery
+52: [       OK ] cubic_congestion_event_does_not_reduce_twice_during_recovery
+52: [ RUN      ] congestion_controller_selects_configured_cubic_without_heap_polymorphism
+52: [       OK ] congestion_controller_selects_configured_cubic_without_heap_polymorphism
+52: [ RUN      ] congestion_controller_uses_cubic_as_the_default
+52: [       OK ] congestion_controller_uses_cubic_as_the_default
+52: [ RUN      ] bbr_selects_model_based_controller_and_tracks_acknowledgements
+52: [       OK ] bbr_selects_model_based_controller_and_tracks_acknowledgements
+52: [ RUN      ] bbr_loss_keeps_a_safe_send_window
+52: [       OK ] bbr_loss_keeps_a_safe_send_window
+52: [ RUN      ] congestion_pacing_tracks_rtt
+52: [       OK ] congestion_pacing_tracks_rtt
+52: [==========] 19 test(s) ran.
+52: [  PASSED  ] 19 test(s).
+ 6/23 Test #52: test_quic_congestion .................................   Passed    0.00 sec
+test 53
+      Start 53: test_quic_early_data
+
+53: Test command: /tmp/cnetmod-h3-arena-build/testing/tests/test_quic_early_data
+53: Working Directory: /tmp/cnetmod-h3-arena-build/testing/tests
+53: Test timeout computed to be: 10000000
+53: [==========] Running 12 test(s).
+53: [ RUN      ] early_data_replay_cache_consumes_ticket_once
+53: [       OK ] early_data_replay_cache_consumes_ticket_once
+53: [ RUN      ] early_data_replay_cache_rejects_expired_and_evicts
+53: [       OK ] early_data_replay_cache_rejects_expired_and_evicts
+53: [ RUN      ] early_data_replay_cache_consumes_concurrently_once
+53: [       OK ] early_data_replay_cache_consumes_concurrently_once
+53: [ RUN      ] server_ticket_callbacks_require_shared_replay_cache
+53: [       OK ] server_ticket_callbacks_require_shared_replay_cache
+53: [ RUN      ] http3_server_requires_explicit_early_data_context
+53: [       OK ] http3_server_requires_explicit_early_data_context
+53: [ RUN      ] http3_server_inbox_limits_require_bounded_nonzero_values
+53: [       OK ] http3_server_inbox_limits_require_bounded_nonzero_values
+53: [ RUN      ] http3_server_idle_timeout_rejects_only_negative_durations
+53: [       OK ] http3_server_idle_timeout_rejects_only_negative_durations
+53: [ RUN      ] http3_server_udp_payload_size_enforces_quic_datagram_bounds
+53: [       OK ] http3_server_udp_payload_size_enforces_quic_datagram_bounds
+53: [ RUN      ] application_key_update_requires_authenticated_1rtt_secrets
+53: [       OK ] application_key_update_requires_authenticated_1rtt_secrets
+53: [ RUN      ] multipath_transport_parameter_roundtrip_is_capability_only
+53: [       OK ] multipath_transport_parameter_roundtrip_is_capability_only
+53: [ RUN      ] early_data_recovery_extracts_only_unacknowledged_work
+53: [       OK ] early_data_recovery_extracts_only_unacknowledged_work
+53: [ RUN      ] early_data_retry_deduplicates_pto_and_preserves_ordinary_queue
+53: [       OK ] early_data_retry_deduplicates_pto_and_preserves_ordinary_queue
+53: [==========] 12 test(s) ran.
+53: [  PASSED  ] 12 test(s).
+ 7/23 Test #53: test_quic_early_data .................................   Passed    0.01 sec
+test 54
+      Start 54: test_http3_qpack
+
+54: Test command: /tmp/cnetmod-h3-arena-build/testing/tests/test_http3_qpack
+54: Working Directory: /tmp/cnetmod-h3-arena-build/testing/tests
+54: Test timeout computed to be: 10000000
+54: [==========] Running 19 test(s).
+54: [ RUN      ] qpack_static_table_is_rfc9204_appendix_a
+54: [       OK ] qpack_static_table_is_rfc9204_appendix_a
+54: [ RUN      ] qpack_static_and_literal_header_block_round_trip
+54: [       OK ] qpack_static_and_literal_header_block_round_trip
+54: [ RUN      ] qpack_dynamic_indexed_header_block_ric_base_and_ack
+54: [       OK ] qpack_dynamic_indexed_header_block_ric_base_and_ack
+54: [ RUN      ] qpack_dynamic_header_blocks_remain_decodable_after_acknowledgement
+54: [       OK ] qpack_dynamic_header_blocks_remain_decodable_after_acknowledgement
+54: [ RUN      ] qpack_decoder_applies_local_maximum_table_capacity
+54: [       OK ] qpack_decoder_applies_local_maximum_table_capacity
+54: [ RUN      ] qpack_acknowledged_entries_stay_pinned_until_each_section_ack
+54: [       OK ] qpack_acknowledged_entries_stay_pinned_until_each_section_ack
+54: [ RUN      ] qpack_static_section_has_zero_required_insert_count_after_dynamic_use
+54: [       OK ] qpack_static_section_has_zero_required_insert_count_after_dynamic_use
+54: [ RUN      ] qpack_small_table_does_not_evict_an_insert_in_the_same_section
+54: [       OK ] qpack_small_table_does_not_evict_an_insert_in_the_same_section
+54: [ RUN      ] qpack_section_ack_releases_only_the_oldest_section_on_a_stream
+54: [       OK ] qpack_section_ack_releases_only_the_oldest_section_on_a_stream
+54: [ RUN      ] qpack_huffman_strings_round_trip
+54: [       OK ] qpack_huffman_strings_round_trip
+54: [ RUN      ] qpack_encoder_and_decoder_stream_instructions
+54: [       OK ] qpack_encoder_and_decoder_stream_instructions
+54: [ RUN      ] qpack_static_response_headers_round_trip
+54: [       OK ] qpack_static_response_headers_round_trip
+54: [ RUN      ] qpack_rejects_header_block_that_requires_unreceived_dynamic_entries
+54: [       OK ] qpack_rejects_header_block_that_requires_unreceived_dynamic_entries
+54: [ RUN      ] qpack_unblocks_retained_header_block_and_acknowledges_once
+54: [       OK ] qpack_unblocks_retained_header_block_and_acknowledges_once
+54: [ RUN      ] qpack_enforces_blocked_stream_limit_and_cancellation
+54: [       OK ] qpack_enforces_blocked_stream_limit_and_cancellation
+54: [ RUN      ] qpack_blocked_cancellation_is_idempotent_and_releases_slot
+54: [       OK ] qpack_blocked_cancellation_is_idempotent_and_releases_slot
+54: [ RUN      ] qpack_fragmented_unfinished_literal_has_a_table_derived_bound
+54: [       OK ] qpack_fragmented_unfinished_literal_has_a_table_derived_bound
+54: [ RUN      ] qpack_complete_instruction_batch_is_not_limited_by_total_bytes
+54: [       OK ] qpack_complete_instruction_batch_is_not_limited_by_total_bytes
+54: [ RUN      ] qpack_decoder_stream_rejects_an_unbounded_integer_prefix
+54: [       OK ] qpack_decoder_stream_rejects_an_unbounded_integer_prefix
+54: [==========] 19 test(s) ran.
+54: [  PASSED  ] 19 test(s).
+ 8/23 Test #54: test_http3_qpack .....................................   Passed    0.00 sec
+test 55
+      Start 55: test_http3_frame
+
+55: Test command: /tmp/cnetmod-h3-arena-build/testing/tests/test_http3_frame
+55: Working Directory: /tmp/cnetmod-h3-arena-build/testing/tests
+55: Test timeout computed to be: 10000000
+55: [==========] Running 29 test(s).
+55: [ RUN      ] http3_data_frame_roundtrip
+55: [       OK ] http3_data_frame_roundtrip
+55: [ RUN      ] http3_async_server_handler_contract
+55: [       OK ] http3_async_server_handler_contract
+55: [ RUN      ] http3_async_server_handler_can_share_buffered_response_body
+55: [       OK ] http3_async_server_handler_can_share_buffered_response_body
+55: [ RUN      ] webtransport_async_server_handler_contract
+55: [       OK ] webtransport_async_server_handler_contract
+55: [ RUN      ] http3_headers_frame_with_qpack
+55: [       OK ] http3_headers_frame_with_qpack
+55: [ RUN      ] http3_settings_frame_multi_entries
+55: [       OK ] http3_settings_frame_multi_entries
+55: [ RUN      ] http3_goaway_frame_decode
+55: [       OK ] http3_goaway_frame_decode
+55: [ RUN      ] http3_max_push_id_encode
+55: [       OK ] http3_max_push_id_encode
+55: [ RUN      ] http3_frame_varint_length_decoding
+55: [       OK ] http3_frame_varint_length_decoding
+55: [ RUN      ] http3_cancel_push_frame
+55: [       OK ] http3_cancel_push_frame
+55: [ RUN      ] http3_push_promise_frame
+55: [       OK ] http3_push_promise_frame
+55: [ RUN      ] http3_empty_data_frame
+55: [       OK ] http3_empty_data_frame
+55: [ RUN      ] http3_settings_single_entry
+55: [       OK ] http3_settings_single_entry
+55: [ RUN      ] http3_frame_type_variants
+55: [       OK ] http3_frame_type_variants
+55: [ RUN      ] http3_goaway_no_error
+55: [       OK ] http3_goaway_no_error
+55: [ RUN      ] http3_settings_reject_duplicate_identifier
+55: [       OK ] http3_settings_reject_duplicate_identifier
+55: [ RUN      ] http3_priority_update_frame_roundtrip
+55: [       OK ] http3_priority_update_frame_roundtrip
+55: [ RUN      ] http3_priority_field_rejects_invalid_urgency
+55: [       OK ] http3_priority_field_rejects_invalid_urgency
+55: [ RUN      ] http3_request_priority_contract
+55: [       OK ] http3_request_priority_contract
+55: [ RUN      ] http3_settings_h3_datagram_roundtrip
+55: [       OK ] http3_settings_h3_datagram_roundtrip
+55: [ RUN      ] http3_settings_extended_connect_roundtrip
+55: [       OK ] http3_settings_extended_connect_roundtrip
+55: [ RUN      ] http3_settings_enable_webtransport_roundtrip
+55: [       OK ] http3_settings_enable_webtransport_roundtrip
+55: [ RUN      ] http3_settings_webtransport_max_sessions_roundtrip
+55: [       OK ] http3_settings_webtransport_max_sessions_roundtrip
+55: [ RUN      ] http3_datagram_context_id_roundtrip
+55: [       OK ] http3_datagram_context_id_roundtrip
+55: [ RUN      ] webtransport_extended_connect_request_shape
+55: [       OK ] webtransport_extended_connect_request_shape
+55: [ RUN      ] webtransport_stream_prefaces_roundtrip_and_validate_session_id
+55: [       OK ] webtransport_stream_prefaces_roundtrip_and_validate_session_id
+55: [ RUN      ] http3_frame_rejects_truncated_varint_length
+55: [       OK ] http3_frame_rejects_truncated_varint_length
+55: [ RUN      ] http3_goaway_rejects_trailing_payload
+55: [       OK ] http3_goaway_rejects_trailing_payload
+55: [ RUN      ] http3_unknown_extension_frame_preserves_payload_and_consumed_length
+55: [       OK ] http3_unknown_extension_frame_preserves_payload_and_consumed_length
+55: [==========] 29 test(s) ran.
+55: [  PASSED  ] 29 test(s).
+ 9/23 Test #55: test_http3_frame .....................................   Passed    0.01 sec
+test 63
+      Start 63: http3_lifecycle
+
+63: Test command: /var/tmp/cnetmod-h3-peer/bin/python "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http3_lifecycle.py" "/tmp/cnetmod-h3-arena-build/bin/h3_interop_server"
+63: Working Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+63: Test timeout computed to be: 60
+63: PASS RESET-before-HEADERS churn and connection reuse
+63: PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+63: PASS bounded buffered requests with and without FIN
+63: PASS RESET cancels QPACK waits and preserves connection reuse
+63: PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+63: PASS incremental control stream above incomplete-frame bound
+63: PASS connection close releases QPACK-blocked session
+63: PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+63: PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+63: PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+63: PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+63: PASS listener survives rejected RESET connections
+63: PASS critical stream FIN application CLOSE control
+63: PASS critical stream FIN application CLOSE encoder
+63: PASS critical stream FIN application CLOSE decoder
+10/23 Test #63: http3_lifecycle ......................................   Passed    2.74 sec
+test 64
+      Start 64: h3_webtransport_aioquic_probe_unit
+
+64: Test command: /var/tmp/cnetmod-h3-peer/bin/python "-m" "unittest" "discover" "-s" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3" "-p" "test_webtransport_aioquic_probe.py"
+64: Working Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+64: Test timeout computed to be: 30
+64: ......
+64: ----------------------------------------------------------------------
+64: Ran 6 tests in 0.248s
+64: 
+64: OK
+11/23 Test #64: h3_webtransport_aioquic_probe_unit ...................   Passed    0.50 sec
+test 66
+      Start 66: http3_early_data_recovery
+
+66: Test command: /var/tmp/cnetmod-h3-peer/bin/python "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--early-data-loss" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+66: Working Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+66: Test timeout computed to be: 90
+66: [2026-10-18 06:54:29.011] [info] [129854273475008] [http_client_e2e.cpp:750] HTTP/3 priority E2E passed: first foreground=1, first background=49
+66: [2026-10-18 06:54:29.514] [info] [129854273475008] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+66: early-data fault evidence: {'retries_delayed': 20, 'early_before_retry': 10, 'early_dropped_after_retry': 2, 'initial_pn_regressions': 1}
+66: Traceback (most recent call last):
+66:   File "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py", line 268, in <module>
+66:     raise SystemExit(main())
+66:                      ~~~~^^
+66:   File "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py", line 247, in main
+66:     assert observed["initial_pn_regressions"] == 0, observed
+66:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+66: AssertionError: {'retries_delayed': 20, 'early_before_retry': 10, 'early_dropped_after_retry': 2, 'initial_pn_regressions': 1}
+12/23 Test #66: http3_early_data_recovery ............................***Failed    1.78 sec
+[2026-10-18 06:54:29.011] [info] [129854273475008] [http_client_e2e.cpp:750] HTTP/3 priority E2E passed: first foreground=1, first background=49
+[2026-10-18 06:54:29.514] [info] [129854273475008] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+early-data fault evidence: {'retries_delayed': 20, 'early_before_retry': 10, 'early_dropped_after_retry': 2, 'initial_pn_regressions': 1}
+Traceback (most recent call last):
+  File "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py", line 268, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py", line 247, in main
+    assert observed["initial_pn_regressions"] == 0, observed
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'retries_delayed': 20, 'early_before_retry': 10, 'early_dropped_after_retry': 2, 'initial_pn_regressions': 1}
+
+test 67
+      Start 67: http3_streaming_cancellation
+
+67: Test command: /var/tmp/cnetmod-h3-peer/bin/python "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http3_streaming_cancellation.py" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server"
+67: Working Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+67: Test timeout computed to be: 20
+67: PASS streaming downstream IO + peer RESET x3 + normal early response + reuse
+13/23 Test #67: http3_streaming_cancellation .........................   Passed    0.59 sec
+test 68
+      Start 68: http3_idle_connection_cleanup
+
+68: Test command: /var/tmp/cnetmod-h3-peer/bin/python "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http3_idle_cleanup.py" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server"
+68: Working Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+68: Test timeout computed to be: 65
+68: idle peers reclaimed: 4 -> 1; samples=[(0.0, 4), (1.0, 4), (2.0, 4), (3.01, 4), (4.01, 4), (5.01, 4), (6.01, 4), (7.02, 4), (8.02, 4), (9.02, 4), (10.03, 4), (11.03, 4), (12.03, 4), (13.04, 4), (14.04, 4), (15.04, 4), (16.04, 4), (17.05, 4), (18.05, 4), (19.05, 4), (20.06, 4), (21.06, 4), (22.06, 4), (23.06, 4), (24.07, 4), (25.07, 4), (26.07, 4), (27.07, 4), (28.08, 4), (29.08, 4), (30.08, 1)]
+14/23 Test #68: http3_idle_connection_cleanup ........................   Passed   31.11 sec
+test 69
+      Start 69: http_client_http3_end_to_end
+
+69: Test command: /var/tmp/cnetmod-h3-peer/bin/python "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+69: Working Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+69: Test timeout computed to be: 90
+69: [2026-10-18 06:55:01.813] [info] [140667058749888] [http_client_e2e.cpp:750] HTTP/3 priority E2E passed: first foreground=1, first background=49
+69: [2026-10-18 06:55:01.952] [info] [140667058749888] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+15/23 Test #69: http_client_http3_end_to_end .........................   Passed    0.73 sec
+test 70
+      Start 70: http_client_http3_dynamic_qpack_end_to_end
+
+70: Test command: /var/tmp/cnetmod-h3-peer/bin/python "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--dynamic-qpack" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+70: Working Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+70: Test timeout computed to be: 90
+70: [2026-10-18 06:55:02.569] [info] [125962432766400] [http_client_e2e.cpp:750] HTTP/3 priority E2E passed: first foreground=1, first background=49
+70: [2026-10-18 06:55:02.707] [info] [125962432766400] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+16/23 Test #70: http_client_http3_dynamic_qpack_end_to_end ...........   Passed    0.75 sec
+test 71
+      Start 71: http3_multipath_end_to_end
+
+71: Test command: /var/tmp/cnetmod-h3-peer/bin/python "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--multipath" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+71: Working Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+71: Test timeout computed to be: 90
+71: [2026-10-18 06:55:03.169] [info] [134604908712384] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+17/23 Test #71: http3_multipath_end_to_end ...........................   Passed    0.46 sec
+test 72
+      Start 72: http3_multipath_path_mtu_end_to_end
+
+72: Test command: /var/tmp/cnetmod-h3-peer/bin/python "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--multipath-pmtu" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+72: Working Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+72: Test timeout computed to be: 90
+72: [2026-10-18 06:55:03.596] [info] [133849476268480] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+18/23 Test #72: http3_multipath_path_mtu_end_to_end ..................   Passed    0.43 sec
+test 73
+      Start 73: http3_multipath_path_mtu_blackhole_end_to_end
+
+73: Test command: /var/tmp/cnetmod-h3-peer/bin/python "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--multipath-pmtu-blackhole" "--pmtu-blackhole-proxy" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/pmtu_blackhole_proxy.py" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+73: Working Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+73: Test timeout computed to be: 90
+73: [2026-10-18 06:55:06.321] [info] [130016052265408] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+19/23 Test #73: http3_multipath_path_mtu_blackhole_end_to_end ........   Passed    2.72 sec
+test 74
+      Start 74: http3_multipath_local_path_close_end_to_end
+
+74: Test command: /var/tmp/cnetmod-h3-peer/bin/python "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--multipath-close" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+74: Working Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+74: Test timeout computed to be: 90
+74: [2026-10-18 06:55:06.999] [info] [127171923308992] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+20/23 Test #74: http3_multipath_local_path_close_end_to_end ..........   Passed    0.68 sec
+test 75
+      Start 75: http3_connect_close_end_to_end
+
+75: Test command: /var/tmp/cnetmod-h3-peer/bin/python "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--connect-close" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+75: Working Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+75: Test timeout computed to be: 90
+75: [2026-10-18 06:55:07.238] [info] [128247319515584] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+21/23 Test #75: http3_connect_close_end_to_end .......................   Passed    0.24 sec
+test 76
+      Start 76: http3_multipath_path_validation_timeout_end_to_end
+
+76: Test command: /var/tmp/cnetmod-h3-peer/bin/python "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--multipath-timeout" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+76: Working Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+76: Test timeout computed to be: 90
+76: [2026-10-18 06:55:10.494] [info] [125129317700032] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+22/23 Test #76: http3_multipath_path_validation_timeout_end_to_end ...   Passed    3.26 sec
+test 77
+      Start 77: http3_connection_migration
+
+77: Test command: /var/tmp/cnetmod-h3-peer/bin/python "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/migration_e2e.py" "/tmp/cnetmod-h3-arena-build/bin/h3_interop_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_migration_e2e" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/migration_udp_proxy.py"
+77: Working Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+77: Test timeout computed to be: 120
+77: HTTP/3 connection migration: path validation and second request passed
+23/23 Test #77: http3_connection_migration ...........................   Passed    2.38 sec
+
+The following tests passed:
+	test_quic_varint
+	test_quic_frame
+	test_quic_packet
+	test_quic_stream
+	test_quic_loss_detection
+	test_quic_congestion
+	test_quic_early_data
+	test_http3_qpack
+	test_http3_frame
+	http3_lifecycle
+	h3_webtransport_aioquic_probe_unit
+	http3_streaming_cancellation
+	http3_idle_connection_cleanup
+	http_client_http3_end_to_end
+	http_client_http3_dynamic_qpack_end_to_end
+	http3_multipath_end_to_end
+	http3_multipath_path_mtu_end_to_end
+	http3_multipath_path_mtu_blackhole_end_to_end
+	http3_multipath_local_path_close_end_to_end
+	http3_connect_close_end_to_end
+	http3_multipath_path_validation_timeout_end_to_end
+	http3_connection_migration
+
+96% tests passed, 1 tests failed out of 23
+
+Label Time Summary:
+blackhole       =   2.72 sec*proc (1 test)
+client          =   1.72 sec*proc (3 tests)
+close           =   0.92 sec*proc (2 tests)
+connect         =   0.24 sec*proc (1 test)
+end_to_end      =   9.27 sec*proc (8 tests)
+http3           =  48.38 sec*proc (14 tests)
+interop         =   3.24 sec*proc (2 tests)
+lifecycle       =  34.44 sec*proc (3 tests)
+migration       =   2.38 sec*proc (1 test)
+multipath       =   7.55 sec*proc (5 tests)
+pmtu            =   3.15 sec*proc (2 tests)
+qpack           =   0.75 sec*proc (1 test)
+quic            =  43.65 sec*proc (10 tests)
+recovery        =   1.78 sec*proc (1 test)
+timeout         =   3.26 sec*proc (1 test)
+unit            =   0.50 sec*proc (1 test)
+webtransport    =   0.50 sec*proc (1 test)
+
+Total Test time (real) =  48.47 sec
+
+The following tests FAILED:
+	 66 - http3_early_data_recovery (Failed)                http3 quic recovery
+Errors while running CTest

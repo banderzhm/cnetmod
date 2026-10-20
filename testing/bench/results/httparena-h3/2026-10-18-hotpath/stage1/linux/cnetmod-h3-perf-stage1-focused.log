@@ -1,0 +1,56 @@
+Test project /tmp/cnetmod-h3-arena-build
+    Start 63: http3_lifecycle
+1/2 Test #63: http3_lifecycle ..................   Passed    3.37 sec
+    Start 64: http3_cold_listener_cleanup
+2/2 Test #64: http3_cold_listener_cleanup ......***Failed    5.63 sec
+[2026-10-18 07:47:24.666] [info] [136009355260352] [h3_interop_server.cpp:260] HTTP/3 interop listener started on UDP 43096 with 2 workers
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.14/asyncio/tasks.py", line 488, in wait_for
+    return await fut
+           ^^^^^^^^^
+  File "/usr/lib/python3.14/asyncio/selector_events.py", line 469, in sock_recvfrom
+    return await fut
+           ^^^^^^^^^
+asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http3_cold_cleanup.py", line 74, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http3_cold_cleanup.py", line 49, in main
+    asyncio.run(prepare(port))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/asyncio/runners.py", line 205, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/asyncio/runners.py", line 128, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/asyncio/base_events.py", line 720, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http3_cold_cleanup.py", line 29, in prepare
+    await asyncio.wait_for(loop.sock_recvfrom(sender, 65536), 5)
+  File "/usr/lib/python3.14/asyncio/tasks.py", line 487, in wait_for
+    async with timeouts.timeout(timeout):
+               ~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/usr/lib/python3.14/asyncio/timeouts.py", line 115, in __aexit__
+    raise TimeoutError from exc_val
+TimeoutError
+
+
+50% tests passed, 1 tests failed out of 2
+
+Label Time Summary:
+http3        =   9.00 sec*proc (2 tests)
+interop      =   9.00 sec*proc (2 tests)
+lifecycle    =   9.00 sec*proc (2 tests)
+
+Total Test time (real) =   9.00 sec
+
+The following tests FAILED:
+	 64 - http3_cold_listener_cleanup (Failed)              http3 interop lifecycle
+Errors while running CTest

@@ -1,0 +1,55 @@
+{
+  "scope": "descriptive finite-run RSS/private samples, not live-owned allocation or unlimited boundedness proof",
+  "successful_rounds": 60,
+  "completed_requests": 12000000,
+  "round30": {
+    "name": "round-30-idle-2s",
+    "time": 1792332760.3771417,
+    "rss": 128802816,
+    "private": 126283776
+  },
+  "round40": {
+    "name": "round-40-idle-2s",
+    "time": 1792332788.204003,
+    "rss": 126066688,
+    "private": 123547648
+  },
+  "round50": {
+    "name": "round-50-idle-2s",
+    "time": 1792332816.0982018,
+    "rss": 131231744,
+    "private": 128712704
+  },
+  "round60": {
+    "name": "round-60-idle-2s",
+    "time": 1792332844.011101,
+    "rss": 138674176,
+    "private": 136155136
+  },
+  "final_idle": {
+    "name": "final-idle-37s",
+    "time": 1792332886.3463662,
+    "rss": 138039296,
+    "private": 135520256
+  },
+  "round30_to60": {
+    "sample_count": 31,
+    "rss_min_bytes": 125833216,
+    "rss_min_round": 41,
+    "rss_max_bytes": 138903552,
+    "rss_max_round": 59,
+    "private_min_bytes": 123314176,
+    "private_max_bytes": 136384512,
+    "rss_median_bytes": 129486848,
+    "rss_end_minus_start_bytes": 9871360,
+    "rss_end_change_percent": 7.663931819627301,
+    "rss_adjacent_increases": 19,
+    "rss_adjacent_decreases": 11,
+    "descriptive_ols_rss_bytes_per_round": 238334.34838709678,
+    "ols_not_a_forecast": true
+  },
+  "final_minus_round30_rss_bytes": 9236480,
+  "final_minus_round60_rss_bytes": -634880,
+  "final_sample_gap_from_round60_seconds": 42.335265159606934,
+  "timing_note": "The final-idle-37s label denotes2s round cooldown plus35s explicit sleep. Final source/binary verification precedes sampling and adds time; recorded sample gap is retained, not rounded to exactly35s."
+}

@@ -1,0 +1,2 @@
+[2026-10-17 08:26:55.902] [info] [129083523412480] [http_client_e2e.cpp:609] HTTP/3 priority E2E passed: first foreground=1, first background=49
+[2026-10-17 08:26:56.048] [info] [129083523412480] [http_client_e2e.cpp:1135] HTTP/3 client end-to-end regression passed

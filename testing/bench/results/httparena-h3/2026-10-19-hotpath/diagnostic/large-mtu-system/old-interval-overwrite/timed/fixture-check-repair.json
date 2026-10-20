@@ -1,0 +1,6 @@
+{
+  "original_preflight_report_sha256": "10af879ee6884c7171ceca1c974a1536ce7e704474be2804450a44c948e107cc",
+  "original_ab_sha256": "8c6a04b7107c59d650ac658da8f1e30e28b8a7c45fcd6e64d5c309c70a74cbfd",
+  "actual_ab_sha256": "cbc3ee33322be13f7ecef61f4c6f5cbfe0af439a7cff3958c38a6003fd949786",
+  "scope": "Accept existing fixture symlinks after rejecting absolute or parent traversal names; retain exact content hashes. Prior attempt failed before output directory or any load."
+}

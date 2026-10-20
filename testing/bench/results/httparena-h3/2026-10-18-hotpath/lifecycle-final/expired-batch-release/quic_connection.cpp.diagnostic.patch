@@ -1,0 +1,23 @@
+--- src/protocol/quic/quic_connection.cpp
++++ diagnostic/quic_connection.cpp
+@@ -12,6 +12,7 @@
+     #ifdef CNETMOD_ENABLE_QUIC
+ 
+ import :connection;
++import cnetmod.core.log;
+ import :stream;
+ import cnetmod.core.error;
+ import cnetmod.coro.mutex;
+@@ -1268,7 +1269,11 @@
+ {
+ }
+ 
+-quic_connection::~quic_connection() = default;
++quic_connection::~quic_connection()
++{
++    logger::warn{"weak_connection_destroy cid={}",
++        impl_->local_connection_id ? impl_->local_connection_id->to_string() : std::string{}};
++}
+ 
+ auto quic_connection::send_datagram(std::span<const std::byte> datagram,
+     const endpoint& destination, udp::udp_socket* path_socket)

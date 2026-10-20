@@ -1,0 +1,7 @@
+{
+  "binary": "/var/tmp/cnetmod-pmtu-deadline-5afc506d/baseline-guard/arena_h3_server",
+  "binary_sha256": "2fa51db8652cf8a0d166d79ab4d36241c9a5c789aa8ed4c0cb5e57eb56bb7d28",
+  "source_snapshot": "/mnt/c/Users/25007/.codex/tmp/pmtu-adaptive-review-5afc506d/source-guard",
+  "allocator_proof": "/var/tmp/cnetmod-pmtu-deadline-5afc506d/baseline-guard/allocator-proof.json",
+  "proof_build_root": "/var/tmp/cnetmod-pmtu-deadline-5afc506d/baseline-guard/allocator-backing"
+}

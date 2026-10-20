@@ -1,0 +1,337 @@
+{
+  "sample_blocks": 9347,
+  "parsed_blocks": 9347,
+  "elf_base": "0x59d5fda57000",
+  "elf_base_votes": [
+    [
+      98775618383872,
+      59430
+    ]
+  ],
+  "libc_base": "0x7c9438c00000",
+  "libc_base_votes": [
+    [
+      136976049111040,
+      641
+    ]
+  ],
+  "insert_ranges": [
+    {
+      "start": "0x2b9450",
+      "end": "0x2b98f0",
+      "mangled": "_ZNSt3__16vectorISt4byteNS_9allocatorIS1_EEE18__insert_with_sizeB9nqe220108INS_17_ClassicAlgPolicyENS_11__wrap_iterIPS1_EES9_EES9_NS7_IPKS1_EET0_T1_l"
+    },
+    {
+      "start": "0x2ba510",
+      "end": "0x2bab20",
+      "mangled": "_ZNSt3__16vectorISt4byteNS_9allocatorIS1_EEE18__insert_with_sizeB9nqe220108INS_17_ClassicAlgPolicyEPKS1_S8_EENS_11__wrap_iterIPS1_EENS9_IS8_EET0_T1_l"
+    },
+    {
+      "start": "0x2bab20",
+      "end": "0x2bb130",
+      "mangled": "_ZNSt3__16vectorISt4byteNS_9allocatorIS1_EEE18__insert_with_sizeB9nqe220108INS_17_ClassicAlgPolicyENS_11__wrap_iterIPKS1_EESA_EENS7_IPS1_EESA_T0_T1_l"
+    },
+    {
+      "start": "0x2c7780",
+      "end": "0x2c7c20",
+      "mangled": "_ZNSt3__16vectorISt4byteNS_9allocatorIS1_EEE18__insert_with_sizeB9nqe220108INS_17_ClassicAlgPolicyEPS1_S7_EENS_11__wrap_iterIS7_EENS8_IPKS1_EET0_T1_l"
+    }
+  ],
+  "insert_leaf_samples": 630,
+  "insert_pcs": [
+    {
+      "pc": "0x2bae6b",
+      "samples": 158
+    },
+    {
+      "pc": "0x2bae57",
+      "samples": 124
+    },
+    {
+      "pc": "0x2bae65",
+      "samples": 84
+    },
+    {
+      "pc": "0x2bae5e",
+      "samples": 70
+    },
+    {
+      "pc": "0x2bae7f",
+      "samples": 43
+    },
+    {
+      "pc": "0x2bae78",
+      "samples": 26
+    },
+    {
+      "pc": "0x2bae86",
+      "samples": 25
+    },
+    {
+      "pc": "0x2bae71",
+      "samples": 23
+    },
+    {
+      "pc": "0x2baeb4",
+      "samples": 9
+    },
+    {
+      "pc": "0x2bae8d",
+      "samples": 7
+    },
+    {
+      "pc": "0x2ba8a8",
+      "samples": 4
+    },
+    {
+      "pc": "0x2bae8a",
+      "samples": 4
+    },
+    {
+      "pc": "0x2baeb8",
+      "samples": 3
+    },
+    {
+      "pc": "0x2ba8d4",
+      "samples": 3
+    },
+    {
+      "pc": "0x2bae50",
+      "samples": 3
+    },
+    {
+      "pc": "0x2ba8a4",
+      "samples": 2
+    },
+    {
+      "pc": "0x2bab40",
+      "samples": 2
+    },
+    {
+      "pc": "0x2ba518",
+      "samples": 2
+    },
+    {
+      "pc": "0x2baec1",
+      "samples": 2
+    },
+    {
+      "pc": "0x2ba937",
+      "samples": 2
+    },
+    {
+      "pc": "0x2baf99",
+      "samples": 1
+    },
+    {
+      "pc": "0x2ba8e9",
+      "samples": 1
+    },
+    {
+      "pc": "0x2baf97",
+      "samples": 1
+    },
+    {
+      "pc": "0x2ba510",
+      "samples": 1
+    },
+    {
+      "pc": "0x2bae9e",
+      "samples": 1
+    },
+    {
+      "pc": "0x2baee4",
+      "samples": 1
+    },
+    {
+      "pc": "0x2ba5fa",
+      "samples": 1
+    },
+    {
+      "pc": "0x2ba8c5",
+      "samples": 1
+    },
+    {
+      "pc": "0x2ba8a0",
+      "samples": 1
+    },
+    {
+      "pc": "0x2baeea",
+      "samples": 1
+    },
+    {
+      "pc": "0x2bab20",
+      "samples": 1
+    },
+    {
+      "pc": "0x2bae98",
+      "samples": 1
+    },
+    {
+      "pc": "0x2baec9",
+      "samples": 1
+    },
+    {
+      "pc": "0x2baec6",
+      "samples": 1
+    },
+    {
+      "pc": "0x2baeb0",
+      "samples": 1
+    },
+    {
+      "pc": "0x2ba8bc",
+      "samples": 1
+    },
+    {
+      "pc": "0x2bab51",
+      "samples": 1
+    },
+    {
+      "pc": "0x2baead",
+      "samples": 1
+    },
+    {
+      "pc": "0x2bab31",
+      "samples": 1
+    },
+    {
+      "pc": "0x2ba5db",
+      "samples": 1
+    },
+    {
+      "pc": "0x2ba5bf",
+      "samples": 1
+    },
+    {
+      "pc": "0x2baea5",
+      "samples": 1
+    },
+    {
+      "pc": "0x2baf47",
+      "samples": 1
+    },
+    {
+      "pc": "0x2ba891",
+      "samples": 1
+    },
+    {
+      "pc": "0x2bab47",
+      "samples": 1
+    },
+    {
+      "pc": "0x2baee0",
+      "samples": 1
+    },
+    {
+      "pc": "0x2ba53b",
+      "samples": 1
+    },
+    {
+      "pc": "0x2bae41",
+      "samples": 1
+    },
+    {
+      "pc": "0x2ba89d",
+      "samples": 1
+    },
+    {
+      "pc": "0x2babd2",
+      "samples": 1
+    },
+    {
+      "pc": "0x2ba8d7",
+      "samples": 1
+    },
+    {
+      "pc": "0x2ba989",
+      "samples": 1
+    },
+    {
+      "pc": "0x2babcf",
+      "samples": 1
+    },
+    {
+      "pc": "0x2ba5f4",
+      "samples": 1
+    }
+  ],
+  "insert_physical_callers": [
+    {
+      "mangled": "_ZN7cnetmod4quicW7cnetmodW8protocolW4quic15quic_connection19pack_one_rtt_packetEbNSt3__16vectorISt4byteNS5_9allocatorIS7_EEEEPSA_",
+      "offset": "0xe0c",
+      "elf_pc": "0x30bffc",
+      "samples": 459
+    },
+    {
+      "mangled": "_ZN7cnetmod4quicW7cnetmodW8protocolW4quic12encode_frameERKNS0_S3_12stream_frameE",
+      "offset": "0xa5",
+      "elf_pc": "0x346745",
+      "samples": 76
+    },
+    {
+      "mangled": "_ZN7cnetmod4quicW7cnetmodW8protocolW4quic15quic_connection18apply_stream_writeEmRKNSt3__16vectorISt4byteNS5_9allocatorIS7_EEEERKNS5_10shared_ptrIKNS5_12basic_stringIcNS5_11char_traitsIcEENS8_IcEEEEEEb",
+      "offset": "0xec7",
+      "elf_pc": "0x3124c7",
+      "samples": 58
+    },
+    {
+      "mangled": "_ZN7cnetmod4quicW7cnetmodW8protocolW4quic15quic_connection19pack_one_rtt_packetEbNSt3__16vectorISt4byteNS5_9allocatorIS7_EEEEPSA_",
+      "offset": "0xb32",
+      "elf_pc": "0x30bd22",
+      "samples": 13
+    },
+    {
+      "mangled": "_ZN7cnetmod4quicW7cnetmodW8protocolW4quic15quic_connection18apply_stream_writeEmRKNSt3__16vectorISt4byteNS5_9allocatorIS7_EEEERKNS5_10shared_ptrIKNS5_12basic_stringIcNS5_11char_traitsIcEENS8_IcEEEEEEb",
+      "offset": "0xe93",
+      "elf_pc": "0x312493",
+      "samples": 7
+    },
+    {
+      "mangled": "_ZN7cnetmod4http2v312_GLOBAL__N_112encode_frameEmNS_W7cnetmodW4coreW6buffer9byte_viewE.llvm.3102471200550365145",
+      "offset": "0x77",
+      "elf_pc": "0x2bc2d7",
+      "samples": 6
+    },
+    {
+      "mangled": "_ZN7cnetmod4quicW7cnetmodW8protocolW4quic15quic_connection19pack_one_rtt_packetEbNSt3__16vectorISt4byteNS5_9allocatorIS7_EEEEPSA_",
+      "offset": "0x1405",
+      "elf_pc": "0x30c5f5",
+      "samples": 4
+    },
+    {
+      "mangled": "_ZN7cnetmod4http2v312_GLOBAL__N_113append_varintEmRNS_W7cnetmodW4coreW6buffer11byte_bufferE",
+      "offset": "0x102",
+      "elf_pc": "0x2d8712",
+      "samples": 3
+    },
+    {
+      "mangled": "_ZN7cnetmod4quicW7cnetmodW8protocolW4quic15quic_connection21pack_and_send_packetsEv.resume",
+      "offset": "0x5a6",
+      "elf_pc": "0x32ee46",
+      "samples": 2
+    },
+    {
+      "mangled": "_ZN7cnetmod4quicW7cnetmodW8protocolW4quic15quic_connection19pack_one_rtt_packetEbNSt3__16vectorISt4byteNS5_9allocatorIS7_EEEEPSA_",
+      "offset": "0x40d",
+      "elf_pc": "0x30b5fd",
+      "samples": 2
+    }
+  ],
+  "libc_stosb_pc": "0x176ed3",
+  "libc_stosb_samples": 130,
+  "libc_stosb_callers": [
+    {
+      "mangled": "_ZN7cnetmod4quicW7cnetmodW8protocolW4quic15quic_connection19pack_one_rtt_packetEbNSt3__16vectorISt4byteNS5_9allocatorIS7_EEEEPSA_",
+      "offset": "0x1573",
+      "elf_pc": "0x30c763",
+      "samples": 104
+    },
+    {
+      "mangled": "_ZN7cnetmodW7cnetmodW8executorW8async_op20uring_cancel_suspend13original_doneERNS_S0_W2ioW8platformW8io_uring16uring_overlappedEij",
+      "offset": "0x4a",
+      "elf_pc": "0x3641aa",
+      "samples": 26
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+=== Validating: cnetmod-official-static ===
+[info] Subscribed tests: static-h3
+[build] Building Docker image...
+ddb6bb8ab6b16eff4578700d14de4c3ce9ce8b6e214283d0dc5051d5616ee4c2
+[wait] Waiting for server...
+[ready] Server is up
+[test] h3 endpoints (QUIC on :48443/udp)
+  PASS [static-h3 over QUIC] (4/4 2xx, ALPN h3)
+
+=== Results: 1 passed, 0 failed ===
+httparena-validate-cnetmod-official-static

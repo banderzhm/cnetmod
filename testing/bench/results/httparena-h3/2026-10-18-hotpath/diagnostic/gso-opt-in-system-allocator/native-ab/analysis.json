@@ -1,0 +1,125 @@
+{
+  "scope": "Same-binary native short A/B, system allocator; not official ranking or long retention.",
+  "summary_sha256": "1c8d7d78a69caaf273dc8c576b841ab91b3afd6628058bbf1459825e4a10e7ed",
+  "binary_sha256": "2cb22a32818646fbf63575370adf6a0c48b3ba5df4bbbc3d3002ab2838003e0a",
+  "profiles": {
+    "baseline-h3": {
+      "pairs": [
+        {
+          "pair": 1,
+          "off_completed_rps": 2202004.9295774647,
+          "on_completed_rps": 2697929.2253521127,
+          "completed_rate_change_percent": 22.521488899201024,
+          "off_cpu_us_per_completed": 7.92411653016601,
+          "on_cpu_us_per_completed": 6.743565324422656,
+          "cpu_per_completed_change_percent": -14.898206017657111,
+          "off_p99_ms": 7.48,
+          "on_p99_ms": 6.31,
+          "off_live_rss_kib": 64596,
+          "on_live_rss_kib": 65272,
+          "off_printed_rps": 2501477.6,
+          "on_printed_rps": 3064847.6,
+          "off_header_delta": 0,
+          "on_header_delta": 0
+        },
+        {
+          "pair": 2,
+          "off_completed_rps": 2946637.809187279,
+          "on_completed_rps": 2764543.5626102295,
+          "completed_rate_change_percent": -6.179729521195332,
+          "off_cpu_us_per_completed": 6.454622475037429,
+          "on_cpu_us_per_completed": 6.840845929961425,
+          "cpu_per_completed_change_percent": 5.983672266157702,
+          "off_p99_ms": 5.02,
+          "on_p99_ms": 6.23,
+          "off_live_rss_kib": 64308,
+          "on_live_rss_kib": 67704,
+          "off_printed_rps": 3335594.0,
+          "on_printed_rps": 3134992.4,
+          "off_header_delta": 0,
+          "on_header_delta": 0
+        },
+        {
+          "pair": 3,
+          "off_completed_rps": 2743946.384479718,
+          "on_completed_rps": 2494243.585237258,
+          "completed_rate_change_percent": -9.100134049806009,
+          "off_cpu_us_per_completed": 6.863272404168715,
+          "on_cpu_us_per_completed": 7.110925219306373,
+          "cpu_per_completed_change_percent": 3.608378052825567,
+          "off_p99_ms": 6.39,
+          "on_p99_ms": 6.56,
+          "off_live_rss_kib": 66508,
+          "on_live_rss_kib": 64636,
+          "off_printed_rps": 3111635.2,
+          "on_printed_rps": 2838449.2,
+          "off_header_delta": 0,
+          "on_header_delta": 0
+        }
+      ],
+      "median_paired_completed_rate_change_percent": -6.179729521195332,
+      "median_paired_cpu_per_completed_change_percent": 3.608378052825567,
+      "off_median_completed_rps": 2743946.384479718,
+      "on_median_completed_rps": 2697929.2253521127
+    },
+    "static-h3": {
+      "pairs": [
+        {
+          "pair": 1,
+          "off_completed_rps": 293404.93827160494,
+          "on_completed_rps": 436240.98939929326,
+          "completed_rate_change_percent": 48.68222463095184,
+          "off_cpu_us_per_completed": 55.15127981024353,
+          "on_cpu_us_per_completed": 37.36142858762865,
+          "cpu_per_completed_change_percent": -32.25646128942719,
+          "off_p99_ms": 33.38,
+          "on_p99_ms": 23.45,
+          "off_live_rss_kib": 84580,
+          "on_live_rss_kib": 85532,
+          "off_printed_rps": 332721.2,
+          "on_printed_rps": 493824.8,
+          "off_header_delta": 63,
+          "on_header_delta": 53
+        },
+        {
+          "pair": 2,
+          "off_completed_rps": 334622.43816254416,
+          "on_completed_rps": 498705.291005291,
+          "completed_rate_change_percent": 49.03522123135178,
+          "off_cpu_us_per_completed": 49.88481823562551,
+          "on_cpu_us_per_completed": 33.75937480438766,
+          "cpu_per_completed_change_percent": -32.3253526856028,
+          "off_p99_ms": 29.62,
+          "on_p99_ms": 21.64,
+          "off_live_rss_kib": 85512,
+          "on_live_rss_kib": 85652,
+          "off_printed_rps": 378792.6,
+          "on_printed_rps": 565531.8,
+          "off_header_delta": 54,
+          "on_header_delta": 51
+        },
+        {
+          "pair": 3,
+          "off_completed_rps": 332097.1781305115,
+          "on_completed_rps": 457255.55555555556,
+          "completed_rate_change_percent": 37.68727519143744,
+          "off_cpu_us_per_completed": 50.25515257375102,
+          "on_cpu_us_per_completed": 36.26806508734922,
+          "cpu_per_completed_change_percent": -27.832146098602138,
+          "off_p99_ms": 28.28,
+          "on_p99_ms": 22.04,
+          "off_live_rss_kib": 84952,
+          "on_live_rss_kib": 86360,
+          "off_printed_rps": 376598.2,
+          "on_printed_rps": 518527.8,
+          "off_header_delta": 61,
+          "on_header_delta": 45
+        }
+      ],
+      "median_paired_completed_rate_change_percent": 48.68222463095184,
+      "median_paired_cpu_per_completed_change_percent": -32.25646128942719,
+      "off_median_completed_rps": 332097.1781305115,
+      "on_median_completed_rps": 457255.55555555556
+    }
+  }
+}

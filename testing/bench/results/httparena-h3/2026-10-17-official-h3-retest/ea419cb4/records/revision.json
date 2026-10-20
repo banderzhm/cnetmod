@@ -1,0 +1,7 @@
+{
+  "commit": "ea419cb4b29ffdd0b273e42d623a0570089c9ccd",
+  "binary_sha256": "b6acf165af57ca825bf1a3d0b243a23eccd225f96c0e3eb3c81ef7837ed8f3e9",
+  "test_token": "explicitly handed over by user for serial official retest",
+  "profiles": "two cnetmod profiles after timer ownership fix, three rounds each; previous 21 rounds retained",
+  "resource_sampling": "supplemental /proc RSS once per second; official Docker peaks unchanged"
+}

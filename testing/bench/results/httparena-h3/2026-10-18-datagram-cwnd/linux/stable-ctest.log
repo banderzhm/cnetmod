@@ -1,0 +1,15 @@
+Test project /tmp/cnetmod-h3-arena-build
+    Start 62: quic_datagram_cc_admission
+1/2 Test #62: quic_datagram_cc_admission .......   Passed    0.95 sec
+    Start 63: quic_datagram_cc_pto
+2/2 Test #63: quic_datagram_cc_pto .............   Passed    0.85 sec
+
+100% tests passed out of 2
+
+Label Time Summary:
+datagram    =   1.80 sec*proc (2 tests)
+http3       =   1.80 sec*proc (2 tests)
+quic        =   1.80 sec*proc (2 tests)
+recovery    =   1.80 sec*proc (2 tests)
+
+Total Test time (real) =   1.81 sec

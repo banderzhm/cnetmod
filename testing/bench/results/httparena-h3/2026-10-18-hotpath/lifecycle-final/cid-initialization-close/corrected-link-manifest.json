@@ -1,0 +1,18 @@
+[
+  {
+    "name": "without-cid-close",
+    "binary": "/var/tmp/cnetmod-h3-cid-failure-controls-final/without-cid-close/quic_retire_stream_server-corrected",
+    "binary_sha256": "2b04597f64c7f603249e7911f74a73d591753edc5a3a9d555b8f00c600b8e9be",
+    "quic_archive": "/var/tmp/cnetmod-h3-cid-failure-controls-final/without-cid-close/libcnetmod_quic.a",
+    "archive_sha256": "aade54b21954064bd200e92aeefff43fe38632e1c127874527be98800786d1f5",
+    "replacements": 1
+  },
+  {
+    "name": "with-cid-close",
+    "binary": "/var/tmp/cnetmod-h3-cid-failure-controls-final/with-cid-close/quic_retire_stream_server-corrected",
+    "binary_sha256": "2aab07eb7a8689a95541ad6dfb7edbfe2f07157da7f52e3beb332f4559f7bd05",
+    "quic_archive": "/var/tmp/cnetmod-h3-cid-failure-controls-final/with-cid-close/libcnetmod_quic.a",
+    "archive_sha256": "253380fdad2f789dc7c20549edf3d1aaf9b2f1fa39639f00de3b3c36eae5b622",
+    "replacements": 1
+  }
+]

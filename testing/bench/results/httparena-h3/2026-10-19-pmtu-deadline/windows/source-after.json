@@ -1,0 +1,27 @@
+[
+  {
+    "Algorithm": "SHA256",
+    "Hash": "50CD8C3BA2CC226C45E83A483BA4C04665E229B76AAE69EBF4523170ABB7F1C2",
+    "Path": "C:\\Users\\25007\\.codex\\worktrees\\2c3c\\cnetmod\\src\\protocol\\quic\\quic_connection.cpp"
+  },
+  {
+    "Algorithm": "SHA256",
+    "Hash": "D1F4895B403DC1374D976F8BC94B5C55771665A4F94DDB5AFAE721F29CF7F1CD",
+    "Path": "C:\\Users\\25007\\.codex\\worktrees\\2c3c\\cnetmod\\testing\\http3\\CMakeLists.txt"
+  },
+  {
+    "Algorithm": "SHA256",
+    "Hash": "3D46358D5C7808CC672BF143BD17387B9A9A14657690CC5E32801FF23DCEABC4",
+    "Path": "C:\\Users\\25007\\.codex\\worktrees\\2c3c\\cnetmod\\testing\\http3\\quic_pmtu_deadline_server.cpp"
+  },
+  {
+    "Algorithm": "SHA256",
+    "Hash": "0A28D27D12EDC2A3D0EA94662B8CB3FB5D980494397D50FC65D59852B3A74E9B",
+    "Path": "C:\\Users\\25007\\.codex\\worktrees\\2c3c\\cnetmod\\testing\\http3\\quic_pmtu_deadline.py"
+  },
+  {
+    "Algorithm": "SHA256",
+    "Hash": "F799971A6CEFAB3CE06E135205F3171E5DAFED8F904DA7279755E477D0963975",
+    "Path": "C:\\Users\\25007\\.codex\\worktrees\\2c3c\\cnetmod\\testing\\http3\\deadline_frame_parser.py"
+  }
+]

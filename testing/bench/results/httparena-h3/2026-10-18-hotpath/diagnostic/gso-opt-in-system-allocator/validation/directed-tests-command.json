@@ -1,0 +1,11 @@
+[
+  "ctest",
+  "--output-on-failure",
+  "-j1",
+  "--timeout",
+  "75",
+  "-R",
+  "^(test_udp_batch|test_quic_.*|http3_lifecycle|http3_cold_listener_cleanup|http3_outbound_pto_close_restart_[12]|quic_retire_stream_credit_wakeup|quic_retire_stream_notification_lifetime|quic_private_outbound_pto|quic_handshake_confirmation|http3_early_data_recovery|http3_streaming_cancellation|http3_idle_connection_cleanup|http_client_http3_end_to_end|http3_multipath_path_mtu.*)$",
+  "--output-junit",
+  "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-gso-validation-1fdab0ae660649bf83f09840e8459d4f/directed-tests.xml"
+]

@@ -1,0 +1,18 @@
+[
+  {
+    "Path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\bin\\Release\\h3_interop_server.exe",
+    "Hash": "8D9DE25B7238486874016B8610CFB3BD415B6BB9199E7886454433F816259E7C"
+  },
+  {
+    "Path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\bin\\Release\\quic_retire_stream_server.exe",
+    "Hash": "F7007591AB4F1813B0A1B7768135AF030A2C8299CCC691B460E6AE9C9F54A4B6"
+  },
+  {
+    "Path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_udp_sendto_on_cancel.exe",
+    "Hash": "022CCF911024AC9BCF00121F97FE312151112F0592F8CC1227D1CF6B6729A558"
+  },
+  {
+    "Path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\bench\\Release\\arena_h3_server.exe",
+    "Hash": "3671DBE8003A2BDFB5FE1799BC8604DFF80FB849A9DA6E1C401A873E028F01C9"
+  }
+]

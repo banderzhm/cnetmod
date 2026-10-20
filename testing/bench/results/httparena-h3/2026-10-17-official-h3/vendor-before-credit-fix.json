@@ -1,0 +1,16 @@
+{
+  "binary_sha256": "97e72484d11c12d7ddfec8465609f36f9290d71c6ea1488d798fdb7f5c694b67",
+  "argv": [
+    "curl",
+    "--noproxy",
+    "*",
+    "--http3-only",
+    "-vk",
+    "--max-time",
+    "3",
+    "https://127.0.0.1:44933/static/vendor.js"
+  ],
+  "exit_code": 28,
+  "body_bytes": 0,
+  "expected_bytes": 307200
+}

@@ -1,0 +1,29 @@
+{
+  "scope": "failed runner setup only; no timed profiles ran",
+  "runner_exit": 1,
+  "reason": "finished validator watchdog descendants held inherited stdout pipe; communicate EOF timed out",
+  "group": 753,
+  "before": [
+    {
+      "pid": 756,
+      "ppid": 542,
+      "sid": 753,
+      "argv": [
+        "bash",
+        "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-11b22d441e264aa4974532e10f2a8066/arena/scripts/validate.sh",
+        "cnetmod-official-optimized"
+      ]
+    },
+    {
+      "pid": 757,
+      "ppid": 756,
+      "sid": 753,
+      "argv": [
+        "sleep",
+        "800"
+      ]
+    }
+  ],
+  "after": [],
+  "docker_owned_remaining": []
+}

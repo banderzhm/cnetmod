@@ -1,0 +1,8 @@
+{
+  "commit": "74d21f2c9dcd76cf9ba9b164381b6dfbfc7d175d",
+  "binary_sha256": "4abd161e456f43a87cca865bbe27672314d32a9da0d9c56ed456026c60bd0e7d",
+  "test_token": "explicitly handed over by user for this serial official retest",
+  "profiles": "baseline-h3 then static-h3, three official rounds each",
+  "fix": "preloaded static resources, one-write response path, 1.5-second arena idle timeout",
+  "resource_sampling": "supplemental /proc RSS once per second; official Docker peaks unchanged"
+}

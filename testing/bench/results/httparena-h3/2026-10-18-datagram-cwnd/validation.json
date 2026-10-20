@@ -1,0 +1,22 @@
+{
+  "scope": "DATAGRAM congestion admission correctness; no new throughput claim",
+  "branch": "fix/http3-arena-performance",
+  "linux": {
+    "passed": 39,
+    "skipped": 0,
+    "admission_repeats": 10,
+    "arena_sha256": "fc6e50f5935ab7bde6b3767a459fc36efc4b2e666239c0f5099de812db7061c3"
+  },
+  "windows": {
+    "passed": 40,
+    "skipped": 0,
+    "audited_executables": 25,
+    "arena_sha256": "4feec3d0337e995478334f62c3c98101ec100a751733b060c345481521aee4c4"
+  },
+  "allocator": "system; mimalloc OFF on both platforms",
+  "external_linux_source_snapshot": "C:/Users/25007/.codex/tmp/datagram-cc-review-51d443d2/source-fixed",
+  "external_windows_records": "C:/Users/25007/.codex/tmp/cnetmod-datagram-cc-windows-5d84a3a01d7145d1884f5cc30572d52b",
+  "old_wire_bytes": 72448,
+  "new_wire_bytes": 14716,
+  "conservative_cwnd_upper_bound": 17447
+}

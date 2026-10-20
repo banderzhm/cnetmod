@@ -1,0 +1,27 @@
+{
+  "stage": "Linux map ownership old-negative/new-positive, not final full regression or performance acceptance",
+  "files": [
+    {
+      "path": "src/utils/concurrentContainers/atomic_hash_map.cppm",
+      "sha256": "393b8f2369d66adffe2ab9557a7142b98fb1566e711a0a62f770930cbb53a4d0"
+    },
+    {
+      "path": "src/utils/concurrentContainers/atomic_hash_map.inl",
+      "sha256": "3bf1f47113a9ef61e628f1d94bc921b23980756f041112f433e51cb69bb0057e"
+    },
+    {
+      "path": "testing/tests/test_concurrent_containers.cpp",
+      "sha256": "98e0364c2d4e15de4016f5dcdab4452b48b0bb315aeac417f3f5ff9220535c2f"
+    }
+  ],
+  "binaries": [
+    {
+      "path": "/var/tmp/cnetmod-h3-atomic-map-old-owner-negative/test_atomic_map_old_ownership",
+      "sha256": "c15bf45be1afb872019193aa1b65d8a74a40e2262d94c6b391464078cf753c06"
+    },
+    {
+      "path": "/var/tmp/cnetmod-h3-arena-build/testing/tests/test_concurrent_containers",
+      "sha256": "e12ee3ced1d1c90f111fa8d8ec2f6e926c61c5aec5250de6ed1a973daade2a0c"
+    }
+  ]
+}

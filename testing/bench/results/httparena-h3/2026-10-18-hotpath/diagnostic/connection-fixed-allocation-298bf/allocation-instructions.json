@@ -1,0 +1,143 @@
+{
+  "binary": "/var/tmp/cnetmod-h3-handshake-retention-1792320533/arena_h3_server",
+  "sha256": "298bf8277e7b1edc32f7e1ab1ce64729a52e8884e97e9486a77a56a20f4cabc4",
+  "command": [
+    "llvm-objdump",
+    "--disassemble",
+    "--demangle",
+    "--no-show-raw-insn",
+    "/var/tmp/cnetmod-h3-handshake-retention-1792320533/arena_h3_server"
+  ],
+  "caveat": "Nearby constant edi is a candidate, not dataflow proof; inspect context before attributing frame sizes.",
+  "records": [
+    {
+      "function": "cnetmod::http::v3::http3_server_session@cnetmod.protocol.http.v3.session::service_peer_stream(unsigned long) (.resume)",
+      "constant_first_argument_candidate": 16640,
+      "context": [
+        "  3277b9:      \tje\t0x3277d1 <cnetmod::http::v3::http3_server_session@cnetmod.protocol.http.v3.session::service_peer_stream(unsigned long) (.resume)+0x1831>",
+        "  3277bb:      \tmovq\t%rdi, 0x5d8(%rbx)",
+        "  3277c2:      \tmovq\t0x5e0(%rbx), %rsi",
+        "  3277c9:      \tsubq\t%rdi, %rsi",
+        "  3277cc:      \tcallq\t0xf7300 <mi_free_size>",
+        "  3277d1:      \tleaq\t0xdd8(%rbx), %rdi",
+        "  3277d8:      \tcallq\t0x39e6f0 <cnetmod::async_lock_guard@cnetmod.coro.mutex::~async_lock_guard()>",
+        "  3277dd:      \ttestb\t%r14b, %r14b",
+        "  3277e0:      \tje\t0x329e46 <cnetmod::http::v3::http3_server_session@cnetmod.protocol.http.v3.session::service_peer_stream(unsigned long) (.resume)+0x3ea6>",
+        "  3277e6:      \tmovq\t0xe88(%rbx), %rax",
+        "  3277ed:      \tmovq\t(%rax), %r12",
+        "  3277f0:      \tmovq\t(%r12), %rax",
+        "  3277f4:      \tmovq\t(%rax), %r15",
+        "  3277f7:      \tmovq\t0xd70(%rbx), %r14",
+        "  3277fe:      \tvmovdqu\t0xd68(%rbx), %xmm0",
+        "  327806:      \tvmovdqa\t%xmm0, 0x90(%rsp)",
+        "  32780f:      \ttestq\t%r14, %r14",
+        "  327812:      \tje\t0x327819 <cnetmod::http::v3::http3_server_session@cnetmod.protocol.http.v3.session::service_peer_stream(unsigned long) (.resume)+0x1879>",
+        "  327814:      \tlock",
+        "  327815:      \tincq\t0x8(%r14)",
+        "  327819:      \tmovl\t$0x4100, %edi           # imm = 0x4100",
+        "  32781e:      \tmovl\t$0x40, %esi",
+        "  327823:      \tcallq\t0xf64c0 <_ZnwmSt11align_val_t$plt>"
+      ]
+    },
+    {
+      "function": "std::__1::unique_ptr<cnetmod::quic::quic_connection@cnetmod.protocol.quic::quic_connection_impl, std::__1::default_delete<cnetmod::quic::quic_connection@cnetmod.protocol.quic::quic_connection_impl>> std::__1::make_unique[abi:nqe220108]<cnetmod::quic::quic_connection@cnetmod.protocol.quic::quic_connection_impl, cnetmod::io_context@cnetmod.io.io_context&, cnetmod::io_context@cnetmod.io.io_context&, cnetmod::udp::udp_socket@cnetmod.protocol.udp&, cnetmod::endpoint@cnetmod.core.address, cnetmod::quic::quic_role@cnetmod.protocol.quic&, cnetmod::quic::quic_config@cnetmod.protocol.quic&, cnetmod::ssl_context@cnetmod.core.ssl&, 0>(cnetmod::io_context@cnetmod.io.io_context&, cnetmod::io_context@cnetmod.io.io_context&, cnetmod::udp::udp_socket@cnetmod.protocol.udp&, cnetmod::endpoint@cnetmod.core.address&&, cnetmod::quic::quic_role@cnetmod.protocol.quic&, cnetmod::quic::quic_config@cnetmod.protocol.quic&, cnetmod::ssl_context@cnetmod.core.ssl&)",
+      "constant_first_argument_candidate": 11456,
+      "context": [
+        "00000000003404b0 <std::__1::unique_ptr<cnetmod::quic::quic_connection@cnetmod.protocol.quic::quic_connection_impl, std::__1::default_delete<cnetmod::quic::quic_connection@cnetmod.protocol.quic::quic_connection_impl>> std::__1::make_unique[abi:nqe220108]<cnetmod::quic::quic_connection@cnetmod.protocol.quic::quic_connection_impl, cnetmod::io_context@cnetmod.io.io_context&, cnetmod::io_context@cnetmod.io.io_context&, cnetmod::udp::udp_socket@cnetmod.protocol.udp&, cnetmod::endpoint@cnetmod.core.address, cnetmod::quic::quic_role@cnetmod.protocol.quic&, cnetmod::quic::quic_config@cnetmod.protocol.quic&, cnetmod::ssl_context@cnetmod.core.ssl&, 0>(cnetmod::io_context@cnetmod.io.io_context&, cnetmod::io_context@cnetmod.io.io_context&, cnetmod::udp::udp_socket@cnetmod.protocol.udp&, cnetmod::endpoint@cnetmod.core.address&&, cnetmod::quic::quic_role@cnetmod.protocol.quic&, cnetmod::quic::quic_config@cnetmod.protocol.quic&, cnetmod::ssl_context@cnetmod.core.ssl&)>:",
+        "  3404b0:      \tpushq\t%rbp",
+        "  3404b1:      \tmovq\t%rsp, %rbp",
+        "  3404b4:      \tpushq\t%r15",
+        "  3404b6:      \tpushq\t%r14",
+        "  3404b8:      \tpushq\t%r13",
+        "  3404ba:      \tpushq\t%r12",
+        "  3404bc:      \tpushq\t%rbx",
+        "  3404bd:      \tsubq\t$0x148, %rsp            # imm = 0x148",
+        "  3404c4:      \tmovq\t%r9, %rbx",
+        "  3404c7:      \tmovq\t%r8, %r15",
+        "  3404ca:      \tmovq\t%rcx, -0x150(%rbp)",
+        "  3404d1:      \tmovq\t%rdx, %r12",
+        "  3404d4:      \tmovq\t%rsi, %r13",
+        "  3404d7:      \tmovq\t%rdi, -0x148(%rbp)",
+        "  3404de:      \tmovq\t%fs:0x28, %rax",
+        "  3404e7:      \tmovq\t%rax, -0x30(%rbp)",
+        "  3404eb:      \tmovl\t$0x2cc0, %edi           # imm = 0x2CC0",
+        "  3404f0:      \tmovl\t$0x40, %esi",
+        "  3404f5:      \tcallq\t0xf64c0 <_ZnwmSt11align_val_t$plt>"
+      ]
+    },
+    {
+      "function": "cnetmod::quic::quic_write_queue@cnetmod.protocol.quic::quic_write_queue()",
+      "constant_first_argument_candidate": 45064,
+      "context": [
+        "0000000000393d70 <cnetmod::quic::quic_write_queue@cnetmod.protocol.quic::quic_write_queue()>:",
+        "  393d70:      \tpushq\t%rbp",
+        "  393d71:      \tmovq\t%rsp, %rbp",
+        "  393d74:      \tpushq\t%r15",
+        "  393d76:      \tpushq\t%r14",
+        "  393d78:      \tpushq\t%rbx",
+        "  393d79:      \tpushq\t%rax",
+        "  393d7a:      \tmovq\t%rdi, %rbx",
+        "  393d7d:      \tmovl\t$0xb008, %edi           # imm = 0xB008",
+        "  393d82:      \tcallq\t0xf70d0 <mi_new>"
+      ]
+    },
+    {
+      "function": "cnetmod::quic::quic_write_queue@cnetmod.protocol.quic::quic_write_queue()",
+      "constant_first_argument_candidate": 32768,
+      "context": [
+        "  393d76:      \tpushq\t%r14",
+        "  393d78:      \tpushq\t%rbx",
+        "  393d79:      \tpushq\t%rax",
+        "  393d7a:      \tmovq\t%rdi, %rbx",
+        "  393d7d:      \tmovl\t$0xb008, %edi           # imm = 0xB008",
+        "  393d82:      \tcallq\t0xf70d0 <mi_new>",
+        "  393d87:      \tmovq\t%rax, %r14",
+        "  393d8a:      \tmovq\t$0x200, (%rax)          # imm = 0x200",
+        "  393d91:      \taddq\t$0x8, %r14",
+        "  393d95:      \tmovl\t$0xb000, %edx           # imm = 0xB000",
+        "  393d9a:      \tmovq\t%r14, %rdi",
+        "  393d9d:      \txorl\t%esi, %esi",
+        "  393d9f:      \tcallq\t0xf6a40 <memset$plt>",
+        "  393da4:      \tmovq\t%r14, (%rbx)",
+        "  393da7:      \tleaq\t0x40(%rbx), %r14",
+        "  393dab:      \tmovq\t$0x0, 0x80(%rbx)",
+        "  393db6:      \tmovq\t$0x0, 0xc0(%rbx)",
+        "  393dc1:      \tmovq\t$0x0, 0x40(%rbx)",
+        "  393dc9:      \tmovq\t$0x200, 0x48(%rbx)      # imm = 0x200",
+        "  393dd1:      \tmovq\t$0x1ff, 0x50(%rbx)      # imm = 0x1FF",
+        "  393dd9:      \tmovl\t$0x8000, %edi           # imm = 0x8000",
+        "  393dde:      \tmovl\t$0x40, %esi",
+        "  393de3:      \tcallq\t0xf6570 <_ZnamSt11align_val_t$plt>"
+      ]
+    },
+    {
+      "function": "cnetmod::quic::quic_write_queue@cnetmod.protocol.quic::quic_write_queue()",
+      "constant_first_argument_candidate": 65536,
+      "context": [
+        "  393ea5:      \tmovq\t$0x0, -0x40(%r15,%rax)",
+        "  393eae:      \tmovq\t$0x0, (%r15,%rax)",
+        "  393eb6:      \taddq\t$0x400, %rax            # imm = 0x400",
+        "  393ebc:      \tcmpq\t$0x83c0, %rax           # imm = 0x83C0",
+        "  393ec2:      \tjne\t0x393e00 <cnetmod::quic::quic_write_queue@cnetmod.protocol.quic::quic_write_queue()+0x90>",
+        "  393ec8:      \tmovq\t%r15, (%r14)",
+        "  393ecb:      \txorl\t%eax, %eax",
+        "  393ecd:      \txorl\t%ecx, %ecx",
+        "  393ecf:      \tnop",
+        "  393ed0:      \tmovq\t0x40(%rbx), %rdx",
+        "  393ed4:      \tmovq\t%rcx, (%rdx,%rax)",
+        "  393ed8:      \tincq\t%rcx",
+        "  393edb:      \taddq\t$0x40, %rax",
+        "  393edf:      \tcmpq\t0x48(%rbx), %rcx",
+        "  393ee3:      \tjb\t0x393ed0 <cnetmod::quic::quic_write_queue@cnetmod.protocol.quic::quic_write_queue()+0x160>",
+        "  393ee5:      \tmovq\t$0x0, 0x140(%rbx)",
+        "  393ef0:      \tmovq\t$0x0, 0x180(%rbx)",
+        "  393efb:      \tmovq\t$0x0, 0x100(%rbx)",
+        "  393f06:      \tmovq\t$0x200, 0x108(%rbx)     # imm = 0x200",
+        "  393f11:      \tmovq\t$0x1ff, 0x110(%rbx)     # imm = 0x1FF",
+        "  393f1c:      \tmovl\t$0x10000, %edi          # imm = 0x10000",
+        "  393f21:      \tmovl\t$0x40, %esi",
+        "  393f26:      \tcallq\t0xf6570 <_ZnamSt11align_val_t$plt>"
+      ]
+    }
+  ]
+}

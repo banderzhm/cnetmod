@@ -1,0 +1,247 @@
+--- a/src/protocol/quic/loss_detection.cppm
++++ b/src/protocol/quic/loss_detection.cppm
+@@ -87,6 +87,11 @@
+             return std::unexpected(make_error_code(quic_errc::protocol_violation));
+         if (frame.largest_acked != largest_acked_pn)
+             return std::unexpected(make_error_code(quic_errc::frame_encoding_error));
++        // Reject the entire malformed ACK before changing RTT, largest ACK,
++        // flight accounting or node ownership. A later invalid range must not
++        // partially retire packets from the detector alone.
++        if (!valid_ack_ranges(frame, largest_acked_pn))
++            return std::unexpected(make_error_code(quic_errc::frame_encoding_error));
+         if (space_state.largest_acked_pn_ == std::numeric_limits<std::uint64_t>::max() ||
+             largest_acked_pn > space_state.largest_acked_pn_)
+             space_state.largest_acked_pn_ = largest_acked_pn;
+@@ -108,8 +113,6 @@
+         // ACK ranges are descending.  first_ack_range describes the
+         // contiguous range ending at largest_acked; every subsequent gap is
+         // the number of missing packets minus one (RFC 9000 §19.3).
+-        if (frame.first_ack_range > largest_acked_pn)
+-            return std::unexpected(make_error_code(quic_errc::frame_encoding_error));
+         auto range_high = largest_acked_pn;
+         auto range_low = range_high - frame.first_ack_range;
+         auto acknowledge_range = [&](std::uint64_t low, std::uint64_t high)
+@@ -127,11 +130,8 @@
+         acknowledge_range(range_low, range_high);
+         for (const auto& range : frame.ack_ranges)
+         {
+-            if (range_low < range.gap + 2)
+-                return std::unexpected(make_error_code(quic_errc::frame_encoding_error));
+-            range_high = range_low - range.gap - 2;
+-            if (range.ack_range_length > range_high)
+-                return std::unexpected(make_error_code(quic_errc::frame_encoding_error));
++            // The complete range sequence was validated before state changes.
++            range_high = range_low - 2U - range.gap;
+             range_low = range_high - range.ack_range_length;
+             acknowledge_range(range_low, range_high);
+         }
+@@ -298,6 +298,9 @@
+     }
+ 
+ private:
++    [[nodiscard]] static auto valid_ack_ranges(const ack_frame& frame,
++        std::uint64_t largest_acked_pn) noexcept -> bool;
++
+     using clock_type = std::chrono::steady_clock;
+     using duration_type = std::chrono::steady_clock::duration;
+ 
+--- a/src/protocol/quic/loss_detection.cpp
++++ b/src/protocol/quic/loss_detection.cpp
+@@ -8,6 +8,26 @@
+ import :loss_detection;
+ 
+ namespace cnetmod::quic {
++
++auto loss_detector::valid_ack_ranges(const ack_frame& frame,
++    std::uint64_t largest_acked_pn) noexcept -> bool
++{
++    if (frame.first_ack_range > largest_acked_pn)
++        return false;
++    auto range_low = largest_acked_pn - frame.first_ack_range;
++    for (const auto& range : frame.ack_ranges)
++    {
++        // Subtract only after checking both operands. In particular, adding
++        // two to a public ack_range::gap can wrap at UINT64_MAX.
++        if (range_low < 2U || range.gap > range_low - 2U)
++            return false;
++        const auto range_high = range_low - 2U - range.gap;
++        if (range.ack_range_length > range_high)
++            return false;
++        range_low = range_high - range.ack_range_length;
++    }
++    return true;
++}
+ 
+ loss_detector::packet_node_cache::packet_node_cache(const packet_node_cache&) noexcept
+ {
+--- a/testing/tests/test_quic_loss_detection.cpp
++++ b/testing/tests/test_quic_loss_detection.cpp
+@@ -23,6 +23,119 @@
+ // =============================================================================
+ // Tests: RTT initialization
+ // =============================================================================
++
++namespace {
++
++auto malformed_ack_range_cases() -> std::array<cnetmod::quic::ack_frame, 5>
++{
++    std::array<cnetmod::quic::ack_frame, 5> cases{};
++    for (auto& ack : cases)
++    {
++        ack.largest_acked = 8U;
++        ack.first_ack_range = 1U;
++    }
++    cases[0].first_ack_range = 9U;
++    cases[1].ack_ranges.push_back({7U, 0U});
++    cases[2].ack_ranges.push_back({0U, 6U});
++    cases[3].ack_ranges.push_back({std::numeric_limits<std::uint64_t>::max(), 0U});
++    cases[4].ack_ranges.push_back({std::numeric_limits<std::uint64_t>::max() - 1U, 0U});
++    for (auto& ack : cases)
++        ack.ack_range_count = ack.ack_ranges.size();
++    return cases;
++}
++
++} // namespace
++
++TEST(loss_detector_malformed_ack_ranges_preserve_flight_rtt_pto_and_recovery)
++{
++    const auto space = cnetmod::quic::pn_space::application;
++    const auto now = std::chrono::steady_clock::now();
++    for (const auto& malformed : malformed_ack_range_cases())
++    {
++        cnetmod::quic::loss_detector detector(make_test_config());
++        detector.initialize_rtt(100ms);
++        for (std::uint64_t packet{}; packet <= 8U; ++packet)
++            detector.on_packet_sent(packet, 1000U, now + packet * 1ms, true, space);
++        detector.on_pto_expired(space);
++        const auto control = detector;
++        const auto before_rtt = detector.rtt_estimate();
++        const auto before_deadline = detector.next_pto_deadline();
++        const auto before_count = detector.in_flight_packet_count(space);
++        const auto before_bytes = detector.bytes_in_flight(space);
++
++        const auto rejected = detector.on_ack_received(
++            malformed, malformed.largest_acked, now + 40ms, space);
++        ASSERT_FALSE(rejected.has_value());
++        if (rejected)
++            continue;
++        ASSERT_EQ(rejected.error(), cnetmod::quic::make_error_code(
++            cnetmod::quic::quic_errc::frame_encoding_error));
++        ASSERT_EQ(detector.in_flight_packet_count(space), before_count);
++        ASSERT_EQ(detector.bytes_in_flight(space), before_bytes);
++        ASSERT_TRUE(detector.next_pto_deadline() == before_deadline);
++        const auto after_rtt = detector.rtt_estimate();
++        ASSERT_TRUE(after_rtt.latest_rtt_ == before_rtt.latest_rtt_);
++        ASSERT_TRUE(after_rtt.min_rtt_ == before_rtt.min_rtt_);
++        ASSERT_TRUE(after_rtt.smoothed_rtt_ == before_rtt.smoothed_rtt_);
++        ASSERT_TRUE(after_rtt.rtt_var_ == before_rtt.rtt_var_);
++
++        // Exercise hidden largest-ACK state through observable loss behavior,
++        // without adding a public diagnostic accessor or mutating the replay.
++        auto after_reject = detector;
++        auto unchanged = control;
++        ASSERT_TRUE(after_reject.detect_lost_packets(now + 1s, space) ==
++            unchanged.detect_lost_packets(now + 1s, space));
++
++        cnetmod::quic::ack_frame valid;
++        valid.largest_acked = 8U;
++        valid.first_ack_range = 1U;
++        auto expected_detector = control;
++        const auto expected = expected_detector.on_ack_received(valid, 8U, now + 41ms, space);
++        const auto actual = detector.on_ack_received(valid, 8U, now + 41ms, space);
++        ASSERT_TRUE(expected.has_value());
++        ASSERT_TRUE(actual.has_value());
++        if (!expected || !actual)
++            continue;
++        ASSERT_EQ(actual->size(), std::size_t{2});
++        ASSERT_TRUE(*actual == *expected);
++        ASSERT_EQ(detector.in_flight_packet_count(space), expected_detector.in_flight_packet_count(space));
++        ASSERT_EQ(detector.bytes_in_flight(space), expected_detector.bytes_in_flight(space));
++        ASSERT_TRUE(detector.next_pto_deadline() == expected_detector.next_pto_deadline());
++    }
++}
++
++TEST(loss_detector_ack_range_zero_boundary_duplicate_and_stale_ack)
++{
++    cnetmod::quic::loss_detector detector(make_test_config());
++    const auto space = cnetmod::quic::pn_space::application;
++    const auto now = std::chrono::steady_clock::now();
++    detector.on_packet_sent(0U, 100U, now, true, space);
++    detector.on_packet_sent(1U, 40U, now + 1ms, false, space);
++    detector.on_packet_sent(2U, 100U, now + 2ms, true, space);
++    cnetmod::quic::ack_frame ack;
++    ack.largest_acked = 2U;
++    ack.ack_range_count = 1U;
++    ack.ack_ranges.push_back({0U, 0U});
++    const auto result = detector.on_ack_received(ack, 2U, now + 20ms, space);
++    ASSERT_TRUE(result.has_value());
++    if (!result)
++        return;
++    // Preserve the public list order: ascending inside each descending range.
++    ASSERT_TRUE(*result == std::vector<std::uint64_t>({2U, 0U}));
++    ASSERT_EQ(detector.bytes_in_flight(space), std::uint64_t{0});
++    ASSERT_FALSE(detector.next_pto_deadline().has_value());
++    const auto duplicate = detector.on_ack_received(ack, 2U, now + 21ms, space);
++    ASSERT_TRUE(duplicate.has_value());
++    if (duplicate)
++        ASSERT_TRUE(duplicate->empty());
++    ack.largest_acked = 0U;
++    ack.ack_range_count = 0U;
++    ack.ack_ranges.clear();
++    const auto stale = detector.on_ack_received(ack, 0U, now + 22ms, space);
++    ASSERT_TRUE(stale.has_value());
++    if (stale)
++        ASSERT_TRUE(stale->empty());
++}
+ 
+ TEST(loss_detector_rtt_initialization)
+ {
+@@ -386,6 +499,48 @@
+ }
+ 
+ } // namespace
++
++TEST(quic_recovery_malformed_ack_keeps_owner_and_followup_ack_releases_it)
++{
++    const auto space = cnetmod::quic::pn_space::application;
++    const auto now = std::chrono::steady_clock::now();
++    for (const auto& malformed : malformed_ack_range_cases())
++    {
++        cnetmod::quic::quic_recovery_controller recovery(make_test_config());
++        auto body = std::make_shared<const std::string>("body");
++        const std::weak_ptr<const std::string> owner = body;
++        recovery.on_packet_sent(7U, 1200U, now, true, space, shared_test_frames(body));
++        recovery.on_packet_sent(8U, 1200U, now + 1ms, true, space, shared_test_frames(body));
++        body.reset();
++        recovery.on_pto_expired(space);
++        const auto deadline = recovery.next_pto_deadline();
++        ASSERT_TRUE(deadline.has_value());
++        const auto window = recovery.congestion_window();
++
++        const auto rejected = recovery.on_ack_received(malformed, now + 40ms, space);
++        ASSERT_FALSE(rejected.has_value());
++        if (rejected)
++            continue;
++        ASSERT_EQ(rejected.error(), cnetmod::quic::make_error_code(
++            cnetmod::quic::quic_errc::frame_encoding_error));
++        ASSERT_FALSE(owner.expired());
++        ASSERT_TRUE(recovery.next_pto_deadline() == deadline);
++        ASSERT_EQ(recovery.congestion_window(), window);
++        ASSERT_FALSE(recovery.can_send_datagram(window));
++
++        cnetmod::quic::ack_frame valid;
++        valid.largest_acked = 8U;
++        valid.first_ack_range = 1U;
++        const auto completed = recovery.on_ack_received(valid, now + 41ms, space);
++        ASSERT_TRUE(completed.has_value());
++        if (!completed)
++            continue;
++        ASSERT_TRUE(completed->lost_frames.empty());
++        ASSERT_TRUE(owner.expired());
++        ASSERT_FALSE(recovery.next_pto_deadline().has_value());
++        ASSERT_TRUE(recovery.can_send_datagram(recovery.congestion_window()));
++    }
++}
+ 
+ TEST(quic_recovery_shared_pto_alias_releases_body_after_original_ack)
+ {

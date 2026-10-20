@@ -1,0 +1,538 @@
+Start testing: Oct 17 19:04 中国标准时间
+----------------------------------------------------------
+48/73 Testing: test_quic_frame
+48/73 Test: test_quic_frame
+Command: "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/tests/Release/test_quic_frame.exe"
+Directory: C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/tests
+"test_quic_frame" start time: Oct 17 19:04 中国标准时间
+Output:
+----------------------------------------------------------
+[==========] Running 30 test(s).
+[ RUN      ] quic_ping_frame_roundtrip
+[       OK ] quic_ping_frame_roundtrip
+[ RUN      ] quic_ack_frame_with_ranges
+[       OK ] quic_ack_frame_with_ranges
+[ RUN      ] quic_stream_frame_encoding
+[       OK ] quic_stream_frame_encoding
+[ RUN      ] quic_crypto_frame_roundtrip
+[       OK ] quic_crypto_frame_roundtrip
+[ RUN      ] quic_connection_close_frame_decode
+[       OK ] quic_connection_close_frame_decode
+[ RUN      ] quic_path_challenge_roundtrip
+[       OK ] quic_path_challenge_roundtrip
+[ RUN      ] quic_unknown_frame_type_handling
+[       OK ] quic_unknown_frame_type_handling
+[ RUN      ] quic_priority_service_budget_bounds_background_starvation
+[       OK ] quic_priority_service_budget_bounds_background_starvation
+[ RUN      ] quic_empty_stream_frame
+[       OK ] quic_empty_stream_frame
+[ RUN      ] quic_large_ack_ranges_list
+[       OK ] quic_large_ack_ranges_list
+[ RUN      ] quic_max_data_frame_encoding
+[       OK ] quic_max_data_frame_encoding
+[ RUN      ] quic_new_connection_id_frame_encoding
+[       OK ] quic_new_connection_id_frame_encoding
+[ RUN      ] quic_padding_frame_encode
+[       OK ] quic_padding_frame_encode
+[ RUN      ] quic_stream_frame_fin_flag_roundtrip
+[       OK ] quic_stream_frame_fin_flag_roundtrip
+[ RUN      ] quic_crypto_frame_large_offset
+[       OK ] quic_crypto_frame_large_offset
+[ RUN      ] quic_handshake_done_frame_roundtrip
+[       OK ] quic_handshake_done_frame_roundtrip
+[ RUN      ] quic_reset_stream_frame_roundtrip
+[       OK ] quic_reset_stream_frame_roundtrip
+[ RUN      ] quic_max_stream_data_frame_roundtrip
+[       OK ] quic_max_stream_data_frame_roundtrip
+[ RUN      ] quic_frame_decode_truncated_data
+[       OK ] quic_frame_decode_truncated_data
+[ RUN      ] quic_frame_ack_eliciting_check
+[       OK ] quic_frame_ack_eliciting_check
+[ RUN      ] quic_frame_probing_check
+[       OK ] quic_frame_probing_check
+[ RUN      ] quic_stop_sending_frame_roundtrip
+[       OK ] quic_stop_sending_frame_roundtrip
+[ RUN      ] quic_data_blocked_frame_roundtrip
+[       OK ] quic_data_blocked_frame_roundtrip
+[ RUN      ] quic_retire_connection_id_frame_roundtrip
+[       OK ] quic_retire_connection_id_frame_roundtrip
+[ RUN      ] quic_datagram_frame_roundtrip
+[       OK ] quic_datagram_frame_roundtrip
+[ RUN      ] quic_datagram_frame_without_length_consumes_packet_tail
+[       OK ] quic_datagram_frame_without_length_consumes_packet_tail
+[ RUN      ] multipath_path_ack_frame_roundtrip
+[       OK ] multipath_path_ack_frame_roundtrip
+[ RUN      ] multipath_path_management_frames_roundtrip
+[       OK ] multipath_path_management_frames_roundtrip
+[ RUN      ] multipath_path_connection_id_frames_roundtrip
+[       OK ] multipath_path_connection_id_frames_roundtrip
+[ RUN      ] multipath_frames_reject_path_ids_above_the_nonce_limit
+[       OK ] multipath_frames_reject_path_ids_above_the_nonce_limit
+[==========] 30 test(s) ran.
+[  PASSED  ] 30 test(s).
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"test_quic_frame" end time: Oct 17 19:04 中国标准时间
+"test_quic_frame" time elapsed: 00:00:00
+----------------------------------------------------------
+
+49/73 Testing: test_quic_packet
+49/73 Test: test_quic_packet
+Command: "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/tests/Release/test_quic_packet.exe"
+Directory: C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/tests
+"test_quic_packet" start time: Oct 17 19:04 中国标准时间
+Output:
+----------------------------------------------------------
+[==========] Running 34 test(s).
+[ RUN      ] long_header_initial_type_detection
+[       OK ] long_header_initial_type_detection
+[ RUN      ] long_header_handshake_type_detection
+[       OK ] long_header_handshake_type_detection
+[ RUN      ] short_header_1rtt_type_detection
+[       OK ] short_header_1rtt_type_detection
+[ RUN      ] zero_rtt_type_detection
+[       OK ] zero_rtt_type_detection
+[ RUN      ] retry_type_detection
+[       OK ] retry_type_detection
+[ RUN      ] version_negotiation_detection
+[       OK ] version_negotiation_detection
+[ RUN      ] long_header_initial_full_parse
+[       OK ] long_header_initial_full_parse
+[ RUN      ] long_header_handshake_full_parse
+[       OK ] long_header_handshake_full_parse
+[ RUN      ] long_header_initial_with_token
+[       OK ] long_header_initial_with_token
+[ RUN      ] long_header_decode_too_short
+[       OK ] long_header_decode_too_short
+[ RUN      ] long_header_short_header_rejected
+[       OK ] long_header_short_header_rejected
+[ RUN      ] short_header_1rtt_full_parse
+[       OK ] short_header_1rtt_full_parse
+[ RUN      ] short_header_key_phase_bit
+[       OK ] short_header_key_phase_bit
+[ RUN      ] short_header_spin_bit
+[       OK ] short_header_spin_bit
+[ RUN      ] short_header_too_short_rejected
+[       OK ] short_header_too_short_rejected
+[ RUN      ] packet_number_decode_basic_recovery
+[       OK ] packet_number_decode_basic_recovery
+[ RUN      ] packet_number_decode_wraparound
+[       OK ] packet_number_decode_wraparound
+[ RUN      ] packet_number_decode_first_packet
+[       OK ] packet_number_decode_first_packet
+[ RUN      ] packet_number_encode_decode_roundtrip
+[       OK ] packet_number_encode_decode_roundtrip
+[ RUN      ] packet_number_encode_min_bits
+[       OK ] packet_number_encode_min_bits
+[ RUN      ] coalesced_single_initial_packet
+[       OK ] coalesced_single_initial_packet
+[ RUN      ] coalesced_two_long_header_packets
+[       OK ] coalesced_two_long_header_packets
+[ RUN      ] initial_datagram_trailing_padding_is_not_a_short_packet
+[       OK ] initial_datagram_trailing_padding_is_not_a_short_packet
+[ RUN      ] coalesced_long_then_short
+[       OK ] coalesced_long_then_short
+[ RUN      ] coalesced_empty_datagram_rejected
+[       OK ] coalesced_empty_datagram_rejected
+[ RUN      ] long_header_encode_decode_roundtrip
+[       OK ] long_header_encode_decode_roundtrip
+[ RUN      ] short_header_encode_decode_roundtrip
+[       OK ] short_header_encode_decode_roundtrip
+[ RUN      ] empty_input_rejected
+[       OK ] empty_input_rejected
+[ RUN      ] long_header_rejects_connection_id_longer_than_rfc_limit
+[       OK ] long_header_rejects_connection_id_longer_than_rfc_limit
+[ RUN      ] retry_without_integrity_tag_is_rejected
+[       OK ] retry_without_integrity_tag_is_rejected
+[ RUN      ] coalesced_packet_with_truncated_declared_payload_is_rejected
+[       OK ] coalesced_packet_with_truncated_declared_payload_is_rejected
+[ RUN      ] chacha20_header_protection_uses_little_endian_counter
+[       OK ] chacha20_header_protection_uses_little_endian_counter
+[ RUN      ] multipath_payload_nonce_scopes_packet_numbers_by_path_id
+[       OK ] multipath_payload_nonce_scopes_packet_numbers_by_path_id
+[ RUN      ] quic_payload_seals_directly_into_packet_storage
+[       OK ] quic_payload_seals_directly_into_packet_storage
+[==========] 34 test(s) ran.
+[  PASSED  ] 34 test(s).
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"test_quic_packet" end time: Oct 17 19:04 中国标准时间
+"test_quic_packet" time elapsed: 00:00:00
+----------------------------------------------------------
+
+50/73 Testing: test_quic_stream
+50/73 Test: test_quic_stream
+Command: "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/tests/Release/test_quic_stream.exe"
+Directory: C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/tests
+"test_quic_stream" start time: Oct 17 19:04 中国标准时间
+Output:
+----------------------------------------------------------
+[==========] Running 4 test(s).
+[ RUN      ] quic_stream_out_of_order_gap_is_not_readable
+[       OK ] quic_stream_out_of_order_gap_is_not_readable
+[ RUN      ] quic_stream_duplicate_fin_is_idempotent
+[       OK ] quic_stream_duplicate_fin_is_idempotent
+[ RUN      ] quic_stream_initial_peer_send_credit_can_be_zero
+[       OK ] quic_stream_initial_peer_send_credit_can_be_zero
+[ RUN      ] quic_stream_initial_peer_send_credit_can_exceed_fallback
+[       OK ] quic_stream_initial_peer_send_credit_can_exceed_fallback
+[==========] 4 test(s) ran.
+[  PASSED  ] 4 test(s).
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"test_quic_stream" end time: Oct 17 19:04 中国标准时间
+"test_quic_stream" time elapsed: 00:00:00
+----------------------------------------------------------
+
+51/73 Testing: test_quic_loss_detection
+51/73 Test: test_quic_loss_detection
+Command: "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/tests/Release/test_quic_loss_detection.exe"
+Directory: C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/tests
+"test_quic_loss_detection" start time: Oct 17 19:04 中国标准时间
+Output:
+----------------------------------------------------------
+[==========] Running 12 test(s).
+[ RUN      ] loss_detector_rtt_initialization
+[       OK ] loss_detector_rtt_initialization
+[ RUN      ] loss_detector_rtt_multiple_samples
+[       OK ] loss_detector_rtt_multiple_samples
+[ RUN      ] loss_detector_pto_duration_basic
+[       OK ] loss_detector_pto_duration_basic
+[ RUN      ] loss_detector_pto_increases_with_rtt_var
+[       OK ] loss_detector_pto_increases_with_rtt_var
+[ RUN      ] loss_detector_packet_sent_tracking
+[       OK ] loss_detector_packet_sent_tracking
+[ RUN      ] loss_detector_ack_received_processing
+[       OK ] loss_detector_ack_received_processing
+[ RUN      ] loss_detector_ack_range_may_include_ack_only_packet
+[       OK ] loss_detector_ack_range_may_include_ack_only_packet
+[ RUN      ] loss_detector_rejects_ack_for_unsent_packet
+[       OK ] loss_detector_rejects_ack_for_unsent_packet
+[ RUN      ] loss_detector_no_loss_on_immediate_ack
+[       OK ] loss_detector_no_loss_on_immediate_ack
+[ RUN      ] loss_detector_pn_space_isolation
+[       OK ] loss_detector_pn_space_isolation
+[ RUN      ] loss_detector_discarded_packet_space_clears_pto_and_bytes
+[       OK ] loss_detector_discarded_packet_space_clears_pto_and_bytes
+[ RUN      ] loss_detector_rtt_sample_fields
+[       OK ] loss_detector_rtt_sample_fields
+[==========] 12 test(s) ran.
+[  PASSED  ] 12 test(s).
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"test_quic_loss_detection" end time: Oct 17 19:04 中国标准时间
+"test_quic_loss_detection" time elapsed: 00:00:00
+----------------------------------------------------------
+
+52/73 Testing: test_quic_congestion
+52/73 Test: test_quic_congestion
+Command: "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/tests/Release/test_quic_congestion.exe"
+Directory: C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/tests
+"test_quic_congestion" start time: Oct 17 19:04 中国标准时间
+Output:
+----------------------------------------------------------
+[==========] Running 18 test(s).
+[ RUN      ] congestion_controller_initial_cwnd
+[       OK ] congestion_controller_initial_cwnd
+[ RUN      ] congestion_controller_initial_ssthresh
+[       OK ] congestion_controller_initial_ssthresh
+[ RUN      ] congestion_controller_initial_pacing_rate
+[       OK ] congestion_controller_initial_pacing_rate
+[ RUN      ] congestion_controller_can_send_below_cwnd
+[       OK ] congestion_controller_can_send_below_cwnd
+[ RUN      ] congestion_controller_can_send_at_cwnd
+[       OK ] congestion_controller_can_send_at_cwnd
+[ RUN      ] congestion_controller_on_packet_sent
+[       OK ] congestion_controller_on_packet_sent
+[ RUN      ] congestion_controller_on_packet_acked
+[       OK ] congestion_controller_on_packet_acked
+[ RUN      ] congestion_controller_discarded_packets_only_release_flight_accounting
+[       OK ] congestion_controller_discarded_packets_only_release_flight_accounting
+[ RUN      ] congestion_controller_congestion_event_no_crash
+[       OK ] congestion_controller_congestion_event_no_crash
+[ RUN      ] congestion_controller_multiple_congestion_events
+[       OK ] congestion_controller_multiple_congestion_events
+[ RUN      ] congestion_controller_recovery_re_entry_prevention
+[       OK ] congestion_controller_recovery_re_entry_prevention
+[ RUN      ] congestion_controller_cwnd_positive
+[       OK ] congestion_controller_cwnd_positive
+[ RUN      ] cubic_reduces_window_and_preserves_minimum
+[       OK ] cubic_reduces_window_and_preserves_minimum
+[ RUN      ] congestion_controller_selects_configured_cubic_without_heap_polymorphism
+[       OK ] congestion_controller_selects_configured_cubic_without_heap_polymorphism
+[ RUN      ] congestion_controller_keeps_newreno_as_the_default
+[       OK ] congestion_controller_keeps_newreno_as_the_default
+[ RUN      ] bbr_selects_model_based_controller_and_tracks_acknowledgements
+[       OK ] bbr_selects_model_based_controller_and_tracks_acknowledgements
+[ RUN      ] bbr_loss_keeps_a_safe_send_window
+[       OK ] bbr_loss_keeps_a_safe_send_window
+[ RUN      ] congestion_pacing_tracks_rtt
+[       OK ] congestion_pacing_tracks_rtt
+[==========] 18 test(s) ran.
+[  PASSED  ] 18 test(s).
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"test_quic_congestion" end time: Oct 17 19:04 中国标准时间
+"test_quic_congestion" time elapsed: 00:00:00
+----------------------------------------------------------
+
+54/73 Testing: test_http3_qpack
+54/73 Test: test_http3_qpack
+Command: "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/tests/Release/test_http3_qpack.exe"
+Directory: C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/tests
+"test_http3_qpack" start time: Oct 17 19:04 中国标准时间
+Output:
+----------------------------------------------------------
+[==========] Running 10 test(s).
+[ RUN      ] qpack_static_table_is_rfc9204_appendix_a
+[       OK ] qpack_static_table_is_rfc9204_appendix_a
+[ RUN      ] qpack_static_and_literal_header_block_round_trip
+[       OK ] qpack_static_and_literal_header_block_round_trip
+[ RUN      ] qpack_dynamic_indexed_header_block_ric_base_and_ack
+[       OK ] qpack_dynamic_indexed_header_block_ric_base_and_ack
+[ RUN      ] qpack_dynamic_header_blocks_remain_decodable_after_acknowledgement
+[       OK ] qpack_dynamic_header_blocks_remain_decodable_after_acknowledgement
+[ RUN      ] qpack_decoder_applies_local_maximum_table_capacity
+[       OK ] qpack_decoder_applies_local_maximum_table_capacity
+[ RUN      ] qpack_huffman_strings_round_trip
+[       OK ] qpack_huffman_strings_round_trip
+[ RUN      ] qpack_encoder_and_decoder_stream_instructions
+[       OK ] qpack_encoder_and_decoder_stream_instructions
+[ RUN      ] qpack_rejects_header_block_that_requires_unreceived_dynamic_entries
+[       OK ] qpack_rejects_header_block_that_requires_unreceived_dynamic_entries
+[ RUN      ] qpack_unblocks_retained_header_block_and_acknowledges_once
+[       OK ] qpack_unblocks_retained_header_block_and_acknowledges_once
+[ RUN      ] qpack_enforces_blocked_stream_limit_and_cancellation
+[       OK ] qpack_enforces_blocked_stream_limit_and_cancellation
+[==========] 10 test(s) ran.
+[  PASSED  ] 10 test(s).
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"test_http3_qpack" end time: Oct 17 19:04 中国标准时间
+"test_http3_qpack" time elapsed: 00:00:00
+----------------------------------------------------------
+
+55/73 Testing: test_http3_frame
+55/73 Test: test_http3_frame
+Command: "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/tests/Release/test_http3_frame.exe"
+Directory: C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/tests
+"test_http3_frame" start time: Oct 17 19:04 中国标准时间
+Output:
+----------------------------------------------------------
+[==========] Running 28 test(s).
+[ RUN      ] http3_data_frame_roundtrip
+[       OK ] http3_data_frame_roundtrip
+[ RUN      ] http3_async_server_handler_contract
+[       OK ] http3_async_server_handler_contract
+[ RUN      ] webtransport_async_server_handler_contract
+[       OK ] webtransport_async_server_handler_contract
+[ RUN      ] http3_headers_frame_with_qpack
+[       OK ] http3_headers_frame_with_qpack
+[ RUN      ] http3_settings_frame_multi_entries
+[       OK ] http3_settings_frame_multi_entries
+[ RUN      ] http3_goaway_frame_decode
+[       OK ] http3_goaway_frame_decode
+[ RUN      ] http3_max_push_id_encode
+[       OK ] http3_max_push_id_encode
+[ RUN      ] http3_frame_varint_length_decoding
+[       OK ] http3_frame_varint_length_decoding
+[ RUN      ] http3_cancel_push_frame
+[       OK ] http3_cancel_push_frame
+[ RUN      ] http3_push_promise_frame
+[       OK ] http3_push_promise_frame
+[ RUN      ] http3_empty_data_frame
+[       OK ] http3_empty_data_frame
+[ RUN      ] http3_settings_single_entry
+[       OK ] http3_settings_single_entry
+[ RUN      ] http3_frame_type_variants
+[       OK ] http3_frame_type_variants
+[ RUN      ] http3_goaway_no_error
+[       OK ] http3_goaway_no_error
+[ RUN      ] http3_settings_reject_duplicate_identifier
+[       OK ] http3_settings_reject_duplicate_identifier
+[ RUN      ] http3_priority_update_frame_roundtrip
+[       OK ] http3_priority_update_frame_roundtrip
+[ RUN      ] http3_priority_field_rejects_invalid_urgency
+[       OK ] http3_priority_field_rejects_invalid_urgency
+[ RUN      ] http3_request_priority_contract
+[       OK ] http3_request_priority_contract
+[ RUN      ] http3_settings_h3_datagram_roundtrip
+[       OK ] http3_settings_h3_datagram_roundtrip
+[ RUN      ] http3_settings_extended_connect_roundtrip
+[       OK ] http3_settings_extended_connect_roundtrip
+[ RUN      ] http3_settings_enable_webtransport_roundtrip
+[       OK ] http3_settings_enable_webtransport_roundtrip
+[ RUN      ] http3_settings_webtransport_max_sessions_roundtrip
+[       OK ] http3_settings_webtransport_max_sessions_roundtrip
+[ RUN      ] http3_datagram_context_id_roundtrip
+[       OK ] http3_datagram_context_id_roundtrip
+[ RUN      ] webtransport_extended_connect_request_shape
+[       OK ] webtransport_extended_connect_request_shape
+[ RUN      ] webtransport_stream_prefaces_roundtrip_and_validate_session_id
+[       OK ] webtransport_stream_prefaces_roundtrip_and_validate_session_id
+[ RUN      ] http3_frame_rejects_truncated_varint_length
+[       OK ] http3_frame_rejects_truncated_varint_length
+[ RUN      ] http3_goaway_rejects_trailing_payload
+[       OK ] http3_goaway_rejects_trailing_payload
+[ RUN      ] http3_unknown_extension_frame_preserves_payload_and_consumed_length
+[       OK ] http3_unknown_extension_frame_preserves_payload_and_consumed_length
+[==========] 28 test(s) ran.
+[  PASSED  ] 28 test(s).
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"test_http3_frame" end time: Oct 17 19:04 中国标准时间
+"test_http3_frame" time elapsed: 00:00:00
+----------------------------------------------------------
+
+61/73 Testing: arena_h3_measurement_unit
+61/73 Test: arena_h3_measurement_unit
+Command: "C:/Users/25007/.codex/tmp/cnetmod-h3-windows-python/Scripts/python.exe" "-m" "unittest" "discover" "-s" "C:/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/bench" "-p" "test_arena_h3_measure.py"
+Directory: C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/bench
+"arena_h3_measurement_unit" start time: Oct 17 19:04 中国标准时间
+Output:
+----------------------------------------------------------
+........
+----------------------------------------------------------------------
+Ran 8 tests in 0.001s
+
+OK
+<end of output>
+Test time =   0.08 sec
+----------------------------------------------------------
+Test Passed.
+"arena_h3_measurement_unit" end time: Oct 17 19:04 中国标准时间
+"arena_h3_measurement_unit" time elapsed: 00:00:00
+----------------------------------------------------------
+
+62/73 Testing: h3_webtransport_aioquic_probe_unit
+62/73 Test: h3_webtransport_aioquic_probe_unit
+Command: "C:/Users/25007/.codex/tmp/cnetmod-h3-windows-python/Scripts/python.exe" "-m" "unittest" "discover" "-s" "C:/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3" "-p" "test_webtransport_aioquic_probe.py"
+Directory: C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/http3
+"h3_webtransport_aioquic_probe_unit" start time: Oct 17 19:04 中国标准时间
+Output:
+----------------------------------------------------------
+......
+----------------------------------------------------------------------
+Ran 6 tests in 0.045s
+
+OK
+<end of output>
+Test time =   0.34 sec
+----------------------------------------------------------
+Test Passed.
+"h3_webtransport_aioquic_probe_unit" end time: Oct 17 19:04 中国标准时间
+"h3_webtransport_aioquic_probe_unit" time elapsed: 00:00:00
+----------------------------------------------------------
+
+63/73 Testing: h3_interop_release_gate
+63/73 Test: h3_interop_release_gate
+Command: "C:/Users/25007/.codex/tmp/cnetmod-h3-windows-python/Scripts/python.exe" "C:/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/h3_acceptance.py" "--server" "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/bin/Release/h3_interop_server.exe" "--client" "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/bin/Release/h3_interop_client.exe" "--port" "4433" "--wtransport-probe" "C:/Users/25007/.codex/tmp/cnetmod-h3-wtransport/target/release/webtransport_probe.exe"
+Directory: C:/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3
+"h3_interop_release_gate" start time: Oct 17 19:04 中国标准时间
+Output:
+----------------------------------------------------------
+[PASSED] aioquic-server_to_cnetmod-client: request and response validated
+[PASSED] aioquic-webtransport_to_cnetmod-server: request and response validated
+[PASSED] wtransport-webtransport_to_cnetmod-server: 3 independent connections validated
+[SKIPPED] cnetmod-server_to_curl-http3: curl lacks HTTP/3 support
+[SKIPPED] cnetmod-server_to_nghttp3-client: --nghttp3-client-command was not supplied
+[SKIPPED] nghttp3-server_to_cnetmod-client: --nghttp3-server-command was not supplied
+<end of output>
+Test time =   6.77 sec
+----------------------------------------------------------
+Test Passed.
+"h3_interop_release_gate" end time: Oct 17 19:04 中国标准时间
+"h3_interop_release_gate" time elapsed: 00:00:06
+----------------------------------------------------------
+
+64/73 Testing: h3_interop_multi_worker_release_gate
+64/73 Test: h3_interop_multi_worker_release_gate
+Command: "C:/Users/25007/.codex/tmp/cnetmod-h3-windows-python/Scripts/python.exe" "C:/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/h3_acceptance.py" "--server" "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/bin/Release/h3_interop_server.exe" "--client" "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/bin/Release/h3_interop_client.exe" "--server-workers" "2" "--port" "4434" "--wtransport-probe" "C:/Users/25007/.codex/tmp/cnetmod-h3-wtransport/target/release/webtransport_probe.exe"
+Directory: C:/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3
+"h3_interop_multi_worker_release_gate" start time: Oct 17 19:04 中国标准时间
+Output:
+----------------------------------------------------------
+[PASSED] aioquic-server_to_cnetmod-client: request and response validated
+[PASSED] aioquic-webtransport_to_cnetmod-server: request and response validated
+[PASSED] wtransport-webtransport_to_cnetmod-server: 3 independent connections validated
+[SKIPPED] cnetmod-server_to_curl-http3: curl lacks HTTP/3 support
+[SKIPPED] cnetmod-server_to_nghttp3-client: --nghttp3-client-command was not supplied
+[SKIPPED] nghttp3-server_to_cnetmod-client: --nghttp3-server-command was not supplied
+<end of output>
+Test time =   6.81 sec
+----------------------------------------------------------
+Test Passed.
+"h3_interop_multi_worker_release_gate" end time: Oct 17 19:04 中国标准时间
+"h3_interop_multi_worker_release_gate" time elapsed: 00:00:06
+----------------------------------------------------------
+
+65/73 Testing: http_client_http3_end_to_end
+65/73 Test: http_client_http3_end_to_end
+Command: "C:/Users/25007/.codex/tmp/cnetmod-h3-windows-python/Scripts/python.exe" "C:/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/http3/Release/http3_e2e_server.exe" "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/http3/Release/http_client_http3_e2e.exe"
+Directory: C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/http3
+"http_client_http3_end_to_end" start time: Oct 17 19:04 中国标准时间
+Output:
+----------------------------------------------------------
+[2026-10-17 11:04:30.408] [info] [3094063406714459512] [http_client_e2e.cpp:614] HTTP/3 priority E2E passed: first foreground=2, first background=1
+[2026-10-17 11:05:01.579] [info] [3094063406714459512] [http_client_e2e.cpp:1140] HTTP/3 client end-to-end regression passed
+<end of output>
+Test time =  31.64 sec
+----------------------------------------------------------
+Test Passed.
+"http_client_http3_end_to_end" end time: Oct 17 19:05 中国标准时间
+"http_client_http3_end_to_end" time elapsed: 00:00:31
+----------------------------------------------------------
+
+66/73 Testing: http_client_http3_dynamic_qpack_end_to_end
+66/73 Test: http_client_http3_dynamic_qpack_end_to_end
+Command: "C:/Users/25007/.codex/tmp/cnetmod-h3-windows-python/Scripts/python.exe" "C:/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--dynamic-qpack" "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/http3/Release/http3_e2e_server.exe" "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/http3/Release/http_client_http3_e2e.exe"
+Directory: C:/Users/25007/.codex/tmp/cnetmod-h3-windows/testing/http3
+"http_client_http3_dynamic_qpack_end_to_end" start time: Oct 17 19:05 中国标准时间
+Output:
+----------------------------------------------------------
+[2026-10-17 11:05:01.976] [info] [11734029324204730413] [http_client_e2e.cpp:614] HTTP/3 priority E2E passed: first foreground=1, first background=26
+[2026-10-17 11:05:03.135] [info] [11734029324204730413] [http_client_e2e.cpp:1140] HTTP/3 client end-to-end regression passed
+<end of output>
+Test time =   1.56 sec
+----------------------------------------------------------
+Test Passed.
+"http_client_http3_dynamic_qpack_end_to_end" end time: Oct 17 19:05 中国标准时间
+"http_client_http3_dynamic_qpack_end_to_end" time elapsed: 00:00:01
+----------------------------------------------------------
+
+End testing: Oct 17 19:05 中国标准时间
+
+benchmark =   0.08 sec*proc
+
+client =  33.19 sec*proc
+
+end_to_end =  33.19 sec*proc
+
+http3 =  47.19 sec*proc
+
+interop =  13.91 sec*proc
+
+multi_worker =   6.81 sec*proc
+
+qpack =   1.56 sec*proc
+
+release_gate =  13.58 sec*proc
+
+unit =   0.41 sec*proc
+
+webtransport =   0.34 sec*proc
+

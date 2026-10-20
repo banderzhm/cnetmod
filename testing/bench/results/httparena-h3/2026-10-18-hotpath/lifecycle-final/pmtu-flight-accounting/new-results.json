@@ -1,0 +1,18 @@
+{
+  "test_quic_congestion": {
+    "exit_code": 0,
+    "summary": [
+      "[       OK ] congestion_consecutive_losses_release_flight_during_recovery",
+      "[==========] 20 test(s) ran.",
+      "[  PASSED  ] 20 test(s)."
+    ]
+  },
+  "test_quic_loss_detection": {
+    "exit_code": 0,
+    "summary": [
+      "[       OK ] quic_recovery_lost_pmtu_probe_preserves_reliable_frame_retransmission",
+      "[==========] 24 test(s) ran.",
+      "[  PASSED  ] 24 test(s)."
+    ]
+  }
+}

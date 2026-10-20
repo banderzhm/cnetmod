@@ -1,0 +1,7 @@
+[2026-10-19 00:18:51.393] [info] [133443783399360] [full-diagnostic.cpp:4302] PMTU_PENDING_PACK path=0 target=1328 selected=1 cwnd=14783 credit=1 empty=1 pto_probe=0 at_us=324571827
+[2026-10-19 00:18:51.496] [info] [133443783399360] [full-diagnostic.cpp:2996] PMTU_PENDING_SCHEDULE path=0 ack_target=1328 next_us=324685121 at_us=324675121
+[2026-10-19 00:18:51.506] [info] [133443783399360] [full-diagnostic.cpp:4302] PMTU_PENDING_PACK path=0 target=1452 selected=0 cwnd=16111 credit=0 empty=0 pto_probe=0 at_us=324685387
+[2026-10-19 00:18:51.559] [info] [133443783399360] [full-diagnostic.cpp:4302] PMTU_PENDING_PACK path=0 target=1452 selected=0 cwnd=16111 credit=0 empty=0 pto_probe=0 at_us=324737948
+[2026-10-19 00:18:51.559] [info] [133443783399360] [full-diagnostic.cpp:4302] PMTU_PENDING_PACK path=0 target=1452 selected=0 cwnd=16111 credit=0 empty=0 pto_probe=0 at_us=324737974
+[2026-10-19 00:18:51.805] [info] [133443783399360] [full-diagnostic.cpp:4302] PMTU_PENDING_PACK path=0 target=1452 selected=1 cwnd=8055 credit=1 empty=1 pto_probe=0 at_us=324984078
+[2026-10-19 00:18:52.124] [info] [133443783399360] [full-diagnostic.cpp:4302] PMTU_PENDING_PACK path=0 target=1452 selected=1 cwnd=8055 credit=1 empty=1 pto_probe=0 at_us=325302948

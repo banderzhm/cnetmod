@@ -1,0 +1,111 @@
+[info] available CPUs: 32
+[info] framework: cnetmod-official-static (cnetmod-official-static, C++)
+[info] subscribed tests: static-h3
+[info] building image: httparena-cnetmod-official-static
+[info] skipping system tuning as requested (SKIP_TUNE=true)
+
+==============================================
+=== cnetmod-official-static / static-h3 / 64c (tool=h2load-h3) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] server ready
+
+[run 1/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Certificate: RSA 2048 bits
+Negotiated Group: x25519
+Resumption: no
+Application protocol: h3
+
+finished in 5.66s, 1242.60 req/s, 19.31MB/s
+requests: 6213 total, 10309 started, 6213 done, 6213 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 6291 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 96.53MB (101218919) total, 136.81KB (140093) headers (space savings 76.71%), 96.35MB (101025852) data
+UDP datagram: 16983 sent, 96952 received
+                 min         max         median     p95        p99        mean         sd        +/- sd
+request     :      610us     40.80ms      9.85ms    19.00ms    31.44ms    10.15ms      5.29ms    75.74%
+connect     :     1.25ms      6.18ms      1.83ms     3.12ms     6.18ms     2.00ms       782us    87.50%
+TTFB        :     1.91ms      9.67ms      2.67ms     4.13ms     9.67ms     2.93ms      1.09ms    93.75%
+req/s       :       5.39       20.00       19.98      19.99      20.00      19.40        2.64    95.31%
+min RTT     :       67us       406us       232us      365us      406us      241us        70us    67.19%
+smoothed RTT:      342us      4.90ms      2.02ms     4.12ms     4.90ms     2.08ms      1.22ms    59.38%
+packets sent:         90         445         265        391        445     268.36       70.99    75.00%
+packets recv:        423        1671        1557       1571       1671    1514.88      209.24    95.31%
+packets lost:          0           3           0          1          3       0.14        0.50    90.63%
+GRO packets :          1          18           1          4          6       1.55        1.17    87.89%
+[info] CPU 315.2% | Mem 851MiB
+
+[run 2/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Certificate: RSA 2048 bits
+Negotiated Group: x25519
+Resumption: no
+Application protocol: h3
+
+finished in 5.67s, 1254.40 req/s, 19.51MB/s
+requests: 6272 total, 10368 started, 6272 done, 6272 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 6339 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 97.53MB (102264227) total, 137.93KB (141245) headers (space savings 76.70%), 97.34MB (102069562) data
+UDP datagram: 15128 sent, 97876 received
+                 min         max         median     p95        p99        mean         sd        +/- sd
+request     :      602us     33.03ms     11.29ms    19.91ms    25.71ms    11.38ms      5.12ms    67.55%
+connect     :     1.32ms     11.22ms      2.46ms     6.46ms    11.22ms     3.07ms      1.94ms    89.06%
+TTFB        :     1.99ms     13.20ms      3.70ms     8.59ms    13.20ms     4.34ms      2.22ms    84.38%
+req/s       :       3.20       19.99       19.98      19.99      19.99      19.58        2.25    96.88%
+min RTT     :       18us       505us       290us      400us      505us      279us        90us    75.00%
+smoothed RTT:      369us      5.46ms      1.88ms     4.66ms     5.46ms     2.15ms      1.27ms    64.06%
+packets sent:         67         405         223        356        405     239.37       65.37    70.31%
+packets recv:        365        1662        1558       1572       1662    1529.31      164.06    95.31%
+packets lost:          0           2           0          1          2       0.14        0.39    87.50%
+GRO packets :          1          18           1          3          6       1.46        1.09    89.85%
+[info] CPU 524.1% | Mem 945MiB
+
+[run 3/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+9.
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Certificate: RSA 2048 bits
+Negotiated Group: x25519
+Resumption: no
+Application protocol: h3
+
+finished in 5.66s, 1202.60 req/s, 18.63MB/s
+requests: 6013 total, 10109 started, 6013 done, 6012 succeeded, 1 failed, 0 errored, 0 timeout
+status codes: 6147 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 93.15MB (97670045) total, 137.03KB (140315) headers (space savings 76.14%), 92.96MB (97475682) data
+UDP datagram: 15506 sent, 93900 received
+                 min         max         median     p95        p99        mean         sd        +/- sd
+request     :      780us     35.04ms     11.97ms    20.68ms    27.28ms    12.10ms      5.40ms    70.10%
+connect     :     1.31ms     11.75ms      2.68ms     5.87ms    11.75ms     3.17ms      2.17ms    90.63%
+TTFB        :     2.18ms     13.61ms      3.98ms     7.34ms    13.61ms     4.54ms      2.27ms    87.50%
+req/s       :       7.19       20.00       19.98      19.99      20.00      18.78        3.09    87.50%
+min RTT     :       17us      1.13ms       312us      477us     1.13ms      321us       149us    85.94%
+smoothed RTT:      279us      7.13ms      2.28ms     5.38ms     7.13ms     2.67ms      1.65ms    65.63%
+packets sent:         66         444         233        383        444     245.28       72.50    75.00%
+packets recv:        532        1666        1553       1574       1666    1467.19      237.19    87.50%
+packets lost:          0           4           0          2          4       0.23        0.75    89.06%
+GRO packets :          1          17           1          3          5       1.36        0.93    92.12%
+[info] CPU 975.1% | Mem 976MiB
+
+=== Best: 1117 req/s (CPU: 524.1%, Mem: 945MiB) ===
+[info] saved results/static-h3/64/cnetmod-official-static.json
+httparena-bench-cnetmod-official-static
+httparena-bench-cnetmod-official-static
+[info] rebuilding site/data/*.json
+[updated] /var/tmp/cnetmod-h3-retest-static-cache-b1635afd/arena/site/data/frameworks.json
+[updated] /var/tmp/cnetmod-h3-retest-static-cache-b1635afd/arena/site/data/results/cnetmod-official-optimized.json - 1 new, 1 total
+[updated] /var/tmp/cnetmod-h3-retest-static-cache-b1635afd/arena/site/data/results/cnetmod-official-static.json - 1 new, 1 total
+[updated] /var/tmp/cnetmod-h3-retest-static-cache-b1635afd/arena/site/data/current.json
+[info] done

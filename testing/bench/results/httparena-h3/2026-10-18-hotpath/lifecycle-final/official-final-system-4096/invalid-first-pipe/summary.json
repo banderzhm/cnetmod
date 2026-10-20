@@ -1,0 +1,340 @@
+{
+  "valid": false,
+  "allocator": "system",
+  "binary_sha256": "5bf46aeeee227934742969972dfa3e4705d5fb87e66289c9109f41d89f353470",
+  "path_mtu": 4096,
+  "receive_ceiling": 8192,
+  "gso": 1,
+  "framework_order": [
+    [
+      "cnetmod-official-optimized",
+      [
+        "baseline-h3"
+      ]
+    ],
+    [
+      "cnetmod-official-static",
+      [
+        "static-h3"
+      ]
+    ],
+    [
+      "agensio-official-h3",
+      [
+        "baseline-h3",
+        "static-h3"
+      ]
+    ],
+    [
+      "genhttp-ioxide-official-h3",
+      [
+        "baseline-h3",
+        "static-h3"
+      ]
+    ]
+  ],
+  "profiles": [],
+  "commands": [
+    {
+      "argv": [
+        "git",
+        "-C",
+        "/var/tmp/cnetmod-http-arena-8977be27",
+        "rev-parse",
+        "HEAD"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "git",
+        "-C",
+        "/var/tmp/cnetmod-http-arena-8977be27",
+        "diff",
+        "--exit-code",
+        "8977be2721a5aba7b320345cddfcd6f6b654e698",
+        "--",
+        "scripts",
+        "requests",
+        "data/static",
+        "data/dataset.json"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "docker",
+        "ps",
+        "-a",
+        "--filter",
+        "name=httparena-",
+        "--format",
+        "{{.Names}}"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "ss",
+        "-H",
+        "-lun",
+        "sport = :8443"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "pgrep",
+        "-x",
+        "h2load|gcannon|wrk|zrk|ghz|oha"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "docker",
+        "image",
+        "inspect",
+        "sha256:dd75c50576e08009267603a62a55f01e59b7e79891c6eb81420735a78e28b504"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "docker",
+        "image",
+        "inspect",
+        "sha256:72d6de94308798c44f38e98576f132ea1daf4bba07463011eadbb2f859beb8be"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "docker",
+        "image",
+        "inspect",
+        "cnetmod-h3-official-loadgen"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "ldd",
+        "/var/tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "docker",
+        "build",
+        "-t",
+        "cnetmod-final-11b22d441e264aa4974532e10f2a8066-cnetmod-official-optimized",
+        "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-11b22d441e264aa4974532e10f2a8066/cnetmod-official-optimized"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "docker",
+        "image",
+        "inspect",
+        "cnetmod-final-11b22d441e264aa4974532e10f2a8066-cnetmod-official-optimized"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "ldd",
+        "/var/tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "docker",
+        "build",
+        "-t",
+        "cnetmod-final-11b22d441e264aa4974532e10f2a8066-cnetmod-official-static",
+        "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-11b22d441e264aa4974532e10f2a8066/cnetmod-official-static"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "docker",
+        "image",
+        "inspect",
+        "cnetmod-final-11b22d441e264aa4974532e10f2a8066-cnetmod-official-static"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "python",
+        "/mnt/c/Users/25007/.codex/tmp/run_official_h3_isolated.py",
+        "--official",
+        "/var/tmp/cnetmod-http-arena-8977be27",
+        "--stage",
+        "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-11b22d441e264aa4974532e10f2a8066/arena",
+        "--h2load",
+        "/var/tmp/cnetmod-h3-loadgen169/h2load",
+        "--images",
+        "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-11b22d441e264aa4974532e10f2a8066/images.json",
+        "--prepare-only"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "/lib64/ld-linux-x86-64.so.2",
+        "--list",
+        "/var/tmp/cnetmod-h3-loadgen169/h2load"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "uname",
+        "-a"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "lscpu"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "clang++",
+        "--version"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "/var/tmp/cnetmod-h3-loadgen169/h2load",
+        "--version"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "bash",
+        "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-11b22d441e264aa4974532e10f2a8066/arena/scripts/validate.sh",
+        "cnetmod-official-optimized"
+      ],
+      "cwd": "/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-11b22d441e264aa4974532e10f2a8066/arena"
+    },
+    {
+      "argv": [
+        "docker",
+        "ps",
+        "-aq",
+        "--filter",
+        "label=cnetmod.official.run=11b22d441e264aa4974532e10f2a8066"
+      ],
+      "cwd": null
+    },
+    {
+      "argv": [
+        "docker",
+        "ps",
+        "-aq",
+        "--filter",
+        "label=cnetmod.official.run=11b22d441e264aa4974532e10f2a8066"
+      ],
+      "cwd": null
+    }
+  ],
+  "selection": "original official best valid-2xx RPS of three; completed rates also recorded",
+  "source_count": 2209,
+  "actual_head": "d0d920791a1d226711176df47148b5e98a2f8713",
+  "source_diff_sha256": "100fd1aebf87c080d2afba346e3799d74ae40f23d936aed4f0afe62fd8936d68",
+  "image_proof": {
+    "agensio-official-h3": {
+      "id": "sha256:dd75c50576e08009267603a62a55f01e59b7e79891c6eb81420735a78e28b504",
+      "entrypoint": null,
+      "diagnostic_env": {}
+    },
+    "genhttp-ioxide-official-h3": {
+      "id": "sha256:72d6de94308798c44f38e98576f132ea1daf4bba07463011eadbb2f859beb8be",
+      "entrypoint": [
+        "dotnet",
+        "genhttp.dll"
+      ],
+      "diagnostic_env": {}
+    },
+    "cnetmod-official-optimized": {
+      "id": "sha256:af5d9ab4419c283631b0bad6074f58fac217e9adb88ffeff5654fb2e9c526e54",
+      "entrypoint": [
+        "/lib64/ld-linux-x86-64.so.2",
+        "--library-path",
+        "/lib",
+        "/program",
+        "/certs/server.crt",
+        "/certs/server.key",
+        "8443",
+        "32"
+      ],
+      "diagnostic_env": {
+        "CNETMOD_QUIC_MAX_PATH_MTU": "4096",
+        "CNETMOD_QUIC_MAX_UDP_PAYLOAD_SIZE": "8192",
+        "CNETMOD_QUIC_GSO": "1"
+      }
+    },
+    "cnetmod-official-static": {
+      "id": "sha256:ba89bc3fc8f449e9faa1f2f8ec36387c4a2d4d631f092d37d2c0b5ab2600effc",
+      "entrypoint": [
+        "/lib64/ld-linux-x86-64.so.2",
+        "--library-path",
+        "/lib",
+        "/program",
+        "/certs/server.crt",
+        "/certs/server.key",
+        "8443",
+        "32",
+        "/data/static"
+      ],
+      "diagnostic_env": {
+        "CNETMOD_QUIC_MAX_PATH_MTU": "4096",
+        "CNETMOD_QUIC_MAX_UDP_PAYLOAD_SIZE": "8192",
+        "CNETMOD_QUIC_GSO": "1"
+      }
+    }
+  },
+  "validation_image": {
+    "id": "sha256:6c9bb39e8233d39dc8d4fc1a939afc88b467d2ae3eaadedefa78204900875691",
+    "entrypoint": [
+      "/lib64/ld-linux-x86-64.so.2",
+      "--library-path",
+      "/lib",
+      "/program"
+    ],
+    "diagnostic_env": {}
+  },
+  "measured_env": {
+    "SKIP_TUNE": "true",
+    "H2LOAD_H3": "/var/tmp/cnetmod-h3-loadgen169/h2load",
+    "H2LOAD_H3_IMAGE": "sha256:6c9bb39e8233d39dc8d4fc1a939afc88b467d2ae3eaadedefa78204900875691",
+    "DURATION": "5s",
+    "RUNS": "3",
+    "H3THREADS": "64",
+    "GCANNON_CPUS": "16-31",
+    "LOADGEN_DOCKER": "false"
+  },
+  "removed_environment_names": [
+    "SSLKEYLOGFILE",
+    "LD_PRELOAD",
+    "LD_AUDIT"
+  ],
+  "loader_environment": {},
+  "failure": "TimeoutExpired(['bash', '/var/tmp/cnetmod-h3-final-system-official-mtu4096-gso1-11b22d441e264aa4974532e10f2a8066/arena/scripts/validate.sh', 'cnetmod-official-optimized'], 5)",
+  "cleanup": {
+    "removed": [],
+    "remaining": []
+  },
+  "inputs_unchanged": true
+}

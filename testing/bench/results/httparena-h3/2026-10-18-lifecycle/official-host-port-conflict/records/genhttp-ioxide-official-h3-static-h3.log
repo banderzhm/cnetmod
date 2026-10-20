@@ -1,0 +1,29 @@
+[info] available CPUs: 32
+[info] framework: genhttp-ioxide-official-h3 (genhttp-ioxide-official-h3, C#)
+[info] subscribed tests: baseline-h3,static-h3
+[info] building image: httparena-genhttp-ioxide-official-h3
+[info] skipping system tuning as requested (SKIP_TUNE=true)
+
+==============================================
+=== genhttp-ioxide-official-h3 / static-h3 / 64c (tool=h2load-h3) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[warn] genhttp-ioxide-official-h3 did not come up for static-h3; skipping
+
+─── genhttp-ioxide-official-h3 — status=exited exit=139 oom=false error=
+─── genhttp-ioxide-official-h3 — last 120 log lines ───
+  | Unhandled exception. System.InvalidOperationException: bind failed
+  |    at ioxide.Reactor.OpenReusePortListener(UInt16 port, Int32 backlog, Boolean dualStack)
+  |    at ioxide.Reactor.OpenTcpListeners()
+  |    at ioxide.Reactor.Run()
+  |    at System.Threading.Thread.StartCallback(Thread* pThread)
+─── genhttp-ioxide-official-h3 — end of logs ───
+httparena-bench-genhttp-ioxide-official-h3
+httparena-bench-genhttp-ioxide-official-h3
+[info] rebuilding site/data/*.json
+[updated] /var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307365/arena/site/data/frameworks.json
+[updated] /var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307365/arena/site/data/results/cnetmod-official-optimized.json - 1 new, 1 total
+[updated] /var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307365/arena/site/data/results/cnetmod-official-static.json - 1 new, 1 total
+[updated] /var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307365/arena/site/data/current.json
+[info] done

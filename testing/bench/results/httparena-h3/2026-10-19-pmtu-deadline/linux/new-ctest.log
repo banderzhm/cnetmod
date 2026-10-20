@@ -1,0 +1,15 @@
+Test project /tmp/cnetmod-h3-arena-build
+    Start 62: quic_pmtu_deadline_interval
+1/2 Test #62: quic_pmtu_deadline_interval ......   Passed    1.55 sec
+    Start 63: quic_pmtu_deadline_initial
+2/2 Test #63: quic_pmtu_deadline_initial .......   Passed    1.06 sec
+
+100% tests passed out of 2
+
+Label Time Summary:
+http3    =   2.62 sec*proc (2 tests)
+pmtu     =   2.62 sec*proc (2 tests)
+quic     =   2.62 sec*proc (2 tests)
+timer    =   2.62 sec*proc (2 tests)
+
+Total Test time (real) =   2.64 sec

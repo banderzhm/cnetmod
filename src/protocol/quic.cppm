@@ -10,7 +10,7 @@ import std;
 #ifdef CNETMOD_HAS_QUIC
 
 // Basic types and utilities
-export import :types;
+export import :foundation;
 
 // Protocol primitives
 export import :varint;
@@ -26,6 +26,7 @@ export import :stream;
 export import :loss_detection;
 export import :congestion_control;
 export import :flow_control;
+export import :recovery;
 
 #else
 

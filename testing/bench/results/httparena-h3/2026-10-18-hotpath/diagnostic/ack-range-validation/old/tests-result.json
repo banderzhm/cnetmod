@@ -1,0 +1,8 @@
+{
+  "stage": "old",
+  "returncode": 8,
+  "executed": 1,
+  "bad": [
+    "test_quic_loss_detection"
+  ]
+}

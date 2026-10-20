@@ -1,0 +1,29 @@
+[0/2] Re-checking globbed directories...
+[1/394] Generating CXX dyndep file CMakeFiles/cnetmod_runtime.dir/CXX.dd
+[2/258] Generating CXX dyndep file CMakeFiles/cnetmod_quic.dir/CXX.dd
+[3/230] Generating CXX dyndep file 'CMakeFiles/cnetmod_runtime@synth_0.dir/CXX.dd'
+[4/230] Generating CXX dyndep file 'CMakeFiles/cnetmod_quic@synth_0.dir/CXX.dd'
+[5/230] Generating CXX dyndep file testing/tests/CMakeFiles/test_udp_batch.dir/CXX.dd
+[6/229] Generating CXX dyndep file CMakeFiles/cnetmod_http.dir/CXX.dd
+[7/129] Generating CXX dyndep file CMakeFiles/cnetmod_application.dir/CXX.dd
+[8/39] Generating CXX dyndep file CMakeFiles/cnetmod_core.dir/CXX.dd
+[9/37] Generating CXX dyndep file 'CMakeFiles/cnetmod_http@synth_0.dir/CXX.dd'
+[10/37] Generating CXX dyndep file testing/tests/CMakeFiles/test_quic_varint.dir/CXX.dd
+[11/36] Linking CXX executable testing/tests/test_quic_varint
+[12/36] Generating CXX dyndep file testing/tests/CMakeFiles/test_quic_frame.dir/CXX.dd
+[13/35] Linking CXX executable testing/tests/test_quic_frame
+[14/35] Generating CXX dyndep file testing/tests/CMakeFiles/test_quic_packet.dir/CXX.dd
+[15/34] Linking CXX executable testing/tests/test_udp_batch
+[16/34] Generating CXX dyndep file testing/tests/CMakeFiles/test_quic_stream.dir/CXX.dd
+[17/33] Linking CXX executable testing/tests/test_quic_packet
+[18/33] Generating CXX dyndep file testing/tests/CMakeFiles/test_quic_loss_detection.dir/CXX.dd
+[19/32] Linking CXX executable testing/tests/test_quic_loss_detection
+[20/32] Generating CXX dyndep file testing/tests/CMakeFiles/test_quic_congestion.dir/CXX.dd
+[21/31] Linking CXX executable testing/tests/test_quic_congestion
+[22/31] Generating CXX dyndep file testing/tests/CMakeFiles/test_quic_early_data.dir/CXX.dd
+[23/30] Linking CXX executable testing/tests/test_quic_early_data
+[24/30] Generating CXX dyndep file testing/bench/CMakeFiles/arena_h3_server.dir/CXX.dd
+[25/29] Linking CXX executable testing/tests/test_quic_stream
+[26/29] Generating CXX dyndep file testing/http3/CMakeFiles/quic_retire_stream_server.dir/CXX.dd
+[27/28] Linking CXX executable testing/bench/arena_h3_server
+[28/28] Linking CXX executable bin/quic_retire_stream_server

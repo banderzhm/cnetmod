@@ -1,0 +1,113 @@
+[info] available CPUs: 32
+[info] framework: genhttp-ioxide-official-h3 (genhttp-ioxide-official-h3, C#)
+[info] subscribed tests: baseline-h3,static-h3
+[info] building image: httparena-genhttp-ioxide-official-h3
+[info] skipping system tuning as requested (SKIP_TUNE=true)
+
+==============================================
+=== genhttp-ioxide-official-h3 / static-h3 / 64c (tool=h2load-h3) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] server ready
+
+[run 1/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Certificate: RSA 2048 bits
+Negotiated Group: x25519
+Resumption: no
+Application protocol: h3
+
+finished in 5.67s, 190105.00 req/s, 2.88GB/s
+requests: 950525 total, 954621 started, 950525 done, 950525 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 953324 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 14.42GB (15484989771) total, 11.05MB (11583290) headers (space savings 88.33%), 14.40GB (15466756943) data
+UDP datagram: 366404 sent, 13106602 received
+                 min         max         median     p95        p99        mean         sd        +/- sd
+request     :     1.58ms    494.86ms     18.77ms    48.96ms    73.80ms    22.20ms     14.85ms    81.04%
+connect     :     1.03ms      9.12ms      2.58ms     6.45ms     9.12ms     3.00ms      1.62ms    79.69%
+TTFB        :     2.61ms     57.26ms      9.86ms    43.57ms    57.26ms    15.33ms     13.25ms    84.38%
+req/s       :    1319.20     5672.75     2709.47    5194.28    5672.75    2969.98     1116.26    67.19%
+min RTT     :        7us       298us        21us      257us      298us       75us        84us    82.81%
+smoothed RTT:      377us     44.50ms      1.44ms    23.56ms    44.50ms     7.15ms      9.97ms    82.81%
+packets sent:       3133        9237        5527       8654       9237    5727.06     1507.66    68.75%
+packets recv:      94485      382873      186335     348902     382873  204792.66    73029.51    67.19%
+packets lost:          0           0           0          0          0       0.00        0.00   100.00%
+GRO packets :          1          44           1          9          9       2.15        2.50    84.64%
+[info] CPU 1844.0% | Mem 1.3GiB
+
+[run 2/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Certificate: RSA 2048 bits
+Negotiated Group: x25519
+Resumption: no
+Application protocol: h3
+
+finished in 5.68s, 223517.40 req/s, 3.39GB/s
+requests: 1117587 total, 1121683 started, 1117587 done, 1117587 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 1120803 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 16.96GB (18206506758) total, 12.99MB (13618133) headers (space savings 88.33%), 16.94GB (18185131172) data
+UDP datagram: 447692 sent, 15460296 received
+                 min         max         median     p95        p99        mean         sd        +/- sd
+request     :      691us    541.31ms     16.99ms    43.35ms    60.60ms    19.56ms     14.44ms    81.64%
+connect     :      978us      6.47ms      2.72ms     5.04ms     6.47ms     2.72ms      1.22ms    65.63%
+TTFB        :     1.68ms     54.11ms      5.81ms    32.19ms    54.11ms    10.11ms     10.50ms    84.38%
+req/s       :    1150.31     7026.21     3294.69    6531.08    7026.21    3492.05     1636.11    62.50%
+min RTT     :        4us       266us        22us      228us      266us       53us        65us    84.38%
+smoothed RTT:      408us     33.73ms      1.26ms    22.72ms    33.73ms     6.94ms      8.41ms    79.69%
+packets sent:       3780       11774        6739      10476      11774    6997.19     1570.51    76.56%
+packets recv:      83413      467737      229973     438291     467737  241569.12   107419.50    62.50%
+packets lost:          0           0           0          0          0       0.00        0.00   100.00%
+GRO packets :          1          44           1          9          9       2.00        2.35    86.64%
+[info] CPU 1944.2% | Mem 1.4GiB
+
+[run 3/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+.
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Certificate: RSA 2048 bits
+Negotiated Group: x25519
+Resumption: no
+Application protocol: h3
+
+finished in 5.70s, 224439.40 req/s, 3.41GB/s
+requests: 1122197 total, 1126293 started, 1122197 done, 1122197 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 1124916 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 17.03GB (18281208517) total, 13.04MB (13668212) headers (space savings 88.33%), 17.01GB (18259891480) data
+UDP datagram: 456467 sent, 15502448 received
+                 min         max         median     p95        p99        mean         sd        +/- sd
+request     :      658us    612.83ms     16.52ms    41.89ms    67.67ms    19.41ms     14.59ms    84.67%
+connect     :      954us     10.21ms      2.58ms     6.67ms    10.21ms     3.11ms      1.95ms    76.56%
+TTFB        :     1.71ms     49.54ms      5.70ms    30.97ms    49.54ms     9.45ms      9.97ms    87.50%
+req/s       :    1043.96     6884.09     3194.18    5871.40    6884.09    3506.45     1477.65    56.25%
+min RTT     :        6us       277us        42us      258us      277us       78us        82us    84.38%
+smoothed RTT:      420us     44.34ms      1.11ms    28.21ms    44.34ms     7.44ms     10.57ms    78.13%
+packets sent:       3554       15646        6268      12935      15646    7134.30     2810.27    79.69%
+packets recv:      75394      457714      222190     397604     457714  242227.75    97354.06    56.25%
+packets lost:          0           0           0          0          0       0.00        0.00   100.00%
+GRO packets :          1          45           1          9          9       2.11        2.47    85.06%
+[info] CPU 1955.9% | Mem 1.5GiB
+
+=== Best: 197353 req/s (CPU: 1955.9%, Mem: 1.5GiB) ===
+[info] saved results/static-h3/64/genhttp-ioxide-official-h3.json
+httparena-bench-genhttp-ioxide-official-h3
+httparena-bench-genhttp-ioxide-official-h3
+[info] rebuilding site/data/*.json
+[updated] /var/tmp/cnetmod-h3-lifecycle-final05f-1792324258/arena/site/data/frameworks.json
+[updated] /var/tmp/cnetmod-h3-lifecycle-final05f-1792324258/arena/site/data/results/agensio-official-h3.json - 2 new, 2 total
+[updated] /var/tmp/cnetmod-h3-lifecycle-final05f-1792324258/arena/site/data/results/cnetmod-official-optimized.json - 1 new, 1 total
+[updated] /var/tmp/cnetmod-h3-lifecycle-final05f-1792324258/arena/site/data/results/cnetmod-official-static.json - 1 new, 1 total
+[updated] /var/tmp/cnetmod-h3-lifecycle-final05f-1792324258/arena/site/data/results/genhttp-ioxide-official-h3.json - 2 new, 2 total
+[updated] /var/tmp/cnetmod-h3-lifecycle-final05f-1792324258/arena/site/data/current.json
+[info] done

@@ -1,0 +1,145 @@
+{
+  "valid": true,
+  "test_binary": "/var/tmp/cnetmod-h3-arena-build/testing/tests/test_udp_batch",
+  "test_sha": "fb2fb189d0b2e51546d67efa79f08db3c8c3955249b6897f0dda1616fa242933",
+  "shim": "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-gso-validation-1fdab0ae660649bf83f09840e8459d4f/system-allocator/gso_fault.so",
+  "shim_sha": "5cde872d79c707b26bee8fe38552677bb1ba64848004930ec10a7c02fde2443e",
+  "runs": [
+    {
+      "mode": "observe",
+      "filter": "udp_segmented_batch_preserves_ipv4_ipv6_tail_empty_peer_and_cap_boundaries",
+      "command": [
+        "/var/tmp/cnetmod-h3-arena-build/testing/tests/test_udp_batch"
+      ],
+      "valid": true,
+      "returncode": 0,
+      "interception": {
+        "kernel_messages": 1,
+        "gso_messages": 1,
+        "stride": 1472,
+        "original_iovs": 16,
+        "bytes": 23552
+      },
+      "real_syscall_accepted_first_group": true
+    },
+    {
+      "mode": "EMSGSIZE",
+      "filter": "udp_segmented_batch_preserves_ipv4_ipv6_tail_empty_peer_and_cap_boundaries",
+      "command": [
+        "/var/tmp/cnetmod-h3-arena-build/testing/tests/test_udp_batch"
+      ],
+      "valid": true,
+      "returncode": 0,
+      "interception": {
+        "kernel_messages": 1,
+        "gso_messages": 1,
+        "stride": 1472,
+        "original_iovs": 16,
+        "bytes": 23552
+      },
+      "injected_zero_progress_errno": "EMSGSIZE"
+    },
+    {
+      "mode": "ENOPROTOOPT",
+      "filter": "udp_segmented_batch_preserves_ipv4_ipv6_tail_empty_peer_and_cap_boundaries",
+      "command": [
+        "/var/tmp/cnetmod-h3-arena-build/testing/tests/test_udp_batch"
+      ],
+      "valid": true,
+      "returncode": 0,
+      "interception": {
+        "kernel_messages": 1,
+        "gso_messages": 1,
+        "stride": 1472,
+        "original_iovs": 16,
+        "bytes": 23552
+      },
+      "injected_zero_progress_errno": "ENOPROTOOPT"
+    },
+    {
+      "mode": "EOPNOTSUPP",
+      "filter": "udp_segmented_batch_preserves_ipv4_ipv6_tail_empty_peer_and_cap_boundaries",
+      "command": [
+        "/var/tmp/cnetmod-h3-arena-build/testing/tests/test_udp_batch"
+      ],
+      "valid": true,
+      "returncode": 0,
+      "interception": {
+        "kernel_messages": 1,
+        "gso_messages": 1,
+        "stride": 1472,
+        "original_iovs": 16,
+        "bytes": 23552
+      },
+      "injected_zero_progress_errno": "EOPNOTSUPP"
+    },
+    {
+      "mode": "EINVAL",
+      "filter": "udp_segmented_batch_preserves_ipv4_ipv6_tail_empty_peer_and_cap_boundaries",
+      "command": [
+        "/var/tmp/cnetmod-h3-arena-build/testing/tests/test_udp_batch"
+      ],
+      "valid": true,
+      "returncode": 0,
+      "interception": {
+        "kernel_messages": 1,
+        "gso_messages": 1,
+        "stride": 1472,
+        "original_iovs": 16,
+        "bytes": 23552
+      },
+      "injected_zero_progress_errno": "EINVAL"
+    },
+    {
+      "mode": "EIO",
+      "filter": "udp_segmented_batch_preserves_ipv4_ipv6_tail_empty_peer_and_cap_boundaries",
+      "command": [
+        "/var/tmp/cnetmod-h3-arena-build/testing/tests/test_udp_batch"
+      ],
+      "valid": true,
+      "returncode": 0,
+      "interception": {
+        "kernel_messages": 1,
+        "gso_messages": 1,
+        "stride": 1472,
+        "original_iovs": 16,
+        "bytes": 23552
+      },
+      "injected_zero_progress_errno": "EIO"
+    },
+    {
+      "mode": "EAGAIN",
+      "filter": "udp_segmented_batch_preserves_ipv4_ipv6_tail_empty_peer_and_cap_boundaries",
+      "command": [
+        "/var/tmp/cnetmod-h3-arena-build/testing/tests/test_udp_batch"
+      ],
+      "valid": true,
+      "returncode": 0,
+      "interception": {
+        "kernel_messages": 1,
+        "gso_messages": 1,
+        "stride": 1472,
+        "original_iovs": 16,
+        "bytes": 23552
+      },
+      "injected_zero_progress_errno": "EAGAIN"
+    },
+    {
+      "mode": "prefix",
+      "filter": "udp_segmented_batch_reports_original_prefix_and_preserves_early_cancel",
+      "command": [
+        "/var/tmp/cnetmod-h3-arena-build/testing/tests/test_udp_batch"
+      ],
+      "valid": true,
+      "returncode": 0,
+      "interception": {
+        "kernel_messages": 2,
+        "gso_messages": 2,
+        "stride": 1472,
+        "original_iovs": 3,
+        "bytes": 4416
+      },
+      "real_syscall_accepted_first_group": true
+    }
+  ]
+}

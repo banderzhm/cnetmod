@@ -1,0 +1,55 @@
+{
+  "scope": "native frozen conditional binary, no counter instrumentation, no gdb attachment; independent retention test",
+  "samples": [
+    {
+      "name": "initial",
+      "time": 1792312587.770704,
+      "rss": 53243904,
+      "private": 50720768
+    },
+    {
+      "name": "round-1-idle-2s",
+      "time": 1792312590.710905,
+      "rss": 183902208,
+      "private": 181325824
+    },
+    {
+      "name": "round-2-idle-2s",
+      "time": 1792312593.834052,
+      "rss": 200704000,
+      "private": 198127616
+    },
+    {
+      "name": "round-3-idle-2s",
+      "time": 1792312596.7821157,
+      "rss": 200704000,
+      "private": 198127616
+    },
+    {
+      "name": "failure-immediate",
+      "time": 1792312598.8871782,
+      "rss": 203943936,
+      "private": 201367552
+    },
+    {
+      "name": "failure-idle-35s",
+      "time": 1792312633.8878467,
+      "rss": 203943936,
+      "private": 201367552
+    }
+  ],
+  "rounds": [
+    {
+      "index": 1,
+      "requests": 200000
+    },
+    {
+      "index": 2,
+      "requests": 200000
+    },
+    {
+      "index": 3,
+      "requests": 200000
+    }
+  ]
+}

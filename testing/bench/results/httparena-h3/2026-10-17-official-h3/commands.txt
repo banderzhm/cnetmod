@@ -1,0 +1,41 @@
+Acquire the single benchmark token; keep other benchmarks and builds stopped.
+Official checkout: /tmp/cnetmod-http-arena at 8977be2721a5aba7b320345cddfcd6f6b654e698.
+Cnetmod checkout: fix/http3-arena-performance, production fix baa4638c.
+Cnetmod build flags and compiler/tool identities: environment.json and manifest.json.
+
+Build:
+cmake --build /tmp/cnetmod-h3-arena-build --target arena_h3_server http3_e2e_server http_client_http3_e2e h3_interop_server h3_interop_client test_quic_stream -j4
+& "D:/runtime/vs/Microsoft Visual Studio/18/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe" --build C:/Users/25007/.codex/tmp/cnetmod-h3-windows --config Release --target arena_h3_server h3_interop_server h3_interop_client http3_e2e_server http_client_http3_e2e test_quic_packet test_quic_stream test_quic_frame test_quic_loss_detection test_quic_congestion test_http3_qpack test_http3_frame -- /m:1
+
+agensio uses the pinned official framework directory with ENV CMAKE_BUILD_PARALLEL_LEVEL=4 inserted only in the build stage:
+docker build --network host -t cnetmod-h3-official-agensio /var/tmp/cnetmod-h3-official/agensio
+The first bridge-network build failed against the machine's loopback proxy; host-network retry succeeded. Both logs are preserved.
+
+Image preparation:
+python prepare-images.py
+The preserved baseline executable comes from SDK 5c969d4ac3b772963df80ff66c93fc8165901dc1 with the original baseline adapter at f5c57a21. Rebuild that combination in an isolated checkout if the preserved binary is unavailable. The current benchmark adapter's argc=5 synchronous baseline handler keeps the same query-parsing workload; argc=6 adds static fixtures. Every exact image ID is in records/images.json.
+Create /var/tmp/cnetmod-h3-official/gai.conf containing:
+precedence ::ffff:0:0/96 100
+
+Supplemental byte checks, outside timing:
+unshare --mount bash run-isolated.sh python testing/bench/probe_official_h3.py --stage /var/tmp/cnetmod-h3-official/arena --images /var/tmp/cnetmod-h3-official/images.json
+
+Official validation + seven sequential profile invocations (three rounds each):
+unshare --mount bash run-isolated.sh python testing/bench/run_official_h3.py --official /tmp/cnetmod-http-arena --stage /var/tmp/cnetmod-h3-official/arena --h2load /tmp/cnetmod-h3-loadgen169/src/h2load --images /var/tmp/cnetmod-h3-official/images.json
+
+Release the test token when the driver finishes and all owned benchmark containers exit.
+Do not rerun a bad round to improve the reported score.
+
+Summary only (does not generate traffic):
+python testing/bench/summarize_official_h3.py --stage /var/tmp/cnetmod-h3-official/arena
+The official selected JSON is copied under official-selected/; the full native h2load output for all 21 rounds is in records/. Summary includes the exact official metric plus completed-body and error counters.
+
+Low-load final checks after the token was released:
+- Linux six-peer acceptance: exact argv and result in records/linux-all-peers-command.json and records/linux-all-peers-1.json.
+- Linux QUIC stream boundary unit + ordinary/dynamic-QPACK 300 KiB E2E: cnetmod-final-e2e.log.
+- Windows 13-entry Release CTest selection: windows-ctest-details.log records exact commands; windows-release-config.txt records flags. No Debug run.
+- python tools/generate_agents.py --check
+- python tools/release/check_version.py
+- git diff --check
+
+Wrapper maintenance after timing only adds shell quoting for fixed image aliases and a resource/listener guard. The executed official-driver patch, workload, data, measured argv, parser and winner selection are unchanged and preserved.

@@ -9,7 +9,7 @@ import std;
 import cnetmod.core.buffer;
 import cnetmod.coro.task;
 import cnetmod.coro.channel;
-import :types;
+import :foundation;
 
 namespace cnetmod::quic {
 
@@ -29,6 +29,8 @@ export enum class stream_state
 // =============================================================================
 // QUIC Stream Interface
 // =============================================================================
+
+export class quic_connection;
 
 export class quic_stream
 {
@@ -83,10 +85,14 @@ public:
         bool fin) -> std::expected<void, std::error_code>;
     auto reset_remote(std::uint64_t final_size) -> std::expected<void, std::error_code>;
     void stop_local() noexcept;
+    void abandon_receive() noexcept;
+    [[nodiscard]] auto receive_abandoned() const noexcept -> bool;
 
     /// Set peer-advertised send credit.  This is independent from the local
     /// receive window used by push_received().
     void update_send_limit(std::uint64_t maximum) noexcept;
+    /// Set the peer's initial credit during stream creation, before sending.
+    void set_initial_send_limit(std::uint64_t maximum) noexcept;
     void set_initial_receive_limit(std::uint64_t maximum) noexcept;
     void extend_receive_limit(std::uint64_t maximum) noexcept;
 
@@ -108,6 +114,7 @@ public:
 
     /// Get remaining receive window
     [[nodiscard]] auto remaining_receive_window() const noexcept -> std::uint64_t;
+    [[nodiscard]] auto remaining_send_window() const noexcept -> std::uint64_t;
 
     /// Total bytes received
     [[nodiscard]] auto bytes_received() const noexcept -> std::uint64_t;
@@ -123,6 +130,15 @@ public:
     [[nodiscard]] auto is_bidirectional() const noexcept -> bool;
 
 private:
+    friend class quic_connection;
+
+    /// Internal owner-only bookkeeping; public task operations remain lazy.
+    auto apply_send_state(std::span<const std::byte> data)
+        -> std::expected<void, std::error_code>;
+    auto apply_close_local_state() -> void;
+    auto apply_receive_state(mutable_buffer buf)
+        -> std::expected<std::size_t, std::error_code>;
+
     struct impl
     {
         stream_id id_;
@@ -137,6 +153,7 @@ private:
         std::uint64_t next_expected_offset_ = 0;
         std::uint64_t highest_received_offset_ = 0;
         std::optional<std::uint64_t> final_size_;
+        bool receive_abandoned_{};
 
         // Send queue
         std::deque<std::pair<std::uint64_t, std::vector<std::byte>>> send_queue_;

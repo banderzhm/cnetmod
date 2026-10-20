@@ -58,8 +58,8 @@ public:
     auto statement_result_map(std::string_view id) const -> std::string_view;
 
     /// Whether the model's logical-delete interceptor applies to this XML
-    /// statement. Defaults to true; set logicalDelete="false" on a statement
-    /// that owns an alias-qualified or join-specific predicate itself.
+    /// statement. Defaults to true; set logicalDelete="false" when the
+    /// statement owns an alias-qualified or join-specific predicate.
     auto statement_logical_delete(std::string_view id) const -> bool;
 
     /// Look up a MyBatis-style <resultMap>. Both "MapId" (when unique in the

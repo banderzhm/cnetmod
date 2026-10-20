@@ -1,0 +1,45 @@
+[
+  {
+    "case": "pto-full",
+    "workers": 1,
+    "restart": false,
+    "client_forwarded": 9,
+    "client_blocked": 0,
+    "client_forwarded_while_gated": 0,
+    "server_forwarded_while_gated": 4,
+    "response_datagrams_dropped": 1,
+    "socket_errors": [],
+    "decode_errors": [],
+    "retransmitted_stream_frames": [
+      {
+        "offset": 0,
+        "length": 1166,
+        "fin": true
+      },
+      {
+        "offset": 0,
+        "length": 1166,
+        "fin": true
+      }
+    ],
+    "control_only_after_drop": 2,
+    "request_fin_acked": true,
+    "gate_at_ms": 100.70842699997229,
+    "client_forwarded_at_gate": 8,
+    "dropped_packet_number": 8,
+    "dropped_datagram_bytes": 1199,
+    "dropped_stream_frames": [
+      {
+        "offset": 0,
+        "length": 1166,
+        "fin": true
+      }
+    ],
+    "drop_at_ms": 1200.578600999961,
+    "response_at_ms": 1230.8646959999123,
+    "client_forwarded_at_response": 8,
+    "response_body": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "listener_healthy": true,
+    "status": "passed"
+  }
+]

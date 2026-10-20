@@ -1,0 +1,2 @@
+[ perf record: Woken up 1 times to write data ]
+[ perf record: Captured and wrote 1.773 MB /var/tmp/cnetmod-h3-large-mtu-perf-c6333e93d31b45c689c0146783514018/static-perf.data (10671 samples) ]

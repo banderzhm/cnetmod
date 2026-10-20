@@ -1,0 +1,8 @@
+[
+  "cmake",
+  "-S",
+  "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod",
+  "-B",
+  "/tmp/cnetmod-h3-arena-build",
+  "-DCNETMOD_USE_MIMALLOC=OFF"
+]

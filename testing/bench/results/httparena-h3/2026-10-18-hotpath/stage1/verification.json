@@ -1,0 +1,38 @@
+{
+  "scope": "stage1 padding fast path and cold listener cleanup; diagnostics are not official rankings",
+  "windows": {
+    "passed": 24,
+    "failed": 0,
+    "cold_before": [
+      0,
+      4,
+      3,
+      0,
+      2,
+      0
+    ],
+    "cold_after": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "linux": {
+    "cold_passed": true,
+    "padding_lifecycle_passed": true,
+    "focused_log_note": "Initial combined run failed due to fixture startup race; fixed cold test passed separately.",
+    "negative_control": "Connection failed before cleanup assertion; not counted as evidence."
+  },
+  "columns": [
+    "active_connections",
+    "retained_reset_routes",
+    "pending_initial_routes",
+    "pending_connection_timers",
+    "active_connection_inboxes",
+    "retired_dispatch_routes"
+  ],
+  "perf_self_format": "Whitespace collapsed only; raw perf.data and call stacks retained in local diagnostic directory."
+}

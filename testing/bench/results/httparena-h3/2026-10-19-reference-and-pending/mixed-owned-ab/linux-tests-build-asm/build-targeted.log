@@ -1,0 +1,10 @@
+[0/2] Re-checking globbed directories...
+[1/36] Scanning /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_send_pipeline.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_send_pipeline.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[2/36] Generating CXX dyndep file CMakeFiles/cnetmod_quic.dir/CXX.dd
+[3/6] Building CXX object CMakeFiles/cnetmod_quic.dir/src/protocol/quic/quic_send_pipeline.cpp.o
+[4/6] Linking CXX static library libcnetmod_quic.a
+[5/6] Linking CXX executable testing/tests/test_quic_frame
+[6/6] Linking CXX executable testing/tests/test_quic_loss_detection

@@ -1,0 +1,15 @@
+Test project C:/Users/25007/.codex/tmp/cnetmod-h3-windows
+    Start 62: quic_pmtu_deadline_interval
+1/2 Test #62: quic_pmtu_deadline_interval ......   Passed    1.00 sec
+    Start 63: quic_pmtu_deadline_initial
+2/2 Test #63: quic_pmtu_deadline_initial .......   Passed    1.01 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Label Time Summary:
+http3    =   2.01 sec*proc (2 tests)
+pmtu     =   2.01 sec*proc (2 tests)
+quic     =   2.01 sec*proc (2 tests)
+timer    =   2.01 sec*proc (2 tests)
+
+Total Test time (real) =   2.03 sec

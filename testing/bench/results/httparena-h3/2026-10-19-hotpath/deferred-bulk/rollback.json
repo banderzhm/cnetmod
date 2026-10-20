@@ -1,0 +1,15 @@
+{
+  "decision": "REJECTED: 4K static no stable benefit; baseline-H3 two throughput pairs and all three p99 pairs regress; 65K throughput gain does not establish overall improvement.",
+  "reverted_patch_sha256": "3f0aefad9df3d885dd092dc123876e8379d4e17d1cf941ab57c5439285477746",
+  "production_restored_to_head": "ac465be68f2b89ec54df344dde3e33b3e7760e2f",
+  "connection_sha256": "50cd8c3ba2cc226c45e83a483ba4c04665e229b76aae69ebf4523170abb7f1c2",
+  "observation_scope": "Immediately after exact reverse and git diff HEAD exit0, before the next mixed-prefix owner applied its independent candidate.",
+  "connection_diff_against_head_exit": 0,
+  "committed_by_agent": false,
+  "execution_window_released": true,
+  "mutable_build_warning": "Linux current build and Windows current build still contain rejected candidate; use frozen guard2fa51db or rebuild for next source identity.",
+  "windows_frozen_binary_hashes_verified": 26,
+  "windows_recorded_sources_before_after_equal": true,
+  "windows_recorded_source_count": 5,
+  "previous_partial_manifest_sha256": "0d3062a597e1ef0aca35e68ade7acce0dec209fb20d964f5a0edded93412f87b"
+}

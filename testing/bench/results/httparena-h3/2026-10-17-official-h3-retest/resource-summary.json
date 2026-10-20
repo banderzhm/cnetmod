@@ -1,0 +1,55 @@
+{
+  "8525da3b": {
+    "httparena-bench-cnetmod-official-baseline": {
+      "samples": 17,
+      "first_rss_mib": 619.32,
+      "last_rss_mib": 4296.03,
+      "max_rss_mib": 4296.03,
+      "elapsed_sample_span_s": 29.14
+    },
+    "httparena-bench-cnetmod-official-optimized": {
+      "samples": 17,
+      "first_rss_mib": 642.05,
+      "last_rss_mib": 955.14,
+      "max_rss_mib": 955.14,
+      "elapsed_sample_span_s": 28.74
+    },
+    "httparena-bench-cnetmod-official-static": {
+      "samples": 18,
+      "first_rss_mib": 619.58,
+      "last_rss_mib": 1270.71,
+      "max_rss_mib": 1315.16,
+      "elapsed_sample_span_s": 31.09
+    },
+    "httparena-bench-agensio-official-h3": {
+      "samples": 28,
+      "first_rss_mib": 11.88,
+      "last_rss_mib": 91.64,
+      "max_rss_mib": 169.48,
+      "elapsed_sample_span_s": 52.65
+    },
+    "httparena-bench-genhttp-ioxide-official-h3": {
+      "samples": 22,
+      "first_rss_mib": 105.16,
+      "last_rss_mib": 1491.68,
+      "max_rss_mib": 1492.7,
+      "elapsed_sample_span_s": 54.6
+    }
+  },
+  "ea419cb4": {
+    "httparena-bench-cnetmod-official-optimized": {
+      "samples": 16,
+      "first_rss_mib": 647.19,
+      "last_rss_mib": 955.77,
+      "max_rss_mib": 955.77,
+      "elapsed_sample_span_s": 28.51
+    },
+    "httparena-bench-cnetmod-official-static": {
+      "samples": 18,
+      "first_rss_mib": 642.04,
+      "last_rss_mib": 1297.45,
+      "max_rss_mib": 1327.19,
+      "elapsed_sample_span_s": 29.9
+    }
+  }
+}

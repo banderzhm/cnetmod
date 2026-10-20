@@ -1,0 +1,207 @@
+[
+  {
+    "path": "applied-sources/src/protocol/quic/loss_detection.cpp",
+    "bytes": 3785,
+    "sha256": "a425c6baa0c8ef5c40311d11d0b56de53126dfc80fdc7144e244388b9583b432"
+  },
+  {
+    "path": "applied-sources/src/protocol/quic/loss_detection.cppm",
+    "bytes": 20470,
+    "sha256": "81b2090c49c28ed28dadca2685b63c299850527222adee0d5e0df65916a1898e"
+  },
+  {
+    "path": "applied-sources/testing/tests/test_quic_loss_detection.cpp",
+    "bytes": 36123,
+    "sha256": "a18340485720d315b887a38e9cf0c450e93d0595424427b7bc176b592ae89f46"
+  },
+  {
+    "path": "before-loss_detection.cpp",
+    "bytes": 3016,
+    "sha256": "701c254bf894966ff52a28a850848df63f0f4ae3eeaeeab04baa6c8125817cfb"
+  },
+  {
+    "path": "before-loss_detection.cppm",
+    "bytes": 20314,
+    "sha256": "0bd16c5cc653b15da74a85a36c6761e15d09cbd9e6c3fc0ddbe4d22f9b8e342c"
+  },
+  {
+    "path": "before-test_quic_loss_detection.cpp",
+    "bytes": 28990,
+    "sha256": "5d662a495c13eb949c069ab59af6836bc3db827653ac23c3cc5c9ab5dabe20df"
+  },
+  {
+    "path": "cnetmod-quic-ack-validation-archive.py",
+    "bytes": 7249,
+    "sha256": "499bb12b5d580135c5631af29659845fc4b442a53a10a770c8f77e35c8ac597a"
+  },
+  {
+    "path": "cnetmod-quic-ack-validation-prepare.py",
+    "bytes": 11861,
+    "sha256": "4e19320237b155bb898b09da1f24dc4d87550317c563bfa957024de93c0d8ce5"
+  },
+  {
+    "path": "cnetmod-quic-ack-validation-run.py",
+    "bytes": 2915,
+    "sha256": "db39ccdfea421402c423630c66b49ad207bfaec5a4e00d0b61aa229b28c21df3"
+  },
+  {
+    "path": "diff-check.txt",
+    "bytes": 60,
+    "sha256": "f8e322e30440a371d6f75bb667f7f94c101830df35f13bf0499e0c769effc67d"
+  },
+  {
+    "path": "identity.json",
+    "bytes": 502,
+    "sha256": "7991404d619b05ffa99f97c3fb503c00b94714bf7dd4c4f1176f51fd1e83d0ef"
+  },
+  {
+    "path": "new/binaries.json",
+    "bytes": 579,
+    "sha256": "eb7f35e4d479c1877ef682cf3513947bc6335895f55697922b4e31cfb9b2297d"
+  },
+  {
+    "path": "new/build-command.json",
+    "bytes": 133,
+    "sha256": "b0fa0d4c5c0cf3bd3bb13886fa0759c43ec9ed197bd87a85514079463e7cb34f"
+  },
+  {
+    "path": "new/build-result.json",
+    "bytes": 57,
+    "sha256": "993fb52474efdfe6837c8cbad97da6c21ae9c8ed51c0a90800e0fbb087af8fe4"
+  },
+  {
+    "path": "new/build.log",
+    "bytes": 3495,
+    "sha256": "92a39e6e200e47e95fe2f8ec136d9c261c76b4059b028e0bcc1ec78b29ee96d9"
+  },
+  {
+    "path": "new/CMakeCache.txt",
+    "bytes": 46777,
+    "sha256": "ac8af21f0b9f76a9894ebbcf66b4e9bd60ba27c88c9b592ff96d58ae204fee52"
+  },
+  {
+    "path": "new/tests-command.json",
+    "bytes": 259,
+    "sha256": "e7c75490f3ec5d263a6ebc6f56280367ca51280ca29389d1771afbe28c980753"
+  },
+  {
+    "path": "new/tests-list.json",
+    "bytes": 1778,
+    "sha256": "293ccb26eca68265e44262aaffa9bea9f3d45d84a159ab1e1a30fe4b0ab1961d"
+  },
+  {
+    "path": "new/tests-result.json",
+    "bytes": 70,
+    "sha256": "de24b995673da780d8054652d66d7e366015f4e4d76b8b9ac0a5dcd5172f682e"
+  },
+  {
+    "path": "new/tests.log",
+    "bytes": 421,
+    "sha256": "e0603ba1b20dea4ed119a761608be1941bea14452ea1087c4930f8633126dd55"
+  },
+  {
+    "path": "new/tests.xml",
+    "bytes": 4023,
+    "sha256": "a5b314a27ceab031cabbcfeaed4ad88ae12c35df1fa595a0dab43b54461871a9"
+  },
+  {
+    "path": "old/binaries.json",
+    "bytes": 203,
+    "sha256": "79c9211e271a40a9739ab28e0cf82a9491b0697e5f7dc69ed7e4a88e029a4aef"
+  },
+  {
+    "path": "old/build-command.json",
+    "bytes": 85,
+    "sha256": "45088251dc0d9539f47c4f10699dcb0f50c160a5c980dbbb4d70a46d5cfdc658"
+  },
+  {
+    "path": "old/build-result.json",
+    "bytes": 57,
+    "sha256": "0db776d220c380ec958d472b3b5ca97e9f7c59c2ccb2e7e5076a40bfd2315f2a"
+  },
+  {
+    "path": "old/build.log",
+    "bytes": 705,
+    "sha256": "c47e85e14f401173f6a684c7ba62de2835baabe04926110003465e4a18cafed8"
+  },
+  {
+    "path": "old/CMakeCache.txt",
+    "bytes": 46777,
+    "sha256": "ac8af21f0b9f76a9894ebbcf66b4e9bd60ba27c88c9b592ff96d58ae204fee52"
+  },
+  {
+    "path": "old/tests-command.json",
+    "bytes": 221,
+    "sha256": "243d9abf0f38f3f722c55b275abfe4067a05b4b3b948e61b3ffae5d3c12fc09a"
+  },
+  {
+    "path": "old/tests-list.json",
+    "bytes": 816,
+    "sha256": "0bbcbe54067d812e9d32010ac1108f686270613990f61cdb99d8c69d39dc073d"
+  },
+  {
+    "path": "old/tests-result.json",
+    "bytes": 104,
+    "sha256": "ec596418c3e136043fb11a9b62d04a1d0f273b2fb37cf28dd84a770bc412b93d"
+  },
+  {
+    "path": "old/tests.log",
+    "bytes": 10598,
+    "sha256": "9c58e4dbdaeba157b1cdc7dee51a49554fe360ef0df4e831a9c20fa68fe1a613"
+  },
+  {
+    "path": "old/tests.xml",
+    "bytes": 10666,
+    "sha256": "a4dc1163beafcf6e9d623869be8a85aa3440845cf013c056c17e26a33e689f4c"
+  },
+  {
+    "path": "prepared/combined.patch",
+    "bytes": 11125,
+    "sha256": "c174518d78f7142f6e21d6b01cf9167baeb99fabe8d876e410b7bd13805a900f"
+  },
+  {
+    "path": "prepared/fix.patch",
+    "bytes": 3517,
+    "sha256": "d2e4eb3fd401e560ecdbd92be9744b77af72971792d26a99e30098a06d2f5b09"
+  },
+  {
+    "path": "prepared/inputs.json",
+    "bytes": 759,
+    "sha256": "aa12a8ee06576f2092bc75b4882d99c0d5f36b474b1960cc995fab4058360eea"
+  },
+  {
+    "path": "prepared/sources/src/protocol/quic/loss_detection.cpp",
+    "bytes": 3668,
+    "sha256": "2733f79df46771849c8f45256b4a38537a32412fbf8099ded045415df16d338c"
+  },
+  {
+    "path": "prepared/sources/src/protocol/quic/loss_detection.cppm",
+    "bytes": 19928,
+    "sha256": "f0f78a6f5943d0928d6b740515bf1e008eae073e0850a4b404f726ee5083d86e"
+  },
+  {
+    "path": "prepared/sources/testing/tests/test_quic_loss_detection.cpp",
+    "bytes": 35264,
+    "sha256": "46a121b5a977c2079cbfed8c23eb578a2481c3fcc9774a5d7fe7685d6337f682"
+  },
+  {
+    "path": "prepared/tests.patch",
+    "bytes": 7608,
+    "sha256": "41bb1e084279f2826c958ae894784c9bf11c3b66aecbd89d88a67bcfac6879f7"
+  },
+  {
+    "path": "README.md",
+    "bytes": 3086,
+    "sha256": "5f36f47b91c4344af493d78970a61d9043b30e891056a7fc662c63f5491fb92e"
+  },
+  {
+    "path": "results.json",
+    "bytes": 1182,
+    "sha256": "973754a999f472c0e291db10e27ba125f5bc9cc3d8dc0335cf14c29c31974b9e"
+  },
+  {
+    "path": "source-manifest.json",
+    "bytes": 1757,
+    "sha256": "d6c383713d697ff26c123b47d031e02b27233ab360437390bb48a780c2f23b35"
+  }
+]

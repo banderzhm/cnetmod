@@ -1,0 +1,39 @@
+{
+  "output": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-pmtu-final-system-windows-20261018-ffa91ab479f4422791aaeacc51dbe847\\run-653c4f3eda064e8280a601cdc3f0d82b",
+  "results": [
+    {
+      "name": "cnetmod-server_to_curl-http3",
+      "status": "passed",
+      "cnetmod_platform": "Windows",
+      "peer_platform": "Windows/native",
+      "workers": 1,
+      "address": "127.0.0.1",
+      "detail": "request and response validated",
+      "logs": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-pmtu-final-system-windows-20261018-ffa91ab479f4422791aaeacc51dbe847\\run-653c4f3eda064e8280a601cdc3f0d82b\\cnetmod-server_to_curl-http3",
+      "elapsed_ms": 1087
+    },
+    {
+      "name": "cnetmod-server_to_nghttp3-client",
+      "status": "passed",
+      "cnetmod_platform": "Windows",
+      "peer_platform": "WSL/Linux",
+      "workers": 1,
+      "address": "127.0.0.1",
+      "detail": "request and response validated",
+      "logs": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-pmtu-final-system-windows-20261018-ffa91ab479f4422791aaeacc51dbe847\\run-653c4f3eda064e8280a601cdc3f0d82b\\cnetmod-server_to_nghttp3-client",
+      "elapsed_ms": 1407
+    },
+    {
+      "name": "nghttp3-server_to_cnetmod-client",
+      "status": "passed",
+      "cnetmod_platform": "Windows",
+      "peer_platform": "WSL/Linux",
+      "workers": 1,
+      "address": "127.0.0.1",
+      "detail": "request and response validated",
+      "logs": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-pmtu-final-system-windows-20261018-ffa91ab479f4422791aaeacc51dbe847\\run-653c4f3eda064e8280a601cdc3f0d82b\\nghttp3-server_to_cnetmod-client",
+      "elapsed_ms": 1565
+    }
+  ],
+  "cleanup_errors": []
+}

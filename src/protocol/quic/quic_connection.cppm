@@ -18,8 +18,9 @@ import cnetmod.coro.cancel;
 import cnetmod.coro.channel;
 import cnetmod.coro.mutex;
 import cnetmod.coro.shared_mutex;
+export import cnetmod.protocol.quic.send_pipeline;
 import cnetmod.protocol.udp;
-import :types;
+import :foundation;
 import :frame;
 import :packet;
 import :crypto;
@@ -43,60 +44,34 @@ export enum class connection_state
     closed       // Closed completely
 };
 
-/// Weighted RFC 9218 service budget used by the connection-local stream
-/// scheduler. Urgency 0 keeps its first-packet preference, while every
-/// non-empty lower-priority class receives service in the same bounded epoch.
-/// It contains no synchronization: one QUIC connection owns it through its
-/// serialized protocol execution domain.
-export class priority_service_budget
-{
-public:
-    static constexpr std::array<std::uint8_t, 8> quantum{
-        16U, 8U, 4U, 2U, 1U, 1U, 1U, 1U};
-
-    [[nodiscard]] auto take_next(const std::array<bool, 8>& ready)
-        -> std::optional<std::uint8_t>
-    {
-        for (unsigned epoch{}; epoch < 2U; ++epoch)
-        {
-            for (std::uint8_t urgency{}; urgency < credits_.size(); ++urgency)
-            {
-                if (ready[urgency] && credits_[urgency] != 0U)
-                {
-                    --credits_[urgency];
-                    return urgency;
-                }
-            }
-            if (!std::ranges::any_of(ready, [](bool value)
-                    {
-                        return value;
-                    }))
-                return std::nullopt;
-            credits_ = quantum;
-        }
-        return std::nullopt;
-    }
-
-    /// Return a reservation when packet construction did not consume it.
-    void restore(std::uint8_t urgency) noexcept
-    {
-        urgency = std::min<std::uint8_t>(urgency, 7U);
-        credits_[urgency] = std::min<std::uint8_t>(quantum[urgency],
-            static_cast<std::uint8_t>(credits_[urgency] + 1U));
-    }
-
-    void reset() noexcept
-    {
-        credits_ = quantum;
-    }
-
-private:
-    std::array<std::uint8_t, 8> credits_{quantum};
-};
-
 // =============================================================================
 // QUIC Connection - Main async coordinator
 // =============================================================================
+
+/// Closed IDs remain closed for the connection lifetime. Adjacent IDs of each
+/// stream type coalesce; only a bounded recent window retains final sizes.
+/// RFC 9000 section 4.5 permits forgetting final sizes of closed streams.
+export class retired_stream_history
+{
+public:
+    struct final_sizes
+    {
+        std::uint64_t received_final_size{};
+        std::uint64_t sent_final_size{};
+    };
+
+    static constexpr std::size_t final_size_capacity{1024U};
+    void insert(stream_id id, final_sizes sizes);
+    [[nodiscard]] auto contains(stream_id id) const -> bool;
+    [[nodiscard]] auto find_final_sizes(stream_id id) const -> std::optional<final_sizes>;
+    [[nodiscard]] auto range_count() const -> std::size_t;
+    [[nodiscard]] auto final_size_count() const -> std::size_t;
+
+private:
+    std::array<std::map<std::uint64_t, std::uint64_t>, 4> ranges_;
+    std::map<stream_id, final_sizes> recent_;
+    std::deque<stream_id> order_;
+};
 
 export class quic_connection
 {
@@ -159,6 +134,16 @@ public:
     [[nodiscard]] auto next_timer_deadline() const
         -> std::optional<std::chrono::steady_clock::time_point>;
 
+    /// Abort pending socket sends during listener shutdown and join their
+    /// kernel completions. The caller keeps this connection alive until return.
+    /// This is terminal for sending; normal async_close does not use it.
+    [[nodiscard]] auto async_stop_io() -> task<void>;
+
+    /// Install before driving the connection. Shared listeners receive an
+    /// outbound recovery deadline snapshot without retaining their owner.
+    auto set_timer_deadline_observer(std::function<void(
+        std::optional<std::chrono::steady_clock::time_point>)> observer) -> void;
+
     // =========================================================================
     // Public API - Stream Operations
     // =========================================================================
@@ -175,6 +160,15 @@ public:
     [[nodiscard]] auto async_send(
         stream_id sid,
         std::vector<std::byte>&& data,
+        bool fin = false)
+        -> task<std::expected<void, std::error_code>>;
+
+    /// Send an owned wire prefix followed by immutable shared storage without
+    /// copying the complete logical write into one temporary buffer.
+    [[nodiscard]] auto async_send_shared(
+        stream_id sid,
+        std::vector<std::byte>&& prefix,
+        std::shared_ptr<const std::string> shared_data,
         bool fin = false)
         -> task<std::expected<void, std::error_code>>;
 
@@ -202,6 +196,8 @@ public:
     /// Send one unreliable RFC 9221 QUIC DATAGRAM. Both endpoints must have
     /// advertised a non-zero `max_datagram_frame_size`; congestion control
     /// still applies, but loss is intentionally never retransmitted.
+    /// Success accepts the send without guaranteeing delivery; a full pending
+    /// queue can drop it locally, just as congestion can prevent transmission.
     [[nodiscard]] auto async_send_datagram(std::span<const std::byte> data)
         -> task<std::expected<void, std::error_code>>;
 
@@ -229,6 +225,7 @@ public:
      * registration. Register only for the dynamic lifetime of a request
      * handler.
      */
+    [[nodiscard]] auto is_stream_cancelled(stream_id sid) const noexcept -> bool;
     void register_stream_cancellation(stream_id sid, cancel_token& token) noexcept;
     void unregister_stream_cancellation(stream_id sid) noexcept;
 
@@ -273,9 +270,11 @@ public:
     [[nodiscard]] auto initiate_key_update() -> std::expected<void, std::error_code>;
 
     /// Close connection with error
+    /// application_error selects CONNECTION_CLOSE_APP; false preserves the
+    /// transport-error close used by existing callers. Draining never sends.
     [[nodiscard]] auto async_close(
         std::error_code ec,
-        std::string_view reason = {})
+        std::string_view reason = {}, bool application_error = false)
         -> task<void>;
 
     /// Check if connection is closed
@@ -437,7 +436,9 @@ private:
 
     /// Frame handlers
     [[nodiscard]] auto process_ack_frame(const ack_frame& frame) -> task<void>;
+    auto process_ack_frame_state(const ack_frame& frame) -> encryption_level;
     [[nodiscard]] auto process_stream_frame(const stream_frame& frame) -> task<void>;
+    auto process_stream_frame_state(const stream_frame& frame) -> void;
     [[nodiscard]] auto process_reset_stream_frame(const reset_stream_frame& frame) -> task<void>;
     [[nodiscard]] auto process_stop_sending_frame(const stop_sending_frame& frame) -> task<void>;
     [[nodiscard]] auto process_crypto_frame(const crypto_frame& frame) -> task<void>;
@@ -465,12 +466,14 @@ private:
     /// Wake every pending stream-read waiter when the connection can no
     /// longer receive application data.
     auto close_stream_readiness() noexcept -> void;
+    auto close_transport(std::error_code error,
+        connection_state state = connection_state::closed) noexcept -> void;
 
     /// Pack and send packets
-    [[nodiscard]] auto pack_and_send_packet() -> task<void>;
+    [[nodiscard]] auto pack_and_send_packet() -> task<std::expected<void, std::error_code>>;
     /// Packet-owner fast path for the common single-path case. It batches only
     /// datagrams already admitted by the congestion controller and pacer.
-    [[nodiscard]] auto pack_and_send_packets() -> task<void>;
+    [[nodiscard]] auto pack_and_send_packets() -> task<std::expected<void, std::error_code>>;
     [[nodiscard]] auto send_initial_packets()
         -> task<std::expected<std::size_t, std::error_code>>;
     [[nodiscard]] auto send_handshake_packets()
@@ -478,15 +481,17 @@ private:
     [[nodiscard]] auto pack_initial_packet() -> std::vector<std::byte>;
     [[nodiscard]] auto pack_zero_rtt_packet() -> std::vector<std::byte>;
     [[nodiscard]] auto pack_handshake_packet() -> std::vector<std::byte>;
-    [[nodiscard]] auto pack_one_rtt_packet(bool pto_probe = false)
-        -> std::vector<std::byte>;
+    [[nodiscard]] auto pack_one_rtt_packet(bool pto_probe = false,
+        std::vector<std::byte> packet_storage = {},
+        std::vector<std::byte>* payload_storage = nullptr)
+        -> std::expected<std::vector<std::byte>, std::error_code>;
     [[nodiscard]] auto pack_path_validation_packet(std::span<const std::byte> frame)
         -> std::vector<std::byte>;
 
     /// Timer management
     void schedule_idle_timeout();
     void handle_idle_timeout();
-    [[nodiscard]] auto handle_pto() -> task<void>;
+    [[nodiscard]] auto handle_pto() -> task<std::expected<void, std::error_code>>;
 
     [[nodiscard]] auto send_datagram(std::span<const std::byte> datagram,
         const endpoint& destination, udp::udp_socket* path_socket = nullptr)
@@ -504,11 +509,22 @@ private:
     /// Executed only by the connection packet-owner after a producer command
     /// has been dequeued.  It is deliberately separate from async_send(), so
     /// callers never mutate stream or flow-control state directly.
-    [[nodiscard]] auto apply_stream_write(stream_id sid, std::vector<std::byte> data,
-        bool fin) -> task<std::expected<void, std::error_code>>;
+    [[nodiscard]] auto apply_stream_write(stream_id sid, std::vector<std::byte>& data,
+        bool fin) -> std::expected<void, std::error_code>;
+    // Accepted pending shared writes may transfer prefix; expected errors preserve it.
+    [[nodiscard]] auto apply_stream_write(stream_id sid,
+        std::vector<std::byte>& prefix,
+        const std::shared_ptr<const std::string>& shared_data, bool fin)
+        -> std::expected<void, std::error_code>;
     [[nodiscard]] auto apply_application_datagram(std::vector<std::byte> data)
         -> task<std::expected<void, std::error_code>>;
+    [[nodiscard]] auto await_local_stream_send_authority(stream_id sid)
+        -> task<std::expected<void, std::error_code>>;
+    [[nodiscard]] auto async_send_fragments(stream_id sid,
+        std::vector<std::byte> data, bool fin)
+        -> task<std::expected<void, std::error_code>>;
     /// Send queued frames
+    auto publish_deferred_stream_cancellations() -> void;
     auto flush_send_queue() -> task<void>;
     /// Serialize application packets according to the controller's current
     /// pacing rate.  Control/path-validation packets are not delayed here.

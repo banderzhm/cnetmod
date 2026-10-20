@@ -1,0 +1,621 @@
+{
+  "scope": "Final lifecycle, ownership, protection-error and sync-state candidate; sixty serial 200k rounds, not official ranking",
+  "binary_sha256": "05fe27108dd833f86493aa2d00eefe7efef9df47805be198ef3eacd09042c479",
+  "samples": [
+    {
+      "name": "initial",
+      "time": 1792324010.6943467,
+      "rss": 53137408,
+      "private": 50782208
+    },
+    {
+      "name": "round-1-idle-2s",
+      "time": 1792324013.8602748,
+      "rss": 181714944,
+      "private": 179290112
+    },
+    {
+      "name": "round-2-idle-2s",
+      "time": 1792324016.892157,
+      "rss": 198053888,
+      "private": 195629056
+    },
+    {
+      "name": "round-3-idle-2s",
+      "time": 1792324019.863065,
+      "rss": 200163328,
+      "private": 197738496
+    },
+    {
+      "name": "round-4-idle-2s",
+      "time": 1792324022.8982005,
+      "rss": 203714560,
+      "private": 201289728
+    },
+    {
+      "name": "round-5-idle-2s",
+      "time": 1792324025.9378228,
+      "rss": 207970304,
+      "private": 205545472
+    },
+    {
+      "name": "round-6-idle-2s",
+      "time": 1792324028.89264,
+      "rss": 209125376,
+      "private": 206700544
+    },
+    {
+      "name": "round-7-idle-2s",
+      "time": 1792324031.9983234,
+      "rss": 214179840,
+      "private": 211755008
+    },
+    {
+      "name": "round-8-idle-2s",
+      "time": 1792324035.0648925,
+      "rss": 213700608,
+      "private": 211275776
+    },
+    {
+      "name": "round-9-idle-2s",
+      "time": 1792324037.988726,
+      "rss": 214003712,
+      "private": 211578880
+    },
+    {
+      "name": "round-10-idle-2s",
+      "time": 1792324041.1086013,
+      "rss": 212746240,
+      "private": 210321408
+    },
+    {
+      "name": "round-11-idle-2s",
+      "time": 1792324044.108012,
+      "rss": 214712320,
+      "private": 212287488
+    },
+    {
+      "name": "round-12-idle-2s",
+      "time": 1792324047.126705,
+      "rss": 223334400,
+      "private": 220909568
+    },
+    {
+      "name": "round-13-idle-2s",
+      "time": 1792324050.0958936,
+      "rss": 216715264,
+      "private": 214290432
+    },
+    {
+      "name": "round-14-idle-2s",
+      "time": 1792324053.0526235,
+      "rss": 220307456,
+      "private": 217882624
+    },
+    {
+      "name": "round-15-idle-2s",
+      "time": 1792324055.975344,
+      "rss": 218599424,
+      "private": 216174592
+    },
+    {
+      "name": "round-16-idle-2s",
+      "time": 1792324058.9223053,
+      "rss": 224456704,
+      "private": 222031872
+    },
+    {
+      "name": "round-17-idle-2s",
+      "time": 1792324061.9417126,
+      "rss": 221343744,
+      "private": 218918912
+    },
+    {
+      "name": "round-18-idle-2s",
+      "time": 1792324065.05251,
+      "rss": 230617088,
+      "private": 228192256
+    },
+    {
+      "name": "round-19-idle-2s",
+      "time": 1792324068.0580666,
+      "rss": 226103296,
+      "private": 223678464
+    },
+    {
+      "name": "round-20-idle-2s",
+      "time": 1792324071.2471917,
+      "rss": 222674944,
+      "private": 220250112
+    },
+    {
+      "name": "round-21-idle-2s",
+      "time": 1792324074.1895075,
+      "rss": 227360768,
+      "private": 224935936
+    },
+    {
+      "name": "round-22-idle-2s",
+      "time": 1792324077.087296,
+      "rss": 228036608,
+      "private": 225611776
+    },
+    {
+      "name": "round-23-idle-2s",
+      "time": 1792324080.0535817,
+      "rss": 230576128,
+      "private": 228151296
+    },
+    {
+      "name": "round-24-idle-2s",
+      "time": 1792324083.122893,
+      "rss": 230584320,
+      "private": 228159488
+    },
+    {
+      "name": "round-25-idle-2s",
+      "time": 1792324086.258909,
+      "rss": 226902016,
+      "private": 224477184
+    },
+    {
+      "name": "round-26-idle-2s",
+      "time": 1792324089.520626,
+      "rss": 233447424,
+      "private": 231022592
+    },
+    {
+      "name": "round-27-idle-2s",
+      "time": 1792324092.5344834,
+      "rss": 238215168,
+      "private": 235790336
+    },
+    {
+      "name": "round-28-idle-2s",
+      "time": 1792324095.5201144,
+      "rss": 238329856,
+      "private": 235905024
+    },
+    {
+      "name": "round-29-idle-2s",
+      "time": 1792324098.5627873,
+      "rss": 238182400,
+      "private": 235757568
+    },
+    {
+      "name": "round-30-idle-2s",
+      "time": 1792324101.5878937,
+      "rss": 238419968,
+      "private": 235995136
+    },
+    {
+      "name": "round-31-idle-2s",
+      "time": 1792324104.6019974,
+      "rss": 234254336,
+      "private": 231829504
+    },
+    {
+      "name": "round-32-idle-2s",
+      "time": 1792324107.605145,
+      "rss": 239493120,
+      "private": 237068288
+    },
+    {
+      "name": "round-33-idle-2s",
+      "time": 1792324110.5157814,
+      "rss": 240287744,
+      "private": 237862912
+    },
+    {
+      "name": "round-34-idle-2s",
+      "time": 1792324113.6410186,
+      "rss": 241590272,
+      "private": 239165440
+    },
+    {
+      "name": "round-35-idle-2s",
+      "time": 1792324116.6603692,
+      "rss": 241610752,
+      "private": 239185920
+    },
+    {
+      "name": "round-36-idle-2s",
+      "time": 1792324119.6690745,
+      "rss": 241651712,
+      "private": 239226880
+    },
+    {
+      "name": "round-37-idle-2s",
+      "time": 1792324122.7076328,
+      "rss": 240652288,
+      "private": 238227456
+    },
+    {
+      "name": "round-38-idle-2s",
+      "time": 1792324125.771061,
+      "rss": 235278336,
+      "private": 232853504
+    },
+    {
+      "name": "round-39-idle-2s",
+      "time": 1792324128.7401664,
+      "rss": 237473792,
+      "private": 235048960
+    },
+    {
+      "name": "round-40-idle-2s",
+      "time": 1792324131.6818085,
+      "rss": 241532928,
+      "private": 239108096
+    },
+    {
+      "name": "round-41-idle-2s",
+      "time": 1792324134.6559098,
+      "rss": 244133888,
+      "private": 241709056
+    },
+    {
+      "name": "round-42-idle-2s",
+      "time": 1792324137.747316,
+      "rss": 244506624,
+      "private": 242081792
+    },
+    {
+      "name": "round-43-idle-2s",
+      "time": 1792324140.8200998,
+      "rss": 240902144,
+      "private": 238477312
+    },
+    {
+      "name": "round-44-idle-2s",
+      "time": 1792324143.7745852,
+      "rss": 244015104,
+      "private": 241590272
+    },
+    {
+      "name": "round-45-idle-2s",
+      "time": 1792324146.7560034,
+      "rss": 246173696,
+      "private": 243748864
+    },
+    {
+      "name": "round-46-idle-2s",
+      "time": 1792324149.8759408,
+      "rss": 244191232,
+      "private": 241766400
+    },
+    {
+      "name": "round-47-idle-2s",
+      "time": 1792324152.9794726,
+      "rss": 247377920,
+      "private": 244953088
+    },
+    {
+      "name": "round-48-idle-2s",
+      "time": 1792324155.959275,
+      "rss": 247484416,
+      "private": 245059584
+    },
+    {
+      "name": "round-49-idle-2s",
+      "time": 1792324159.0369208,
+      "rss": 249847808,
+      "private": 247422976
+    },
+    {
+      "name": "round-50-idle-2s",
+      "time": 1792324161.9657223,
+      "rss": 248905728,
+      "private": 246480896
+    },
+    {
+      "name": "round-51-idle-2s",
+      "time": 1792324164.895958,
+      "rss": 253104128,
+      "private": 250679296
+    },
+    {
+      "name": "round-52-idle-2s",
+      "time": 1792324167.8242958,
+      "rss": 251006976,
+      "private": 248582144
+    },
+    {
+      "name": "round-53-idle-2s",
+      "time": 1792324170.765555,
+      "rss": 259395584,
+      "private": 256970752
+    },
+    {
+      "name": "round-54-idle-2s",
+      "time": 1792324173.725896,
+      "rss": 259395584,
+      "private": 256970752
+    },
+    {
+      "name": "round-55-idle-2s",
+      "time": 1792324176.671474,
+      "rss": 263589888,
+      "private": 261165056
+    },
+    {
+      "name": "round-56-idle-2s",
+      "time": 1792324179.729681,
+      "rss": 261492736,
+      "private": 259067904
+    },
+    {
+      "name": "round-57-idle-2s",
+      "time": 1792324182.809218,
+      "rss": 267784192,
+      "private": 265359360
+    },
+    {
+      "name": "round-58-idle-2s",
+      "time": 1792324185.7868092,
+      "rss": 265687040,
+      "private": 263262208
+    },
+    {
+      "name": "round-59-idle-2s",
+      "time": 1792324188.7322426,
+      "rss": 269881344,
+      "private": 267456512
+    },
+    {
+      "name": "round-60-idle-2s",
+      "time": 1792324191.9022121,
+      "rss": 267735040,
+      "private": 265310208
+    },
+    {
+      "name": "final-idle-37s",
+      "time": 1792324226.903172,
+      "rss": 267325440,
+      "private": 264900608
+    }
+  ],
+  "rounds": [
+    {
+      "index": 1,
+      "requests": 200000
+    },
+    {
+      "index": 2,
+      "requests": 200000
+    },
+    {
+      "index": 3,
+      "requests": 200000
+    },
+    {
+      "index": 4,
+      "requests": 200000
+    },
+    {
+      "index": 5,
+      "requests": 200000
+    },
+    {
+      "index": 6,
+      "requests": 200000
+    },
+    {
+      "index": 7,
+      "requests": 200000
+    },
+    {
+      "index": 8,
+      "requests": 200000
+    },
+    {
+      "index": 9,
+      "requests": 200000
+    },
+    {
+      "index": 10,
+      "requests": 200000
+    },
+    {
+      "index": 11,
+      "requests": 200000
+    },
+    {
+      "index": 12,
+      "requests": 200000
+    },
+    {
+      "index": 13,
+      "requests": 200000
+    },
+    {
+      "index": 14,
+      "requests": 200000
+    },
+    {
+      "index": 15,
+      "requests": 200000
+    },
+    {
+      "index": 16,
+      "requests": 200000
+    },
+    {
+      "index": 17,
+      "requests": 200000
+    },
+    {
+      "index": 18,
+      "requests": 200000
+    },
+    {
+      "index": 19,
+      "requests": 200000
+    },
+    {
+      "index": 20,
+      "requests": 200000
+    },
+    {
+      "index": 21,
+      "requests": 200000
+    },
+    {
+      "index": 22,
+      "requests": 200000
+    },
+    {
+      "index": 23,
+      "requests": 200000
+    },
+    {
+      "index": 24,
+      "requests": 200000
+    },
+    {
+      "index": 25,
+      "requests": 200000
+    },
+    {
+      "index": 26,
+      "requests": 200000
+    },
+    {
+      "index": 27,
+      "requests": 200000
+    },
+    {
+      "index": 28,
+      "requests": 200000
+    },
+    {
+      "index": 29,
+      "requests": 200000
+    },
+    {
+      "index": 30,
+      "requests": 200000
+    },
+    {
+      "index": 31,
+      "requests": 200000
+    },
+    {
+      "index": 32,
+      "requests": 200000
+    },
+    {
+      "index": 33,
+      "requests": 200000
+    },
+    {
+      "index": 34,
+      "requests": 200000
+    },
+    {
+      "index": 35,
+      "requests": 200000
+    },
+    {
+      "index": 36,
+      "requests": 200000
+    },
+    {
+      "index": 37,
+      "requests": 200000
+    },
+    {
+      "index": 38,
+      "requests": 200000
+    },
+    {
+      "index": 39,
+      "requests": 200000
+    },
+    {
+      "index": 40,
+      "requests": 200000
+    },
+    {
+      "index": 41,
+      "requests": 200000
+    },
+    {
+      "index": 42,
+      "requests": 200000
+    },
+    {
+      "index": 43,
+      "requests": 200000
+    },
+    {
+      "index": 44,
+      "requests": 200000
+    },
+    {
+      "index": 45,
+      "requests": 200000
+    },
+    {
+      "index": 46,
+      "requests": 200000
+    },
+    {
+      "index": 47,
+      "requests": 200000
+    },
+    {
+      "index": 48,
+      "requests": 200000
+    },
+    {
+      "index": 49,
+      "requests": 200000
+    },
+    {
+      "index": 50,
+      "requests": 200000
+    },
+    {
+      "index": 51,
+      "requests": 200000
+    },
+    {
+      "index": 52,
+      "requests": 200000
+    },
+    {
+      "index": 53,
+      "requests": 200000
+    },
+    {
+      "index": 54,
+      "requests": 200000
+    },
+    {
+      "index": 55,
+      "requests": 200000
+    },
+    {
+      "index": 56,
+      "requests": 200000
+    },
+    {
+      "index": 57,
+      "requests": 200000
+    },
+    {
+      "index": 58,
+      "requests": 200000
+    },
+    {
+      "index": 59,
+      "requests": 200000
+    },
+    {
+      "index": 60,
+      "requests": 200000
+    }
+  ],
+  "valid": true
+}

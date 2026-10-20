@@ -1,0 +1,10 @@
+{
+  "commit": "e1c6da60903444f5a1734ea00636e855e5b446b8",
+  "branch": "fix/http3-arena-performance",
+  "base": "11e4930f",
+  "preceding_commit": "1caf610a",
+  "windows_build": "Visual Studio 18 2026 Release",
+  "linux_build": "Clang 23 Release",
+  "serial_network_validation": true,
+  "protected_interop_json_sha256": "CA41C4CB5ADCC34EE16042E00EA9C6DFB248B9A17649995DBACFEB43B64D8B66"
+}

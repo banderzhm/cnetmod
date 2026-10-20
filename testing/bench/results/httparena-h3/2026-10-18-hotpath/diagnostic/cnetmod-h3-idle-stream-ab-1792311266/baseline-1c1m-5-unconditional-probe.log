@@ -1,0 +1,1 @@
+{"requests": 2000, "idle_bidirectional_streams": 32, "p50_us": 222.022, "p95_us": 339.053, "p99_us": 560.219, "mean_us": 243.6840055}

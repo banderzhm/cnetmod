@@ -137,12 +137,6 @@ auto iocp_context::run_batch_impl(DWORD timeout_ms) -> std::size_t
             continue;
         }
         auto* iov = static_cast<iocp_overlapped*>(entry.lpOverlapped);
-        if (iov->completion_callback != nullptr)
-        {
-            iov->completion_callback(*iov);
-            ++handled;
-            continue;
-        }
         if (entry.lpOverlapped->Internal != 0)
         {
             const auto native_error = static_cast<int>(ntstatus_to_win32(
@@ -165,6 +159,14 @@ auto iocp_context::run_batch_impl(DWORD timeout_ms) -> std::size_t
             }
         }
         iov->bytes_transferred = entry.dwNumberOfBytesTransferred;
+        if (iov->completion_callback != nullptr)
+        {
+            // The callback may release the overlapped operation and its frame.
+            // Publish the result first and never access iov after dispatch.
+            iov->completion_callback(*iov);
+            ++handled;
+            continue;
+        }
         if (iov->coroutine)
         {
             if (iov->resume_context)

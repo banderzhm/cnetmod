@@ -1,0 +1,8 @@
+[
+  "/usr/sbin/python",
+  "/mnt/c/Users/25007/.codex/tmp/cnetmod-quic-packet-failure-proposal/inject_fault.py",
+  "--source",
+  "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_connection.cpp",
+  "--out",
+  "/var/tmp/cnetmod-h3-crypto-old-real-fault/quic_connection.cpp"
+]

@@ -1,0 +1,22 @@
+{
+  "argv": [
+    "/tmp/cnetmod-h3-peer/bin/python",
+    "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/h3_acceptance.py",
+    "--server",
+    "/tmp/cnetmod-h3-arena-build/bin/h3_interop_server",
+    "--client",
+    "/tmp/cnetmod-h3-arena-build/bin/h3_interop_client",
+    "--wtransport-probe",
+    "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-wtransport-linux-target/release/webtransport_probe",
+    "--nghttp3-client-command",
+    "/tmp/cnetmod-h3-ngtcp2-peer-build/examples/osslclient --timeout=1s --no-quic-dump --exit-on-first-stream-close 127.0.0.1 {port} {url}",
+    "--nghttp3-server-command",
+    "/tmp/cnetmod-h3-ngtcp2-peer-build/examples/osslserver -q --htdocs {root} 127.0.0.1 {port} {key} {cert}",
+    "--results",
+    "/var/tmp/cnetmod-h3-official/arena/records/linux-all-peers-1.json"
+  ],
+  "cwd": "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod",
+  "env": {
+    "TMPDIR": "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-linux-tmp"
+  }
+}

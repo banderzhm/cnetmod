@@ -1,0 +1,58 @@
+{
+  "production_commit": "e20010d20b2df1e3f0c17d82b1b66c5592a0ca5c",
+  "branch": "fix/http3-arena-performance",
+  "official_commit": "8977be2721a5aba7b320345cddfcd6f6b654e698",
+  "timed_rounds": 6,
+  "test_token_received": true,
+  "test_token_released_after_six_rounds": true,
+  "benchmarks_retried_for_score": false,
+  "binary_sha256": "ee7f9273c57c8e75aebfbae6c6cdda1022bed0fd5b0fab89003877961138a23b",
+  "source_sha256": {
+    "src/protocol/http/v3/http3_server.cpp": "2485b9fdee00a1546286daee5d7be06ce32a3dc417438a4a7152306cac8d3387",
+    "src/protocol/http/v3/http3_server.cppm": "490a97cda869493fe87d1999bc07cef853ea9486d4441c27d0b604ce48e37489",
+    "testing/http3/http_client_e2e_server.cpp": "e54ddc6735f4bb5adac8c4d4b322806338a91933e0b424b0516df3322fe2ecba",
+    "testing/http3/http3_idle_cleanup.py": "9fd0b92822e104b8ba07ea5bbb41621dbf2003daaeeca54af78561f4b549012e",
+    "testing/http3/CMakeLists.txt": "4c8f30186ba8d56595aff9686d4584ce0f5903405daa7cc34961e3de6565bf2f"
+  },
+  "validation": "No production source changes since Linux 9 and Windows 5 passing low-load checks; previous logs retained unchanged.",
+  "result": {
+    "baseline_failed": 0,
+    "static_completed_total": 120128,
+    "static_failed": 3,
+    "static_peak_memory": [
+      "975MiB",
+      "1.1GiB",
+      "1.3GiB"
+    ],
+    "stable": false,
+    "remaining_failed_request_cause_isolated": false,
+    "long_duration_soak_run": false
+  },
+  "record_sha256": {
+    ".gitattributes": "8ea479341dec519b90dc29e58f8547f0952082e99bdace04f7038908be754ad2",
+    "isolated-address-policy.sh": "ab9564c0c6b57b29b98b5cab884cc8911c944db10a313ac6b437d02e21f57637",
+    "official-selected/baseline-h3/64/cnetmod-official-optimized.json": "558f62835dde6321b762f09d8d1f94a0bc6561cb74d224ad6b540b0b21962e7d",
+    "official-selected/static-h3/64/cnetmod-official-static.json": "ba825ba75b33cb778a7acbcbdb70fd18bb26da11fb6e73b23a2a6df67ca519d8",
+    "prepare-and-run.py": "ed31a299ffedf8e53d870baa3b01b47f3fe30f805b3562691773cdbfa23e966f",
+    "README.md": "43938653a73719fffc8768cb53f66e694dfc4bc8be228b1d03cc90f4671f7c79",
+    "records/cnetmod-h3-idle-retest-baseline-build.log": "52dbb1a1023e4bca7703a64f245b1013d46669946bcd5b967909a4b7e938a3bf",
+    "records/cnetmod-h3-idle-retest-static-build.log": "76b4e46e89bc5464e5ac3e563394562f7f798c77f16261b59271255bf5a6ba8e",
+    "records/cnetmod-official-optimized-baseline-h3.log": "fd42cebda8d7da10342231e660299e0ae0243d5ee492be4fe16073a4a19ec39b",
+    "records/cnetmod-official-optimized-official-validation.log": "b3dea59410d63f6e22139a171f38196274d933937ef320fd6d77104720dd1fc2",
+    "records/cnetmod-official-static-official-validation.log": "13eed576567bb466fbdbe86726640cd5979f630cf228c38fdde671804baf9b23",
+    "records/cnetmod-official-static-static-h3.log": "c9e5c3b2ce4fbe93fe7fc125adc9accbdb196ca7369dc36b55ea7e938041526e",
+    "records/command.json": "bfbd3c23f43c1a56b511bb76de16e9a6e265f91eb7e879406be0ba218e71a4fc",
+    "records/compiler.txt": "515e73398b96d9755cd8e88a2f977a4ac68160148e23fc5f5a63c1290c6576eb",
+    "records/dataset-sha256.json": "cf6bd7e3bf90d14537cfa3f7e723b341097c50baeab0957a3b338f9d9ad97b1a",
+    "records/environment.txt": "4c2fe0b708becea0f3de843e67a88df5469d71a569199b067b553b7174ce92b0",
+    "records/h2load.txt": "4b55ea4606aea1025ddf119f5b590ed2ea63df30ef9d19c002070d313e97ef0b",
+    "records/hardware.txt": "441004f921d149b6e101779968bd8b49bd8fdb3f424c527ddb312a524b8f644c",
+    "records/images.json": "2082127f7b72ef03dc168bb3319bf5ded8612def9ff590a62181f0d8bf59d54f",
+    "records/invocations.json": "07f7b767f898866678535f645c1408ce3e213e93b3f9a39987e8d49352777929",
+    "records/official-driver.patch": "332ff5789fca79a9e20c2dbb44a01827ec72a2868a065a9ecbf0ae93e17c00b0",
+    "records/resource-samples.jsonl": "7d65295f2c1373118998967e0867b7f98a4d81d8cc65d9606865ad53f827d827",
+    "records/revision.json": "c23885f04c585eea6eaca1a8d04ac65e6d9b8494833747081cb1faaee8f7a21e",
+    "records/summary.json": "7b05e52c50b6dafb891f308b5b9496b3733c657ce5b5c04a1aa64f82158655ea",
+    "resource-summary.json": "b268c15a4e87063acc18c21df43e76716e540599a85a32499961239ca0ebf248"
+  }
+}

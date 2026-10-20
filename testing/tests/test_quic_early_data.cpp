@@ -11,6 +11,7 @@ import cnetmod.core.address;
 import cnetmod.io.io_context;
 import cnetmod.protocol.http.v3.server;
 import cnetmod.protocol.http.v3.session;
+import std;
 
 using namespace cnetmod::quic;
 
@@ -156,6 +157,48 @@ TEST(http3_server_inbox_limits_require_bounded_nonzero_values)
             .has_value());
 }
 
+TEST(http3_server_idle_timeout_rejects_only_negative_durations)
+{
+    auto tls = cnetmod::ssl_context::quic_server();
+    ASSERT_TRUE(tls.has_value());
+    auto context = cnetmod::make_io_context();
+    auto address = cnetmod::ip_address::from_string("127.0.0.1");
+    ASSERT_TRUE(address.has_value());
+    auto server = cnetmod::http::v3::make_http3_server(*context, *tls,
+        cnetmod::endpoint{*address, 0},
+        [](cnetmod::http::v3::http3_request&, cnetmod::http::v3::http3_response&)
+            -> std::error_code
+        {
+            return {};
+        });
+
+    ASSERT_FALSE(server->set_idle_timeout(std::chrono::milliseconds{-1}).has_value());
+    ASSERT_TRUE(server->set_idle_timeout(std::chrono::milliseconds::zero()).has_value());
+    ASSERT_TRUE(server->set_idle_timeout(std::chrono::seconds{5}).has_value());
+}
+
+TEST(http3_server_udp_payload_size_enforces_quic_datagram_bounds)
+{
+    auto tls = cnetmod::ssl_context::quic_server();
+    ASSERT_TRUE(tls.has_value());
+    auto context = cnetmod::make_io_context();
+    auto address = cnetmod::ip_address::from_string("127.0.0.1");
+    ASSERT_TRUE(address.has_value());
+    auto server = cnetmod::http::v3::make_http3_server(*context, *tls,
+        cnetmod::endpoint{*address, 0},
+        [](cnetmod::http::v3::http3_request&, cnetmod::http::v3::http3_response&)
+            -> std::error_code
+        {
+            return {};
+        });
+
+    ASSERT_FALSE(server->set_max_udp_payload_size(1199U).has_value());
+    ASSERT_TRUE(server->set_max_udp_payload_size(1200U).has_value());
+    ASSERT_TRUE(server->set_max_udp_payload_size(1472U).has_value());
+    ASSERT_TRUE(server->set_max_udp_payload_size(65527U).has_value());
+    ASSERT_FALSE(server->set_max_udp_payload_size(65528U).has_value());
+}
+
 TEST(application_key_update_requires_authenticated_1rtt_secrets)
 {
     auto context = cnetmod::ssl_context::quic_client();
@@ -188,6 +231,57 @@ TEST(multipath_transport_parameter_roundtrip_is_capability_only)
     ASSERT_TRUE((*receiver)->decode_transport_params(*encoded).has_value());
     ASSERT_TRUE((*receiver)->received_transport_params().initial_max_path_id.has_value());
     ASSERT_EQ(*(*receiver)->received_transport_params().initial_max_path_id, 7U);
+}
+
+TEST(early_data_recovery_extracts_only_unacknowledged_work)
+{
+    quic_config config;
+    quic_recovery_controller recovery{config};
+    const auto now = std::chrono::steady_clock::now();
+    auto first = quic_send_frame::owned({std::byte{1}}, 0U);
+    auto second = quic_send_frame::owned({std::byte{2}}, 4U);
+    first.mark_early_data();
+    second.mark_early_data();
+    auto ordinary = quic_send_frame::owned({std::byte{3}}, 8U);
+    recovery.on_packet_sent(0, 100, now, true, pn_space::application,
+        retransmittable_frame_storage{first});
+    recovery.on_packet_sent(1, 100, now, true, pn_space::application,
+        retransmittable_frame_storage{second});
+    recovery.on_packet_sent(2, 100, now, true, pn_space::application,
+        retransmittable_frame_storage{ordinary});
+    ack_frame ack{};
+    ack.largest_acked = 0;
+    ASSERT_TRUE(recovery.on_ack_received(ack, now + std::chrono::milliseconds{1},
+        pn_space::application).has_value());
+    auto retry = recovery.take_early_data_frames();
+    ASSERT_EQ(retry.size(), 1U);
+    ASSERT_TRUE(retry.front() == second);
+    auto remaining = recovery.newest_probe_frames(pn_space::application);
+    ASSERT_TRUE(remaining.has_value());
+    ASSERT_TRUE((*remaining)[0] == ordinary);
+    ASSERT_TRUE(recovery.take_early_data_frames().empty());
+}
+
+TEST(early_data_retry_deduplicates_pto_and_preserves_ordinary_queue)
+{
+    quic_config config;
+    quic_recovery_controller recovery{config};
+    const auto now = std::chrono::steady_clock::now();
+    auto early = quic_send_frame::owned({std::byte{1}}, 0U);
+    early.mark_early_data();
+    recovery.on_packet_sent(10, 100, now, true, pn_space::application,
+        retransmittable_frame_storage{early});
+    recovery.on_packet_sent(11, 100, now, true, pn_space::application,
+        retransmittable_frame_storage{early}, std::nullopt, true);
+    ASSERT_EQ(recovery.take_early_data_frames().size(), 1U);
+    ASSERT_FALSE(recovery.next_pto_deadline().has_value());
+    quic_stream_scheduler scheduler;
+    scheduler.set_priority(0, 0, false);
+    scheduler.enqueue(0, early);
+    scheduler.enqueue(4, quic_send_frame::owned({std::byte{2}}, 4U));
+    ASSERT_EQ(scheduler.take_early_data().size(), 1U);
+    ASSERT_EQ(scheduler.size(), 1U);
+    ASSERT_EQ(scheduler.take()->stream, 4U);
 }
 
 int main()

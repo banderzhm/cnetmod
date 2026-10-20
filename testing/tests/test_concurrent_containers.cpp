@@ -262,4 +262,132 @@ TEST(udp_datagram_buffer_transfers_pooled_or_fallback_storage)
     ASSERT_EQ(fallback.size(), 128U);
 }
 
+
+namespace {
+struct owner_collision_hash
+{
+    auto operator()(int) const noexcept -> std::size_t { return 0U; }
+};
+
+using owner_collision_map = cnetmod::concurrent_containers::atomic_hash_map<
+    int, std::shared_ptr<int>, owner_collision_hash>;
+
+auto erase_owner_entry(owner_collision_map& values, int method) -> bool
+{
+    if (method == 0)
+        return values.erase(7);
+    if (method == 1)
+        return values.erase_if([](int key, const std::shared_ptr<int>&)
+            { return key == 7; }) == 1U;
+    return values.erase_min_by([](int, const std::shared_ptr<int>& left,
+                                   int, const std::shared_ptr<int>& right)
+        { return *left < *right; });
+}
+
+struct non_default_map_value
+{
+    non_default_map_value() = delete;
+    explicit non_default_map_value(int value)
+        : owner(std::make_shared<int>(value)) {}
+    std::shared_ptr<int> owner;
+};
+} // namespace
+
+TEST(atomic_hash_map_each_erase_releases_owned_value)
+{
+    for (int method{}; method < 3; ++method)
+    {
+        owner_collision_map values{4};
+        auto owner = std::make_shared<int>(42);
+        const std::weak_ptr<int> weak = owner;
+        const bool inserted = values.try_emplace(7, owner);
+        ASSERT_TRUE(inserted);
+        if (!inserted)
+            return;
+        owner.reset();
+        ASSERT_FALSE(weak.expired());
+        ASSERT_TRUE(erase_owner_entry(values, method));
+        ASSERT_EQ(values.size(), std::size_t{0});
+        ASSERT_FALSE(values.find(7).has_value());
+        // A tombstone must not own the payload until this slot is reused.
+        ASSERT_TRUE(weak.expired());
+        ASSERT_EQ(values.capacity(), std::size_t{4});
+    }
+}
+
+TEST(atomic_hash_map_erase_preserves_concurrent_reader_snapshot)
+{
+    for (int method{}; method < 3; ++method)
+    {
+        owner_collision_map values{4};
+        auto owner = std::make_shared<int>(42);
+        const std::weak_ptr<int> weak = owner;
+        const bool inserted = values.try_emplace(7, owner);
+        ASSERT_TRUE(inserted);
+        if (!inserted)
+            return;
+        owner.reset();
+        std::atomic<bool> snapshot_ready{};
+        std::atomic<bool> erased{};
+        int observed{};
+        std::jthread reader{[&]
+            {
+                auto snapshot = values.find(7);
+                snapshot_ready.store(true, std::memory_order_release);
+                while (!erased.load(std::memory_order_acquire))
+                    std::this_thread::yield();
+                if (snapshot)
+                    observed = **snapshot;
+                snapshot.reset();
+            }};
+        while (!snapshot_ready.load(std::memory_order_acquire))
+            std::this_thread::yield();
+        ASSERT_TRUE(erase_owner_entry(values, method));
+        ASSERT_EQ(values.size(), std::size_t{0});
+        // Erasure publishes a fresh immutable tombstone. The reader's old
+        // value snapshot remains valid until that reader releases it.
+        ASSERT_FALSE(weak.expired());
+        erased.store(true, std::memory_order_release);
+        reader.join();
+        ASSERT_EQ(observed, 42);
+        ASSERT_TRUE(weak.expired());
+    }
+}
+
+TEST(atomic_hash_map_owner_tombstones_support_non_default_values_and_collisions)
+{
+    cnetmod::concurrent_containers::atomic_hash_map<
+        int, non_default_map_value, owner_collision_hash> values{4};
+    ASSERT_TRUE(values.try_emplace(1, non_default_map_value{10}));
+    ASSERT_TRUE(values.try_emplace(2, non_default_map_value{20}));
+    ASSERT_TRUE(values.try_emplace(3, non_default_map_value{30}));
+    ASSERT_TRUE(values.erase(1));
+    const auto second = values.find(2);
+    const auto third = values.find(3);
+    ASSERT_TRUE(second.has_value());
+    ASSERT_TRUE(third.has_value());
+    if (!second || !third)
+        return;
+    ASSERT_EQ(*second->owner, 20);
+    ASSERT_EQ(*third->owner, 30);
+    ASSERT_TRUE(values.try_emplace(4, non_default_map_value{40}));
+    ASSERT_EQ(values.size(), std::size_t{3});
+    ASSERT_FALSE(values.try_emplace(2, non_default_map_value{200}));
+    ASSERT_TRUE(values.try_insert_or_assign(2, non_default_map_value{21}));
+    ASSERT_TRUE(values.erase_min_by([](int, const non_default_map_value& left,
+                                      int, const non_default_map_value& right)
+        { return *left.owner < *right.owner; }));
+    ASSERT_FALSE(values.contains(2));
+    ASSERT_TRUE(values.contains(3));
+    ASSERT_TRUE(values.contains(4));
+    ASSERT_EQ(values.erase_if([](int, const non_default_map_value&)
+                      { return true; }), std::size_t{2});
+    ASSERT_EQ(values.size(), std::size_t{0});
+    ASSERT_TRUE(values.try_emplace(5, non_default_map_value{50}));
+    const auto last = values.find(5);
+    ASSERT_TRUE(last.has_value());
+    if (last)
+        ASSERT_EQ(*last->owner, 50);
+}
+
 RUN_TESTS()

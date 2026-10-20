@@ -1,0 +1,9 @@
+{
+  "provenance": "Coordinator /root reports post-commit independent verification of all2209 recorded source hashes with zero differences",
+  "source_commit": "36568ef8cb14a1ddba6680a53d5fc67c5692140e",
+  "original_run_head": "d0d920791a1d226711176df47148b5e98a2f8713",
+  "original_run_diff_sha256": "100fd1aebf87c080d2afba346e3799d74ae40f23d936aed4f0afe62fd8936d68",
+  "binary_sha256": "5bf46aeeee227934742969972dfa3e4705d5fb87e66289c9109f41d89f353470",
+  "source_input_count": 2209,
+  "historical_metadata_preserved": true
+}

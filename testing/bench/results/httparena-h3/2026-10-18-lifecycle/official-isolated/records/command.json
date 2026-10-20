@@ -1,0 +1,16 @@
+[
+  "unshare",
+  "--mount",
+  "bash",
+  "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-isolated.sh",
+  "/usr/bin/python",
+  "/mnt/c/Users/25007/.codex/tmp/run_official_h3_isolated.py",
+  "--official",
+  "/var/tmp/cnetmod-http-arena-8977be27",
+  "--stage",
+  "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307675/arena",
+  "--h2load",
+  "/var/tmp/cnetmod-h3-loadgen169/h2load",
+  "--images",
+  "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307675/images.json"
+]

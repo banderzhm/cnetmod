@@ -1,0 +1,50 @@
+{
+  "Architecture": "amd64",
+  "Config": {
+    "Cmd": [
+      "/etc/agensio/start.sh"
+    ],
+    "Env": [
+      "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    ],
+    "ExposedPorts": {
+      "8080/tcp": {},
+      "8081/tcp": {},
+      "8082/tcp": {},
+      "8443/tcp": {},
+      "8443/udp": {}
+    }
+  },
+  "Created": "2026-10-17T18:47:04.677150371+08:00",
+  "Descriptor": {
+    "digest": "sha256:dd75c50576e08009267603a62a55f01e59b7e79891c6eb81420735a78e28b504",
+    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "size": 1191
+  },
+  "Id": "sha256:dd75c50576e08009267603a62a55f01e59b7e79891c6eb81420735a78e28b504",
+  "Metadata": {
+    "LastTagTime": "2026-10-18T14:22:10.433555413Z"
+  },
+  "Os": "linux",
+  "Parent": "sha256:243dcfef00d87b2a25c117671fcffde83dbae59a3378b9c772f205db2f7a0bc3",
+  "RepoDigests": [
+    "cnetmod-final-4c178de9d76f4c63adb15a4ebe898833-agensio-official-h3@sha256:dd75c50576e08009267603a62a55f01e59b7e79891c6eb81420735a78e28b504",
+    "cnetmod-h3-official-agensio@sha256:dd75c50576e08009267603a62a55f01e59b7e79891c6eb81420735a78e28b504",
+    "httparena-agensio-official-h3@sha256:dd75c50576e08009267603a62a55f01e59b7e79891c6eb81420735a78e28b504"
+  ],
+  "RepoTags": [
+    "cnetmod-final-4c178de9d76f4c63adb15a4ebe898833-agensio-official-h3:latest",
+    "cnetmod-h3-official-agensio:latest",
+    "httparena-agensio-official-h3:latest"
+  ],
+  "RootFS": {
+    "Layers": [
+      "sha256:15f1c8eb1ab18eae260c7fb6296434cbe1ff0e1e30fd814ae92a80dd54005e62",
+      "sha256:a51b949bccf09e14c0cc7bd0063d21b551184400dbd67fdbeb678f23e3a8a4a2",
+      "sha256:25181ba708beadfc57e39b396540a59b9a7d2dab9b36d8a40f6e867cf951f809",
+      "sha256:dab72900f6fd7f1dfc775ea3ae36bd21e3ca6acf52a4c0bcf388fe6369bc3ac3"
+    ],
+    "Type": "layers"
+  },
+  "Size": 123964889
+}

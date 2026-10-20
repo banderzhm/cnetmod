@@ -1,0 +1,39 @@
+       749:	binding file /usr/lib/libc.so.6 [0] to /usr/lib/libc.so.6 [0]: normal symbol `realloc' [GLIBC_2.2.5]
+       749:	binding file /usr/lib/libc.so.6 [0] to /usr/lib/libc.so.6 [0]: normal symbol `calloc' [GLIBC_2.2.5]
+       749:	binding file /usr/lib/libc.so.6 [0] to /usr/lib/libc.so.6 [0]: normal symbol `free' [GLIBC_2.2.5]
+       749:	binding file /usr/lib/libc.so.6 [0] to /usr/lib/libc.so.6 [0]: normal symbol `malloc' [GLIBC_2.2.5]
+       749:	binding file /usr/lib/libgcc_s.so.1 [0] to /usr/lib/libc.so.6 [0]: normal symbol `free' [GLIBC_2.2.5]
+       749:	binding file /usr/lib/libgcc_s.so.1 [0] to /usr/lib/libc.so.6 [0]: normal symbol `calloc' [GLIBC_2.2.5]
+       749:	binding file /usr/lib/libgcc_s.so.1 [0] to /usr/lib/libc.so.6 [0]: normal symbol `malloc' [GLIBC_2.2.5]
+       749:	binding file /usr/lib/libgcc_s.so.1 [0] to /usr/lib/libc.so.6 [0]: normal symbol `realloc' [GLIBC_2.2.5]
+       749:	binding file /usr/lib/libm.so.6 [0] to /usr/lib/libc.so.6 [0]: normal symbol `free' [GLIBC_2.2.5]
+       749:	binding file /usr/lib/libm.so.6 [0] to /usr/lib/libc.so.6 [0]: normal symbol `malloc' [GLIBC_2.2.5]
+       749:	binding file /usr/lib/libc++abi.so.1 [0] to /usr/lib/libc.so.6 [0]: normal symbol `free' [GLIBC_2.2.5]
+       749:	binding file /usr/lib/libc++abi.so.1 [0] to /usr/lib/libc++abi.so.1 [0]: normal symbol `_ZdlPv'
+       749:	binding file /usr/lib/libc++abi.so.1 [0] to /usr/lib/libc++abi.so.1 [0]: normal symbol `_Znam'
+       749:	binding file /usr/lib/libc++abi.so.1 [0] to /usr/lib/libc.so.6 [0]: normal symbol `calloc' [GLIBC_2.2.5]
+       749:	binding file /usr/lib/libc++abi.so.1 [0] to /usr/lib/libc.so.6 [0]: normal symbol `malloc' [GLIBC_2.2.5]
+       749:	binding file /usr/lib/libc++abi.so.1 [0] to /usr/lib/libc++abi.so.1 [0]: normal symbol `_ZdaPv'
+       749:	binding file /usr/lib/libc++abi.so.1 [0] to /usr/lib/libc.so.6 [0]: normal symbol `realloc' [GLIBC_2.2.5]
+       749:	binding file /usr/lib/libc++abi.so.1 [0] to /usr/lib/libc++abi.so.1 [0]: normal symbol `_Znwm'
+       749:	binding file /usr/lib/libc++.so.1 [0] to /usr/lib/libc.so.6 [0]: normal symbol `free' [GLIBC_2.2.5]
+       749:	binding file /usr/lib/libc++.so.1 [0] to /usr/lib/libc++abi.so.1 [0]: normal symbol `_ZdlPv'
+       749:	binding file /usr/lib/libc++.so.1 [0] to /usr/lib/libc++abi.so.1 [0]: normal symbol `_Znam'
+       749:	binding file /usr/lib/libc++.so.1 [0] to /usr/lib/libc.so.6 [0]: normal symbol `malloc' [GLIBC_2.2.5]
+       749:	binding file /usr/lib/libc++.so.1 [0] to /usr/lib/libc++abi.so.1 [0]: normal symbol `_ZdaPv'
+       749:	binding file /usr/lib/libc++.so.1 [0] to /usr/lib/libc.so.6 [0]: normal symbol `realloc' [GLIBC_2.2.5]
+       749:	binding file /usr/lib/libc++.so.1 [0] to /usr/lib/libc++abi.so.1 [0]: normal symbol `_Znwm'
+       749:	binding file /usr/lib/libz.so.1 [0] to /usr/lib/libc.so.6 [0]: normal symbol `free' [GLIBC_2.2.5]
+       749:	binding file /usr/lib/libz.so.1 [0] to /usr/lib/libc.so.6 [0]: normal symbol `malloc' [GLIBC_2.2.5]
+       749:	binding file /tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server [0] to /usr/lib/libc.so.6 [0]: normal symbol `free' [GLIBC_2.2.5]
+       749:	binding file /tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server [0] to /usr/lib/libc.so.6 [0]: normal symbol `realloc' [GLIBC_2.2.5]
+       749:	binding file /tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server [0] to /usr/lib/libc.so.6 [0]: normal symbol `malloc' [GLIBC_2.2.5]
+       749:	binding file /tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server [0] to /usr/lib/libc++abi.so.1 [0]: normal symbol `_ZdaPv'
+       749:	binding file /tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server [0] to /usr/lib/libc++abi.so.1 [0]: normal symbol `_ZdlPv'
+       749:	binding file /tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server [0] to /usr/lib/libc++abi.so.1 [0]: normal symbol `_Znwm'
+       749:	binding file /tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server [0] to /usr/lib/libc++abi.so.1 [0]: normal symbol `_Znam'
+       749:	binding file /tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server [0] to /usr/lib/libc.so.6 [0]: normal symbol `calloc' [GLIBC_2.2.5]
+       749:	binding file /tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server [0] to /usr/lib/libc.so.6 [0]: normal symbol `calloc' [GLIBC_2.2.5]
+       749:	binding file /tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server [0] to /usr/lib/libc.so.6 [0]: normal symbol `free' [GLIBC_2.2.5]
+       749:	binding file /tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server [0] to /usr/lib/libc.so.6 [0]: normal symbol `malloc' [GLIBC_2.2.5]
+       749:	binding file /tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server [0] to /usr/lib/libc.so.6 [0]: normal symbol `realloc' [GLIBC_2.2.5]

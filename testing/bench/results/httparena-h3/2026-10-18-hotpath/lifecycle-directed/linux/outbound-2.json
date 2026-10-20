@@ -1,0 +1,73 @@
+[
+  {
+    "case": "pto",
+    "workers": 2,
+    "restart": true,
+    "restart_report": "restarted",
+    "restart_budget": [
+      0,
+      0,
+      0
+    ],
+    "client_forwarded": 9,
+    "client_blocked": 0,
+    "client_forwarded_while_gated": 0,
+    "server_forwarded_while_gated": 2,
+    "response_datagrams_dropped": 1,
+    "socket_errors": [],
+    "decode_errors": [],
+    "request_fin_acked": true,
+    "gate_at_ms": 101.21739599998136,
+    "client_forwarded_at_gate": 8,
+    "dropped_packet_number": 8,
+    "dropped_datagram_bytes": 60,
+    "dropped_stream_frames": [
+      {
+        "offset": 0,
+        "length": 28,
+        "fin": true
+      }
+    ],
+    "drop_at_ms": 1201.1757759999853,
+    "response_at_ms": 1232.5412040000003,
+    "client_forwarded_at_response": 8,
+    "response_body": "delayed pto response\n",
+    "listener_healthy": true,
+    "status": "passed"
+  },
+  {
+    "case": "close",
+    "workers": 2,
+    "restart": true,
+    "restart_report": "restarted",
+    "restart_budget": [
+      0,
+      0,
+      0
+    ],
+    "active_connections_after_peer_close": 1,
+    "listener_healthy": true,
+    "status": "passed"
+  },
+  {
+    "case": "active",
+    "workers": 2,
+    "restart": true,
+    "restart_report": "restarted",
+    "restart_budget": [
+      0,
+      0,
+      0
+    ],
+    "old_request_terminated": true,
+    "old_request_error": "ConnectionTerminated(error_code=71, frame_type=0, reason_phrase='invalid HTTP/3 GOAWAY stream ID')",
+    "active_restart_report": "restarted",
+    "active_restart_budget": [
+      0,
+      0,
+      0
+    ],
+    "listener_healthy": true,
+    "status": "passed"
+  }
+]

@@ -1,0 +1,12 @@
+{
+  "exit": 0,
+  "selected": 43,
+  "reported": 43,
+  "failures": [],
+  "skips": [],
+  "source_unchanged": true,
+  "protected_file_unchanged": true,
+  "mimalloc_off": true,
+  "serial_build": true,
+  "serial_tests": true
+}

@@ -1,0 +1,31 @@
+{
+  "baseline-h3": [
+    "/tmp/cnetmod-h3-loadgen169/src/h2load",
+    "--alpn-list=h3",
+    "https://localhost:8443/baseline2?a=1&b=1",
+    "-c",
+    "64",
+    "-m",
+    "64",
+    "-t",
+    "64",
+    "-D",
+    "5s"
+  ],
+  "static-h3": [
+    "/tmp/cnetmod-h3-loadgen169/src/h2load",
+    "--alpn-list=h3",
+    "-i",
+    "/var/tmp/cnetmod-h3-official/arena/requests/static-h2-uris.txt",
+    "-H",
+    "Accept-Encoding: br;q=1, gzip;q=0.8",
+    "-c",
+    "64",
+    "-m",
+    "64",
+    "-t",
+    "64",
+    "-D",
+    "5s"
+  ]
+}

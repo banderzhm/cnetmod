@@ -1,0 +1,17 @@
+{
+  "server": [
+    "nsenter",
+    "-t",
+    "1204",
+    "-n",
+    "/var/tmp/cnetmod-h3-mtu-ceiling-ab-48da061b63724a608da432d269675413/arena_h3_server",
+    "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307675/arena/certs/server.crt",
+    "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307675/arena/certs/server.key",
+    "8443",
+    "32",
+    "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307675/arena/data/static"
+  ],
+  "gso_environment": "1",
+  "max_path_mtu": 4096,
+  "max_udp_payload_size": 8192
+}

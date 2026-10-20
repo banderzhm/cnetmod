@@ -1,0 +1,16 @@
+[
+  {
+    "variant": "without-cid-close",
+    "member_sha256": "47874b0792a72af0b0be2ee0d3677cfdc95c52343e2ff4403f02666923e7688f",
+    "external_object_sha256": "47874b0792a72af0b0be2ee0d3677cfdc95c52343e2ff4403f02666923e7688f",
+    "production_member_sha256": "e219d613e851cacb206e0656ebdea4350cca0213ae9f1d54cfa54bc35478c2f8",
+    "binary_sha256": "2b04597f64c7f603249e7911f74a73d591753edc5a3a9d555b8f00c600b8e9be",
+    "trace_verified": true
+  },
+  {
+    "variant": "with-cid-close",
+    "member_sha256": "e219d613e851cacb206e0656ebdea4350cca0213ae9f1d54cfa54bc35478c2f8",
+    "binary_sha256": "2aab07eb7a8689a95541ad6dfb7edbfe2f07157da7f52e3beb332f4559f7bd05",
+    "trace_verified": true
+  }
+]

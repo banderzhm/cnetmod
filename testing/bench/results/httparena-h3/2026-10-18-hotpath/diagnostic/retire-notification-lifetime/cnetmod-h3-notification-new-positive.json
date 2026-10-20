@@ -1,0 +1,23 @@
+[
+  {
+    "case": "notification-lifetime",
+    "mode": "observer",
+    "status": "passed",
+    "request_fin_acked": true,
+    "initial_max_streams": 1,
+    "credit_at_ms": 6.050318000006882,
+    "final_max_streams": 2,
+    "pre_retire_deadline_ms": 5892,
+    "observer_notifications_after_retire": 7,
+    "fixture_ingress_count": 5,
+    "notification_capture_owners_before": 1,
+    "notification_capture_owners_after_dispatch": 1,
+    "notification_capture_expired_after_unobserve": true,
+    "client_forwarded_after_gate": 0,
+    "client_blocked": 3,
+    "server_datagrams_after_gate": 5,
+    "proxy_errors": [],
+    "server_stdout": "",
+    "server_stderr": ""
+  }
+]

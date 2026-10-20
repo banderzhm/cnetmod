@@ -1,0 +1,19 @@
+{
+  "framework": "genhttp-ioxide-official-h3",
+  "language": "C#",
+  "rps": 51865,
+  "avg_latency": "68.08ms",
+  "p99_latency": "216.55ms",
+  "cpu": "733.1%",
+  "memory": "1.4GiB",
+  "connections": 64,
+  "threads": 64,
+  "duration": "5s",
+  "pipeline": 1,
+  "bandwidth": "923.26MB/s",
+  "reconnects": 0,
+  "status_2xx": 297187,
+  "status_3xx": 0,
+  "status_4xx": 0,
+  "status_5xx": 0
+}

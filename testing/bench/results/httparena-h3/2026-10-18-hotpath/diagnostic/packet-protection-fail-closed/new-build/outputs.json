@@ -1,0 +1,107 @@
+{
+  "/var/tmp/cnetmod-h3-crypto-new-real-fault/archive-member-proof.json": {
+    "sha256": "51cd7cf7ce7c5020bbd3a41a5471d54ee0e1f0dccb894388f96678dc343061e6",
+    "bytes": 384,
+    "mtime_ns": 1792323177889504632
+  },
+  "/var/tmp/cnetmod-h3-crypto-new-real-fault/compile-connection.command.json": {
+    "sha256": "37469b7186e51ac9274a643a0df11ca9e5063b0da8ba46dfcf2bcc176eae4400",
+    "bytes": 5188,
+    "mtime_ns": 1792323170985858155
+  },
+  "/var/tmp/cnetmod-h3-crypto-new-real-fault/compile-connection.log": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "mtime_ns": 1792323170985858155
+  },
+  "/var/tmp/cnetmod-h3-crypto-new-real-fault/compile-fixture.command.json": {
+    "sha256": "737a6b812809585e96ddb9209e3f6f791f91d967f48fd3d7f711d4a6f41230db",
+    "bytes": 6206,
+    "mtime_ns": 1792323176613540967
+  },
+  "/var/tmp/cnetmod-h3-crypto-new-real-fault/compile-fixture.log": {
+    "sha256": "7688383e910ceaa03a3e32bea3b525073e5c7af547e0081129b16ca5a896c014",
+    "bytes": 308,
+    "mtime_ns": 1792323177794459702
+  },
+  "/var/tmp/cnetmod-h3-crypto-new-real-fault/inject.command.json": {
+    "sha256": "2650588d0af5efddf77367e9de3a6f59a340b12d2169b0d442b05ac4385a3cf4",
+    "bytes": 297,
+    "mtime_ns": 1792323170850552110
+  },
+  "/var/tmp/cnetmod-h3-crypto-new-real-fault/inject.log": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "mtime_ns": 1792323170850552110
+  },
+  "/var/tmp/cnetmod-h3-crypto-new-real-fault/inputs-before.json": {
+    "sha256": "4e746513ffd296e7a59f7b984f3b65496fa5ec1492d5ce8d592cdf04e74fe427",
+    "bytes": 422055,
+    "mtime_ns": 1792323170850291733
+  },
+  "/var/tmp/cnetmod-h3-crypto-new-real-fault/libcnetmod_quic.a": {
+    "sha256": "4fe7c560b25a9b0ba9080c5da0859cfd574089e0c00c9fe2f57c520641137ce1",
+    "bytes": 20999932,
+    "mtime_ns": 1792323177850459685
+  },
+  "/var/tmp/cnetmod-h3-crypto-new-real-fault/link-proof.json": {
+    "sha256": "66d52570382782fb17c2c04ab9f4a7eaa70e7a470c4f9446deabde82eeca4258",
+    "bytes": 668,
+    "mtime_ns": 1792323181284301360
+  },
+  "/var/tmp/cnetmod-h3-crypto-new-real-fault/link.command.json": {
+    "sha256": "0ab2909f256959e685093c065c670be2e32cc26117448835e6c3934e8e602930",
+    "bytes": 890,
+    "mtime_ns": 1792323177893873018
+  },
+  "/var/tmp/cnetmod-h3-crypto-new-real-fault/link.d": {
+    "sha256": "5f8c8dedae7f0379498fa48c4d7bc95fa846a954e973aad5eb7159bb9139c497",
+    "bytes": 2106,
+    "mtime_ns": 1792323181250458731
+  },
+  "/var/tmp/cnetmod-h3-crypto-new-real-fault/link.log": {
+    "sha256": "6c79bafffd297e0b1b86e4453cda784b05a80b3ab34315301f44885860885545",
+    "bytes": 85093,
+    "mtime_ns": 1792323181254458731
+  },
+  "/var/tmp/cnetmod-h3-crypto-new-real-fault/link.map": {
+    "sha256": "9123458648fa4b106a37d6468488756cfd2a617fa8660d0078802aec424bceac",
+    "bytes": 2205864,
+    "mtime_ns": 1792323181254458731
+  },
+  "/var/tmp/cnetmod-h3-crypto-new-real-fault/quic_connection.cpp": {
+    "sha256": "3b78a29cd66655810f6f6d62bd84014fcc98dece5b07ce7be2b42a1611ab38c9",
+    "bytes": 273743,
+    "mtime_ns": 1792323170974418009
+  },
+  "/var/tmp/cnetmod-h3-crypto-new-real-fault/quic_connection.cpp.o": {
+    "sha256": "4e039fca6d235ab92108343241de9ed85be7ea774a7a92aaec02a85a2391da70",
+    "bytes": 8799644,
+    "mtime_ns": 1792323176590460052
+  },
+  "/var/tmp/cnetmod-h3-crypto-new-real-fault/quic_packet_failure_server": {
+    "sha256": "d60d4136a6ef5c05b671516fa8006bd8941def29c1d7e9c0b8bb8484edee1b6b",
+    "bytes": 31387096,
+    "mtime_ns": 1792323181246458733
+  },
+  "/var/tmp/cnetmod-h3-crypto-new-real-fault/quic_packet_failure_server.cpp": {
+    "sha256": "55d15d2086d4fd160ca02ebcfa6a99237f8a9d8c67b65183e4194934377698a0",
+    "bytes": 13887,
+    "mtime_ns": 1792322817078094900
+  },
+  "/var/tmp/cnetmod-h3-crypto-new-real-fault/quic_packet_failure_server.cpp.o": {
+    "sha256": "c63134b080902bca5a5908c3fdb07d2b09d2ced0ec4c84938dcbfd4237b6cdd7",
+    "bytes": 1827592,
+    "mtime_ns": 1792323177794459702
+  },
+  "/var/tmp/cnetmod-h3-crypto-new-real-fault/replace-member.command.json": {
+    "sha256": "f08f236b185a461b0f765b69815c411a20d36001fc621440f63c6b754f562061",
+    "bytes": 159,
+    "mtime_ns": 1792323177836587347
+  },
+  "/var/tmp/cnetmod-h3-crypto-new-real-fault/replace-member.log": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "mtime_ns": 1792323177836587347
+  }
+}

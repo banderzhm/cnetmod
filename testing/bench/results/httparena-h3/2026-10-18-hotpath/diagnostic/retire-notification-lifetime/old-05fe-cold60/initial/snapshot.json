@@ -1,0 +1,2207 @@
+{
+  "inferior_function_calls": false,
+  "inferior_writes": false,
+  "mimalloc": {
+    "arena_count": 1,
+    "committed": {
+      "current": 43974656,
+      "peak": 43974656,
+      "total": 43974656
+    },
+    "heap_count": 1,
+    "malloc_live_bytes": null,
+    "reason": "native build MI_STATS=OFF; never infer live=0 from disabled counters",
+    "reserved": {
+      "current": 1076166656,
+      "peak": 1076166656,
+      "total": 1076166656
+    },
+    "scope": "raw subprocess OS accounting; not live-allocation bytes",
+    "static_bin_table": {
+      "2048": {
+        "bin": 28,
+        "block_size": 2048
+      },
+      "2049": {
+        "bin": 29,
+        "block_size": 2560
+      },
+      "65536": {
+        "bin": 48,
+        "block_size": 65536
+      },
+      "65537": {
+        "bin": 49,
+        "block_size": 81920
+      }
+    },
+    "static_bin_table_scope": "Release MI_PADDING=0, MI_GUARDED=OFF assumptions; class sizes, not live block counts",
+    "stats_version": 5,
+    "thread_count": 33
+  },
+  "owned_pages": {
+    "abandoned_counter_scope": "heap maintained counts only; abandoned page bytes/live objects not enumerated",
+    "abandoned_counts_complete": true,
+    "abandoned_page_count_partial": 0,
+    "abandoned_page_count_total": 0,
+    "abandoned_page_counts_by_bin": {
+      "0": 0,
+      "1": 0,
+      "10": 0,
+      "11": 0,
+      "12": 0,
+      "13": 0,
+      "14": 0,
+      "15": 0,
+      "16": 0,
+      "17": 0,
+      "18": 0,
+      "19": 0,
+      "2": 0,
+      "20": 0,
+      "21": 0,
+      "22": 0,
+      "23": 0,
+      "24": 0,
+      "25": 0,
+      "26": 0,
+      "27": 0,
+      "28": 0,
+      "29": 0,
+      "3": 0,
+      "30": 0,
+      "31": 0,
+      "32": 0,
+      "33": 0,
+      "34": 0,
+      "35": 0,
+      "36": 0,
+      "37": 0,
+      "38": 0,
+      "39": 0,
+      "4": 0,
+      "40": 0,
+      "41": 0,
+      "42": 0,
+      "43": 0,
+      "44": 0,
+      "45": 0,
+      "46": 0,
+      "47": 0,
+      "48": 0,
+      "49": 0,
+      "5": 0,
+      "50": 0,
+      "51": 0,
+      "52": 0,
+      "53": 0,
+      "54": 0,
+      "55": 0,
+      "56": 0,
+      "57": 0,
+      "58": 0,
+      "59": 0,
+      "6": 0,
+      "60": 0,
+      "61": 0,
+      "62": 0,
+      "63": 0,
+      "64": 0,
+      "65": 0,
+      "66": 0,
+      "67": 0,
+      "68": 0,
+      "69": 0,
+      "7": 0,
+      "70": 0,
+      "71": 0,
+      "72": 0,
+      "73": 0,
+      "74": 0,
+      "8": 0,
+      "9": 0
+    },
+    "abandoned_pages_enumerated": false,
+    "bins": {
+      "1024": {
+        "committed_block_capacity_bytes": 262144,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 32,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 2064384,
+        "used_blocks_upper": 32,
+        "used_bytes_upper": 32768
+      },
+      "10240": {
+        "committed_block_capacity_bytes": 471040,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 9,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 552960,
+        "used_blocks_upper": 46,
+        "used_bytes_upper": 471040
+      },
+      "112": {
+        "committed_block_capacity_bytes": 16352,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 2,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 130592,
+        "used_blocks_upper": 87,
+        "used_bytes_upper": 9744
+      },
+      "12288": {
+        "committed_block_capacity_bytes": 110592,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 516096,
+        "used_blocks_upper": 9,
+        "used_bytes_upper": 110592
+      },
+      "128": {
+        "committed_block_capacity_bytes": 8192,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 65408,
+        "used_blocks_upper": 34,
+        "used_bytes_upper": 4352
+      },
+      "1536": {
+        "committed_block_capacity_bytes": 53760,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 64512,
+        "used_blocks_upper": 33,
+        "used_bytes_upper": 50688
+      },
+      "16": {
+        "committed_block_capacity_bytes": 8192,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 65360,
+        "used_blocks_upper": 6,
+        "used_bytes_upper": 96
+      },
+      "160": {
+        "committed_block_capacity_bytes": 8160,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 65280,
+        "used_blocks_upper": 7,
+        "used_bytes_upper": 1120
+      },
+      "16384": {
+        "committed_block_capacity_bytes": 16384,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 524288,
+        "used_blocks_upper": 1,
+        "used_bytes_upper": 16384
+      },
+      "192": {
+        "committed_block_capacity_bytes": 8064,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 65280,
+        "used_blocks_upper": 33,
+        "used_bytes_upper": 6336
+      },
+      "196608": {
+        "committed_block_capacity_bytes": 393216,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 4128768,
+        "used_blocks_upper": 1,
+        "used_bytes_upper": 196608
+      },
+      "2048": {
+        "committed_block_capacity_bytes": 8192,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 63488,
+        "used_blocks_upper": 1,
+        "used_bytes_upper": 2048
+      },
+      "224": {
+        "committed_block_capacity_bytes": 8064,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 65184,
+        "used_blocks_upper": 2,
+        "used_bytes_upper": 448
+      },
+      "24576": {
+        "committed_block_capacity_bytes": 147456,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 516096,
+        "used_blocks_upper": 6,
+        "used_bytes_upper": 147456
+      },
+      "256": {
+        "committed_block_capacity_bytes": 16384,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 2,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 130560,
+        "used_blocks_upper": 4,
+        "used_bytes_upper": 1024
+      },
+      "2560": {
+        "committed_block_capacity_bytes": 245760,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 32,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 2048000,
+        "used_blocks_upper": 32,
+        "used_bytes_upper": 81920
+      },
+      "3072": {
+        "committed_block_capacity_bytes": 12288,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 64512,
+        "used_blocks_upper": 3,
+        "used_bytes_upper": 9216
+      },
+      "32": {
+        "committed_block_capacity_bytes": 8192,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 65312,
+        "used_blocks_upper": 121,
+        "used_bytes_upper": 3872
+      },
+      "320": {
+        "committed_block_capacity_bytes": 32000,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 64960,
+        "used_blocks_upper": 82,
+        "used_bytes_upper": 26240
+      },
+      "384": {
+        "committed_block_capacity_bytes": 282240,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 33,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 2141568,
+        "used_blocks_upper": 87,
+        "used_bytes_upper": 33408
+      },
+      "393216": {
+        "committed_block_capacity_bytes": 1179648,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 3932160,
+        "used_blocks_upper": 3,
+        "used_bytes_upper": 1179648
+      },
+      "4096": {
+        "committed_block_capacity_bytes": 16384,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 61440,
+        "used_blocks_upper": 2,
+        "used_bytes_upper": 8192
+      },
+      "448": {
+        "committed_block_capacity_bytes": 8064,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 64960,
+        "used_blocks_upper": 17,
+        "used_bytes_upper": 7616
+      },
+      "48": {
+        "committed_block_capacity_bytes": 16320,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 1,
+        "reserved_block_capacity_bytes": 65376,
+        "used_blocks_upper": 289,
+        "used_bytes_upper": 13872
+      },
+      "49152": {
+        "committed_block_capacity_bytes": 245760,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 491520,
+        "used_blocks_upper": 5,
+        "used_bytes_upper": 245760
+      },
+      "512": {
+        "committed_block_capacity_bytes": 49152,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 65024,
+        "used_blocks_upper": 83,
+        "used_bytes_upper": 42496
+      },
+      "6144": {
+        "committed_block_capacity_bytes": 24576,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 61440,
+        "used_blocks_upper": 3,
+        "used_bytes_upper": 18432
+      },
+      "64": {
+        "committed_block_capacity_bytes": 73600,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 2,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 130816,
+        "used_blocks_upper": 1072,
+        "used_bytes_upper": 68608
+      },
+      "640": {
+        "committed_block_capacity_bytes": 245760,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 32,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 2068480,
+        "used_blocks_upper": 32,
+        "used_bytes_upper": 20480
+      },
+      "768": {
+        "committed_block_capacity_bytes": 7680,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 64512,
+        "used_blocks_upper": 2,
+        "used_bytes_upper": 1536
+      },
+      "8": {
+        "committed_block_capacity_bytes": 8192,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 1,
+        "reserved_block_capacity_bytes": 65376,
+        "used_blocks_upper": 180,
+        "used_bytes_upper": 1440
+      },
+      "80": {
+        "committed_block_capacity_bytes": 8160,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 65360,
+        "used_blocks_upper": 1,
+        "used_bytes_upper": 80
+      },
+      "896": {
+        "committed_block_capacity_bytes": 8064,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 64512,
+        "used_blocks_upper": 1,
+        "used_bytes_upper": 896
+      },
+      "98304": {
+        "committed_block_capacity_bytes": 491520,
+        "definitely_empty_pages": 0,
+        "empty_reserved_block_capacity_bytes": 0,
+        "pages": 1,
+        "pages_with_deferred_thread_free": 0,
+        "reserved_block_capacity_bytes": 4128768,
+        "used_blocks_upper": 4,
+        "used_bytes_upper": 393216
+      }
+    },
+    "complete_within_declared_scope": true,
+    "heaps_visited": 1,
+    "limits": {
+      "debugger_wall_seconds": 5,
+      "heaps": 256,
+      "pages": 32768,
+      "theaps": 2048
+    },
+    "live_bytes_exact": false,
+    "owned_empty_reserved_capacity_bytes": 0,
+    "owned_used_bytes_upper": 3207632,
+    "pages_visited": 170,
+    "scope": "owned theap page queues plus detached metadata theap",
+    "theaps_visited": 34,
+    "used_includes_deferred_thread_free": true
+  },
+  "pid": 13752,
+  "pools": {
+    "large": {
+      "address": "0x0",
+      "constructed": false,
+      "symbol": "_ZZN7cnetmod6detailW7cnetmodW8executorW8async_op23large_udp_datagram_poolEvE4pool"
+    },
+    "small": {
+      "address": "0x2fa50fd0100",
+      "block_size": 2048,
+      "cached_blocks_approx": 0,
+      "cached_payload_bytes": 0,
+      "capacity": 32768,
+      "constructed": true,
+      "dequeue_position": 0,
+      "enqueue_position": 0,
+      "max_blocks": 32768,
+      "queue_cell_bytes": 64,
+      "queue_storage_bytes": 2097152,
+      "sampled_raw_allocation_addresses": [],
+      "symbol": "_ZZN7cnetmod6detailW7cnetmodW8executorW8async_op23small_udp_datagram_poolEvE4pool"
+    }
+  },
+  "proc_smaps_rollup": "2fa50000000-7ffe3af32000 ---p 00000000 00:00 0                           [rollup]\nRss:               47296 kB\nPss:               45069 kB\nPss_Dirty:         40368 kB\nPss_Anon:          40104 kB\nPss_File:           4965 kB\nPss_Shmem:             0 kB\nShared_Clean:       2484 kB\nShared_Dirty:          0 kB\nPrivate_Clean:      4444 kB\nPrivate_Dirty:     40368 kB\nReferenced:        47296 kB\nAnonymous:         40104 kB\nKSM:                   0 kB\nLazyFree:              0 kB\nAnonHugePages:     38912 kB\nShmemPmdMapped:        0 kB\nFilePmdMapped:         0 kB\nShared_Hugetlb:        0 kB\nPrivate_Hugetlb:       0 kB\nSwap:                  0 kB\nSwapPss:               0 kB\nLocked:                0 kB\n",
+  "proc_status": "Name:\tarena_h3_server\nUmask:\t0022\nState:\tt (tracing stop)\nTgid:\t13752\nNgid:\t0\nPid:\t13752\nPPid:\t13665\nTracerPid:\t13826\nUid:\t0\t0\t0\t0\nGid:\t0\t0\t0\t0\nFDSize:\t256\nGroups:\t0 0 \nNStgid:\t13752\nNSpid:\t13752\nNSpgid:\t13752\nNSsid:\t13752\nKthread:\t0\nVmPeak:\t 1594256 kB\nVmSize:\t 1594256 kB\nVmLck:\t       0 kB\nVmPin:\t       0 kB\nVmHWM:\t   47296 kB\nVmRSS:\t   47296 kB\nRssAnon:\t   40104 kB\nRssFile:\t    7192 kB\nRssShmem:\t       0 kB\nVmData:\t 1583948 kB\nVmStk:\t     136 kB\nVmExe:\t    2780 kB\nVmLib:\t    3280 kB\nVmPTE:\t     408 kB\nVmSwap:\t       0 kB\nHugetlbPages:\t       0 kB\nCoreDumping:\t0\nTHP_enabled:\t1\nuntag_mask:\t0xffffffffffffffff\nThreads:\t66\nSigQ:\t1/63276\nSigPnd:\t0000000000000000\nShdPnd:\t0000000000000000\nSigBlk:\t0000000000000000\nSigIgn:\t0000000000000000\nSigCgt:\t0000000100000000\nCapInh:\t0000000000000000\nCapPrm:\t000001ffffffffff\nCapEff:\t000001ffffffffff\nCapBnd:\t000001ffffffffff\nCapAmb:\t0000000000000000\nNoNewPrivs:\t0\nSeccomp:\t2\nSeccomp_filters:\t1\nSpeculation_Store_Bypass:\tthread vulnerable\nSpeculationIndirectBranch:\tconditional enabled\nCpus_allowed:\tffffffff\nCpus_allowed_list:\t0-31\nMems_allowed:\t00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001\nMems_allowed_list:\t0\nvoluntary_ctxt_switches:\t43\nnonvoluntary_ctxt_switches:\t1\n",
+  "server": {
+    "active_connections_sum": 0,
+    "budget_counted_once": true,
+    "impl_address": "0x2fa50ea1280",
+    "shards": [
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea1280",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50eac080",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50eaba80",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50eab480",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50eaae80",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50eaa880",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50eaa280",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea9c80",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea9680",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea9080",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea8a80",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea8480",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea7e80",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea7880",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea7280",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea6c80",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea6680",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea6080",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea5a80",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea5480",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea4e80",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea4880",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea4280",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea3c80",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea3680",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea3080",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea2a80",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea2480",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea1e80",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea1880",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea0080",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea0680",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      },
+      {
+        "active_connections_": 0,
+        "address": "0x2fa50ea0c80",
+        "containers": {
+          "connections_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "dispatcher_constructed": false,
+          "pending_route_expirations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "published_route_generations_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "reset_routes_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "sessions_": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_generations": {
+            "bucket_count": 0,
+            "bucket_pointer_bytes": 0,
+            "size": 0
+          },
+          "timer_heap": {
+            "capacity": 0,
+            "element_bytes": 32,
+            "expired_weak_entries": 0,
+            "live_weak_entries": 0,
+            "reserved_bytes": 0,
+            "size": 0,
+            "weak_entries_checked": 0,
+            "weak_scan_complete": true
+          }
+        },
+        "dropped_inbox_datagrams_": 0,
+        "heap_receive_datagrams_": 0,
+        "inbox_enqueued_datagrams_": 0,
+        "pooled_receive_datagrams_": 0
+      }
+    ],
+    "shared_budget": {
+      "active_inboxes": 0,
+      "budget_dropped": 0,
+      "capacity_dropped": 0,
+      "creation_dropped": 0,
+      "peak_queued": 0,
+      "queued": 0
+    }
+  },
+  "snapshot_time": 1792324557.4749806
+}

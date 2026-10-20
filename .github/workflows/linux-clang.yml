@@ -2,9 +2,9 @@ name: Linux Clang/LLVM Build
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main", "release/**" ]
   pull_request:
-    branches: [ "main", "master" ]
+    branches: [ "main", "release/**" ]
   workflow_dispatch:
 
 permissions:
@@ -17,7 +17,7 @@ concurrency:
 env:
   SCCACHE_GHA_ENABLED: "true"
   SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
-  # C++ module cache entries embed interface paths; bump after module moves.
+  # C++ module caches embed interface paths; bump this after module moves.
   SCCACHE_C_CUSTOM_CACHE_BUSTER: "cnetmod-module-layout-v2"
 
 jobs:
@@ -38,7 +38,7 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=12
-    
+
     strategy:
       fail-fast: false
       matrix:
@@ -344,10 +344,10 @@ jobs:
       run: |
         echo "=== Running cnetmod_app ==="
         ${{ github.workspace }}/build/cnetmod_app || true
-        
+
         echo "=== Running timer_demo ==="
         timeout 5 ${{ github.workspace }}/build/examples/core/example_timer_demo || true
-        
+
         echo "=== Running channel_demo ==="
         ${{ github.workspace }}/build/examples/concurrency/example_channel_demo || true
 
@@ -371,4 +371,4 @@ jobs:
         echo "Build Type: ${{ matrix.build_type }}"
         echo "Compiler: /usr/bin/clang++-${{ matrix.clang_version }}"
         /usr/bin/clang++-${{ matrix.clang_version }} --version 2>&1 || echo "clang++ not found"
-        echo "=========================================" 
+        echo "========================================="

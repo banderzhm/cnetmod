@@ -26,6 +26,7 @@ This file is generated from every `skill/**/*.md` file. Edit the source files an
 - `skill/infra/application.md`
 - `skill/infra/architecture.md`
 - `skill/infra/code-style.md`
+- `skill/infra/distribution.md`
 - `skill/infra/json.md`
 - `skill/infra/module-conventions.md`
 - `skill/infra/new-module-guide.md`
@@ -77,6 +78,7 @@ This file is generated from every `skill/**/*.md` file. Edit the source files an
 | 了解项目架构、目录结构、模块清单 | [architecture.md](infra/architecture.md) |
 | 使用模块化 JSON、DTO 映射和异步 JSON 模板 | [json.md](infra/json.md) |
 | 创建开箱即用的 HTTP/OTEL 应用 | [application.md](infra/application.md) |
+| 下载、发布和消费预构建 SDK | [distribution.md](infra/distribution.md) |
 | 了解模块/文件命名约定、export 规则 | [module-conventions.md](infra/module-conventions.md) |
 | 了解代码风格、clang-format、命名规范 | [code-style.md](infra/code-style.md) |
 | 接入 OpenTelemetry、链路追踪和指标 | [observability.md](infra/observability.md) |
@@ -1593,6 +1595,12 @@ BoringSSL 导出 AES-128/256-GCM 的 TLS 1.2 发送密钥并安装到 Linux TLS 
 安装成功，`kernel_tls_active()` 才返回 `true`；内核或密码套件不支持时保留用户态 TLS。
 普通上下文默认不启用，继续协商 TLS 1.3。该路径仅卸载 TX，接收方向仍由 BoringSSL
 解密；QUIC 不使用 kTLS。
+
+HTTP/2 会在同一个 `ssl_stream` 上同时挂起读取协程和串行化的写入协程。框架在每次
+`SSL_read` / `SSL_write` 到对应 memory BIO 密文刷出完成之间持有协程锁，保证另一协程
+不会使 `BIO_get_mem_data()` 返回的内部存储失效，也不会在刷出后被错误的 `BIO_reset()`
+清掉新记录。应用层不需要再给一个读协程加锁；多个业务写入仍应由上层协议按帧顺序
+串行化。禁止绕过 `ssl_stream` 直接操作 `native()` 返回的 `SSL*`，否则该并发保证失效。
 
 HTTP/2 会在同一个 `ssl_stream` 上同时挂起读取协程和串行化的写入协程。框架在每次
 `SSL_read` / `SSL_write` 到对应 memory BIO 密文刷出完成之间持有协程锁，保证另一协程
@@ -8865,6 +8873,34 @@ auto server = h3::make_http3_server(io, tls,
     });
 ```
 
+可在 `start()` 前调整新连接的 QUIC 空闲回收时间：
+
+```cpp
+auto configured = server->set_idle_timeout(std::chrono::seconds{10});
+// 检查 configured 后再调用 server->start()。
+```
+
+`set_idle_timeout(std::chrono::milliseconds)` 会同步应用到多 worker listener；负值返回
+`invalid_argument`，`0ms` 禁用空闲到期。短任务型客户端若直接关闭 UDP socket 而不发送
+`CONNECTION_CLOSE`，服务端无法从静默中区分断线与合法空闲，应由应用按连接复用策略选择
+合适的有限超时。
+
+受控网络可在 `start()` 前同时设置接收上限和逐路径 MTU 探测：
+
+```cpp
+auto payload = server->set_max_udp_payload_size(1472);
+auto pmtud = server->set_path_mtu_discovery(
+    1472, std::chrono::milliseconds{10});
+```
+
+`set_max_udp_payload_size()` 接受 `1200..65527`，并同步应用到所有 worker；它决定本端
+接收缓冲区大小及向 peer 通告的 QUIC UDP payload 上限。发送路径仍从 RFC 9000 的
+1200 字节安全基线开始，只有 padded PING 被确认后才提升到探测值。公网部署应按实际
+链路选择保守上限，避免 IP 分片。
+
+QUIC 新连接默认使用 CUBIC 拥塞控制。真实网络仍按 RTT 和拥塞窗口 pacing；loopback
+没有物理瓶颈队列，因此只保留拥塞窗口限制，省去本机进程间通信的短定时器唤醒。
+
 同步 handler 适合纯内存、快速响应；涉及数据库、缓存或 RPC 时使用协程 handler：
 
 ```cpp
@@ -8905,6 +8941,54 @@ h3::streaming_server_request_handler handler =
 
 handler 提前返回会关闭 body pump；消费者慢时，传输层不会无限制缓存上传数据。
 
+服务端默认限制请求 DATA 为 32 MiB。`start()` 前可通过
+`server->set_request_body_limits({.max_bytes = 64U * 1024U * 1024U,
+.chunk_capacity = 16U})` 调整；所有 worker 和普通/流式 handler 使用同一配置。
+普通 handler 仍在完整请求体到达后启动，同时限制 FIN 前的聚合 wire 缓冲为
+`max_bytes` 加允许的 header 字节（未设置 header 上限时额外 64 KiB）；大量帧开销也计入
+此聚合上限。超限只取消当前 stream，连接可继续复用。流式 handler 的 DATA 累计限制
+独立于逐帧缓冲和 channel 容量，大上传应显式提高限制。
+
+RESET 会按 final size 结算流和连接接收信用；取消后的接收方向只保留 offset，直到
+peer FIN/RESET 给出最终大小后退休。QPACK 阻塞等待绑定到流取消和连接关闭，取消会发送
+Stream Cancellation 指令，避免保留阻塞 header section。
+
+
+### 共享缓冲响应体
+
+服务端可将预加载的不可变内容放入 `response.shared_body`。多个响应共享原始存储，
+会话直接构建一次 HEADERS + DATA + FIN 写入，适合静态资源热路径：
+
+```cpp
+auto cached = std::make_shared<const std::string>("cached asset");
+response.shared_body = cached;
+response.headers.emplace("content-length", std::to_string(cached->size()));
+```
+
+`body`、`shared_body` 与 `body_source` 三者只能设置一个。
+
+重复静态响应还可以预编码完整的 QPACK 响应头。编码结果只使用静态表和字面量，
+可以安全地跨连接共享，并避免每个请求重复创建 header 容器和查询 QPACK 表：
+
+```cpp
+const std::array fields{
+    h3::header_field{"content-type", "text/css"},
+    h3::header_field{"vary", "Accept-Encoding"}};
+auto encoded = h3::qpack_static_response_headers::encode(200, fields);
+if (!encoded)
+    co_return std::unexpected(encoded.error());
+auto cached_headers =
+    std::make_shared<h3::qpack_static_response_headers>(std::move(*encoded));
+
+// 请求热路径
+response.status = 200;
+response.static_headers = cached_headers;
+response.shared_body = cached_body;
+```
+
+使用 `static_headers` 时，`response.status` 必须与预编码状态一致，
+`response.headers` 必须为空，并且不能同时使用 `body_source`。
+
 ### 响应体流式发送
 
 服务端可设置 `response.body_source`。服务端先发送 HEADERS，再按 producer 发送
@@ -8927,7 +9011,7 @@ response.body_source = std::make_shared<cn::http::response_body_source>(
     }, 18);
 ```
 
-`body` 与 `body_source` 不能同时设置。声明的长度必须与实际发送长度一致；HEAD、
+`body`、`shared_body` 与 `body_source` 不能同时设置。声明的长度必须与实际发送长度一致；HEAD、
 1xx、204、304 响应禁止发送 DATA。
 
 ### 显式 Server Push
@@ -10135,14 +10219,14 @@ executor.event_loop(), ...)`。`event_loop()` 必须在 request handler 所在�
 
 # 项目架构
 
-> cnetmod v2.0.0 — 基于 C++23 Modules 的跨平台异步网络库。
+> cnetmod v2.1.0 — 基于 C++23 Modules 的跨平台异步网络库。
 
 ## 项目概述
 
 | 属性 | 值 |
 |------|------|
 | 名称 | cnetmod |
-| 版本 | 2.0.0（`CNETMOD_VERSION_STRING "2.0.0"`） |
+| 版本 | 2.1.0（唯一来源为根目录 `VERSION`） |
 | 语言标准 | C++23（`CMAKE_CXX_STANDARD 23`） |
 | 构建系统 | CMake 3.28+，`CMAKE_CXX_SCAN_FOR_MODULES ON` |
 | 库类型 | 分层静态组件；`cnetmod::core` / `cnetmod::all` 是兼容聚合入口 |
@@ -10418,7 +10502,7 @@ cnetmod_enable_mimalloc(my_service)
 ## 参考源码
 - `CMakeLists.txt` — 根构建文件（项目配置、平台检测、目标定义）
 - `include/cnetmod/config.hpp` — 平台/功能宏定义
-- `include/cnetmod/version.hpp` — 版本信息（`CNETMOD_VERSION_STRING "2.0.0"`）
+- `include/cnetmod/version.hpp.in` — 从根目录 `VERSION` 生成安装用版本头
 - `cmake/Protocols.cmake` — 18 个协议开关注册与依赖验证
 <!-- END SOURCE: skill/infra/architecture.md -->
 
@@ -10620,6 +10704,107 @@ bool skip(std::size_t n) noexcept;
 - `src/core/log.cppm` — 命名空间、函数签名示例
 - `src/core/error.cppm` — 枚举定义、全局片段示例
 <!-- END SOURCE: skill/infra/code-style.md -->
+
+<!-- BEGIN SOURCE: skill/infra/distribution.md -->
+# Source: `skill/infra/distribution.md`
+
+# SDK 分发与版本治理
+
+> 用 GitHub Releases 分发经过真实消费门禁的 cnetmod C++23 Modules SDK，并保持源码构建与二进制消费边界清晰。
+
+## 核心原则
+
+1. 根目录 `VERSION` 是项目版本的唯一事实来源。CMake、Conan、vcpkg、Rust、Python 与发布标签必须一致；提交前运行 `python tools/release/check_version.py`。
+2. `main` 是稳定主分支，`develop` 是功能完备性集成分支，`release/<major>.<minor>` 是版本维护分支，正式标签使用不可变的 `v<major>.<minor>.<patch>`。
+3. 预构建包按精确 ABI 目标分发。编译器大版本、标准库、运行库、CPU 架构、系统基线或构建类型不匹配时，禁止静默回退到相近产物。
+4. 发布物是一个目标平台上的完整 SDK；消费者使用 `find_package(cnetmod CONFIG REQUIRED COMPONENTS ...)` 声明所需能力。`cnetmod::core`、`cnetmod::http` 等组件目标是稳定消费接口，当前共同链接兼容目标 `cnetmod::cnetmod_core`。
+5. 不分发 BMI/IFC/PCM。C++ Modules 的编译产物与具体编译器和参数强绑定；SDK 分发模块接口源码、静态库、公开头和 CMake 元数据，由消费端编译自己的模块图。
+6. `system`、`vcpkg`、`conan` 仍是三种源码依赖模式；预构建 SDK 是构建输出，不是第四种依赖模式。
+7. 已发布资产不覆盖。发布流水线先创建草稿、上传校验通过的全部资产，再一次性发布；同名 Release 已存在时直接失败。
+
+## 分支和门禁
+
+| 分支/标签 | 用途 | 必须通过 |
+|---|---|---|
+| `develop` | 小平台功能完备性集成 | Linux 上的 `core`、`backend`、`complete` 三个配置 |
+| `release/2.1` | 2.1 版本线稳定与补丁 | Windows、Linux、macOS 全量构建与测试 |
+| `main` | 随时可发布的稳定主线 | 受保护合并，禁止直接推送 |
+| `v2.1.0` | 不可变正式发布身份 | 版本契约、三平台 SDK、干净消费项目、校验和、SBOM、构建证明 |
+
+分支保护的具体策略维护在 `.github/BRANCHING.md`。版本标签必须从对应的
+`release/<major>.<minor>` 合并到 `main` 后创建。
+
+## 发布物布局
+
+每个 ZIP 都必须包含：
+
+```text
+include/cnetmod/                         C/C++ 公开头
+lib/cnetmod/modules/                     C++23 模块接口与必要实现片段
+lib/cmake/cnetmod/                       find_package 配置与导出目标
+lib/                                    静态库
+bin/                                    必要的目标平台运行库
+share/cnetmod/cnetmod-package-manifest.json
+share/cnetmod/licenses/LICENSE
+```
+
+包清单记录版本、目标 ID、ABI、系统、架构、编译器、标准库、运行库、平台基线、
+构建类型、链接方式、依赖模式和可用组件。Release 还必须包含版本目录 JSON、
+`SHA256SUMS`、SPDX JSON SBOM 与 GitHub artifact attestation。
+
+## 下载精确目标
+
+脚手架可以复制 `cmake/cnetmod-fetch.cmake`，然后显式指定版本和目标：
+
+```powershell
+cmake `
+  -DCNETMOD_VERSION=2.1.0 `
+  -DCNETMOD_TARGET=windows-x86_64-msvc-v145-md-release `
+  -DCNETMOD_PREFIX="$PWD/3rdparty/cnetmod" `
+  -P cmake/cnetmod-fetch.cmake
+```
+
+下载器先获取版本目录，再按目标 ID 选择唯一资产并使用目录中的 SHA-256 校验。
+目标目录已存在但没有 cnetmod 包清单时，下载器拒绝覆盖。应用的构建脚本必须先完成
+这一预构建/下载步骤，再把 `CMAKE_PREFIX_PATH` 指向该目录。
+
+## CMake 消费
+
+```cmake
+find_package(cnetmod 2.1 CONFIG REQUIRED COMPONENTS
+    core application http mysql redis orm openai)
+
+target_link_libraries(my_backend PRIVATE
+    cnetmod::core
+    cnetmod::application
+    cnetmod::http
+    cnetmod::mysql
+    cnetmod::redis
+    cnetmod::orm
+    cnetmod::openai)
+```
+
+请求包中不存在的组件必须在配置阶段失败，不能等到链接阶段。消费者仍须使用与目标
+ID 一致的工具链和 ABI；系统依赖模式的 Unix SDK 还要求目标机器具有对应系统库。
+
+## 发布操作
+
+1. 在 `develop` 完成功能和三配置门禁。
+2. 合并到 `release/<major>.<minor>`，完成三平台全量验证。
+3. 更新 `VERSION`，运行版本契约检查，合并到 `main`。
+4. 在 `main` 创建签名或受保护标签 `v<version>`。
+5. `release-sdk.yml` 构建并安装 SDK，用仓库外的干净消费项目执行
+   `find_package`、编译和运行，再生成目录、校验和、SBOM 和构建证明。
+6. 发布后验证 GitHub Release 的不可变状态；任何修复使用新补丁版本，禁止替换资产。
+
+## 禁止事项
+
+- 禁止手工修改生成的 `include/cnetmod/version.hpp` 或在源码中硬编码项目版本。
+- 禁止把不同 MSVC 运行库、不同 libc++/libstdc++ 或不同系统基线标成同一个目标。
+- 禁止仅验证“库能编译”；发布门禁必须从安装目录完成一次干净消费。
+- 禁止用 `--clobber` 覆盖已有 Release 资产。
+- 禁止把临时构建目录、下载缓存、BMI 或本机绝对路径打入 SDK。
+<!-- END SOURCE: skill/infra/distribution.md -->
 
 <!-- BEGIN SOURCE: skill/infra/json.md -->
 # Source: `skill/infra/json.md`

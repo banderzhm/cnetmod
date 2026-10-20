@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RFC 9220 WebTransport probe: aioquic client -> cnetmod HTTP/3 server.
+"""WebTransport probe: aioquic client -> cnetmod HTTP/3 server.
 
 This is intentionally a small executable interoperability check, rather than
 a mock: it opens a real QUIC connection, performs Extended CONNECT, sends a
@@ -18,8 +18,9 @@ try:
     from aioquic.asyncio import connect
     from aioquic.asyncio.protocol import QuicConnectionProtocol
     from aioquic.h3.connection import H3Connection
-    from aioquic.h3.events import DataReceived, DatagramReceived, HeadersReceived, WebTransportStreamDataReceived
+    from aioquic.h3.events import DataReceived, DatagramReceived, HeadersReceived
     from aioquic.quic.configuration import QuicConfiguration
+    from aioquic.quic.events import ConnectionTerminated, StreamDataReceived, StreamReset
 except ImportError as error:
     print(f"SKIP: aioquic unavailable: {error}")
     raise SystemExit(77)
@@ -60,10 +61,25 @@ class WebTransportProbeProtocol(QuicConnectionProtocol):
         self.datagram_echo: asyncio.Future[bytes] = loop.create_future()
         self.close_info: asyncio.Future[tuple[int, str]] = loop.create_future()
         self.session_id: int | None = None
+        self.local_child_stream_id: int | None = None
+        self.child_echo_body = bytearray()
         self.events: list[str] = []
         self.close_wire = bytearray()
 
     def quic_event_received(self, event) -> None:
+        if isinstance(event, (ConnectionTerminated, StreamReset)):
+            self.events.append(repr(event))
+        # create_webtransport_stream() emits the outgoing preface but aioquic
+        # 1.7 does not classify this locally initiated stream's receive half.
+        # The peer's reply is raw application data on that already-associated
+        # stream, not another HTTP/3 frame sequence. Only bypass H3 parsing for
+        # the exact child stream this probe created; CONNECT/control streams
+        # still go through the independent H3 parser below.
+        if isinstance(event, StreamDataReceived) and event.stream_id == self.local_child_stream_id:
+            self.child_echo_body.extend(event.data)
+            if event.end_stream and not self.stream_echo.done():
+                self.stream_echo.set_result(bytes(self.child_echo_body))
+            return
         for h3_event in self.h3.handle_event(event):
             stream_id = getattr(h3_event, "stream_id", "-")
             self.events.append(f"{type(h3_event).__name__}(stream={stream_id})")
@@ -75,9 +91,6 @@ class WebTransportProbeProtocol(QuicConnectionProtocol):
                 status = next((value for name, value in h3_event.headers if name == b":status"), b"0")
                 if not self.connect_response.done():
                     self.connect_response.set_result(int(status))
-            elif isinstance(h3_event, WebTransportStreamDataReceived):
-                if h3_event.session_id == self.session_id and not self.stream_echo.done():
-                    self.stream_echo.set_result(h3_event.data)
             elif isinstance(h3_event, DatagramReceived):
                 if h3_event.stream_id == self.session_id and not self.datagram_echo.done():
                     self.datagram_echo.set_result(h3_event.data)
@@ -92,6 +105,21 @@ class WebTransportProbeProtocol(QuicConnectionProtocol):
                         self.close_info.set_result(decode_close_capsule(bytes(self.close_wire)))
                     except ValueError as error:
                         self.close_info.set_exception(error)
+
+    def open_child_stream(self, session_id: int) -> int:
+        stream_id = self.h3.create_webtransport_stream(session_id)
+        self.local_child_stream_id = stream_id
+        return stream_id
+
+    async def expect_child_echo(self, timeout: float) -> None:
+        try:
+            echo = await asyncio.wait_for(self.stream_echo, timeout)
+        except asyncio.TimeoutError as error:
+            raise RuntimeError(
+                f"timed out waiting for WebTransport child echo; received events: {self.events}"
+            ) from error
+        if echo != b"strm":
+            raise RuntimeError(f"WebTransport child echo mismatch: {echo!r}")
 
     def open_session(self, authority: str, path: str) -> int:
         session_id = self._quic.get_next_available_stream_id()
@@ -166,7 +194,7 @@ async def run(host: str, port: int, path: str, timeout: float) -> None:
         if status < 200 or status >= 300:
             raise RuntimeError(f"Extended CONNECT rejected with HTTP {status}")
 
-        stream_id = protocol.h3.create_webtransport_stream(session_id)
+        stream_id = protocol.open_child_stream(session_id)
         # The shared cnetmod fixture validates the bidirectional payload and
         # accepts a second (unidirectional) WebTransport child stream before
         # echoing the Datagram.
@@ -178,6 +206,7 @@ async def run(host: str, port: int, path: str, timeout: float) -> None:
         protocol.h3.send_datagram(session_id, b"aioquic-datagram")
         protocol.transmit()
 
+        await protocol.expect_child_echo(timeout)
         try:
             datagram_echo = await asyncio.wait_for(protocol.datagram_echo, timeout)
         except asyncio.TimeoutError as error:

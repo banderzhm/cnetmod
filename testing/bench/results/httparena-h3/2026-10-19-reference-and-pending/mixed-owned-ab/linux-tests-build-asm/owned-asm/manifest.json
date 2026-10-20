@@ -1,0 +1,230 @@
+{
+  "guard": {
+    "binary": "/var/tmp/cnetmod-pmtu-deadline-5afc506d/baseline-guard/arena_h3_server",
+    "binary_sha256": "2fa51db8652cf8a0d166d79ab4d36241c9a5c789aa8ed4c0cb5e57eb56bb7d28",
+    "methods": {
+      "size()": {
+        "start": "0x34d1c0",
+        "end": "0x34d1e0",
+        "bytes": 32,
+        "command": [
+          "objdump",
+          "-d",
+          "-C",
+          "--start-address=0x34d1c0",
+          "--stop-address=0x34d1e0",
+          "/var/tmp/cnetmod-pmtu-deadline-5afc506d/baseline-guard/arena_h3_server"
+        ],
+        "sha256": "40a4e23a2b2f63cd7eb98dd3033669dac5921c161de4e1ff8269c1d69fd22dea"
+      },
+      "append_to(": {
+        "start": "0x34d260",
+        "end": "0x34d2d0",
+        "bytes": 112,
+        "command": [
+          "objdump",
+          "-d",
+          "-C",
+          "--start-address=0x34d260",
+          "--stop-address=0x34d2d0",
+          "/var/tmp/cnetmod-pmtu-deadline-5afc506d/baseline-guard/arena_h3_server"
+        ],
+        "sha256": "1674a88ac8507b5d1e9eb3be12490ac0597702699d467b9c671d161f0b648b2f"
+      },
+      "is_connection_close()": {
+        "start": "0x34d200",
+        "end": "0x34d220",
+        "bytes": 32,
+        "command": [
+          "objdump",
+          "-d",
+          "-C",
+          "--start-address=0x34d200",
+          "--stop-address=0x34d220",
+          "/var/tmp/cnetmod-pmtu-deadline-5afc506d/baseline-guard/arena_h3_server"
+        ],
+        "sha256": "c0baafd48374ffe45565ae1a5f41511c20dac30b7ee7ad62e234b9e085229f66"
+      },
+      "owned_bytes()": {
+        "start": "0x34d220",
+        "end": "0x34d230",
+        "bytes": 16,
+        "command": [
+          "objdump",
+          "-d",
+          "-C",
+          "--start-address=0x34d220",
+          "--stop-address=0x34d230",
+          "/var/tmp/cnetmod-pmtu-deadline-5afc506d/baseline-guard/arena_h3_server"
+        ],
+        "sha256": "b295a946970d2005fbe5f6622bd70f6927fe4b1857d3714a66d7a67163b049ab"
+      },
+      "release_owned_bytes()": {
+        "start": "0x34d230",
+        "end": "0x34d260",
+        "bytes": 48,
+        "command": [
+          "objdump",
+          "-d",
+          "-C",
+          "--start-address=0x34d230",
+          "--stop-address=0x34d260",
+          "/var/tmp/cnetmod-pmtu-deadline-5afc506d/baseline-guard/arena_h3_server"
+        ],
+        "sha256": "28375cf54e5241cdad27ef51867f6a96606307e8321865f99cea07ffce482649"
+      }
+    }
+  },
+  "mixed": {
+    "binary": "/var/tmp/cnetmod-h3-mixed-prefix-candidate-4a739b77e7584ead85cbf02304fb77ff/proof-build-root/testing/bench/arena_h3_server",
+    "binary_sha256": "4e81085bb948f91a1ef6a98e4e0dc670d8fd843776b5ad17009ce1b9dc81a32a",
+    "methods": {
+      "size()": {
+        "start": "0x34d640",
+        "end": "0x34d670",
+        "bytes": 48,
+        "command": [
+          "objdump",
+          "-d",
+          "-C",
+          "--start-address=0x34d640",
+          "--stop-address=0x34d670",
+          "/var/tmp/cnetmod-h3-mixed-prefix-candidate-4a739b77e7584ead85cbf02304fb77ff/proof-build-root/testing/bench/arena_h3_server"
+        ],
+        "sha256": "7f6d0ce713eafd697687f51507794259acda5d747a444a47d3a9b1ed3c4e7a98"
+      },
+      "append_to(": {
+        "start": "0x34d720",
+        "end": "0x34d7b0",
+        "bytes": 144,
+        "command": [
+          "objdump",
+          "-d",
+          "-C",
+          "--start-address=0x34d720",
+          "--stop-address=0x34d7b0",
+          "/var/tmp/cnetmod-h3-mixed-prefix-candidate-4a739b77e7584ead85cbf02304fb77ff/proof-build-root/testing/bench/arena_h3_server"
+        ],
+        "sha256": "3b9ebe9f54ebb6ee85695e7a2a45030fdf8d1bbdcf4979582707d0d188354fa9"
+      },
+      "is_connection_close()": {
+        "start": "0x34d690",
+        "end": "0x34d6c0",
+        "bytes": 48,
+        "command": [
+          "objdump",
+          "-d",
+          "-C",
+          "--start-address=0x34d690",
+          "--stop-address=0x34d6c0",
+          "/var/tmp/cnetmod-h3-mixed-prefix-candidate-4a739b77e7584ead85cbf02304fb77ff/proof-build-root/testing/bench/arena_h3_server"
+        ],
+        "sha256": "392912efe1e410b305456cedf75b04070c2ef48aaee3418609379f7d421f47cf"
+      },
+      "owned_bytes()": {
+        "start": "0x34d6c0",
+        "end": "0x34d6e0",
+        "bytes": 32,
+        "command": [
+          "objdump",
+          "-d",
+          "-C",
+          "--start-address=0x34d6c0",
+          "--stop-address=0x34d6e0",
+          "/var/tmp/cnetmod-h3-mixed-prefix-candidate-4a739b77e7584ead85cbf02304fb77ff/proof-build-root/testing/bench/arena_h3_server"
+        ],
+        "sha256": "7d0f24467744a2984b07b0ce1ce373570e1add5ba32a7cc255426a8c5d767f22"
+      },
+      "release_owned_bytes()": {
+        "start": "0x34d6e0",
+        "end": "0x34d720",
+        "bytes": 64,
+        "command": [
+          "objdump",
+          "-d",
+          "-C",
+          "--start-address=0x34d6e0",
+          "--stop-address=0x34d720",
+          "/var/tmp/cnetmod-h3-mixed-prefix-candidate-4a739b77e7584ead85cbf02304fb77ff/proof-build-root/testing/bench/arena_h3_server"
+        ],
+        "sha256": "935b100b2b55bd2dc550500366d4de8e9c3dea4cee49ef62b8be070c763b6b0d"
+      }
+    }
+  },
+  "fast": {
+    "binary": "/var/tmp/cnetmod-h3-owned-fast-candidate-fbaeb04a21614732b24a7fdae850fcd0/proof-build-root/testing/bench/arena_h3_server",
+    "binary_sha256": "e73f3dae63639c862512e277e835ec68569bb358af66c27c55e85b71de7022ed",
+    "methods": {
+      "size()": {
+        "start": "0x34d590",
+        "end": "0x34d5c0",
+        "bytes": 48,
+        "command": [
+          "objdump",
+          "-d",
+          "-C",
+          "--start-address=0x34d590",
+          "--stop-address=0x34d5c0",
+          "/var/tmp/cnetmod-h3-owned-fast-candidate-fbaeb04a21614732b24a7fdae850fcd0/proof-build-root/testing/bench/arena_h3_server"
+        ],
+        "sha256": "ba12a97242c09280ebc4c95eb6d01bdfcc78ebe8e125a09c9d017c4caf5204d2"
+      },
+      "append_to(": {
+        "start": "0x34d670",
+        "end": "0x34d700",
+        "bytes": 144,
+        "command": [
+          "objdump",
+          "-d",
+          "-C",
+          "--start-address=0x34d670",
+          "--stop-address=0x34d700",
+          "/var/tmp/cnetmod-h3-owned-fast-candidate-fbaeb04a21614732b24a7fdae850fcd0/proof-build-root/testing/bench/arena_h3_server"
+        ],
+        "sha256": "07ea1f9033c2599d860d9e32718b31904f6992fd5ee2d4d0416e77c09d263c39"
+      },
+      "is_connection_close()": {
+        "start": "0x34d5e0",
+        "end": "0x34d610",
+        "bytes": 48,
+        "command": [
+          "objdump",
+          "-d",
+          "-C",
+          "--start-address=0x34d5e0",
+          "--stop-address=0x34d610",
+          "/var/tmp/cnetmod-h3-owned-fast-candidate-fbaeb04a21614732b24a7fdae850fcd0/proof-build-root/testing/bench/arena_h3_server"
+        ],
+        "sha256": "a1c51afd8b3edc72b4a6e9d38e149ca0e100ea03d8e70b4b67568a4d294e7a5f"
+      },
+      "owned_bytes()": {
+        "start": "0x34d610",
+        "end": "0x34d630",
+        "bytes": 32,
+        "command": [
+          "objdump",
+          "-d",
+          "-C",
+          "--start-address=0x34d610",
+          "--stop-address=0x34d630",
+          "/var/tmp/cnetmod-h3-owned-fast-candidate-fbaeb04a21614732b24a7fdae850fcd0/proof-build-root/testing/bench/arena_h3_server"
+        ],
+        "sha256": "b4c9896c20da2b30caeff13408be678039c4f5e53ab2498ba72205da628d8fc0"
+      },
+      "release_owned_bytes()": {
+        "start": "0x34d630",
+        "end": "0x34d670",
+        "bytes": 64,
+        "command": [
+          "objdump",
+          "-d",
+          "-C",
+          "--start-address=0x34d630",
+          "--stop-address=0x34d670",
+          "/var/tmp/cnetmod-h3-owned-fast-candidate-fbaeb04a21614732b24a7fdae850fcd0/proof-build-root/testing/bench/arena_h3_server"
+        ],
+        "sha256": "86688329db45a42aaab54f0f1217d5b61f137a95b06010e6c4424f168203cc2f"
+      }
+    }
+  }
+}

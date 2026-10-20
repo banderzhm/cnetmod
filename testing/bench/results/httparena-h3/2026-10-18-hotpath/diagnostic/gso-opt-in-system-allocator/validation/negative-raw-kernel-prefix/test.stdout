@@ -1,0 +1,6 @@
+[==========] Running 16 test(s).
+[ RUN      ] udp_segmented_batch_reports_original_prefix_and_preserves_early_cancel
+[  FAILED  ] udp_segmented_batch_reports_original_prefix_and_preserves_early_cancel (1 failure(s))
+[==========] 1 test(s) ran.
+[  PASSED  ] 0 test(s).
+[  FAILED  ] 1 test(s).

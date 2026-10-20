@@ -1,0 +1,14 @@
+{
+  "official_commit": "8977be2721a5aba7b320345cddfcd6f6b654e698",
+  "cwd": "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307916/arena",
+  "env": {
+    "SKIP_TUNE": "true",
+    "H2LOAD_H3": "/var/tmp/cnetmod-h3-loadgen169/h2load",
+    "TMPDIR": "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307916/arena/tmp",
+    "DURATION": "5s",
+    "RUNS": "12",
+    "H3THREADS": "64"
+  },
+  "selection": "supplemental twelve-round static retention; not the three-round comparison",
+  "system_tuning": "disabled on this shared WSL host using official SKIP_TUNE option"
+}

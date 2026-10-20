@@ -1,0 +1,375 @@
+{
+  "kind": "serial correctness only; no throughput or memory measurement",
+  "server_argv": [
+    "/tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server",
+    "/var/tmp/cnetmod-h3-official/arena/certs/server.crt",
+    "/var/tmp/cnetmod-h3-official/arena/certs/server.key",
+    "41956",
+    "1",
+    "/var/tmp/cnetmod-h3-official/arena/data/static"
+  ],
+  "connections": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "checks": [
+    {
+      "path": "reset.css",
+      "encoding": "identity",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/reset.css",
+      "bytes": 8192,
+      "passed": true
+    },
+    {
+      "path": "reset.css",
+      "encoding": "br;q=1, gzip;q=0.8",
+      "expected_br": true,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/reset.css.br",
+      "bytes": 2420,
+      "passed": true
+    },
+    {
+      "path": "layout.css",
+      "encoding": "identity",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/layout.css",
+      "bytes": 25600,
+      "passed": true
+    },
+    {
+      "path": "layout.css",
+      "encoding": "br;q=1, gzip;q=0.8",
+      "expected_br": true,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/layout.css.br",
+      "bytes": 5615,
+      "passed": true
+    },
+    {
+      "path": "theme.css",
+      "encoding": "identity",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/theme.css",
+      "bytes": 18432,
+      "passed": true
+    },
+    {
+      "path": "theme.css",
+      "encoding": "br;q=1, gzip;q=0.8",
+      "expected_br": true,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/theme.css.br",
+      "bytes": 4520,
+      "passed": true
+    },
+    {
+      "path": "components.css",
+      "encoding": "identity",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/components.css",
+      "bytes": 204800,
+      "passed": true
+    },
+    {
+      "path": "components.css",
+      "encoding": "br;q=1, gzip;q=0.8",
+      "expected_br": true,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/components.css.br",
+      "bytes": 33268,
+      "passed": true
+    },
+    {
+      "path": "utilities.css",
+      "encoding": "identity",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/utilities.css",
+      "bytes": 61440,
+      "passed": true
+    },
+    {
+      "path": "utilities.css",
+      "encoding": "br;q=1, gzip;q=0.8",
+      "expected_br": true,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/utilities.css.br",
+      "bytes": 11595,
+      "passed": true
+    },
+    {
+      "path": "analytics.js",
+      "encoding": "identity",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/analytics.js",
+      "bytes": 12288,
+      "passed": true
+    },
+    {
+      "path": "analytics.js",
+      "encoding": "br;q=1, gzip;q=0.8",
+      "expected_br": true,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/analytics.js.br",
+      "bytes": 3899,
+      "passed": true
+    },
+    {
+      "path": "helpers.js",
+      "encoding": "identity",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/helpers.js",
+      "bytes": 22528,
+      "passed": true
+    },
+    {
+      "path": "helpers.js",
+      "encoding": "br;q=1, gzip;q=0.8",
+      "expected_br": true,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/helpers.js.br",
+      "bytes": 6612,
+      "passed": true
+    },
+    {
+      "path": "app.js",
+      "encoding": "identity",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/app.js",
+      "bytes": 204800,
+      "passed": true
+    },
+    {
+      "path": "app.js",
+      "encoding": "br;q=1, gzip;q=0.8",
+      "expected_br": true,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/app.js.br",
+      "bytes": 47275,
+      "passed": true
+    },
+    {
+      "path": "vendor.js",
+      "encoding": "identity",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/vendor.js",
+      "bytes": 307200,
+      "passed": true
+    },
+    {
+      "path": "vendor.js",
+      "encoding": "br;q=1, gzip;q=0.8",
+      "expected_br": true,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/vendor.js.br",
+      "bytes": 67294,
+      "passed": true
+    },
+    {
+      "path": "router.js",
+      "encoding": "identity",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/router.js",
+      "bytes": 35840,
+      "passed": true
+    },
+    {
+      "path": "router.js",
+      "encoding": "br;q=1, gzip;q=0.8",
+      "expected_br": true,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/router.js.br",
+      "bytes": 9665,
+      "passed": true
+    },
+    {
+      "path": "header.html",
+      "encoding": "identity",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/header.html",
+      "bytes": 122880,
+      "passed": true
+    },
+    {
+      "path": "header.html",
+      "encoding": "br;q=1, gzip;q=0.8",
+      "expected_br": true,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/header.html.br",
+      "bytes": 9390,
+      "passed": true
+    },
+    {
+      "path": "footer.html",
+      "encoding": "identity",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/footer.html",
+      "bytes": 56320,
+      "passed": true
+    },
+    {
+      "path": "footer.html",
+      "encoding": "br;q=1, gzip;q=0.8",
+      "expected_br": true,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/footer.html.br",
+      "bytes": 6974,
+      "passed": true
+    },
+    {
+      "path": "regular.woff2",
+      "encoding": "identity",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/regular.woff2",
+      "bytes": 18432,
+      "passed": true
+    },
+    {
+      "path": "regular.woff2",
+      "encoding": "br;q=1, gzip;q=0.8",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/regular.woff2",
+      "bytes": 18432,
+      "passed": true
+    },
+    {
+      "path": "bold.woff2",
+      "encoding": "identity",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/bold.woff2",
+      "bytes": 22528,
+      "passed": true
+    },
+    {
+      "path": "bold.woff2",
+      "encoding": "br;q=1, gzip;q=0.8",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/bold.woff2",
+      "bytes": 22528,
+      "passed": true
+    },
+    {
+      "path": "logo.svg",
+      "encoding": "identity",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/logo.svg",
+      "bytes": 15344,
+      "passed": true
+    },
+    {
+      "path": "logo.svg",
+      "encoding": "br;q=1, gzip;q=0.8",
+      "expected_br": true,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/logo.svg.br",
+      "bytes": 3028,
+      "passed": true
+    },
+    {
+      "path": "icon-sprite.svg",
+      "encoding": "identity",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/icon-sprite.svg",
+      "bytes": 71680,
+      "passed": true
+    },
+    {
+      "path": "icon-sprite.svg",
+      "encoding": "br;q=1, gzip;q=0.8",
+      "expected_br": true,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/icon-sprite.svg.br",
+      "bytes": 11739,
+      "passed": true
+    },
+    {
+      "path": "hero.webp",
+      "encoding": "identity",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/hero.webp",
+      "bytes": 46080,
+      "passed": true
+    },
+    {
+      "path": "hero.webp",
+      "encoding": "br;q=1, gzip;q=0.8",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/hero.webp",
+      "bytes": 46080,
+      "passed": true
+    },
+    {
+      "path": "thumb1.webp",
+      "encoding": "identity",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/thumb1.webp",
+      "bytes": 8192,
+      "passed": true
+    },
+    {
+      "path": "thumb1.webp",
+      "encoding": "br;q=1, gzip;q=0.8",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/thumb1.webp",
+      "bytes": 8192,
+      "passed": true
+    },
+    {
+      "path": "thumb2.webp",
+      "encoding": "identity",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/thumb2.webp",
+      "bytes": 6144,
+      "passed": true
+    },
+    {
+      "path": "thumb2.webp",
+      "encoding": "br;q=1, gzip;q=0.8",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/thumb2.webp",
+      "bytes": 6144,
+      "passed": true
+    },
+    {
+      "path": "manifest.json",
+      "encoding": "identity",
+      "expected_br": false,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/manifest.json",
+      "bytes": 2883,
+      "passed": true
+    },
+    {
+      "path": "manifest.json",
+      "encoding": "br;q=1, gzip;q=0.8",
+      "expected_br": true,
+      "source": "/var/tmp/cnetmod-h3-official/arena/data/static/manifest.json.br",
+      "bytes": 735,
+      "passed": true
+    }
+  ]
+}

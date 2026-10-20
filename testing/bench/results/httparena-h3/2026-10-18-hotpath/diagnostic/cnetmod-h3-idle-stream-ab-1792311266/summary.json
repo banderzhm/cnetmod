@@ -1,0 +1,226 @@
+{
+  "mode": "diagnostic counterbalanced A/B; all workloads serial",
+  "binaries": {
+    "stage1": {
+      "path": "/var/tmp/cnetmod-h3-stage1-variant/arena_h3_server",
+      "sha256": "bcb97359a1e4511689e4789497f13c3069ed021dbe7dbab2ab535b1aa35e2a09"
+    },
+    "stage2": {
+      "path": "/var/tmp/cnetmod-h3-conditional-nogso/arena_h3_server",
+      "sha256": "f7872d2c046d3002a12a25dfb804bc6f8310f9ce15d1866d2b4c3b45f1011f79"
+    },
+    "unconditional": {
+      "path": "/var/tmp/cnetmod-h3-stage2-before-gso/arena_h3_server",
+      "sha256": "cff0b635889a97be1bd9e83f42a76bc97f34bb3a687559bbcebf8a0cea8853b4"
+    }
+  },
+  "measurements": [
+    {
+      "requests": 2000,
+      "idle_bidirectional_streams": 32,
+      "p50_us": 226.17700000000002,
+      "p95_us": 336.469,
+      "p99_us": 485.648,
+      "mean_us": 246.159471,
+      "name": "baseline-1c1m-1-stage1",
+      "stage": "stage1",
+      "profile": "32-idle-bidi-sequential-get",
+      "command": [
+        "nsenter",
+        "-t",
+        "669",
+        "-n",
+        "taskset",
+        "-c",
+        "16",
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-idle-stream-latency.py",
+        "8443"
+      ]
+    },
+    {
+      "requests": 2000,
+      "idle_bidirectional_streams": 32,
+      "p50_us": 220.212,
+      "p95_us": 327.764,
+      "p99_us": 443.439,
+      "mean_us": 239.4258475,
+      "name": "baseline-1c1m-2-unconditional",
+      "stage": "unconditional",
+      "profile": "32-idle-bidi-sequential-get",
+      "command": [
+        "nsenter",
+        "-t",
+        "669",
+        "-n",
+        "taskset",
+        "-c",
+        "16",
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-idle-stream-latency.py",
+        "8443"
+      ]
+    },
+    {
+      "requests": 2000,
+      "idle_bidirectional_streams": 32,
+      "p50_us": 218.73450000000003,
+      "p95_us": 324.637,
+      "p99_us": 441.923,
+      "mean_us": 236.523671,
+      "name": "baseline-1c1m-3-stage2",
+      "stage": "stage2",
+      "profile": "32-idle-bidi-sequential-get",
+      "command": [
+        "nsenter",
+        "-t",
+        "669",
+        "-n",
+        "taskset",
+        "-c",
+        "16",
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-idle-stream-latency.py",
+        "8443"
+      ]
+    },
+    {
+      "requests": 2000,
+      "idle_bidirectional_streams": 32,
+      "p50_us": 221.514,
+      "p95_us": 328.662,
+      "p99_us": 446.244,
+      "mean_us": 241.2670595,
+      "name": "baseline-1c1m-4-stage2",
+      "stage": "stage2",
+      "profile": "32-idle-bidi-sequential-get",
+      "command": [
+        "nsenter",
+        "-t",
+        "669",
+        "-n",
+        "taskset",
+        "-c",
+        "16",
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-idle-stream-latency.py",
+        "8443"
+      ]
+    },
+    {
+      "requests": 2000,
+      "idle_bidirectional_streams": 32,
+      "p50_us": 222.022,
+      "p95_us": 339.053,
+      "p99_us": 560.219,
+      "mean_us": 243.6840055,
+      "name": "baseline-1c1m-5-unconditional",
+      "stage": "unconditional",
+      "profile": "32-idle-bidi-sequential-get",
+      "command": [
+        "nsenter",
+        "-t",
+        "669",
+        "-n",
+        "taskset",
+        "-c",
+        "16",
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-idle-stream-latency.py",
+        "8443"
+      ]
+    },
+    {
+      "requests": 2000,
+      "idle_bidirectional_streams": 32,
+      "p50_us": 223.4315,
+      "p95_us": 338.453,
+      "p99_us": 486.945,
+      "mean_us": 243.7851625,
+      "name": "baseline-1c1m-6-stage1",
+      "stage": "stage1",
+      "profile": "32-idle-bidi-sequential-get",
+      "command": [
+        "nsenter",
+        "-t",
+        "669",
+        "-n",
+        "taskset",
+        "-c",
+        "16",
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-idle-stream-latency.py",
+        "8443"
+      ]
+    },
+    {
+      "requests": 2000,
+      "idle_bidirectional_streams": 32,
+      "p50_us": 219.7475,
+      "p95_us": 325.085,
+      "p99_us": 407.63,
+      "mean_us": 237.938665,
+      "name": "baseline-1c1m-7-unconditional",
+      "stage": "unconditional",
+      "profile": "32-idle-bidi-sequential-get",
+      "command": [
+        "nsenter",
+        "-t",
+        "669",
+        "-n",
+        "taskset",
+        "-c",
+        "16",
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-idle-stream-latency.py",
+        "8443"
+      ]
+    },
+    {
+      "requests": 2000,
+      "idle_bidirectional_streams": 32,
+      "p50_us": 221.34050000000002,
+      "p95_us": 329.454,
+      "p99_us": 420.114,
+      "mean_us": 241.162457,
+      "name": "baseline-1c1m-8-stage1",
+      "stage": "stage1",
+      "profile": "32-idle-bidi-sequential-get",
+      "command": [
+        "nsenter",
+        "-t",
+        "669",
+        "-n",
+        "taskset",
+        "-c",
+        "16",
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-idle-stream-latency.py",
+        "8443"
+      ]
+    },
+    {
+      "requests": 2000,
+      "idle_bidirectional_streams": 32,
+      "p50_us": 220.13049999999998,
+      "p95_us": 334.044,
+      "p99_us": 472.64,
+      "mean_us": 240.8791835,
+      "name": "baseline-1c1m-9-stage2",
+      "stage": "stage2",
+      "profile": "32-idle-bidi-sequential-get",
+      "command": [
+        "nsenter",
+        "-t",
+        "669",
+        "-n",
+        "taskset",
+        "-c",
+        "16",
+        "/var/tmp/cnetmod-h3-peer/bin/python",
+        "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-idle-stream-latency.py",
+        "8443"
+      ]
+    }
+  ]
+}

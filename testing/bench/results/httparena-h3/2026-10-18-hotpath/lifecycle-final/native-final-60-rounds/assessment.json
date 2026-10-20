@@ -1,0 +1,19 @@
+{
+  "initial": {
+    "name": "initial",
+    "time": 1792324010.6943467,
+    "rss": 53137408,
+    "private": 50782208
+  },
+  "final": {
+    "name": "final-idle-37s",
+    "time": 1792324226.903172,
+    "rss": 267325440,
+    "private": 264900608
+  },
+  "round_rss_peak": 269881344,
+  "first10_median_rss": 208547840.0,
+  "last10_median_rss": 262541312.0,
+  "memory_accepted": false,
+  "reason": "RSS continues rising; no stable plateau established in 60 rounds"
+}

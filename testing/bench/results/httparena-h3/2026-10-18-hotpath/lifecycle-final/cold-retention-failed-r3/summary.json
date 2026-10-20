@@ -1,0 +1,48 @@
+{
+  "scope": "latest candidate with close-only instrumentation; reproduction diagnostic, not official ranking",
+  "binary_sha256": "8ac72cfa883816cd97a6d4b68688461ee8f158fc9f4fbab3412ac9f5debdd99a",
+  "samples": [
+    {
+      "name": "initial",
+      "time": 1792318078.8175747,
+      "rss": 53166080,
+      "private": 50647040
+    },
+    {
+      "name": "round-1-idle-2s",
+      "time": 1792318081.8148377,
+      "rss": 190181376,
+      "private": 187588608
+    },
+    {
+      "name": "round-2-idle-2s",
+      "time": 1792318084.8858364,
+      "rss": 198569984,
+      "private": 195977216
+    },
+    {
+      "name": "failure-immediate",
+      "time": 1792318087.0795135,
+      "rss": 204873728,
+      "private": 202280960
+    },
+    {
+      "name": "failure-idle-35s",
+      "time": 1792318122.0803578,
+      "rss": 204742656,
+      "private": 202149888
+    }
+  ],
+  "rounds": [
+    {
+      "index": 1,
+      "requests": 200000
+    },
+    {
+      "index": 2,
+      "requests": 200000
+    }
+  ],
+  "failure": "AssertionError('otal, 197048 started, 196984 done, 196984 succeeded, 3016 failed, 3016 errored, 0 timeout\\nstatus codes: 197006 2xx, 0 3xx, 0 4xx, 0 5xx\\ntraffic: 2.99GB (3214434751) total, 6.67MB (6997152) headers (space savings 54.05%), 2.99GB (3206334047) data\\nUDP datagram: 98449 sent, 2374782 received\\n                 min         max         median     p95        p99        mean         sd        +/- sd\\nrequest     :      380us     50.42ms      3.51ms    12.08ms    22.54ms     4.76ms      3.99ms    89.84%\\nconnect     :     2.95ms    656.84ms    330.69ms   625.94ms   656.84ms   332.06ms    194.21ms    59.38%\\nTTFB        :     3.68ms    658.94ms    331.45ms   626.99ms   658.94ms   333.46ms    194.44ms    59.38%\\nreq/s       :      51.36    26311.22     5244.87   16267.03   26311.22    7053.63     4694.83    85.94%\\nmin RTT     :        6us      2.87ms        31us     1.42ms     2.87ms      268us       574us    90.63%\\nsmoothed RTT:      194us     11.42ms       635us     5.34ms    11.42ms     1.53ms      2.08ms    87.50%\\npackets sent:         95        2180        1552       2038       2180    1541.23      318.43    76.56%\\npackets recv:       1724       38005       37680      37917      38005   37105.97     4495.71    98.44%\\npackets lost:          0          20           1         11         20       2.75        4.02    85.94%\\nGRO packets :          1           1           1          1          1       1.00        0.00   100.00%\\n-t: warning: the number of threads is greater than hardware cores.\\n')",
+  "valid": false
+}

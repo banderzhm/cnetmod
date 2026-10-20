@@ -1,0 +1,1 @@
+wsl -d archlinux -- /tmp/cnetmod-h3-peer/bin/python /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/h3_acceptance.py --server /tmp/cnetmod-h3-arena-build/bin/h3_interop_server --client /tmp/cnetmod-h3-arena-build/bin/h3_interop_client --results /tmp/cnetmod-h3-wt-verified-3.json

@@ -1,0 +1,15 @@
+[
+  "/var/tmp/cnetmod-h3-deferred-bulk-fault-29750984cd8945798f9f0832ef63cc9c-link-fix/quic_packet_failure_server",
+  "--port",
+  "56259",
+  "--mode",
+  "observer",
+  "--cert",
+  "/var/tmp/cnetmod-h3-deferred-bulk-fault-results-29750984cd8945798f9f0832ef63cc9c/observer-seal-empty-error/cert.pem",
+  "--key",
+  "/var/tmp/cnetmod-h3-deferred-bulk-fault-results-29750984cd8945798f9f0832ef63cc9c/observer-seal-empty-error/key.pem",
+  "--listening-report",
+  "/var/tmp/cnetmod-h3-deferred-bulk-fault-results-29750984cd8945798f9f0832ef63cc9c/observer-seal-empty-error/listening",
+  "--result-report",
+  "/var/tmp/cnetmod-h3-deferred-bulk-fault-results-29750984cd8945798f9f0832ef63cc9c/observer-seal-empty-error/result"
+]

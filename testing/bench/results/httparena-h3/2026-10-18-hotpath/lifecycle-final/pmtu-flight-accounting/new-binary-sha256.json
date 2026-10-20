@@ -1,0 +1,5 @@
+{
+  "Release/cnetmod_quic.lib": "f2567a195dd2c532f55181d9db00aa319844946d354db91d71b0973aaf95739c",
+  "testing/tests/Release/test_quic_congestion.exe": "298350bf350c51b37215b44c4ea3f655f8a2a40a7c9af039d9a34d4b4d857d6a",
+  "testing/tests/Release/test_quic_loss_detection.exe": "f453a8f9ab2dfb11f5436c56d2fc6c3b0d0be8878cdb1e1b14079d6bc5cd2c4a"
+}

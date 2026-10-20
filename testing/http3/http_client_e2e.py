@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
 import queue
@@ -90,6 +91,22 @@ def wait_for_file(path: Path, timeout: float) -> bool:
     return path.exists()
 
 
+def read_json_snapshot(path: Path, timeout: float = 1.0) -> object:
+    """Read an atomically replaced fixture file within a fixed retry budget.
+
+    Windows can briefly deny opening a destination during Path.replace().
+    Persistent sharing/permission failures or invalid JSON remain test failures.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (PermissionError, json.JSONDecodeError):
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.01)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("server", type=Path)
@@ -101,6 +118,7 @@ def main() -> int:
     parser.add_argument("--multipath-timeout", action="store_true")
     parser.add_argument("--multipath-close", action="store_true")
     parser.add_argument("--connect-close", action="store_true")
+    parser.add_argument("--early-data-loss", action="store_true")
     parser.add_argument("--pmtu-blackhole-proxy", type=Path)
     args = parser.parse_args()
     if not args.server.is_file() or not args.client.is_file():
@@ -137,6 +155,17 @@ def main() -> int:
                 client_port = port
                 dropped_marker = directory / "pmtu-probe-dropped.marker"
                 arm_marker = directory / "pmtu-blackhole-armed.marker"
+                early_stats = directory / "early-loss.json"
+                if args.early_data_loss:
+                    proxy_port = reserve_port()
+                    proxy = subprocess.Popen([sys.executable,
+                        str(Path(__file__).with_name("early_data_loss_proxy.py")),
+                        "--listen", str(proxy_port), "--target-port", str(port),
+                        "--stats", str(early_stats)], cwd=directory, env=environment,
+                        text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    if not wait_for_file(early_stats, 5):
+                        raise RuntimeError("early-data fault proxy did not start")
+                    client_port = proxy_port
                 if args.multipath_pmtu_blackhole:
                     proxy_port = reserve_port()
                     proxy = subprocess.Popen(
@@ -204,6 +233,10 @@ def main() -> int:
                 if completed.stderr:
                     print(completed.stderr, end="", file=sys.stderr)
                 if completed.returncode:
+                    if args.early_data_loss:
+                        print(f"early-data fault evidence: {read_json_snapshot(early_stats)}", file=sys.stderr)
+                        proxy_stdout, proxy_stderr = stop_process(proxy)
+                        print(f"proxy stdout:\n{proxy_stdout}\nproxy stderr:\n{proxy_stderr}", file=sys.stderr)
                     if server.poll() is None:
                         server.terminate()
                     stdout, stderr = server.communicate(timeout=5)
@@ -221,6 +254,13 @@ def main() -> int:
                         not wait_for_file(dropped_marker, 5.0)):
                     print("PMTU blackhole proxy did not drop an oversized probe", file=sys.stderr)
                     return 1
+                if args.early_data_loss:
+                    observed = read_json_snapshot(early_stats)
+                    print(f"early-data fault evidence: {observed}")
+                    assert observed["retries_delayed"] > 0, observed
+                    assert observed["early_before_retry"] > 0, observed
+                    assert observed["early_dropped_after_retry"] > 0, observed
+                    assert observed["initial_pn_regressions"] == 0, observed
                 return 0
             finally:
                 if proxy is not None:

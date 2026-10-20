@@ -1,0 +1,687 @@
+[2026-10-18 13:35:23.287] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=1200 sent=1200 error=0
+[2026-10-18 13:35:23.288] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=1200 sent=1200 error=0
+[2026-10-18 13:35:23.289] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=102 sent=102 error=0
+[2026-10-18 13:35:23.290] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=0 ordinary_lost=0 probe_lost=0 cwnd=15920 flight=1302 pto=true
+[2026-10-18 13:35:23.303] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=1 ordinary_lost=0 probe_lost=0 cwnd=17120 flight=102 pto=true
+[2026-10-18 13:35:23.304] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=1 ordinary_lost=0 probe_lost=0 cwnd=17222 flight=204 pto=true
+[2026-10-18 13:35:23.314] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=102 sent=102 error=0
+[2026-10-18 13:35:23.317] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=49 sent=49 error=0
+[2026-10-18 13:35:23.320] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=0 mds=1200 bytes=63 probe=false pto=false tracked=true
+[2026-10-18 13:35:23.324] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=102 sent=102 error=0
+[2026-10-18 13:35:23.332] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=63 accepted=1 error=0
+[2026-10-18 13:35:23.333] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=14783 flight=0 pto=false
+[2026-10-18 13:35:23.383] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=1 mds=1200 bytes=1328 probe=true pto=false tracked=true
+[2026-10-18 13:35:23.385] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=1328 accepted=1 error=0
+[2026-10-18 13:35:23.386] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=16111 flight=0 pto=false
+[2026-10-18 13:35:23.387] [info] [130378748671936] [quic_connection.cpp:2981] PMTU_CC_VALIDATE path=0 mds=1328 cwnd=16111 pto=false
+[2026-10-18 13:35:23.437] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=2 mds=1328 bytes=1456 probe=true pto=false tracked=true
+[2026-10-18 13:35:23.439] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=1456 accepted=1 error=0
+[2026-10-18 13:35:23.441] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=17567 flight=0 pto=false
+[2026-10-18 13:35:23.441] [info] [130378748671936] [quic_connection.cpp:2981] PMTU_CC_VALIDATE path=0 mds=1456 cwnd=17567 pto=false
+[2026-10-18 13:35:23.492] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=3 mds=1456 bytes=1584 probe=true pto=false tracked=true
+[2026-10-18 13:35:23.495] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=1584 accepted=1 error=0
+[2026-10-18 13:35:23.496] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=19151 flight=0 pto=false
+[2026-10-18 13:35:23.496] [info] [130378748671936] [quic_connection.cpp:2981] PMTU_CC_VALIDATE path=0 mds=1584 cwnd=19151 pto=false
+[2026-10-18 13:35:23.546] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=4 mds=1584 bytes=1712 probe=true pto=false tracked=true
+[2026-10-18 13:35:23.550] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=1712 accepted=1 error=0
+[2026-10-18 13:35:23.552] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=20863 flight=0 pto=false
+[2026-10-18 13:35:23.552] [info] [130378748671936] [quic_connection.cpp:2981] PMTU_CC_VALIDATE path=0 mds=1712 cwnd=20863 pto=false
+[2026-10-18 13:35:23.602] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=5 mds=1712 bytes=1840 probe=true pto=false tracked=true
+[2026-10-18 13:35:23.605] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=1840 accepted=1 error=0
+[2026-10-18 13:35:23.608] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=22703 flight=0 pto=false
+[2026-10-18 13:35:23.608] [info] [130378748671936] [quic_connection.cpp:2981] PMTU_CC_VALIDATE path=0 mds=1840 cwnd=22703 pto=false
+[2026-10-18 13:35:23.658] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=6 mds=1840 bytes=1968 probe=true pto=false tracked=true
+[2026-10-18 13:35:23.660] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=1968 accepted=1 error=0
+[2026-10-18 13:35:23.662] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=24671 flight=0 pto=false
+[2026-10-18 13:35:23.665] [info] [130378748671936] [quic_connection.cpp:2981] PMTU_CC_VALIDATE path=0 mds=1968 cwnd=24671 pto=false
+[2026-10-18 13:35:23.715] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=7 mds=1968 bytes=2096 probe=true pto=false tracked=true
+[2026-10-18 13:35:23.720] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=2096 accepted=1 error=0
+[2026-10-18 13:35:23.724] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=26767 flight=0 pto=false
+[2026-10-18 13:35:23.724] [info] [130378748671936] [quic_connection.cpp:2981] PMTU_CC_VALIDATE path=0 mds=2096 cwnd=26767 pto=false
+[2026-10-18 13:35:23.775] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=8 mds=2096 bytes=2224 probe=true pto=false tracked=true
+[2026-10-18 13:35:23.784] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=2224 accepted=1 error=0
+[2026-10-18 13:35:23.785] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=28991 flight=0 pto=false
+[2026-10-18 13:35:23.785] [info] [130378748671936] [quic_connection.cpp:2981] PMTU_CC_VALIDATE path=0 mds=2224 cwnd=28991 pto=false
+[2026-10-18 13:35:23.836] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=9 mds=2224 bytes=2352 probe=true pto=false tracked=true
+[2026-10-18 13:35:23.839] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=2352 accepted=1 error=0
+[2026-10-18 13:35:23.841] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=31343 flight=0 pto=false
+[2026-10-18 13:35:23.842] [info] [130378748671936] [quic_connection.cpp:2981] PMTU_CC_VALIDATE path=0 mds=2352 cwnd=31343 pto=false
+[2026-10-18 13:35:23.892] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=10 mds=2352 bytes=2480 probe=true pto=false tracked=true
+[2026-10-18 13:35:23.893] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=2480 accepted=1 error=0
+[2026-10-18 13:35:23.895] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=33823 flight=0 pto=false
+[2026-10-18 13:35:23.895] [info] [130378748671936] [quic_connection.cpp:2981] PMTU_CC_VALIDATE path=0 mds=2480 cwnd=33823 pto=false
+[2026-10-18 13:35:23.945] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=11 mds=2480 bytes=2608 probe=true pto=false tracked=true
+[2026-10-18 13:35:23.950] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=2608 accepted=1 error=0
+[2026-10-18 13:35:23.956] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=36431 flight=0 pto=false
+[2026-10-18 13:35:23.965] [info] [130378748671936] [quic_connection.cpp:2981] PMTU_CC_VALIDATE path=0 mds=2608 cwnd=36431 pto=false
+[2026-10-18 13:35:24.015] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=12 mds=2608 bytes=2736 probe=true pto=false tracked=true
+[2026-10-18 13:35:24.027] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=2736 accepted=1 error=0
+[2026-10-18 13:35:24.028] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=39167 flight=0 pto=false
+[2026-10-18 13:35:24.028] [info] [130378748671936] [quic_connection.cpp:2981] PMTU_CC_VALIDATE path=0 mds=2736 cwnd=39167 pto=false
+[2026-10-18 13:35:24.078] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=13 mds=2736 bytes=2864 probe=true pto=false tracked=true
+[2026-10-18 13:35:24.093] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=2864 accepted=1 error=0
+[2026-10-18 13:35:24.098] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=42031 flight=0 pto=false
+[2026-10-18 13:35:24.107] [info] [130378748671936] [quic_connection.cpp:2981] PMTU_CC_VALIDATE path=0 mds=2864 cwnd=42031 pto=false
+[2026-10-18 13:35:24.157] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=14 mds=2864 bytes=2992 probe=true pto=false tracked=true
+[2026-10-18 13:35:24.163] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=2992 accepted=1 error=0
+[2026-10-18 13:35:24.170] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=45023 flight=0 pto=false
+[2026-10-18 13:35:24.172] [info] [130378748671936] [quic_connection.cpp:2981] PMTU_CC_VALIDATE path=0 mds=2992 cwnd=45023 pto=false
+[2026-10-18 13:35:24.223] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=15 mds=2992 bytes=3120 probe=true pto=false tracked=true
+[2026-10-18 13:35:24.224] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=3120 accepted=1 error=0
+[2026-10-18 13:35:24.232] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=48143 flight=0 pto=false
+[2026-10-18 13:35:24.232] [info] [130378748671936] [quic_connection.cpp:2981] PMTU_CC_VALIDATE path=0 mds=3120 cwnd=48143 pto=false
+[2026-10-18 13:35:24.282] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=16 mds=3120 bytes=3248 probe=true pto=false tracked=true
+[2026-10-18 13:35:24.293] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=3248 accepted=1 error=0
+[2026-10-18 13:35:24.294] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=51391 flight=0 pto=false
+[2026-10-18 13:35:24.295] [info] [130378748671936] [quic_connection.cpp:2981] PMTU_CC_VALIDATE path=0 mds=3248 cwnd=51391 pto=false
+[2026-10-18 13:35:24.346] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=17 mds=3248 bytes=3376 probe=true pto=false tracked=true
+[2026-10-18 13:35:24.354] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=3376 accepted=1 error=0
+[2026-10-18 13:35:24.356] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=54767 flight=0 pto=false
+[2026-10-18 13:35:24.356] [info] [130378748671936] [quic_connection.cpp:2981] PMTU_CC_VALIDATE path=0 mds=3376 cwnd=54767 pto=false
+[2026-10-18 13:35:24.407] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=18 mds=3376 bytes=3504 probe=true pto=false tracked=true
+[2026-10-18 13:35:24.408] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=3504 accepted=1 error=0
+[2026-10-18 13:35:24.412] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=58271 flight=0 pto=false
+[2026-10-18 13:35:24.412] [info] [130378748671936] [quic_connection.cpp:2981] PMTU_CC_VALIDATE path=0 mds=3504 cwnd=58271 pto=false
+[2026-10-18 13:35:24.462] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=19 mds=3504 bytes=3632 probe=true pto=false tracked=true
+[2026-10-18 13:35:24.466] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=3632 accepted=1 error=0
+[2026-10-18 13:35:24.468] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=61903 flight=0 pto=false
+[2026-10-18 13:35:24.468] [info] [130378748671936] [quic_connection.cpp:2981] PMTU_CC_VALIDATE path=0 mds=3632 cwnd=61903 pto=false
+[2026-10-18 13:35:24.518] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=20 mds=3632 bytes=3760 probe=true pto=false tracked=true
+[2026-10-18 13:35:24.523] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=3760 accepted=1 error=0
+[2026-10-18 13:35:24.527] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=65663 flight=0 pto=false
+[2026-10-18 13:35:24.527] [info] [130378748671936] [quic_connection.cpp:2981] PMTU_CC_VALIDATE path=0 mds=3760 cwnd=65663 pto=false
+[2026-10-18 13:35:24.577] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=21 mds=3760 bytes=3888 probe=true pto=false tracked=true
+[2026-10-18 13:35:24.591] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=3888 accepted=1 error=0
+[2026-10-18 13:35:24.604] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=69551 flight=0 pto=false
+[2026-10-18 13:35:24.604] [info] [130378748671936] [quic_connection.cpp:2981] PMTU_CC_VALIDATE path=0 mds=3888 cwnd=69551 pto=false
+[2026-10-18 13:35:24.655] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=22 mds=3888 bytes=4016 probe=true pto=false tracked=true
+[2026-10-18 13:35:24.669] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=4016 accepted=1 error=0
+[2026-10-18 13:35:24.679] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=73567 flight=0 pto=false
+[2026-10-18 13:35:24.684] [info] [130378748671936] [quic_connection.cpp:2981] PMTU_CC_VALIDATE path=0 mds=4016 cwnd=73567 pto=false
+[2026-10-18 13:35:24.734] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=23 mds=4016 bytes=4096 probe=true pto=false tracked=true
+[2026-10-18 13:35:24.737] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=4096 accepted=1 error=0
+[2026-10-18 13:35:24.739] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=77663 flight=0 pto=false
+[2026-10-18 13:35:24.739] [info] [130378748671936] [quic_connection.cpp:2981] PMTU_CC_VALIDATE path=0 mds=4096 cwnd=77663 pto=false
+[2026-10-18 13:35:24.857] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=24 mds=4096 bytes=34 probe=false pto=false tracked=false
+[2026-10-18 13:35:24.869] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:24.880] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=0 command=epoch/0 mds=4096 bytes=256
+[2026-10-18 13:35:24.884] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=25 mds=4096 bytes=289 probe=false pto=false tracked=true
+[2026-10-18 13:35:24.889] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=289 accepted=1 error=0
+[2026-10-18 13:35:24.933] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=26 mds=4096 bytes=295 probe=false pto=true tracked=true
+[2026-10-18 13:35:24.934] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=27 mds=4096 bytes=295 probe=false pto=true tracked=true
+[2026-10-18 13:35:24.941] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=295 sent=295 error=0
+[2026-10-18 13:35:24.946] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=28 mds=4096 bytes=34 probe=false pto=false tracked=false
+[2026-10-18 13:35:24.955] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=295 sent=295 error=0
+[2026-10-18 13:35:24.962] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:24.973] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=4 command=confirm/0/0 mds=4096 bytes=1
+[2026-10-18 13:35:24.977] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=29 mds=4096 bytes=33 probe=false pto=false tracked=true
+[2026-10-18 13:35:24.978] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=33 accepted=1 error=0
+[2026-10-18 13:35:24.981] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=289 probe_lost=0 cwnd=38979 flight=328 pto=true
+[2026-10-18 13:35:24.990] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=38979 flight=33 pto=true
+[2026-10-18 13:35:24.993] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=38980 flight=0 pto=false
+[2026-10-18 13:35:25.005] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=30 mds=4096 bytes=34 probe=false pto=false tracked=false
+[2026-10-18 13:35:25.008] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:25.008] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=8 command=confirm/0/1 mds=4096 bytes=1
+[2026-10-18 13:35:25.008] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=31 mds=4096 bytes=33 probe=false pto=false tracked=true
+[2026-10-18 13:35:25.014] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=33 accepted=1 error=0
+[2026-10-18 13:35:25.023] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=38981 flight=0 pto=false
+[2026-10-18 13:35:25.038] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=32 mds=4096 bytes=34 probe=false pto=false tracked=false
+[2026-10-18 13:35:25.046] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:25.048] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=12 command=confirm/0/2 mds=4096 bytes=1
+[2026-10-18 13:35:25.050] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=33 mds=4096 bytes=33 probe=false pto=false tracked=true
+[2026-10-18 13:35:25.052] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=33 accepted=1 error=0
+[2026-10-18 13:35:25.055] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=38982 flight=0 pto=false
+[2026-10-18 13:35:25.069] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=34 mds=4096 bytes=34 probe=false pto=false tracked=false
+[2026-10-18 13:35:25.070] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:25.084] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=35 mds=4096 bytes=34 probe=false pto=false tracked=false
+[2026-10-18 13:35:25.086] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:25.090] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=16 command=confirm/0/3 mds=4096 bytes=1
+[2026-10-18 13:35:25.090] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=36 mds=4096 bytes=33 probe=false pto=false tracked=true
+[2026-10-18 13:35:25.101] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=33 accepted=1 error=0
+[2026-10-18 13:35:25.105] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=38983 flight=0 pto=false
+[2026-10-18 13:35:25.198] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=37 mds=4096 bytes=34 probe=false pto=false tracked=false
+[2026-10-18 13:35:25.203] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:25.203] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=20 command=epoch/1 mds=4096 bytes=256
+[2026-10-18 13:35:25.203] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=38 mds=4096 bytes=289 probe=false pto=false tracked=true
+[2026-10-18 13:35:25.211] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=289 accepted=1 error=0
+[2026-10-18 13:35:25.279] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=39 mds=4096 bytes=295 probe=false pto=true tracked=true
+[2026-10-18 13:35:25.281] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=40 mds=4096 bytes=295 probe=false pto=true tracked=true
+[2026-10-18 13:35:25.289] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=295 sent=295 error=0
+[2026-10-18 13:35:25.291] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=41 mds=4096 bytes=34 probe=false pto=false tracked=false
+[2026-10-18 13:35:25.293] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=295 sent=295 error=0
+[2026-10-18 13:35:25.299] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:25.299] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=24 command=confirm/1/0 mds=4096 bytes=1
+[2026-10-18 13:35:25.299] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=42 mds=4096 bytes=33 probe=false pto=false tracked=true
+[2026-10-18 13:35:25.303] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=33 accepted=1 error=0
+[2026-10-18 13:35:25.306] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=289 probe_lost=0 cwnd=19497 flight=328 pto=true
+[2026-10-18 13:35:25.310] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=19497 flight=33 pto=true
+[2026-10-18 13:35:25.320] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=19499 flight=0 pto=false
+[2026-10-18 13:35:25.333] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=43 mds=4096 bytes=34 probe=false pto=false tracked=false
+[2026-10-18 13:35:25.337] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:25.339] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=28 command=confirm/1/1 mds=4096 bytes=1
+[2026-10-18 13:35:25.344] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=44 mds=4096 bytes=33 probe=false pto=false tracked=true
+[2026-10-18 13:35:25.346] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=33 accepted=1 error=0
+[2026-10-18 13:35:25.350] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=19501 flight=0 pto=false
+[2026-10-18 13:35:25.371] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=45 mds=4096 bytes=34 probe=false pto=false tracked=false
+[2026-10-18 13:35:25.375] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:25.376] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=32 command=confirm/1/2 mds=4096 bytes=1
+[2026-10-18 13:35:25.377] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=46 mds=4096 bytes=33 probe=false pto=false tracked=true
+[2026-10-18 13:35:25.377] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=33 accepted=1 error=0
+[2026-10-18 13:35:25.378] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=19503 flight=0 pto=false
+[2026-10-18 13:35:25.403] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=47 mds=4096 bytes=34 probe=false pto=false tracked=false
+[2026-10-18 13:35:25.405] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:25.407] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=36 command=confirm/1/3 mds=4096 bytes=1
+[2026-10-18 13:35:25.408] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=48 mds=4096 bytes=33 probe=false pto=false tracked=true
+[2026-10-18 13:35:25.409] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=33 accepted=1 error=0
+[2026-10-18 13:35:25.410] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=19505 flight=0 pto=false
+[2026-10-18 13:35:25.518] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=49 mds=4096 bytes=34 probe=false pto=false tracked=false
+[2026-10-18 13:35:25.519] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:25.519] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=40 command=epoch/2 mds=4096 bytes=256
+[2026-10-18 13:35:25.520] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=50 mds=4096 bytes=289 probe=false pto=false tracked=true
+[2026-10-18 13:35:25.521] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=289 accepted=1 error=0
+[2026-10-18 13:35:25.595] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=51 mds=4096 bytes=295 probe=false pto=true tracked=true
+[2026-10-18 13:35:25.595] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=52 mds=4096 bytes=295 probe=false pto=true tracked=true
+[2026-10-18 13:35:25.598] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=295 sent=295 error=0
+[2026-10-18 13:35:25.600] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=53 mds=4096 bytes=34 probe=false pto=false tracked=false
+[2026-10-18 13:35:25.601] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=295 sent=295 error=0
+[2026-10-18 13:35:25.606] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:25.607] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=44 command=confirm/2/0 mds=4096 bytes=1
+[2026-10-18 13:35:25.608] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=54 mds=4096 bytes=33 probe=false pto=false tracked=true
+[2026-10-18 13:35:25.609] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=33 accepted=1 error=0
+[2026-10-18 13:35:25.609] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=289 probe_lost=0 cwnd=9763 flight=328 pto=true
+[2026-10-18 13:35:25.610] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=55 mds=4096 bytes=34 probe=false pto=false tracked=false
+[2026-10-18 13:35:25.610] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:25.611] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=9763 flight=33 pto=true
+[2026-10-18 13:35:25.612] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=9767 flight=0 pto=false
+[2026-10-18 13:35:25.635] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=56 mds=4096 bytes=34 probe=false pto=false tracked=false
+[2026-10-18 13:35:25.636] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:25.637] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=48 command=confirm/2/1 mds=4096 bytes=1
+[2026-10-18 13:35:25.637] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=57 mds=4096 bytes=33 probe=false pto=false tracked=true
+[2026-10-18 13:35:25.639] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=33 accepted=1 error=0
+[2026-10-18 13:35:25.642] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=9771 flight=0 pto=false
+[2026-10-18 13:35:25.663] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=58 mds=4096 bytes=34 probe=false pto=false tracked=false
+[2026-10-18 13:35:25.667] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:25.668] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=52 command=confirm/2/2 mds=4096 bytes=1
+[2026-10-18 13:35:25.669] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=59 mds=4096 bytes=33 probe=false pto=false tracked=true
+[2026-10-18 13:35:25.669] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=33 accepted=1 error=0
+[2026-10-18 13:35:25.671] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=9775 flight=0 pto=false
+[2026-10-18 13:35:25.695] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=60 mds=4096 bytes=34 probe=false pto=false tracked=false
+[2026-10-18 13:35:25.699] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:25.700] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=56 command=confirm/2/3 mds=4096 bytes=1
+[2026-10-18 13:35:25.700] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=61 mds=4096 bytes=33 probe=false pto=false tracked=true
+[2026-10-18 13:35:25.701] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=33 accepted=1 error=0
+[2026-10-18 13:35:25.702] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=9779 flight=0 pto=false
+[2026-10-18 13:35:25.814] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=62 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:25.815] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:25.816] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=60 command=epoch/3 mds=4096 bytes=256
+[2026-10-18 13:35:25.817] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=63 mds=4096 bytes=289 probe=false pto=false tracked=true
+[2026-10-18 13:35:25.817] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=289 accepted=1 error=0
+[2026-10-18 13:35:25.880] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=64 mds=4096 bytes=295 probe=false pto=true tracked=true
+[2026-10-18 13:35:25.880] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=65 mds=4096 bytes=295 probe=false pto=true tracked=true
+[2026-10-18 13:35:25.887] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=295 sent=295 error=0
+[2026-10-18 13:35:25.890] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=66 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:25.898] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=295 sent=295 error=0
+[2026-10-18 13:35:25.904] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:25.904] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=64 command=confirm/3/0 mds=4096 bytes=1
+[2026-10-18 13:35:25.905] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=67 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:25.906] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:25.907] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=289 probe_lost=0 cwnd=4911 flight=329 pto=true
+[2026-10-18 13:35:25.909] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=4911 flight=34 pto=true
+[2026-10-18 13:35:25.909] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=4921 flight=0 pto=false
+[2026-10-18 13:35:25.931] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=68 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:25.935] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:25.938] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=68 command=confirm/3/1 mds=4096 bytes=1
+[2026-10-18 13:35:25.940] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=69 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:25.941] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:25.942] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=4931 flight=0 pto=false
+[2026-10-18 13:35:25.967] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=70 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:25.975] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:25.975] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=72 command=confirm/3/2 mds=4096 bytes=1
+[2026-10-18 13:35:25.979] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=71 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:25.986] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:25.988] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=4941 flight=0 pto=false
+[2026-10-18 13:35:26.007] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=72 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:26.009] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:26.010] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=76 command=confirm/3/3 mds=4096 bytes=1
+[2026-10-18 13:35:26.010] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=73 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:26.012] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:26.013] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=4951 flight=0 pto=false
+[2026-10-18 13:35:26.127] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=74 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:26.128] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:26.129] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=80 command=epoch/4 mds=4096 bytes=256
+[2026-10-18 13:35:26.130] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=75 mds=4096 bytes=290 probe=false pto=false tracked=true
+[2026-10-18 13:35:26.131] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=290 accepted=1 error=0
+[2026-10-18 13:35:26.197] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=76 mds=4096 bytes=296 probe=false pto=true tracked=true
+[2026-10-18 13:35:26.199] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=77 mds=4096 bytes=296 probe=false pto=true tracked=true
+[2026-10-18 13:35:26.201] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=296 sent=296 error=0
+[2026-10-18 13:35:26.202] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=78 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:26.203] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=296 sent=296 error=0
+[2026-10-18 13:35:26.205] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:26.205] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=84 command=confirm/4/0 mds=4096 bytes=1
+[2026-10-18 13:35:26.208] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=79 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:26.209] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:26.210] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=290 probe_lost=0 cwnd=2944 flight=330 pto=true
+[2026-10-18 13:35:26.212] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2944 flight=34 pto=true
+[2026-10-18 13:35:26.214] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2961 flight=0 pto=false
+[2026-10-18 13:35:26.215] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=80 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:26.216] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:26.235] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=81 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:26.237] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:26.237] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=88 command=confirm/4/1 mds=4096 bytes=1
+[2026-10-18 13:35:26.238] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=82 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:26.241] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:26.242] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2977 flight=0 pto=false
+[2026-10-18 13:35:26.266] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=83 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:26.269] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:26.269] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=92 command=confirm/4/2 mds=4096 bytes=1
+[2026-10-18 13:35:26.271] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=84 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:26.274] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:26.277] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2993 flight=0 pto=false
+[2026-10-18 13:35:26.298] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=85 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:26.300] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:26.302] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=96 command=confirm/4/3 mds=4096 bytes=1
+[2026-10-18 13:35:26.303] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=86 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:26.304] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:26.305] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=3009 flight=0 pto=false
+[2026-10-18 13:35:26.421] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=87 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:26.424] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:26.424] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=100 command=epoch/5 mds=4096 bytes=256
+[2026-10-18 13:35:26.424] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=88 mds=4096 bytes=290 probe=false pto=false tracked=true
+[2026-10-18 13:35:26.426] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=290 accepted=1 error=0
+[2026-10-18 13:35:26.482] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=89 mds=4096 bytes=296 probe=false pto=true tracked=true
+[2026-10-18 13:35:26.485] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=90 mds=4096 bytes=296 probe=false pto=true tracked=true
+[2026-10-18 13:35:26.488] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=296 sent=296 error=0
+[2026-10-18 13:35:26.491] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=91 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:26.493] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=296 sent=296 error=0
+[2026-10-18 13:35:26.495] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:26.495] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=104 command=confirm/5/0 mds=4096 bytes=1
+[2026-10-18 13:35:26.495] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=92 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:26.497] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:26.498] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=290 probe_lost=0 cwnd=2944 flight=330 pto=true
+[2026-10-18 13:35:26.499] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2944 flight=34 pto=true
+[2026-10-18 13:35:26.500] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2961 flight=0 pto=false
+[2026-10-18 13:35:26.522] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=93 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:26.524] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:26.525] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=108 command=confirm/5/1 mds=4096 bytes=1
+[2026-10-18 13:35:26.527] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=94 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:26.528] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:26.529] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2977 flight=0 pto=false
+[2026-10-18 13:35:26.554] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=95 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:26.557] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:26.559] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=112 command=confirm/5/2 mds=4096 bytes=1
+[2026-10-18 13:35:26.561] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=96 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:26.562] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:26.563] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2993 flight=0 pto=false
+[2026-10-18 13:35:26.588] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=97 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:26.591] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:26.592] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=116 command=confirm/5/3 mds=4096 bytes=1
+[2026-10-18 13:35:26.593] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=98 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:26.594] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:26.594] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=3009 flight=0 pto=false
+[2026-10-18 13:35:26.706] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=99 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:26.707] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:26.708] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=120 command=epoch/6 mds=4096 bytes=256
+[2026-10-18 13:35:26.709] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=100 mds=4096 bytes=290 probe=false pto=false tracked=true
+[2026-10-18 13:35:26.710] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=290 accepted=1 error=0
+[2026-10-18 13:35:26.762] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=101 mds=4096 bytes=296 probe=false pto=true tracked=true
+[2026-10-18 13:35:26.763] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=102 mds=4096 bytes=296 probe=false pto=true tracked=true
+[2026-10-18 13:35:26.764] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=296 sent=296 error=0
+[2026-10-18 13:35:26.765] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=103 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:26.765] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=296 sent=296 error=0
+[2026-10-18 13:35:26.767] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:26.767] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=124 command=confirm/6/0 mds=4096 bytes=1
+[2026-10-18 13:35:26.768] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=104 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:26.770] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:26.771] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=290 probe_lost=0 cwnd=2944 flight=330 pto=true
+[2026-10-18 13:35:26.772] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2944 flight=34 pto=true
+[2026-10-18 13:35:26.773] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2961 flight=0 pto=false
+[2026-10-18 13:35:26.795] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=105 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:26.797] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:26.797] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=128 command=confirm/6/1 mds=4096 bytes=1
+[2026-10-18 13:35:26.798] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=106 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:26.800] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:26.802] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2977 flight=0 pto=false
+[2026-10-18 13:35:26.803] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=107 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:26.805] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:26.825] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=108 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:26.828] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:26.829] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=132 command=confirm/6/2 mds=4096 bytes=1
+[2026-10-18 13:35:26.829] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=109 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:26.830] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:26.831] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2993 flight=0 pto=false
+[2026-10-18 13:35:26.855] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=110 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:26.857] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:26.858] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=136 command=confirm/6/3 mds=4096 bytes=1
+[2026-10-18 13:35:26.859] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=111 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:26.862] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:26.863] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=3009 flight=0 pto=false
+[2026-10-18 13:35:26.973] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=112 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:26.975] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:26.977] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=140 command=epoch/7 mds=4096 bytes=256
+[2026-10-18 13:35:26.978] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=113 mds=4096 bytes=290 probe=false pto=false tracked=true
+[2026-10-18 13:35:26.980] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=290 accepted=1 error=0
+[2026-10-18 13:35:27.024] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=114 mds=4096 bytes=296 probe=false pto=true tracked=true
+[2026-10-18 13:35:27.024] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=115 mds=4096 bytes=296 probe=false pto=true tracked=true
+[2026-10-18 13:35:27.028] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=296 sent=296 error=0
+[2026-10-18 13:35:27.030] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=290 probe_lost=0 cwnd=2944 flight=296 pto=true
+[2026-10-18 13:35:27.040] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=116 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:27.042] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=296 sent=296 error=0
+[2026-10-18 13:35:27.043] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:27.043] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=144 command=confirm/7/0 mds=4096 bytes=1
+[2026-10-18 13:35:27.043] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=117 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:27.045] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:27.046] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2944 flight=34 pto=true
+[2026-10-18 13:35:27.047] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2961 flight=0 pto=false
+[2026-10-18 13:35:27.070] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=118 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:27.073] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:27.073] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=148 command=confirm/7/1 mds=4096 bytes=1
+[2026-10-18 13:35:27.073] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=119 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:27.075] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:27.076] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2977 flight=0 pto=false
+[2026-10-18 13:35:27.100] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=120 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:27.102] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:27.103] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=152 command=confirm/7/2 mds=4096 bytes=1
+[2026-10-18 13:35:27.104] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=121 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:27.105] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:27.106] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2993 flight=0 pto=false
+[2026-10-18 13:35:27.131] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=122 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:27.134] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:27.138] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=156 command=confirm/7/3 mds=4096 bytes=1
+[2026-10-18 13:35:27.139] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=123 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:27.141] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:27.142] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=3009 flight=0 pto=false
+[2026-10-18 13:35:27.270] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=124 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:27.272] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:27.273] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=160 command=epoch/8 mds=4096 bytes=256
+[2026-10-18 13:35:27.274] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=125 mds=4096 bytes=290 probe=false pto=false tracked=true
+[2026-10-18 13:35:27.275] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=290 accepted=1 error=0
+[2026-10-18 13:35:27.321] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=126 mds=4096 bytes=296 probe=false pto=true tracked=true
+[2026-10-18 13:35:27.325] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=127 mds=4096 bytes=296 probe=false pto=true tracked=true
+[2026-10-18 13:35:27.327] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=296 sent=296 error=0
+[2026-10-18 13:35:27.328] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=128 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:27.329] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=296 sent=296 error=0
+[2026-10-18 13:35:27.332] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:27.339] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=164 command=confirm/8/0 mds=4096 bytes=1
+[2026-10-18 13:35:27.346] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=129 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:27.348] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:27.356] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=290 probe_lost=0 cwnd=2944 flight=330 pto=true
+[2026-10-18 13:35:27.362] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2944 flight=34 pto=true
+[2026-10-18 13:35:27.363] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2961 flight=0 pto=false
+[2026-10-18 13:35:27.373] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=130 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:27.375] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:27.376] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=168 command=confirm/8/1 mds=4096 bytes=1
+[2026-10-18 13:35:27.376] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=131 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:27.377] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:27.379] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2977 flight=0 pto=false
+[2026-10-18 13:35:27.403] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=132 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:27.408] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:27.408] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=172 command=confirm/8/2 mds=4096 bytes=1
+[2026-10-18 13:35:27.408] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=133 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:27.411] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:27.412] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2993 flight=0 pto=false
+[2026-10-18 13:35:27.435] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=134 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:27.440] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:27.442] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=176 command=confirm/8/3 mds=4096 bytes=1
+[2026-10-18 13:35:27.442] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=135 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:27.455] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:27.465] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=3009 flight=0 pto=false
+[2026-10-18 13:35:27.567] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=136 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:27.569] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:27.569] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=180 command=epoch/9 mds=4096 bytes=256
+[2026-10-18 13:35:27.569] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=137 mds=4096 bytes=290 probe=false pto=false tracked=true
+[2026-10-18 13:35:27.570] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=290 accepted=1 error=0
+[2026-10-18 13:35:27.639] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=138 mds=4096 bytes=296 probe=false pto=true tracked=true
+[2026-10-18 13:35:27.641] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=139 mds=4096 bytes=296 probe=false pto=true tracked=true
+[2026-10-18 13:35:27.642] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=296 sent=296 error=0
+[2026-10-18 13:35:27.643] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=140 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:27.644] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=296 sent=296 error=0
+[2026-10-18 13:35:27.649] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:27.650] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=184 command=confirm/9/0 mds=4096 bytes=1
+[2026-10-18 13:35:27.651] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=141 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:27.652] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:27.654] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=290 probe_lost=0 cwnd=2944 flight=330 pto=true
+[2026-10-18 13:35:27.655] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2944 flight=34 pto=true
+[2026-10-18 13:35:27.657] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2961 flight=0 pto=false
+[2026-10-18 13:35:27.679] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=142 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:27.688] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:27.688] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=188 command=confirm/9/1 mds=4096 bytes=1
+[2026-10-18 13:35:27.688] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=143 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:27.689] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:27.691] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2977 flight=0 pto=false
+[2026-10-18 13:35:27.691] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=144 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:27.692] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:27.715] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=145 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:27.718] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:27.718] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=192 command=confirm/9/2 mds=4096 bytes=1
+[2026-10-18 13:35:27.718] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=146 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:27.721] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:27.722] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2993 flight=0 pto=false
+[2026-10-18 13:35:27.745] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=147 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:27.747] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:27.749] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=196 command=confirm/9/3 mds=4096 bytes=1
+[2026-10-18 13:35:27.750] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=148 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:27.751] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:27.752] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=3009 flight=0 pto=false
+[2026-10-18 13:35:27.876] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=149 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:27.878] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:27.878] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=200 command=epoch/10 mds=4096 bytes=256
+[2026-10-18 13:35:27.879] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=150 mds=4096 bytes=290 probe=false pto=false tracked=true
+[2026-10-18 13:35:27.882] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=290 accepted=1 error=0
+[2026-10-18 13:35:27.940] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=151 mds=4096 bytes=296 probe=false pto=true tracked=true
+[2026-10-18 13:35:27.942] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=152 mds=4096 bytes=296 probe=false pto=true tracked=true
+[2026-10-18 13:35:27.943] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=296 sent=296 error=0
+[2026-10-18 13:35:27.943] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=153 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:27.944] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=296 sent=296 error=0
+[2026-10-18 13:35:27.945] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:27.945] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=204 command=confirm/10/0 mds=4096 bytes=1
+[2026-10-18 13:35:27.946] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=154 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:27.947] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:27.948] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=290 probe_lost=0 cwnd=2944 flight=330 pto=true
+[2026-10-18 13:35:27.949] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2944 flight=34 pto=true
+[2026-10-18 13:35:27.950] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=155 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:27.951] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:27.951] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2961 flight=0 pto=false
+[2026-10-18 13:35:27.973] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=156 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:27.975] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:27.976] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=208 command=confirm/10/1 mds=4096 bytes=1
+[2026-10-18 13:35:27.977] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=157 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:27.979] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:27.980] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2977 flight=0 pto=false
+[2026-10-18 13:35:28.004] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=158 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:28.007] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:28.008] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=212 command=confirm/10/2 mds=4096 bytes=1
+[2026-10-18 13:35:28.009] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=159 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:28.010] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:28.010] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2993 flight=0 pto=false
+[2026-10-18 13:35:28.035] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=160 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:28.037] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:28.039] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=216 command=confirm/10/3 mds=4096 bytes=1
+[2026-10-18 13:35:28.040] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=161 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:28.042] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:28.043] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=3009 flight=0 pto=false
+[2026-10-18 13:35:28.152] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=162 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:28.154] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:28.154] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=220 command=epoch/11 mds=4096 bytes=256
+[2026-10-18 13:35:28.155] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=163 mds=4096 bytes=290 probe=false pto=false tracked=true
+[2026-10-18 13:35:28.157] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=290 accepted=1 error=0
+[2026-10-18 13:35:28.206] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=164 mds=4096 bytes=296 probe=false pto=true tracked=true
+[2026-10-18 13:35:28.206] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=165 mds=4096 bytes=296 probe=false pto=true tracked=true
+[2026-10-18 13:35:28.208] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=296 sent=296 error=0
+[2026-10-18 13:35:28.210] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=166 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:28.211] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=296 sent=296 error=0
+[2026-10-18 13:35:28.212] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:28.212] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=224 command=confirm/11/0 mds=4096 bytes=1
+[2026-10-18 13:35:28.213] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=167 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:28.214] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:28.214] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=290 probe_lost=0 cwnd=2944 flight=330 pto=true
+[2026-10-18 13:35:28.215] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2944 flight=34 pto=true
+[2026-10-18 13:35:28.215] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2961 flight=0 pto=false
+[2026-10-18 13:35:28.239] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=168 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:28.241] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:28.242] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=228 command=confirm/11/1 mds=4096 bytes=1
+[2026-10-18 13:35:28.242] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=169 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:28.243] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:28.244] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2977 flight=0 pto=false
+[2026-10-18 13:35:28.268] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=170 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:28.270] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:28.271] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=232 command=confirm/11/2 mds=4096 bytes=1
+[2026-10-18 13:35:28.271] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=171 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:28.273] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:28.274] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2993 flight=0 pto=false
+[2026-10-18 13:35:28.275] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=172 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:28.278] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:28.299] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=173 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:28.302] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:28.303] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=236 command=confirm/11/3 mds=4096 bytes=1
+[2026-10-18 13:35:28.304] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=174 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:28.305] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:28.307] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=3009 flight=0 pto=false
+[2026-10-18 13:35:28.412] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=175 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:28.413] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:28.414] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=240 command=epoch/12 mds=4096 bytes=256
+[2026-10-18 13:35:28.415] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=176 mds=4096 bytes=290 probe=false pto=false tracked=true
+[2026-10-18 13:35:28.417] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=290 accepted=1 error=0
+[2026-10-18 13:35:28.459] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=177 mds=4096 bytes=296 probe=false pto=true tracked=true
+[2026-10-18 13:35:28.459] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=178 mds=4096 bytes=296 probe=false pto=true tracked=true
+[2026-10-18 13:35:28.461] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=296 sent=296 error=0
+[2026-10-18 13:35:28.461] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=179 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:28.462] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=296 sent=296 error=0
+[2026-10-18 13:35:28.463] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:28.463] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=244 command=confirm/12/0 mds=4096 bytes=1
+[2026-10-18 13:35:28.464] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=180 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:28.465] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:28.466] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=290 probe_lost=0 cwnd=2944 flight=330 pto=true
+[2026-10-18 13:35:28.467] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2944 flight=34 pto=true
+[2026-10-18 13:35:28.469] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2961 flight=0 pto=false
+[2026-10-18 13:35:28.490] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=181 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:28.492] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:28.494] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=248 command=confirm/12/1 mds=4096 bytes=1
+[2026-10-18 13:35:28.496] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=182 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:28.498] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:28.499] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2977 flight=0 pto=false
+[2026-10-18 13:35:28.522] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=183 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:28.524] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:28.526] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=252 command=confirm/12/2 mds=4096 bytes=1
+[2026-10-18 13:35:28.527] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=184 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:28.530] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:28.531] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2993 flight=0 pto=false
+[2026-10-18 13:35:28.554] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=185 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:28.557] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:28.557] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=256 command=confirm/12/3 mds=4096 bytes=1
+[2026-10-18 13:35:28.559] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=186 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:28.561] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:28.563] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=3009 flight=0 pto=false
+[2026-10-18 13:35:28.674] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=187 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:28.675] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:28.676] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=260 command=epoch/13 mds=4096 bytes=256
+[2026-10-18 13:35:28.677] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=188 mds=4096 bytes=290 probe=false pto=false tracked=true
+[2026-10-18 13:35:28.678] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=290 accepted=1 error=0
+[2026-10-18 13:35:28.715] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=189 mds=4096 bytes=296 probe=false pto=true tracked=true
+[2026-10-18 13:35:28.715] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=190 mds=4096 bytes=296 probe=false pto=true tracked=true
+[2026-10-18 13:35:28.717] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=296 sent=296 error=0
+[2026-10-18 13:35:28.717] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=191 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:28.718] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=296 sent=296 error=0
+[2026-10-18 13:35:28.720] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:28.720] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=264 command=confirm/13/0 mds=4096 bytes=1
+[2026-10-18 13:35:28.720] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=192 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:28.724] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:28.726] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=290 probe_lost=0 cwnd=2944 flight=330 pto=true
+[2026-10-18 13:35:28.728] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=193 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:28.729] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:28.730] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2944 flight=34 pto=true
+[2026-10-18 13:35:28.731] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2961 flight=0 pto=false
+[2026-10-18 13:35:28.746] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=194 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:28.748] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:28.750] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=268 command=confirm/13/1 mds=4096 bytes=1
+[2026-10-18 13:35:28.751] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=195 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:28.752] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:28.753] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2977 flight=0 pto=false
+[2026-10-18 13:35:28.777] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=196 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:28.779] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:28.781] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=272 command=confirm/13/2 mds=4096 bytes=1
+[2026-10-18 13:35:28.782] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=197 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:28.784] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:28.785] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2993 flight=0 pto=false
+[2026-10-18 13:35:28.809] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=198 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:28.809] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:28.811] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=276 command=confirm/13/3 mds=4096 bytes=1
+[2026-10-18 13:35:28.811] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=199 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:28.811] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:28.813] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=3009 flight=0 pto=false
+[2026-10-18 13:35:28.931] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=200 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:28.932] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:28.933] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=280 command=epoch/14 mds=4096 bytes=256
+[2026-10-18 13:35:28.934] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=201 mds=4096 bytes=290 probe=false pto=false tracked=true
+[2026-10-18 13:35:28.935] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=290 accepted=1 error=0
+[2026-10-18 13:35:28.974] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=202 mds=4096 bytes=296 probe=false pto=true tracked=true
+[2026-10-18 13:35:28.977] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=203 mds=4096 bytes=296 probe=false pto=true tracked=true
+[2026-10-18 13:35:28.979] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=296 sent=296 error=0
+[2026-10-18 13:35:28.980] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=204 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:28.981] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=296 sent=296 error=0
+[2026-10-18 13:35:28.983] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:28.983] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=284 command=confirm/14/0 mds=4096 bytes=1
+[2026-10-18 13:35:28.983] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=205 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:28.984] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:28.985] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=290 probe_lost=0 cwnd=2944 flight=330 pto=true
+[2026-10-18 13:35:28.986] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2944 flight=34 pto=true
+[2026-10-18 13:35:28.988] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2961 flight=0 pto=false
+[2026-10-18 13:35:29.009] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=206 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:29.011] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:29.011] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=288 command=confirm/14/1 mds=4096 bytes=1
+[2026-10-18 13:35:29.013] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=207 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:29.015] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:29.016] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2977 flight=0 pto=false
+[2026-10-18 13:35:29.040] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=208 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:29.043] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:29.044] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=292 command=confirm/14/2 mds=4096 bytes=1
+[2026-10-18 13:35:29.045] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=209 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:29.046] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:29.047] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2993 flight=0 pto=false
+[2026-10-18 13:35:29.072] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=210 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:29.074] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:29.074] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=296 command=confirm/14/3 mds=4096 bytes=1
+[2026-10-18 13:35:29.074] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=211 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:29.076] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:29.078] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=3009 flight=0 pto=false
+[2026-10-18 13:35:29.196] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=212 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:29.197] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:29.198] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=300 command=epoch/15 mds=4096 bytes=256
+[2026-10-18 13:35:29.198] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=213 mds=4096 bytes=290 probe=false pto=false tracked=true
+[2026-10-18 13:35:29.199] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=290 accepted=1 error=0
+[2026-10-18 13:35:29.237] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=214 mds=4096 bytes=296 probe=false pto=true tracked=true
+[2026-10-18 13:35:29.238] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=215 mds=4096 bytes=296 probe=false pto=true tracked=true
+[2026-10-18 13:35:29.242] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=296 sent=296 error=0
+[2026-10-18 13:35:29.244] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=216 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:29.245] [info] [130378748671936] [quic_connection.cpp:1297] PMTU_CC_UDP_SINGLE bytes=296 sent=296 error=0
+[2026-10-18 13:35:29.247] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:29.247] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=304 command=confirm/15/0 mds=4096 bytes=1
+[2026-10-18 13:35:29.247] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=217 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:29.248] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:29.249] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=290 probe_lost=0 cwnd=2944 flight=330 pto=true
+[2026-10-18 13:35:29.250] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2944 flight=34 pto=true
+[2026-10-18 13:35:29.251] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2961 flight=0 pto=false
+[2026-10-18 13:35:29.252] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=218 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:29.252] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:29.274] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=219 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:29.276] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:29.276] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=308 command=confirm/15/1 mds=4096 bytes=1
+[2026-10-18 13:35:29.276] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=220 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:29.278] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:29.279] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2977 flight=0 pto=false
+[2026-10-18 13:35:29.303] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=221 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:29.305] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:29.306] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=312 command=confirm/15/2 mds=4096 bytes=1
+[2026-10-18 13:35:29.306] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=222 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:29.307] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:29.308] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=2993 flight=0 pto=false
+[2026-10-18 13:35:29.332] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=223 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:29.335] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:29.336] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=316 command=confirm/15/3 mds=4096 bytes=1
+[2026-10-18 13:35:29.337] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=224 mds=4096 bytes=34 probe=false pto=false tracked=true
+[2026-10-18 13:35:29.338] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=34 accepted=1 error=0
+[2026-10-18 13:35:29.340] [info] [130378748671936] [quic_recovery.cpp:229] PMTU_CC_ACK space=2 ordinary_lost=0 probe_lost=0 cwnd=3009 flight=0 pto=false
+[2026-10-18 13:35:29.568] [info] [130378748671936] [quic_connection.cpp:4477] PMTU_CC_SENT path=0 pn=225 mds=4096 bytes=35 probe=false pto=false tracked=false
+[2026-10-18 13:35:29.572] [info] [130378748671936] [quic_connection.cpp:1353] PMTU_CC_UDP_BATCH count=1 first=35 accepted=1 error=0
+[2026-10-18 13:35:29.582] [info] [130378748671936] [quic_pmtu_cc_server.cpp:165] PMTU_FIXTURE_ENQUEUE stream=320 command=final mds=4096 bytes=16384
+[2026-10-18 13:35:29.582] [info] [130378748671936] [quic_connection.cpp:4411] PMTU_CC_BLOCK path=0 mds=4096 cwnd=3009 packet=4095 first_frame=4066 noflight=true pto=false
+[2026-10-18 13:35:31.587] [error] [130378748671936] [quic_pmtu_cc_server.cpp:54] PMTU fixture: accept stream: Transport endpoint is not connected

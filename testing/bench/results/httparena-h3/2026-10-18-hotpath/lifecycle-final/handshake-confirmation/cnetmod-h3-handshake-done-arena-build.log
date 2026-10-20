@@ -1,0 +1,35 @@
+[0/2] Re-checking globbed directories...
+[1/8] Generating CXX dyndep file 'CMakeFiles/cnetmod_runtime@synth_0.dir/CXX.dd'
+[2/8] Scanning /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_connection.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_connection.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[3/8] Generating CXX dyndep file 'CMakeFiles/cnetmod_quic@synth_0.dir/CXX.dd'
+[4/8] Scanning /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/http/v3/http3_server.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/http/v3/http3_server.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[5/8] Generating CXX dyndep file 'CMakeFiles/cnetmod_http@synth_0.dir/CXX.dd'
+[6/8] Generating CXX dyndep file testing/bench/CMakeFiles/arena_h3_server.dir/CXX.dd
+[7/14] Building CXX object 'CMakeFiles/cnetmod_quic@synth_0.dir/b968f3359636.bmi'
+[8/14] Building CXX object 'CMakeFiles/cnetmod_quic@synth_0.dir/68896ee11f5a.bmi'
+[9/14] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/6f5281353606.bmi'
+[10/14] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/9b1a957855bd.bmi'
+[11/14] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/3331137a57e0.bmi'
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/http/client/http_client.cppm:144:5: warning: explicitly defaulted move constructor is implicitly deleted [-Wdefaulted-function-deleted]
+  144 |     client(client&&) noexcept = default;
+      |     ^
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/http/client/http_client.cppm:346:17: note: move constructor of 'client' is implicitly deleted because field 'h3_lifecycle_mutex_' has a deleted move constructor
+  346 |     async_mutex h3_lifecycle_mutex_;
+      |                 ^
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/coro/mutex.cppm:51:5: note: 'async_mutex' has been explicitly marked deleted here
+   51 |     async_mutex(const async_mutex&) = delete;
+      |     ^
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/http/client/http_client.cppm:144:33: note: replace 'default' with 'delete'
+  144 |     client(client&&) noexcept = default;
+      |                                 ^~~~~~~
+      |                                 delete
+1 warning generated.
+[12/14] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/cd17b2d38f47.bmi'
+[13/14] Building CXX object testing/bench/CMakeFiles/arena_h3_server.dir/arena_h3_server.cpp.o
+[14/14] Linking CXX executable testing/bench/arena_h3_server

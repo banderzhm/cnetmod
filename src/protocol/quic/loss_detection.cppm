@@ -5,7 +5,7 @@ module;
 export module cnetmod.protocol.quic:loss_detection;
 
 import std;
-import :types;
+import :foundation;
 import :frame;
 
 namespace cnetmod::quic {
@@ -68,7 +68,8 @@ public:
         if (!ack_eliciting)
             return;
 
-        space_state.in_flight_packets_.emplace(pn, inflight_packet{pn, bytes_in_flight, send_time, ack_eliciting});
+        insert_inflight_packet(space_state,
+            inflight_packet{pn, bytes_in_flight, send_time, ack_eliciting});
         space_state.bytes_in_flight_ += bytes_in_flight;
         space_state.time_of_last_ack_eliciting_packet_ = send_time;
     }
@@ -85,6 +86,11 @@ public:
             largest_acked_pn > space_state.largest_sent_packet_number_)
             return std::unexpected(make_error_code(quic_errc::protocol_violation));
         if (frame.largest_acked != largest_acked_pn)
+            return std::unexpected(make_error_code(quic_errc::frame_encoding_error));
+        // Reject the entire malformed ACK before changing RTT, largest ACK,
+        // flight accounting or node ownership. A later invalid range must not
+        // partially retire packets from the detector alone.
+        if (!valid_ack_ranges(frame, largest_acked_pn))
             return std::unexpected(make_error_code(quic_errc::frame_encoding_error));
         if (space_state.largest_acked_pn_ == std::numeric_limits<std::uint64_t>::max() ||
             largest_acked_pn > space_state.largest_acked_pn_)
@@ -107,8 +113,6 @@ public:
         // ACK ranges are descending.  first_ack_range describes the
         // contiguous range ending at largest_acked; every subsequent gap is
         // the number of missing packets minus one (RFC 9000 §19.3).
-        if (frame.first_ack_range > largest_acked_pn)
-            return std::unexpected(make_error_code(quic_errc::frame_encoding_error));
         auto range_high = largest_acked_pn;
         auto range_low = range_high - frame.first_ack_range;
         auto acknowledge_range = [&](std::uint64_t low, std::uint64_t high)
@@ -120,17 +124,14 @@ public:
             {
                 newly_acked.push_back(it->first);
                 space_state.bytes_in_flight_ -= it->second.bytes;
-                it = space_state.in_flight_packets_.erase(it);
+                it = recycle_inflight_packet(space_state, it);
             }
         };
         acknowledge_range(range_low, range_high);
         for (const auto& range : frame.ack_ranges)
         {
-            if (range_low < range.gap + 2)
-                return std::unexpected(make_error_code(quic_errc::frame_encoding_error));
-            range_high = range_low - range.gap - 2;
-            if (range.ack_range_length > range_high)
-                return std::unexpected(make_error_code(quic_errc::frame_encoding_error));
+            // The complete range sequence was validated before state changes.
+            range_high = range_low - 2U - range.gap;
             range_low = range_high - range.ack_range_length;
             acknowledge_range(range_low, range_high);
         }
@@ -168,14 +169,19 @@ public:
         for (auto it = space_state.in_flight_packets_.begin();
             it != space_state.in_flight_packets_.end();)
         {
+            // Both RFC 9002 loss tests apply only at or below the largest
+            // acknowledged packet number. The map is ordered, so every later
+            // entry is ineligible in this pass. Avoid walking the whole newer
+            // flight on every ACK during a high-bandwidth transfer.
+            if (it->first > space_state.largest_acked_pn_)
+                break;
             const bool packet_threshold = it->first + 3 <= space_state.largest_acked_pn_;
             const bool time_threshold = it->second.sent_time + loss_threshold <= now;
-            if (it->first <= space_state.largest_acked_pn_ &&
-                (packet_threshold || time_threshold))
+            if (packet_threshold || time_threshold)
             {
                 lost.push_back(it->first);
                 space_state.bytes_in_flight_ -= it->second.bytes;
-                it = space_state.in_flight_packets_.erase(it);
+                it = recycle_inflight_packet(space_state, it);
             }
             else
                 ++it;
@@ -247,13 +253,7 @@ public:
     /// peer can no longer acknowledge packets in that space, so retaining
     /// them would leave an already-expired PTO armed forever.
     [[nodiscard]] auto discard_packet_number_space(pn_space space) noexcept
-        -> std::uint64_t
-    {
-        auto& state = get_pn_space_state(space);
-        const auto bytes = state.bytes_in_flight_;
-        state = pn_space_state{};
-        return bytes;
-    }
+        -> std::uint64_t;
 
     /// Calculate PTO duration
     auto pto_duration() const noexcept -> std::chrono::steady_clock::duration
@@ -298,6 +298,9 @@ public:
     }
 
 private:
+    [[nodiscard]] static auto valid_ack_ranges(const ack_frame& frame,
+        std::uint64_t largest_acked_pn) noexcept -> bool;
+
     using clock_type = std::chrono::steady_clock;
     using duration_type = std::chrono::steady_clock::duration;
 
@@ -313,9 +316,27 @@ private:
         bool ack_eliciting;
     };
 
+    using inflight_packet_map = std::map<std::uint64_t, inflight_packet>;
+
+    /// Retain at most 64 empty nodes per packet-number space. Copies retain
+    /// live recovery state but start with an empty allocation cache.
+    struct packet_node_cache
+    {
+        packet_node_cache() = default;
+        packet_node_cache(const packet_node_cache&) noexcept;
+        auto operator=(const packet_node_cache&) noexcept -> packet_node_cache&;
+        packet_node_cache(packet_node_cache&& other) noexcept;
+        auto operator=(packet_node_cache&& other) noexcept -> packet_node_cache&;
+        auto clear() noexcept -> void;
+
+        std::array<inflight_packet_map::node_type, 64U> nodes;
+        std::size_t size{};
+    };
+
     struct pn_space_state
     {
-        std::map<std::uint64_t, inflight_packet> in_flight_packets_{};
+        inflight_packet_map in_flight_packets_{};
+        packet_node_cache cached_nodes_;
         std::uint64_t largest_sent_packet_number_ = 0;
         bool has_sent_packet_ = false;
         std::uint64_t largest_acked_pn_ = std::numeric_limits<std::uint64_t>::max();
@@ -324,6 +345,10 @@ private:
         std::uint32_t pto_count_ = 0;
         std::uint64_t bytes_in_flight_ = 0;
     };
+
+    static auto insert_inflight_packet(pn_space_state& state, inflight_packet packet) -> void;
+    static auto recycle_inflight_packet(pn_space_state& state,
+        inflight_packet_map::iterator packet) noexcept -> inflight_packet_map::iterator;
 
     pn_space_state initial_space_{};
     pn_space_state handshake_space_{};
@@ -364,7 +389,7 @@ private:
         if (it != state.in_flight_packets_.end())
         {
             state.bytes_in_flight_ -= it->second.bytes;
-            state.in_flight_packets_.erase(it);
+            (void)recycle_inflight_packet(state, it);
             return true;
         }
 

@@ -1,0 +1,38 @@
+[
+  {
+    "name": "aioquic-server_to_cnetmod-client",
+    "status": "passed",
+    "detail": "request and response validated",
+    "elapsed_ms": 1098
+  },
+  {
+    "name": "aioquic-webtransport_to_cnetmod-server",
+    "status": "passed",
+    "detail": "request and response validated",
+    "elapsed_ms": 1505
+  },
+  {
+    "name": "wtransport-webtransport_to_cnetmod-server",
+    "status": "passed",
+    "detail": "3 independent connections validated",
+    "elapsed_ms": 3415
+  },
+  {
+    "name": "cnetmod-server_to_curl-http3",
+    "status": "passed",
+    "detail": "request and response validated",
+    "elapsed_ms": 1200
+  },
+  {
+    "name": "cnetmod-server_to_nghttp3-client",
+    "status": "passed",
+    "detail": "request and response validated",
+    "elapsed_ms": 2234
+  },
+  {
+    "name": "nghttp3-server_to_cnetmod-client",
+    "status": "passed",
+    "detail": "request and response validated",
+    "elapsed_ms": 1188
+  }
+]

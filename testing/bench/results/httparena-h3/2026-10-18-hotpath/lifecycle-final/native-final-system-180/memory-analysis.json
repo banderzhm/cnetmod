@@ -1,0 +1,50 @@
+{
+  "scope": "finite180round RSS/private observation, not proof of unlimited boundedness or absence of all leaks",
+  "completed_requests": 36000000,
+  "successful_rounds": 180,
+  "round120": {
+    "name": "round-120-idle-2s",
+    "time": 1792334065.4052358,
+    "rss": 147673088,
+    "private": 145162240
+  },
+  "round150": {
+    "name": "round-150-idle-2s",
+    "time": 1792334149.029055,
+    "rss": 146640896,
+    "private": 144130048
+  },
+  "round180": {
+    "name": "round-180-idle-2s",
+    "time": 1792334232.6320403,
+    "rss": 150642688,
+    "private": 148131840
+  },
+  "final_idle": {
+    "name": "final-idle-37s",
+    "time": 1792334272.6485486,
+    "rss": 150642688,
+    "private": 148131840
+  },
+  "round120_to180": {
+    "sample_count": 61,
+    "rss_min_bytes": 145080320,
+    "rss_min_round": 125,
+    "rss_max_bytes": 150642688,
+    "rss_max_round": 180,
+    "private_min_bytes": 142569472,
+    "private_max_bytes": 148131840,
+    "rss_median_bytes": 147415040,
+    "rss_end_minus_start_bytes": 2969600,
+    "rss_end_change_percent": 2.010928355476649,
+    "rss_adjacent_increases": 26,
+    "rss_adjacent_decreases": 32,
+    "rss_adjacent_unchanged": 2,
+    "descriptive_ols_rss_bytes_per_round": 21455.372184029613,
+    "ols_not_a_forecast": true
+  },
+  "round120_to150_rss_change_bytes": -1032192,
+  "round150_to180_rss_change_bytes": 4001792,
+  "final_minus_round180_rss_bytes": 0,
+  "final_sample_gap_from_round180_seconds": 40.01650834083557
+}

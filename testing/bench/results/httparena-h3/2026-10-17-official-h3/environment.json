@@ -1,0 +1,264 @@
+{
+  "cpu": {
+    "argv": [
+      "lscpu"
+    ],
+    "exit_code": 0,
+    "output": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           46 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  32\nOn-line CPU(s) list:                     0-31\nVendor ID:                               GenuineIntel\nModel name:                              Intel(R) Core(TM) i9-14900K\nCPU family:                              6\nModel:                                   183\nThread(s) per core:                      2\nCore(s) per socket:                      16\nSocket(s):                               1\nStepping:                                1\nMicrocode version:                       0xffffffff\nBogoMIPS:                                6374.39\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nVirtualization:                          VT-x\nHypervisor vendor:                       Microsoft\nVirtualization type:                     full\nL1d cache:                               768 KiB (16 instances)\nL1i cache:                               512 KiB (16 instances)\nL2 cache:                                32 MiB (16 instances)\nL3 cache:                                36 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-31\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Mitigation; Clear Register File\nVulnerability Retbleed:                  Mitigation; Enhanced IBRS\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS SW sequence; BHI BHI_DIS_S\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Not affected\n"
+  },
+  "memory": {
+    "argv": [
+      "free",
+      "-b"
+    ],
+    "exit_code": 0,
+    "output": "               total        used        free      shared  buff/cache   available\nMem:     16598654976  8923185152  2054111232  7559475200 13434593280  7675469824\nSwap:     4294967296       16384  4294950912\n"
+  },
+  "kernel": {
+    "argv": [
+      "uname",
+      "-a"
+    ],
+    "exit_code": 0,
+    "output": "Linux BF-202607291749 6.18.33.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Thu Jun 18 21:54:43 UTC 2026 x86_64 GNU/Linux\n"
+  },
+  "compiler": {
+    "argv": [
+      "clang++",
+      "--version"
+    ],
+    "exit_code": 0,
+    "output": "clang version 23.1.3\nTarget: x86_64-pc-linux-gnu\nThread model: posix\nInstalledDir: /usr/bin\n"
+  },
+  "packages": {
+    "argv": [
+      "pacman",
+      "-Q",
+      "libc++",
+      "libc++abi",
+      "liburing",
+      "openssl",
+      "ngtcp2",
+      "nghttp3"
+    ],
+    "exit_code": 1,
+    "output": "libc++ 22.1.8-1\nlibc++abi 22.1.8-1\nliburing 2.15-1\nopenssl 3.6.4-1\nerror: package 'ngtcp2' was not found\nerror: package 'nghttp3' was not found\n"
+  },
+  "h2load": {
+    "argv": [
+      "/tmp/cnetmod-h3-loadgen169/src/h2load",
+      "--version"
+    ],
+    "exit_code": 0,
+    "output": "h2load nghttp2/1.69.0\n"
+  },
+  "udp_limits": {
+    "argv": [
+      "sysctl",
+      "net.core.rmem_max",
+      "net.core.wmem_max",
+      "net.core.rmem_default",
+      "net.core.wmem_default"
+    ],
+    "exit_code": 0,
+    "output": "net.core.rmem_max = 4194304\nnet.core.wmem_max = 4194304\nnet.core.rmem_default = 212992\nnet.core.wmem_default = 212992\n"
+  },
+  "loopback": {
+    "argv": [
+      "ip",
+      "link",
+      "show",
+      "lo"
+    ],
+    "exit_code": 0,
+    "output": "1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000\n    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00\n"
+  },
+  "agensio_source": {
+    "argv": [
+      "docker",
+      "run",
+      "--rm",
+      "--entrypoint",
+      "git",
+      "e544b11758fa",
+      "-C",
+      "/src",
+      "rev-parse",
+      "HEAD"
+    ],
+    "exit_code": 0,
+    "output": "e60c61c7643e47c046fbb5136f8b46f7f7f9289b\n"
+  },
+  "agensio_compiler": {
+    "argv": [
+      "docker",
+      "run",
+      "--rm",
+      "--entrypoint",
+      "c++",
+      "e544b11758fa",
+      "--version"
+    ],
+    "exit_code": 0,
+    "output": "c++ (Debian 14.2.0-19) 14.2.0\nCopyright (C) 2024 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n"
+  },
+  "agensio_build_flags": {
+    "argv": [
+      "docker",
+      "run",
+      "--rm",
+      "--entrypoint",
+      "ninja",
+      "e544b11758fa",
+      "-C",
+      "/src/build",
+      "-t",
+      "commands",
+      "agensio"
+    ],
+    "exit_code": 0,
+    "output": "/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio.dir/src/main.cpp.o -MF CMakeFiles/agensio.dir/src/main.cpp.o.d -o CMakeFiles/agensio.dir/src/main.cpp.o -c /src/src/main.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/config.cpp.o -MF CMakeFiles/agensio_core.dir/src/config.cpp.o.d -o CMakeFiles/agensio_core.dir/src/config.cpp.o -c /src/src/config.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/http_date.cpp.o -MF CMakeFiles/agensio_core.dir/src/http_date.cpp.o.d -o CMakeFiles/agensio_core.dir/src/http_date.cpp.o -c /src/src/http_date.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/mime.cpp.o -MF CMakeFiles/agensio_core.dir/src/mime.cpp.o.d -o CMakeFiles/agensio_core.dir/src/mime.cpp.o -c /src/src/mime.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/file.cpp.o -MF CMakeFiles/agensio_core.dir/src/file.cpp.o.d -o CMakeFiles/agensio_core.dir/src/file.cpp.o -c /src/src/file.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/path.cpp.o -MF CMakeFiles/agensio_core.dir/src/path.cpp.o.d -o CMakeFiles/agensio_core.dir/src/path.cpp.o -c /src/src/path.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/http1/parser.cpp.o -MF CMakeFiles/agensio_core.dir/src/http1/parser.cpp.o.d -o CMakeFiles/agensio_core.dir/src/http1/parser.cpp.o -c /src/src/http1/parser.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/cache.cpp.o -MF CMakeFiles/agensio_core.dir/src/cache.cpp.o.d -o CMakeFiles/agensio_core.dir/src/cache.cpp.o -c /src/src/cache.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/core/router.cpp.o -MF CMakeFiles/agensio_core.dir/src/core/router.cpp.o.d -o CMakeFiles/agensio_core.dir/src/core/router.cpp.o -c /src/src/core/router.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/services/log.cpp.o -MF CMakeFiles/agensio_core.dir/src/services/log.cpp.o.d -o CMakeFiles/agensio_core.dir/src/services/log.cpp.o -c /src/src/services/log.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/services/pools.cpp.o -MF CMakeFiles/agensio_core.dir/src/services/pools.cpp.o.d -o CMakeFiles/agensio_core.dir/src/services/pools.cpp.o -c /src/src/services/pools.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/services/acme.cpp.o -MF CMakeFiles/agensio_core.dir/src/services/acme.cpp.o.d -o CMakeFiles/agensio_core.dir/src/services/acme.cpp.o -c /src/src/services/acme.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/services/provision.cpp.o -MF CMakeFiles/agensio_core.dir/src/services/provision.cpp.o.d -o CMakeFiles/agensio_core.dir/src/services/provision.cpp.o -c /src/src/services/provision.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/services/archive.cpp.o -MF CMakeFiles/agensio_core.dir/src/services/archive.cpp.o.d -o CMakeFiles/agensio_core.dir/src/services/archive.cpp.o -c /src/src/services/archive.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/services/fetch.cpp.o -MF CMakeFiles/agensio_core.dir/src/services/fetch.cpp.o.d -o CMakeFiles/agensio_core.dir/src/services/fetch.cpp.o -c /src/src/services/fetch.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/services/install.cpp.o -MF CMakeFiles/agensio_core.dir/src/services/install.cpp.o.d -o CMakeFiles/agensio_core.dir/src/services/install.cpp.o -c /src/src/services/install.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/control/handler.cpp.o -MF CMakeFiles/agensio_core.dir/src/control/handler.cpp.o.d -o CMakeFiles/agensio_core.dir/src/control/handler.cpp.o -c /src/src/control/handler.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/control/commands.cpp.o -MF CMakeFiles/agensio_core.dir/src/control/commands.cpp.o.d -o CMakeFiles/agensio_core.dir/src/control/commands.cpp.o -c /src/src/control/commands.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/control/sites.cpp.o -MF CMakeFiles/agensio_core.dir/src/control/sites.cpp.o.d -o CMakeFiles/agensio_core.dir/src/control/sites.cpp.o -c /src/src/control/sites.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/control/settings.cpp.o -MF CMakeFiles/agensio_core.dir/src/control/settings.cpp.o.d -o CMakeFiles/agensio_core.dir/src/control/settings.cpp.o -c /src/src/control/settings.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/control/reference.cpp.o -MF CMakeFiles/agensio_core.dir/src/control/reference.cpp.o.d -o CMakeFiles/agensio_core.dir/src/control/reference.cpp.o -c /src/src/control/reference.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/control/mcp.cpp.o -MF CMakeFiles/agensio_core.dir/src/control/mcp.cpp.o.d -o CMakeFiles/agensio_core.dir/src/control/mcp.cpp.o -c /src/src/control/mcp.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/control/client.cpp.o -MF CMakeFiles/agensio_core.dir/src/control/client.cpp.o.d -o CMakeFiles/agensio_core.dir/src/control/client.cpp.o -c /src/src/control/client.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/response.cpp.o -MF CMakeFiles/agensio_core.dir/src/response.cpp.o.d -o CMakeFiles/agensio_core.dir/src/response.cpp.o -c /src/src/response.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/http/field_codec.cpp.o -MF CMakeFiles/agensio_core.dir/src/http/field_codec.cpp.o.d -o CMakeFiles/agensio_core.dir/src/http/field_codec.cpp.o -c /src/src/http/field_codec.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/http2/hpack.cpp.o -MF CMakeFiles/agensio_core.dir/src/http2/hpack.cpp.o.d -o CMakeFiles/agensio_core.dir/src/http2/hpack.cpp.o -c /src/src/http2/hpack.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/http3/qpack.cpp.o -MF CMakeFiles/agensio_core.dir/src/http3/qpack.cpp.o.d -o CMakeFiles/agensio_core.dir/src/http3/qpack.cpp.o -c /src/src/http3/qpack.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/quic/crypto.cpp.o -MF CMakeFiles/agensio_core.dir/src/quic/crypto.cpp.o.d -o CMakeFiles/agensio_core.dir/src/quic/crypto.cpp.o -c /src/src/quic/crypto.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/quic/tls.cpp.o -MF CMakeFiles/agensio_core.dir/src/quic/tls.cpp.o.d -o CMakeFiles/agensio_core.dir/src/quic/tls.cpp.o -c /src/src/quic/tls.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/handlers/static.cpp.o -MF CMakeFiles/agensio_core.dir/src/handlers/static.cpp.o.d -o CMakeFiles/agensio_core.dir/src/handlers/static.cpp.o -c /src/src/handlers/static.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/handlers/fastcgi.cpp.o -MF CMakeFiles/agensio_core.dir/src/handlers/fastcgi.cpp.o.d -o CMakeFiles/agensio_core.dir/src/handlers/fastcgi.cpp.o -c /src/src/handlers/fastcgi.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/handlers/proxy.cpp.o -MF CMakeFiles/agensio_core.dir/src/handlers/proxy.cpp.o.d -o CMakeFiles/agensio_core.dir/src/handlers/proxy.cpp.o -c /src/src/handlers/proxy.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/handlers/cgi.cpp.o -MF CMakeFiles/agensio_core.dir/src/handlers/cgi.cpp.o.d -o CMakeFiles/agensio_core.dir/src/handlers/cgi.cpp.o -c /src/src/handlers/cgi.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/handlers/upstream_common.cpp.o -MF CMakeFiles/agensio_core.dir/src/handlers/upstream_common.cpp.o.d -o CMakeFiles/agensio_core.dir/src/handlers/upstream_common.cpp.o -c /src/src/handlers/upstream_common.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/handlers/dispatch.cpp.o -MF CMakeFiles/agensio_core.dir/src/handlers/dispatch.cpp.o.d -o CMakeFiles/agensio_core.dir/src/handlers/dispatch.cpp.o -c /src/src/handlers/dispatch.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/handlers/httparena.cpp.o -MF CMakeFiles/agensio_core.dir/src/handlers/httparena.cpp.o.d -o CMakeFiles/agensio_core.dir/src/handlers/httparena.cpp.o -c /src/src/handlers/httparena.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/upstream/client.cpp.o -MF CMakeFiles/agensio_core.dir/src/upstream/client.cpp.o.d -o CMakeFiles/agensio_core.dir/src/upstream/client.cpp.o -c /src/src/upstream/client.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/upstream/fcgi_client.cpp.o -MF CMakeFiles/agensio_core.dir/src/upstream/fcgi_client.cpp.o.d -o CMakeFiles/agensio_core.dir/src/upstream/fcgi_client.cpp.o -c /src/src/upstream/fcgi_client.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/upstream/http_client.cpp.o -MF CMakeFiles/agensio_core.dir/src/upstream/http_client.cpp.o.d -o CMakeFiles/agensio_core.dir/src/upstream/http_client.cpp.o -c /src/src/upstream/http_client.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/upstream/cgi_client.cpp.o -MF CMakeFiles/agensio_core.dir/src/upstream/cgi_client.cpp.o.d -o CMakeFiles/agensio_core.dir/src/upstream/cgi_client.cpp.o -c /src/src/upstream/cgi_client.cpp\n/usr/bin/c++ -DAGENSIO_HAS_QUIC=1 -DAGENSIO_HAS_TLS=1 -DAGENSIO_HAS_ZLIB=1 -DAGENSIO_HTTPARENA=1 -DAGENSIO_VERSION=\\\"0.1.0-alpha.23\\\" -DASIO_NO_DEPRECATED -DASIO_STANDALONE -D_FORTIFY_SOURCE=2 -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST -I/src/src -isystem /src/build/_deps/asio-src/asio/include -isystem /src/third_party/tomlplusplus -O3 -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic -march=native -fstack-protector-strong -ftrivial-auto-var-init=zero -MD -MT CMakeFiles/agensio_core.dir/src/server.cpp.o -MF CMakeFiles/agensio_core.dir/src/server.cpp.o.d -o CMakeFiles/agensio_core.dir/src/server.cpp.o -c /src/src/server.cpp\n: && /usr/bin/cmake -E rm -f libagensio_core.a && /usr/bin/ar qc libagensio_core.a  CMakeFiles/agensio_core.dir/src/config.cpp.o CMakeFiles/agensio_core.dir/src/http_date.cpp.o CMakeFiles/agensio_core.dir/src/mime.cpp.o CMakeFiles/agensio_core.dir/src/file.cpp.o CMakeFiles/agensio_core.dir/src/path.cpp.o CMakeFiles/agensio_core.dir/src/http1/parser.cpp.o CMakeFiles/agensio_core.dir/src/cache.cpp.o CMakeFiles/agensio_core.dir/src/core/router.cpp.o CMakeFiles/agensio_core.dir/src/services/log.cpp.o CMakeFiles/agensio_core.dir/src/services/pools.cpp.o CMakeFiles/agensio_core.dir/src/services/acme.cpp.o CMakeFiles/agensio_core.dir/src/services/provision.cpp.o CMakeFiles/agensio_core.dir/src/services/archive.cpp.o CMakeFiles/agensio_core.dir/src/services/fetch.cpp.o CMakeFiles/agensio_core.dir/src/services/install.cpp.o CMakeFiles/agensio_core.dir/src/control/handler.cpp.o CMakeFiles/agensio_core.dir/src/control/commands.cpp.o CMakeFiles/agensio_core.dir/src/control/sites.cpp.o CMakeFiles/agensio_core.dir/src/control/settings.cpp.o CMakeFiles/agensio_core.dir/src/control/reference.cpp.o CMakeFiles/agensio_core.dir/src/control/mcp.cpp.o CMakeFiles/agensio_core.dir/src/control/client.cpp.o CMakeFiles/agensio_core.dir/src/response.cpp.o CMakeFiles/agensio_core.dir/src/http/field_codec.cpp.o CMakeFiles/agensio_core.dir/src/http2/hpack.cpp.o CMakeFiles/agensio_core.dir/src/http3/qpack.cpp.o CMakeFiles/agensio_core.dir/src/quic/crypto.cpp.o CMakeFiles/agensio_core.dir/src/quic/tls.cpp.o CMakeFiles/agensio_core.dir/src/handlers/static.cpp.o CMakeFiles/agensio_core.dir/src/handlers/fastcgi.cpp.o CMakeFiles/agensio_core.dir/src/handlers/proxy.cpp.o CMakeFiles/agensio_core.dir/src/handlers/cgi.cpp.o CMakeFiles/agensio_core.dir/src/handlers/upstream_common.cpp.o CMakeFiles/agensio_core.dir/src/handlers/dispatch.cpp.o CMakeFiles/agensio_core.dir/src/handlers/httparena.cpp.o CMakeFiles/agensio_core.dir/src/upstream/client.cpp.o CMakeFiles/agensio_core.dir/src/upstream/fcgi_client.cpp.o CMakeFiles/agensio_core.dir/src/upstream/http_client.cpp.o CMakeFiles/agensio_core.dir/src/upstream/cgi_client.cpp.o CMakeFiles/agensio_core.dir/src/server.cpp.o && /usr/bin/ranlib libagensio_core.a && :\n: && /usr/bin/c++ -O3 -DNDEBUG -Wl,-z,relro,-z,now -pie -Wl,--dependency-file=CMakeFiles/agensio.dir/link.d CMakeFiles/agensio.dir/src/main.cpp.o -o agensio  libagensio_core.a  /usr/lib/x86_64-linux-gnu/libssl.so  /usr/lib/x86_64-linux-gnu/libcrypto.so  /usr/lib/x86_64-linux-gnu/libz.so && :\n"
+  },
+  "official_commit": "8977be2721a5aba7b320345cddfcd6f6b654e698",
+  "cnetmod_source_before_followup": "f5c57a21",
+  "cnetmod_release_flags": "-O3 -DNDEBUG -g -fno-omit-frame-pointer; -stdlib=libc++",
+  "server_cpu_policy": "Unmodified official profile 0-31,64-95; official framework_start fallback --cpus=32 on this 32-vCPU guest; all 32 CPUs available to servers, all frameworks identical policy.",
+  "load_generator_cpu_policy": "Unmodified official common.sh smaller-host fallback 16-31; H3THREADS=64 as official default (oversubscribed on 16 loadgen vCPUs).",
+  "warmup": "No added warmup; official -D 5s, RUNS=3, 2s cooldown, keep official best 2xx/duration RPS. All rounds preserved.",
+  "local_environment_adjustments": [
+    "SKIP_TUNE=true (official option) on shared WSL: no sysctl/governor/MTU changes or Docker daemon restart.",
+    "Only global cleanup/prune omitted in staged benchmark.sh; task-owned containers still removed.",
+    "Readiness uses curl --http3-only, since cnetmod is UDP-only.",
+    "Isolated /etc/gai.conf prefers IPv4 for localhost; URL, SNI and all measured h2load arguments unchanged for every implementation.",
+    "Native official-supported H2LOAD_H3 binary is nghttp2 1.69.0 linked to OpenSSL 3.6.4/ngtcp2 1.25.0/nghttp3 1.18.0 rather than the quictls Dockerfile backend.",
+    "agensio Dockerfile only adds CMAKE_BUILD_PARALLEL_LEVEL=4 and docker build uses --network host for existing proxy; runtime/Release flags unchanged."
+  ],
+  "binary_sha256": {
+    "/tmp/cnetmod-h3-arena-baseline": "52b25c068ce05b55f452d91a09f39e03f8371cfe891b70e2bb0b551dea8fe404",
+    "/tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server": "e7c4f5f8dc310e8b29e4c264626b2ccec62d2640c7fc30eea827c795fa58970f",
+    "/tmp/cnetmod-h3-loadgen169/src/h2load": "9a35cefa52e809a32f1898d65575a2cbbf54555031604830b852e2f6b5a4484f"
+  },
+  "static_payloads": [
+    {
+      "url": "https://localhost:8443/static/reset.css",
+      "identity_bytes": 8192,
+      "wire_bytes": 2420,
+      "content_encoding": "br"
+    },
+    {
+      "url": "https://localhost:8443/static/layout.css",
+      "identity_bytes": 25600,
+      "wire_bytes": 5615,
+      "content_encoding": "br"
+    },
+    {
+      "url": "https://localhost:8443/static/theme.css",
+      "identity_bytes": 18432,
+      "wire_bytes": 4520,
+      "content_encoding": "br"
+    },
+    {
+      "url": "https://localhost:8443/static/components.css",
+      "identity_bytes": 204800,
+      "wire_bytes": 33268,
+      "content_encoding": "br"
+    },
+    {
+      "url": "https://localhost:8443/static/utilities.css",
+      "identity_bytes": 61440,
+      "wire_bytes": 11595,
+      "content_encoding": "br"
+    },
+    {
+      "url": "https://localhost:8443/static/analytics.js",
+      "identity_bytes": 12288,
+      "wire_bytes": 3899,
+      "content_encoding": "br"
+    },
+    {
+      "url": "https://localhost:8443/static/helpers.js",
+      "identity_bytes": 22528,
+      "wire_bytes": 6612,
+      "content_encoding": "br"
+    },
+    {
+      "url": "https://localhost:8443/static/app.js",
+      "identity_bytes": 204800,
+      "wire_bytes": 47275,
+      "content_encoding": "br"
+    },
+    {
+      "url": "https://localhost:8443/static/vendor.js",
+      "identity_bytes": 307200,
+      "wire_bytes": 67294,
+      "content_encoding": "br"
+    },
+    {
+      "url": "https://localhost:8443/static/router.js",
+      "identity_bytes": 35840,
+      "wire_bytes": 9665,
+      "content_encoding": "br"
+    },
+    {
+      "url": "https://localhost:8443/static/header.html",
+      "identity_bytes": 122880,
+      "wire_bytes": 9390,
+      "content_encoding": "br"
+    },
+    {
+      "url": "https://localhost:8443/static/footer.html",
+      "identity_bytes": 56320,
+      "wire_bytes": 6974,
+      "content_encoding": "br"
+    },
+    {
+      "url": "https://localhost:8443/static/regular.woff2",
+      "identity_bytes": 18432,
+      "wire_bytes": 18432,
+      "content_encoding": "identity"
+    },
+    {
+      "url": "https://localhost:8443/static/bold.woff2",
+      "identity_bytes": 22528,
+      "wire_bytes": 22528,
+      "content_encoding": "identity"
+    },
+    {
+      "url": "https://localhost:8443/static/logo.svg",
+      "identity_bytes": 15344,
+      "wire_bytes": 3028,
+      "content_encoding": "br"
+    },
+    {
+      "url": "https://localhost:8443/static/icon-sprite.svg",
+      "identity_bytes": 71680,
+      "wire_bytes": 11739,
+      "content_encoding": "br"
+    },
+    {
+      "url": "https://localhost:8443/static/hero.webp",
+      "identity_bytes": 46080,
+      "wire_bytes": 46080,
+      "content_encoding": "identity"
+    },
+    {
+      "url": "https://localhost:8443/static/thumb1.webp",
+      "identity_bytes": 8192,
+      "wire_bytes": 8192,
+      "content_encoding": "identity"
+    },
+    {
+      "url": "https://localhost:8443/static/thumb2.webp",
+      "identity_bytes": 6144,
+      "wire_bytes": 6144,
+      "content_encoding": "identity"
+    },
+    {
+      "url": "https://localhost:8443/static/manifest.json",
+      "identity_bytes": 2883,
+      "wire_bytes": 735,
+      "content_encoding": "br"
+    }
+  ],
+  "static_uniform_mean_wire_bytes": 16270.25
+}

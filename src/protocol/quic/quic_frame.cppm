@@ -5,7 +5,7 @@ module;
 export module cnetmod.protocol.quic:frame;
 
 import std;
-import :types;
+import :foundation;
 import :varint;
 
 namespace cnetmod::quic {

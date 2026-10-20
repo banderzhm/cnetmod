@@ -1,0 +1,27 @@
+[0/2] Re-checking globbed directories...
+[1/284] Scanning /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_connection.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_connection.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[2/284] Generating CXX dyndep file CMakeFiles/cnetmod_quic.dir/CXX.dd
+[3/23] Building CXX object CMakeFiles/cnetmod_quic.dir/src/protocol/quic/quic_connection.cpp.o
+[4/23] Linking CXX static library libcnetmod_quic.a
+[5/23] Linking CXX executable testing/tests/test_quic_varint
+[6/23] Linking CXX executable testing/tests/test_quic_frame
+[7/23] Linking CXX executable testing/tests/test_quic_packet
+[8/23] Linking CXX executable testing/tests/test_quic_loss_detection
+[9/23] Linking CXX executable testing/tests/test_quic_congestion
+[10/23] Linking CXX executable testing/tests/test_quic_early_data
+[11/23] Linking CXX executable testing/tests/test_quic_stream
+[12/23] Linking CXX executable testing/tests/test_http3_qpack
+[13/23] Linking CXX executable testing/tests/test_http3_frame
+[14/23] Linking CXX executable testing/bench/arena_h3_server
+[15/23] Linking CXX executable bin/h3_interop_server
+[16/23] Linking CXX executable bin/quic_pmtu_deadline_server
+[17/23] Linking CXX executable bin/h3_interop_client
+[18/23] Linking CXX executable bin/quic_datagram_cc_server
+[19/23] Linking CXX executable bin/quic_pmtu_cc_server
+[20/23] Linking CXX executable bin/quic_retire_stream_server
+[21/23] Linking CXX executable testing/http3/http3_e2e_server
+[22/23] Linking CXX executable testing/http3/http3_migration_e2e
+[23/23] Linking CXX executable testing/http3/http_client_http3_e2e

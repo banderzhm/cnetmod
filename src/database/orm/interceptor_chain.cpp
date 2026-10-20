@@ -11,6 +11,7 @@ struct interceptor_chain::implementation
         std::string name;
         int priority{};
         sql_interceptor_function function;
+        interceptor_kind kind = interceptor_kind::custom;
     };
 
     std::vector<entry> entries;
@@ -29,7 +30,8 @@ auto interceptor_chain::operator=(interceptor_chain&& other) noexcept
     -> interceptor_chain& = default;
 
 auto interceptor_chain::add(std::string name, int priority,
-    sql_interceptor_function function) -> std::expected<void, std::string>
+    sql_interceptor_function function, interceptor_kind kind)
+    -> std::expected<void, std::string>
 {
     if (!implementation_ || implementation_->is_frozen)
         return std::unexpected("interceptor chain is frozen");
@@ -40,7 +42,7 @@ auto interceptor_chain::add(std::string name, int priority,
     if (duplicate != implementation_->entries.end())
         return std::unexpected(std::format("duplicate interceptor '{}'", name));
     implementation_->entries.push_back({std::move(name), priority,
-        std::move(function)});
+        std::move(function), kind});
     return {};
 }
 
@@ -84,7 +86,8 @@ auto interceptor_chain::apply(sql_operation operation,
         return std::unexpected("interceptor chain must be frozen before use");
     for (const auto& entry : implementation_->entries)
     {
-        if (!options.logical_delete && entry.name == "logical_delete")
+        if (!options.logical_delete &&
+            entry.kind == interceptor_kind::logical_delete)
             continue;
         auto next = entry.function(operation, std::move(statement));
         if (!next)

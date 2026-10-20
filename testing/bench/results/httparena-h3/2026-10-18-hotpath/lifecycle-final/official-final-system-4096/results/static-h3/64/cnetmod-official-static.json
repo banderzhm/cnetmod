@@ -1,0 +1,19 @@
+{
+  "framework": "cnetmod-official-static",
+  "language": "C++",
+  "rps": 628129,
+  "avg_latency": "5.91ms",
+  "p99_latency": "28.60ms",
+  "cpu": "1699.3%",
+  "memory": "117MiB",
+  "connections": 64,
+  "threads": 64,
+  "duration": "5s",
+  "pipeline": 1,
+  "bandwidth": "10.80GB/s",
+  "reconnects": 0,
+  "status_2xx": 3555212,
+  "status_3xx": 0,
+  "status_4xx": 0,
+  "status_5xx": 0
+}

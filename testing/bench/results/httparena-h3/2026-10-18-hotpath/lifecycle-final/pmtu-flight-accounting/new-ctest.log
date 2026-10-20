@@ -1,0 +1,9 @@
+Test project C:/Users/25007/.codex/tmp/cnetmod-h3-windows
+    Start 51: test_quic_loss_detection
+1/2 Test #51: test_quic_loss_detection .........   Passed    0.01 sec
+    Start 52: test_quic_congestion
+2/2 Test #52: test_quic_congestion .............   Passed    0.01 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   0.02 sec

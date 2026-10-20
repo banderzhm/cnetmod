@@ -1,0 +1,63 @@
+Test project /tmp/cnetmod-h3-arena-build
+      Start 44: test_udp_batch
+ 1/22 Test #44: test_udp_batch ..................................   Passed    0.48 sec
+      Start 47: test_quic_varint
+ 2/22 Test #47: test_quic_varint ................................   Passed    0.00 sec
+      Start 48: test_quic_frame
+ 3/22 Test #48: test_quic_frame .................................   Passed    0.00 sec
+      Start 49: test_quic_packet
+ 4/22 Test #49: test_quic_packet ................................   Passed    0.01 sec
+      Start 50: test_quic_stream
+ 5/22 Test #50: test_quic_stream ................................   Passed    0.08 sec
+      Start 51: test_quic_loss_detection
+ 6/22 Test #51: test_quic_loss_detection ........................   Passed    0.01 sec
+      Start 52: test_quic_congestion
+ 7/22 Test #52: test_quic_congestion ............................   Passed    0.00 sec
+      Start 53: test_quic_early_data
+ 8/22 Test #53: test_quic_early_data ............................   Passed    0.02 sec
+      Start 63: http3_lifecycle
+ 9/22 Test #63: http3_lifecycle .................................   Passed    2.27 sec
+      Start 64: http3_cold_listener_cleanup
+10/22 Test #64: http3_cold_listener_cleanup .....................   Passed   35.39 sec
+      Start 65: http3_outbound_pto_close_restart_1
+11/22 Test #65: http3_outbound_pto_close_restart_1 ..............   Passed    4.21 sec
+      Start 66: http3_outbound_pto_close_restart_2
+12/22 Test #66: http3_outbound_pto_close_restart_2 ..............   Passed    4.39 sec
+      Start 67: quic_retire_stream_credit_wakeup
+13/22 Test #67: quic_retire_stream_credit_wakeup ................   Passed    1.02 sec
+      Start 68: quic_retire_stream_notification_lifetime
+14/22 Test #68: quic_retire_stream_notification_lifetime ........   Passed    0.66 sec
+      Start 69: quic_private_outbound_pto
+15/22 Test #69: quic_private_outbound_pto .......................   Passed    0.54 sec
+      Start 70: quic_handshake_confirmation
+16/22 Test #70: quic_handshake_confirmation .....................   Passed    1.61 sec
+      Start 73: http3_early_data_recovery
+17/22 Test #73: http3_early_data_recovery .......................   Passed    1.69 sec
+      Start 74: http3_streaming_cancellation
+18/22 Test #74: http3_streaming_cancellation ....................   Passed    0.52 sec
+      Start 75: http3_idle_connection_cleanup
+19/22 Test #75: http3_idle_connection_cleanup ...................   Passed   31.25 sec
+      Start 76: http_client_http3_end_to_end
+20/22 Test #76: http_client_http3_end_to_end ....................   Passed    0.75 sec
+      Start 79: http3_multipath_path_mtu_end_to_end
+21/22 Test #79: http3_multipath_path_mtu_end_to_end .............   Passed    0.42 sec
+      Start 80: http3_multipath_path_mtu_blackhole_end_to_end
+22/22 Test #80: http3_multipath_path_mtu_blackhole_end_to_end ...   Passed    2.74 sec
+
+100% tests passed out of 22
+
+Label Time Summary:
+blackhole       =   2.74 sec*proc (1 test)
+client          =   0.75 sec*proc (1 test)
+end_to_end      =   3.91 sec*proc (3 tests)
+flow_control    =   1.02 sec*proc (1 test)
+http3           =  87.44 sec*proc (14 tests)
+interop         =  46.25 sec*proc (4 tests)
+lifecycle       =  81.84 sec*proc (10 tests)
+memory          =   0.66 sec*proc (1 test)
+multipath       =   3.16 sec*proc (2 tests)
+pmtu            =   3.16 sec*proc (2 tests)
+quic            =  40.43 sec*proc (9 tests)
+recovery        =  12.43 sec*proc (5 tests)
+
+Total Test time (real) =  88.09 sec

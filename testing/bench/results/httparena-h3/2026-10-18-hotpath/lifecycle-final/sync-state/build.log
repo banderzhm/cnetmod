@@ -1,0 +1,259 @@
+ninja: Entering directory `/tmp/cnetmod-h3-arena-build'
+[0/2] Re-checking globbed directories...
+[1/282] Scanning /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_stream.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_stream.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[2/282] Scanning /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_connection.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_connection.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[3/282] Scanning /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_stream.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_stream.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[4/282] Generating CXX dyndep file 'CMakeFiles/cnetmod_runtime@synth_0.dir/CXX.dd'
+[5/282] Scanning /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_connection.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_connection.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[6/282] Scanning /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_stream.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_stream.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[7/282] Scanning /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_connection.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_connection.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[8/282] Generating CXX dyndep file CMakeFiles/cnetmod_quic.dir/CXX.dd
+[9/178] Building CXX object CMakeFiles/cnetmod_quic.dir/src/protocol/quic/quic_connection.cppm.o
+[10/178] Building CXX object CMakeFiles/cnetmod_quic.dir/src/protocol/quic/quic_stream.cppm.o
+[11/178] Building CXX object CMakeFiles/cnetmod_quic.dir/src/protocol/quic.cppm.o
+[12/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v3/http3_session.cppm.o
+[13/178] Scanning /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/tests/test_quic_stream.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/tests/test_quic_stream.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[14/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/client/http_client.cppm.o
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/http/client/http_client.cppm:144:5: warning: explicitly defaulted move constructor is implicitly deleted [-Wdefaulted-function-deleted]
+  144 |     client(client&&) noexcept = default;
+      |     ^
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/http/client/http_client.cppm:346:17: note: move constructor of 'client' is implicitly deleted because field 'h3_lifecycle_mutex_' has a deleted move constructor
+  346 |     async_mutex h3_lifecycle_mutex_;
+      |                 ^
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/coro/mutex.cppm:51:5: note: 'async_mutex' has been explicitly marked deleted here
+   51 |     async_mutex(const async_mutex&) = delete;
+      |     ^
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/http/client/http_client.cppm:144:33: note: replace 'default' with 'delete'
+  144 |     client(client&&) noexcept = default;
+      |                                 ^~~~~~~
+      |                                 delete
+1 warning generated.
+[15/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http.cppm.o
+[16/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/client/cookie.cpp.o
+[17/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart_builder.cpp.o
+[18/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart_content_type.cpp.o
+[19/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart_disposition.cpp.o
+[20/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart_form.cpp.o
+[21/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart_parser.cpp.o
+[22/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart_url.cpp.o
+[23/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/sse.cpp.o
+[24/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/sse_stream.cpp.o
+[25/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v3/http3_session.cpp.o
+[26/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/swagger.cpp.o
+[27/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/utils.cpp.o
+[28/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/swagger_ui.cpp.o
+[29/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/message/http_response.cpp.o
+[30/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/server/router.cpp.o
+[31/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v1/http_v1_parser.cpp.o
+[32/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/client/client_pool.cppm.o
+[33/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/client/client_pool.cpp.o
+[34/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/access_log.cppm.o
+[35/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/server/http_server.cpp.o
+[36/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/authorization.cppm.o
+[37/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_access_log.cpp.o
+[38/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/authorization.cpp.o
+[39/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/compress.cppm.o
+[40/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/body_limit.cppm.o
+[41/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/cors.cppm.o
+[42/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_cors.cpp.o
+[43/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_compress.cpp.o
+[44/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/graceful_shutdown.cppm.o
+[45/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_graceful_shutdown.cpp.o
+[46/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/health_check.cppm.o
+[47/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_cache.cppm.o
+[48/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/ip_filter.cppm.o
+[49/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_cache.cpp.o
+[50/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/ip_firewall.cppm.o
+[51/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_ip_filter.cpp.o
+[52/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/jwt_auth.cppm.o
+[53/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/metrics.cppm.o
+[54/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/ip_firewall.cpp.o
+[55/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/rate_limiter.cppm.o
+[56/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_metrics.cpp.o
+[57/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/recover.cppm.o
+[58/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_rate_limiter.cpp.o
+[59/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/request_id.cppm.o
+[60/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_request_id.cpp.o
+[61/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/timeout.cppm.o
+[62/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/tracing.cppm.o
+[63/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_recover.cpp.o
+[64/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/tracing.cpp.o
+[65/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/upload.cppm.o
+[66/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v3/http3_client.cppm.o
+[67/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_upload.cpp.o
+[68/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v3/http3_client.cpp.o
+[69/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/middleware.cppm.o
+[70/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v3/http3_server.cppm.o
+[71/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/client/http_client.cpp.o
+[72/178] Building CXX object CMakeFiles/cnetmod_quic.dir/src/protocol/quic/congestion_control.cpp.o
+[73/178] Building CXX object CMakeFiles/cnetmod_quic.dir/src/protocol/quic/loss_detection.cpp.o
+[74/178] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v3/http3_server.cpp.o
+[75/178] Building CXX object CMakeFiles/cnetmod_quic.dir/src/protocol/quic/quic_crypto.cpp.o
+[76/178] Building CXX object CMakeFiles/cnetmod_quic.dir/src/protocol/quic/quic_flow_control.cpp.o
+[77/178] Building CXX object CMakeFiles/cnetmod_quic.dir/src/protocol/quic/quic_connection.cpp.o
+[78/178] Building CXX object CMakeFiles/cnetmod_quic.dir/src/protocol/quic/quic_foundation.cpp.o
+[79/178] Building CXX object CMakeFiles/cnetmod_quic.dir/src/protocol/quic/quic_packet.cpp.o
+[80/178] Building CXX object CMakeFiles/cnetmod_quic.dir/src/protocol/quic/quic_frame.cpp.o
+[81/178] Building CXX object CMakeFiles/cnetmod_quic.dir/src/protocol/quic/quic_recovery.cpp.o
+[82/178] Building CXX object CMakeFiles/cnetmod_quic.dir/src/protocol/quic/quic_stream.cpp.o
+[83/178] Building CXX object CMakeFiles/cnetmod_quic.dir/src/protocol/quic/quic_write_queue.cpp.o
+[84/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/integration/http_client.cppm.o
+[85/178] Building CXX object CMakeFiles/cnetmod_quic.dir/src/protocol/quic/varint.cpp.o
+[86/178] Linking CXX static library libcnetmod_quic.a
+[87/178] Linking CXX static library libcnetmod_http.a
+[88/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/integration/http_server.cppm.o
+[89/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/integration/http_server.cpp.o
+[90/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/integration/http_client.cpp.o
+[91/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/integration/messaging.cppm.o
+[92/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/otlp/otlp_http_exporter.cppm.o
+[93/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/integration/messaging.cpp.o
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/application/monitoring/integration/messaging.cpp:44:10: warning: unused function 'parse' [-Wunused-function]
+   44 |     auto parse(std::string_view traceparent, std::string_view tracestate)
+      |          ^~~~~
+1 warning generated.
+[94/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/telemetry.cppm.o
+[95/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/telemetry.cpp.o
+[96/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/otlp/otlp_http_exporter.cpp.o
+[97/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/observability.cppm.o
+[98/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/template/json_template.cppm.o
+[99/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/template/rest_template.cppm.o
+[100/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/managed_service.cppm.o
+[101/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/managed_service.cpp.o
+[102/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/health_registry.cppm.o
+[103/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/template/rest_template.cpp.o
+[104/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/service_registry.cppm.o
+[105/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/health_registry.cpp.o
+[106/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/service_lifecycle.cppm.o
+[107/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/service_registry.cpp.o
+[108/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/configuration.cppm.o
+[109/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/service_lifecycle.cpp.o
+[110/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/application_runtime.cppm.o
+[111/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/application_runtime.cpp.o
+[112/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/configuration.cpp.o
+[113/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/auto_configuration.cppm.o
+[114/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/auto_configuration.cpp.o
+[115/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/integration/http_client.cppm.o
+[116/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/builtin_auto_configuration.cpp.o
+[117/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/diagnostics.cppm.o
+[118/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/components.cppm.o
+[119/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/integration/http_client.cpp.o
+[120/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/json.cppm.o
+[121/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/json.cpp.o
+[122/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/options.cppm.o
+[123/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/components.cpp.o
+[124/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/application_module.cppm.o
+[125/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/application_host.cppm.o
+[126/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/options.cpp.o
+[127/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application.cppm.o
+[128/178] Generating CXX dyndep file 'CMakeFiles/cnetmod_quic@synth_0.dir/CXX.dd'
+[129/178] Generating CXX dyndep file 'CMakeFiles/cnetmod_http@synth_0.dir/CXX.dd'
+[130/178] Generating CXX dyndep file testing/tests/CMakeFiles/test_quic_frame.dir/CXX.dd
+[131/178] Building CXX object testing/tests/CMakeFiles/test_quic_frame.dir/test_quic_frame.cpp.o
+[132/178] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/application_host.cpp.o
+[133/178] Linking CXX static library libcnetmod_application.a
+[134/178] Generating CXX dyndep file testing/tests/CMakeFiles/test_quic_packet.dir/CXX.dd
+[135/178] Linking CXX executable testing/tests/test_quic_frame
+[136/178] Generating CXX dyndep file testing/tests/CMakeFiles/test_quic_stream.dir/CXX.dd
+[137/178] Building CXX object testing/tests/CMakeFiles/test_quic_packet.dir/test_quic_packet.cpp.o
+[138/178] Building CXX object testing/tests/CMakeFiles/test_quic_stream.dir/test_quic_stream.cpp.o
+[139/178] Linking CXX executable testing/tests/test_quic_packet
+[140/178] Scanning /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/tests/test_quic_loss_detection.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/tests/test_quic_loss_detection.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[141/178] Generating CXX dyndep file testing/tests/CMakeFiles/test_quic_loss_detection.dir/CXX.dd
+[142/178] Building CXX object testing/tests/CMakeFiles/test_quic_loss_detection.dir/test_quic_loss_detection.cpp.o
+[143/178] Linking CXX executable testing/tests/test_quic_stream
+[144/178] Generating CXX dyndep file testing/tests/CMakeFiles/test_quic_congestion.dir/CXX.dd
+[145/178] Linking CXX executable testing/tests/test_quic_loss_detection
+[146/178] Generating CXX dyndep file testing/tests/CMakeFiles/test_quic_early_data.dir/CXX.dd
+[147/178] Building CXX object testing/tests/CMakeFiles/test_quic_congestion.dir/test_quic_congestion.cpp.o
+[148/178] Linking CXX executable testing/tests/test_quic_congestion
+[149/178] Generating CXX dyndep file testing/tests/CMakeFiles/test_http3_qpack.dir/CXX.dd
+[150/177] Building CXX object testing/tests/CMakeFiles/test_quic_early_data.dir/test_quic_early_data.cpp.o
+[151/177] Linking CXX executable testing/tests/test_http3_qpack
+[152/177] Generating CXX dyndep file testing/tests/CMakeFiles/test_http3_frame.dir/CXX.dd
+[153/177] Linking CXX executable testing/tests/test_quic_early_data
+[154/177] Generating CXX dyndep file testing/bench/CMakeFiles/arena_h3_server.dir/CXX.dd
+[155/184] Building CXX object 'CMakeFiles/cnetmod_quic@synth_0.dir/b968f3359636.bmi'
+[156/184] Building CXX object 'CMakeFiles/cnetmod_quic@synth_0.dir/2ef7f41b81db.bmi'
+[157/184] Building CXX object 'CMakeFiles/cnetmod_quic@synth_0.dir/68896ee11f5a.bmi'
+[158/184] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/6f5281353606.bmi'
+[159/184] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/3331137a57e0.bmi'
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/http/client/http_client.cppm:144:5: warning: explicitly defaulted move constructor is implicitly deleted [-Wdefaulted-function-deleted]
+  144 |     client(client&&) noexcept = default;
+      |     ^
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/http/client/http_client.cppm:346:17: note: move constructor of 'client' is implicitly deleted because field 'h3_lifecycle_mutex_' has a deleted move constructor
+  346 |     async_mutex h3_lifecycle_mutex_;
+      |                 ^
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/coro/mutex.cppm:51:5: note: 'async_mutex' has been explicitly marked deleted here
+   51 |     async_mutex(const async_mutex&) = delete;
+      |     ^
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/http/client/http_client.cppm:144:33: note: replace 'default' with 'delete'
+  144 |     client(client&&) noexcept = default;
+      |                                 ^~~~~~~
+      |                                 delete
+1 warning generated.
+[160/184] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/cd17b2d38f47.bmi'
+[161/184] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/9b1a957855bd.bmi'
+[162/184] Building CXX object testing/tests/CMakeFiles/test_http3_frame.dir/test_http3_frame.cpp.o
+[163/184] Building CXX object testing/bench/CMakeFiles/arena_h3_server.dir/arena_h3_server.cpp.o
+[164/184] Linking CXX executable testing/tests/test_http3_frame
+[165/184] Building CXX object testing/http3/CMakeFiles/h3_interop_server.dir/h3_interop_server.cpp.o
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/h3_interop_server.cpp:275:95: warning: missing field 'push_cancelled' initializer [-Wmissing-field-initializers]
+  275 |                   cnetmod::http::v3::http3_server_handlers{async_handler, webtransport_handler})
+      |                                                                                               ^
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/h3_interop_server.cpp:305:148: warning: missing field 'push_cancelled' initializer [-Wmissing-field-initializers]
+  305 |               cnetmod::endpoint{*address, port}, cnetmod::http::v3::http3_server_handlers{std::move(async_handler), std::move(webtransport_handler)})
+      |                                                                                                                                                    ^
+2 warnings generated.
+[166/184] Linking CXX executable testing/bench/arena_h3_server
+[167/184] Generating CXX dyndep file testing/http3/CMakeFiles/h3_interop_client.dir/CXX.dd
+[168/184] Building CXX object testing/http3/CMakeFiles/h3_interop_client.dir/h3_interop_client.cpp.o
+[169/184] Linking CXX executable bin/h3_interop_server
+[170/184] Generating CXX dyndep file testing/http3/CMakeFiles/quic_retire_stream_server.dir/CXX.dd
+[171/184] Building CXX object testing/http3/CMakeFiles/quic_retire_stream_server.dir/quic_retire_stream_server.cpp.o
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/quic_retire_stream_server.cpp:394:54: warning: missing field 'connection' initializer [-Wmissing-field-initializers]
+  394 |     fixture state{*context, tls, std::move(arguments)};
+      |                                                      ^
+1 warning generated.
+[172/184] Linking CXX executable bin/h3_interop_client
+[173/184] Scanning /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e_server.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e_server.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[174/184] Generating CXX dyndep file testing/http3/CMakeFiles/http3_e2e_server.dir/CXX.dd
+[175/184] Building CXX object testing/http3/CMakeFiles/http3_e2e_server.dir/http_client_e2e_server.cpp.o
+[176/184] Linking CXX executable bin/quic_retire_stream_server
+[177/184] Scanning /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[178/184] Generating CXX dyndep file testing/http3/CMakeFiles/http_client_http3_e2e.dir/CXX.dd
+[179/184] Building CXX object testing/http3/CMakeFiles/http_client_http3_e2e.dir/http_client_e2e.cpp.o
+[180/184] Linking CXX executable testing/http3/http3_e2e_server
+[181/184] Generating CXX dyndep file testing/http3/CMakeFiles/http3_migration_e2e.dir/CXX.dd
+[182/184] Building CXX object testing/http3/CMakeFiles/http3_migration_e2e.dir/http3_migration_e2e.cpp.o
+[183/184] Linking CXX executable testing/http3/http_client_http3_e2e
+[184/184] Linking CXX executable testing/http3/http3_migration_e2e
