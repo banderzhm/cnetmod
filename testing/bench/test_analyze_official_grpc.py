@@ -6,12 +6,12 @@ from analyze_official_grpc import parse_log
 
 
 class OfficialGrpcAnalysisTests(unittest.TestCase):
-    def parse(self, completed=1000000, failed=0, omit_latency=False):
+    def parse(self, completed=1000000, failed=0, omit_latency=False, header_extra=0):
         text = "=== fixture / unary-grpc / 256c (tool=h2load) ===\n[run 1/3]\n"
         text += f"finished in 5.12s, 1 req/s, 1MB/s\nrequests: {completed} total, "
         text += f"{completed + 25600} started, {completed} done, {completed} succeeded, "
         text += f"{failed} failed, 0 errored, 0 timeout\n"
-        text += f"status codes: {completed} 2xx, 0 3xx, 0 4xx, 0 5xx\n"
+        text += f"status codes: {completed + header_extra} 2xx, 0 3xx, 0 4xx, 0 5xx\n"
         if not omit_latency:
             text += "time for request: 1ms 20ms 5ms 2ms 90%\n"
         with tempfile.TemporaryDirectory() as folder:
@@ -29,6 +29,12 @@ class OfficialGrpcAnalysisTests(unittest.TestCase):
     def test_errors_and_one_batch_stall_cannot_pass(self):
         self.assertFalse(self.parse(failed=1)["valid"])
         self.assertFalse(self.parse(completed=25600)["progressing_beyond_initial_batches"])
+
+    def test_inflight_trailers_preserve_official_status_count(self):
+        row = self.parse(header_extra=12800)
+        self.assertTrue(row["valid"])
+        self.assertEqual(row["rps"], int(1012800 / 5.12))
+        self.assertFalse(self.parse(header_extra=25601)["valid"])
 
     def test_incomplete_round_is_not_silently_dropped(self):
         with self.assertRaises(ValueError):

@@ -29,7 +29,10 @@ def parse_log(path):
         total, started, done, succeeded, failed, errored, timeout = map(int, requests.groups())
         ok, redirects, client_errors, server_errors = map(int, statuses.groups())
         seconds = float(duration[1])
-        valid = (seconds > 0 and done == succeeded == ok and
+        # h2load counts a status when HEADERS arrive, but a successful request
+        # only when END_STREAM arrives. Timed cutoffs can leave valid 2xx
+        # responses waiting for trailers. Preserve the upstream 2xx headline.
+        valid = (seconds > 0 and done == succeeded and done <= ok <= started and
                  failed == errored == timeout == redirects == client_errors == server_errors == 0)
         progressing = done > int(current["connections"]) * 100 * 2
         resources = re.search(r"\[info\] CPU ([^|]+)\| Mem (\S+)", block)
@@ -65,15 +68,33 @@ def main():
     parser.add_argument("--candidate", required=True)
     parser.add_argument("--reference", action="append", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--subscriptions", type=Path,
+                        help="Explicit entry -> tests metadata for peers without TLS support")
     args = parser.parse_args()
+    subscriptions = json.loads(args.subscriptions.read_text()) if args.subscriptions else None
     rows = []
     for directory in args.records:
+        monitor = directory / "quiet-host.json"
+        if monitor.exists() and not json.loads(monitor.read_text())["valid"]:
+            raise ValueError(f"Build interference invalidated this measurement: {directory}")
+        invocation = json.loads((directory / "invocation.json").read_text())
+        environment = invocation["environment"]
+        if (invocation["official_sha"] != "8977be2721a5aba7b320345cddfcd6f6b654e698" or
+                environment["DURATION"] != "5s" or environment["RUNS"] != "3" or
+                environment["H2THREADS"] != "64" or invocation.get("supplementary_high_only")):
+            raise ValueError(f"Not the pinned headline configuration: {directory}")
         for path in sorted(directory.glob("*-unary-grpc*.log")):
             rows.extend(parse_log(path))
     comparison = []
     for profile, connections in CASES:
         entries = {}
         for entry in [args.candidate, *args.reference]:
+            if subscriptions is not None:
+                supported = subscriptions[entry].get("tests", ["unary-grpc", "unary-grpc-tls"])
+                if profile not in supported:
+                    if entry == args.candidate:
+                        raise ValueError(f"Candidate must support {profile}")
+                    continue
             selected = [r for r in rows if (r["entry"], r["profile"], r["connections"]) ==
                         (entry, profile, connections)]
             if {r["round"] for r in selected} != {1, 2, 3} or len(selected) != 3:
@@ -81,7 +102,7 @@ def main():
             if not all(r["valid"] and r["progressing_beyond_initial_batches"] for r in selected):
                 raise ValueError(f"Errors or stalled connection: {entry} {profile} {connections}")
             entries[entry] = max(r["rps"] for r in selected)
-        fastest = max(entries[e] for e in args.reference)
+        fastest = max(entries[e] for e in args.reference if e in entries)
         candidate = entries[args.candidate]
         comparison.append(dict(profile=profile, connections=connections, rps=entries,
                                target=math.ceil(fastest * 1.1),
