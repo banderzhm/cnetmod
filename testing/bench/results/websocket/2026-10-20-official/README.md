@@ -1,5 +1,7 @@
 # Local official WebSocket comparison, 2026-10-20
 
+Follow-up: a buffer-ring recycling bug was found in the pinned load generator. The [corrected-client short-connection retest](../2026-10-20-zero-errors/README.md) is a separate series; original evidence here remains unchanged.
+
 The cnetmod baseline is competitive for one outstanding message per connection,
 but all three completed peers outperform it in every pipeline-16 configuration.
 Vanilla epoll is fastest among these measured entries (its upstream category is

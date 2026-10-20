@@ -1,0 +1,197 @@
+[info] available CPUs: 32
+[info] framework: genhttp-ioxide (genhttp-ioxide, C#)
+[info] subscribed tests: baseline,async,latency-1m,latency-10k,latency-500k-8cpu,pipelined,limited-conn,json-comp,json-tls,static-tls,baseline-h2c,json-h2c,baseline-h2,static-h2,static-h3,baseline-h3,8gbit,async-db,echo-ws,echo-ws-pipeline,echo-ws-limited
+[info] building image: httparena-genhttp-ioxide
+[info] skipping system tuning as requested (SKIP_TUNE=true)
+[info] starting postgres sidecar
+[info] postgres ready (seeded)
+
+==============================================
+=== genhttp-ioxide / echo-ws-limited / 512c (tool=gcannon) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] server ready
+
+[run 1/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     512 (8/thread)
+  Pipeline:  1
+  Req/conn:  10
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency    499us    142us   1.21ms   5.48ms   11.10ms
+
+  4030951 frames sent in 5.00s, 4030565 frames received
+  Throughput: 805.85K req/s
+  Bandwidth:  19.99MB/s
+  WS upgrades: 403296
+  WS frames:   4030565
+  Latency samples: 4030565 / 4030565 responses (100.0%)
+  Reconnects: 402897
+[info] CPU 1087.0% | Mem 1.5GiB
+
+[run 2/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     512 (8/thread)
+  Pipeline:  1
+  Req/conn:  10
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency    402us    114us    949us   4.57ms   9.72ms
+
+  5375254 frames sent in 5.00s, 5375136 frames received
+  Throughput: 1.07M req/s
+  Bandwidth:  26.65MB/s
+  WS upgrades: 545786
+  WS frames:   5375136
+  Latency samples: 5375136 / 5375136 responses (100.0%)
+  Reconnects: 537438
+[info] CPU 1333.8% | Mem 1.5GiB
+
+[run 3/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     512 (8/thread)
+  Pipeline:  1
+  Req/conn:  10
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency    394us    115us    971us   4.12ms   8.75ms
+
+  5390857 frames sent in 5.00s, 5390731 frames received
+  Throughput: 1.08M req/s
+  Bandwidth:  26.73MB/s
+  WS upgrades: 544470
+  WS frames:   5390731
+  Latency samples: 5390731 / 5390731 responses (100.0%)
+  Reconnects: 538990
+[info] CPU 1297.2% | Mem 1.5GiB
+
+=== Best: 1078146 req/s (CPU: 1297.2%, Mem: 1.5GiB) ===
+[info] saved results/echo-ws-limited/512/genhttp-ioxide.json
+httparena-bench-genhttp-ioxide
+httparena-bench-genhttp-ioxide
+
+==============================================
+=== genhttp-ioxide / echo-ws-limited / 4096c (tool=gcannon) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] server ready
+
+[run 1/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     4096 (64/thread)
+  Pipeline:  1
+  Req/conn:  10
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency   4.19ms    802us   11.90ms   34.10ms   116.90ms
+
+  4248527 frames sent in 5.00s, 4244854 frames received
+  Throughput: 848.52K req/s
+  Bandwidth:  21.11MB/s
+  WS upgrades: 426475
+  WS frames:   4244854
+  Latency samples: 4244854 / 4244854 responses (100.0%)
+  Reconnects: 422802
+[info] CPU 1248.9% | Mem 3.8GiB
+
+[run 2/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     4096 (64/thread)
+  Pipeline:  1
+  Req/conn:  10
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency   3.36ms    228us   11.70ms   30.80ms   46.00ms
+
+  5527905 frames sent in 5.00s, 5524134 frames received
+  Throughput: 1.10M req/s
+  Bandwidth:  27.46MB/s
+  WS upgrades: 554398
+  WS frames:   5524134
+  Latency samples: 5524134 / 5524134 responses (100.0%)
+  Reconnects: 550627
+[info] CPU 1383.6% | Mem 3.4GiB
+
+[run 3/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     4096 (64/thread)
+  Pipeline:  1
+  Req/conn:  10
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency   3.41ms    329us   11.00ms   33.70ms   55.50ms
+
+  5382709 frames sent in 5.00s, 5379114 frames received
+  Throughput: 1.08M req/s
+  Bandwidth:  26.75MB/s
+  WS upgrades: 540265
+  WS frames:   5379114
+  Latency samples: 5379114 / 5379114 responses (100.0%)
+  Reconnects: 536670
+[info] CPU 1456.5% | Mem 2.9GiB
+
+=== Best: 1104826 req/s (CPU: 1383.6%, Mem: 3.4GiB) ===
+[info] saved results/echo-ws-limited/4096/genhttp-ioxide.json
+httparena-bench-genhttp-ioxide
+httparena-bench-genhttp-ioxide
+[info] rebuilding site/data/*.json
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/frameworks.json
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-baseline.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch.json - 3 new, 3 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-candidate.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-awaiter.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch-affine.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch-compact.json - 3 new, 3 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch-epoll.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch-linked.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch-multishot.json - 3 new, 3 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch-nodelay.json - 3 new, 3 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch-ready.json - 3 new, 3 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch-sharded.json - 5 new, 5 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch-small.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-duplex.json - 1 new, 1 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-duplex-v2.json - 5 new, 5 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-final.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-final24-b64.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-poll-first.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-reviewed16-b64.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-workers16.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/fulmine.js.json - 8 new, 28 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/genhttp-ioxide.json - 8 new, 33 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/vanilla-epoll.json - 8 new, 35 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/current.json
+[info] done
+httparena-postgres

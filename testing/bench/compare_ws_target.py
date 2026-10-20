@@ -45,10 +45,13 @@ def compare(candidate, peers, margin_percent=10):
                             improvement_percent=(observed / peer_fps - 1) * 100,
                             candidate_p99_us=best["latency_us"]["p99"],
                             reference_p99_us=reference["latency_us"]["p99"],
-                            candidate_error_events=sum(sum(row["errors"].values()) for row in candidate[key]),
-                            reference_error_events=sum(sum(row["errors"].values()) for row in peers[name][key])))
-    return dict(margin_percent=margin_percent, meets_throughput_target=all(row["meets_target"] for row in results),
-                criterion="Each of all eight configurations must beat the fastest peer's official best of three; correctness gates are separate.",
+                            candidate_error_events=sum(sum(row["errors"].values()) + row.get("ws_upgrade_failures", 0) for row in candidate[key]),
+                            reference_error_events=sum(sum(row["errors"].values()) + row.get("ws_upgrade_failures", 0) for row in peers[name][key])))
+    zero_errors = all(row["candidate_error_events"] == 0 for row in results)
+    throughput = all(row["meets_target"] for row in results)
+    return dict(margin_percent=margin_percent, meets_throughput_target=throughput,
+                has_zero_errors=zero_errors, accepted=throughput and zero_errors,
+                criterion="All eight configurations must beat the fastest peer's best of three and every candidate round must have zero errors. Wire protocol gates remain required separately.",
                 rows=results)
 
 
@@ -66,8 +69,9 @@ def main():
     for row in result["rows"]:
         print(f'{row["profile"]:18} {row["connections"]:5} {row["candidate_frames_per_second"]:>10,} '
               f'vs {row["reference_peer"]:16} {row["reference_frames_per_second"]:>10,} '
-              f'{row["improvement_percent"]:+7.2f}% {"PASS" if row["meets_target"] else "FAIL"}')
-    return 0 if result["meets_throughput_target"] else 1
+              f'{row["improvement_percent"]:+7.2f}% errors={row["candidate_error_events"]} '
+              f'{"PASS" if row["meets_target"] and row["candidate_error_events"] == 0 else "FAIL"}')
+    return 0 if result["accepted"] else 1
 
 
 if __name__ == "__main__":

@@ -36,6 +36,7 @@ def parse_log(path):
         errors = re.search(r"Errors: connect (\d+), read (\d+), timeout (\d+)", raw)
         connect, read, timeout = map(int, errors.groups()) if errors else (0, 0, 0)
         reconnects = re.search(r"Reconnects: (\d+)", raw)
+        refused = re.search(r"WS upgrades refused: (\d+)", raw)
         rows.append(dict(framework=header[0], profile=header[1], connections=header[2],
                          round=round_number, frames_sent=sent, frames_received=received,
                          elapsed_seconds=seconds, frames_per_second=int(received / seconds),
@@ -43,6 +44,7 @@ def parse_log(path):
                                              map(microseconds, latency.groups()))),
                          cpu_percent=float(stats[1]), memory=stats[2],
                          errors=dict(connect=connect, read=read, timeout=timeout),
+                         ws_upgrade_failures=int(refused[1]) if refused else 0,
                          reconnects=int(reconnects[1]) if reconnects else 0,
                          send_receive_delta=sent-received, source_log=str(path), raw_round=raw))
 
@@ -102,7 +104,7 @@ def main():
                             best_round=best["round"], best_p99_us=best["latency_us"]["p99"],
                             best_cpu_percent=best["cpu_percent"], best_memory=best["memory"],
                             min_frames_per_second=min(row["frames_per_second"] for row in samples),
-                            total_error_events=sum(sum(row["errors"].values()) for row in samples)))
+                            total_error_events=sum(sum(row["errors"].values()) + row["ws_upgrade_failures"] for row in samples)))
     (args.output/"summary.json").write_text(json.dumps(summary, indent=2)+"\n")
     with (args.output/"summary.csv").open("w", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=list(summary[0]))

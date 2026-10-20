@@ -47,6 +47,11 @@ class OfficialLogTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.parse(header+self.sample(1).replace("1000 frames received", "0 frames received"))
 
+    def test_upgrade_refusals_are_kept_separately(self):
+        raw = "=== engine / echo-ws-limited / 512c (tool=gcannon) ===\n"
+        row = self.parse(raw+self.sample(1, "WS upgrades refused: 2"))[0]
+        self.assertEqual(row["ws_upgrade_failures"], 2)
+
     def test_complete_rounds_cannot_hide_missing_official_configurations(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

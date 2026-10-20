@@ -1,5 +1,7 @@
 # Local WebSocket optimization and the +10% acceptance target
 
+Follow-up: the short-connection read counters were traced to incorrect buffer-ring recycling in the pinned **load generator**. See the [separate corrected-client retest](../2026-10-20-zero-errors/README.md). All original logs and numbers below remain unchanged; corrected-client measurements must not be mixed with these frozen-client scores.
+
 Acceptance here interprets the requested +10% conservatively as beating the fastest peer in each of the eight official configurations. That target is **not achieved**. Both fixed runtime configurations below pass only 3 of 8 throughput checks against the fastest of the three frozen local peers. Protocol checks pass. No per-case peaks from different runtime configurations are combined into a fictitious server score.
 
 The branch now contains production changes, rather than only measurements: validated message batching, per-worker Linux accept listeners, smaller handshake/message state, fast general masking/framing, ownership transfer of parsed headers, preservation of bytes beyond HTTP Upgrade, and a multishot terminal-callback lifetime fix. The rejected I/O experiments are absent from production code.
