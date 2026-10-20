@@ -195,6 +195,9 @@ private:
     std::uint32_t secret_key_{};
     std::uint64_t statement_counter_{};
     std::atomic_flag operation_in_progress_{};
+    std::array<std::uint8_t, 8192> receive_buffer_{};
+    std::size_t receive_begin_{};
+    std::size_t receive_end_{};
 #ifdef CNETMOD_HAS_SSL
     std::unique_ptr<ssl_context> ssl_context_;
     std::unique_ptr<ssl_stream> ssl_stream_;

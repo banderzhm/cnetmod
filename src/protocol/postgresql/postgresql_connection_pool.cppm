@@ -93,6 +93,8 @@ private:
         bool in_use{};
         bool discard{};
         bool connecting{};
+        bool snapshot_idle{};
+        bool snapshot_checked_out{};
         post_node return_notification{};
         connection_pool* owner{};
         std::size_t index{};
@@ -128,6 +130,7 @@ private:
     std::atomic<std::size_t> checked_out_snapshot_{};
     std::atomic<std::size_t> waiter_snapshot_{};
     void refresh_snapshots_locked() noexcept;
+    void refresh_slot_snapshot_locked(std::size_t) noexcept;
     template <bool Cancellable>
     auto close_impl(cancel_token* cancellation)
         -> task<std::conditional_t<Cancellable, std::expected<void, std::error_code>, void>>;

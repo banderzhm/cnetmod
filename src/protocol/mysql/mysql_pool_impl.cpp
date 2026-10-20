@@ -201,6 +201,12 @@ void connection_pool::request_stop() noexcept
 auto connection_pool::async_get_connection()
     -> task<std::expected<pooled_connection, std::error_code>>
 {
+    if (params_.pool_timeout > std::chrono::steady_clock::duration::zero())
+    {
+        auto ready = try_get_connection();
+        if (ready || ready.error() != make_error_code(std::errc::resource_unavailable_try_again))
+            co_return std::move(ready);
+    }
     cancel_token token;
     co_return co_await with_timeout(ctx_, params_.pool_timeout,
         async_get_connection(token), token);

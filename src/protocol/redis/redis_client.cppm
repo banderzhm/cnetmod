@@ -191,8 +191,8 @@ private:
         -> task<std::expected<std::vector<resp3_node>, std::string>>;
     auto parse_one_response()
         -> task<std::expected<std::vector<resp3_node>, std::string>>;
-    auto parse_children(std::size_t count)
-        -> task<std::expected<std::vector<resp3_node>, std::string>>;
+    auto append_response(std::vector<resp3_node>& nodes)
+        -> task<std::expected<void, std::string>>;
     auto fill() -> task<bool>;
     void compact_buffer();
     io_context& ctx_;

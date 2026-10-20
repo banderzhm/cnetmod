@@ -854,6 +854,20 @@ auto client::read_packet() -> task<std::vector<std::uint8_t>>
 auto client::write_packet(std::span<const std::uint8_t> data,
     std::uint8_t seqnum) -> task<bool>
 {
+    // Common command packets need one transport write rather than separate
+    // header and payload writes. Large/multipart packets retain the streaming
+    // path and its exact-multiple empty terminator.
+    if (data.size() <= 4096)
+    {
+        small_write_buffer_.resize(data.size() + 4);
+        detail::write_u24_le(small_write_buffer_.data(), static_cast<std::uint32_t>(data.size()));
+        small_write_buffer_[3] = seqnum;
+        std::copy(data.begin(), data.end(), small_write_buffer_.begin() + 4);
+        if (!co_await do_write(const_buffer{small_write_buffer_.data(), small_write_buffer_.size()}))
+            co_return false;
+        seq_ = static_cast<std::uint8_t>(seqnum + 1);
+        co_return true;
+    }
     std::size_t offset = 0;
     while (offset < data.size() || offset == 0)
     {

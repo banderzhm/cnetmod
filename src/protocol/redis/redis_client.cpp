@@ -181,11 +181,9 @@ auto client::exec(const request& request)
     std::vector<resp3_node> result;
     for (std::size_t index = 0; index < request.size(); ++index)
     {
-        auto nodes = co_await parse_one_response();
-        if (!nodes)
-            co_return std::unexpected(nodes.error());
-        for (auto& node : *nodes)
-            result.push_back(std::move(node));
+        auto parsed = co_await append_response(result);
+        if (!parsed)
+            co_return std::unexpected(parsed.error());
     }
     if (!is_reusable())
         co_return std::unexpected("response contains unexpected trailing data");
@@ -464,11 +462,9 @@ auto client::pipe(
     std::vector<resp3_node> result;
     for (std::size_t i = 0; i < commands.size(); ++i)
     {
-        auto nodes = co_await parse_one_response();
-        if (!nodes)
-            co_return std::unexpected(nodes.error());
-        for (auto& node : *nodes)
-            result.push_back(std::move(node));
+        auto parsed = co_await append_response(result);
+        if (!parsed)
+            co_return std::unexpected(parsed.error());
     }
     if (!is_reusable())
         co_return std::unexpected("response contains unexpected trailing data");
@@ -500,11 +496,9 @@ auto client::pipe(std::span<const std::vector<std::string>> commands)
     std::vector<resp3_node> result;
     for (std::size_t i = 0; i < commands.size(); ++i)
     {
-        auto nodes = co_await parse_one_response();
-        if (!nodes)
-            co_return std::unexpected(nodes.error());
-        for (auto& node : *nodes)
-            result.push_back(std::move(node));
+        auto parsed = co_await append_response(result);
+        if (!parsed)
+            co_return std::unexpected(parsed.error());
     }
     if (!is_reusable())
         co_return std::unexpected("response contains unexpected trailing data");
@@ -703,11 +697,9 @@ auto client::subscription_command(std::string_view command,
     std::vector<resp3_node> result;
     for (std::size_t i = 0; i < names.size(); ++i)
     {
-        auto nodes = co_await parse_one_response();
-        if (!nodes)
-            co_return std::unexpected(nodes.error());
-        for (auto& node : *nodes)
-            result.push_back(std::move(node));
+        auto parsed = co_await append_response(result);
+        if (!parsed)
+            co_return std::unexpected(parsed.error());
     }
     co_return result;
 }
@@ -716,91 +708,36 @@ auto client::parse_one_response()
     -> task<std::expected<std::vector<resp3_node>, std::string>>
 {
     std::vector<resp3_node> nodes;
+    auto result = co_await append_response(nodes);
+    if (!result)
+        co_return std::unexpected(result.error());
+    co_return nodes;
+}
+
+auto client::append_response(std::vector<resp3_node>& nodes)
+    -> task<std::expected<void, std::string>>
+{
+    // One bounded parser owns the entire aggregate. Its offset remains
+    // relative to rpos_ until completion, including fragmented bulk bodies.
+    // Pipeline replies append directly to their final vector.
     resp3_parser parser;
-    std::error_code error;
-    while (true)
+    while (!parser.done())
     {
-        if (rpos_ >= rbuf_.size() || rbuf_.empty())
-        {
-            if (!(co_await fill()))
-                co_return std::unexpected(std::string("connection closed"));
-        }
-        auto view = std::string_view(rbuf_).substr(rpos_);
-        auto node = parser.consume(view, error);
+        std::error_code error;
+        auto node = parser.consume(std::string_view{rbuf_}.substr(rpos_), error);
         if (error)
             co_return std::unexpected(error.message());
         if (node)
         {
             nodes.push_back(std::move(*node));
-            rpos_ += parser.consumed();
-            parser.reset();
-            auto& first = nodes.front();
-            if (first.is_aggregate() && first.aggregate_size > 0)
-            {
-                auto children = co_await parse_children(
-                    first.aggregate_size * element_multiplicity(first.data_type));
-                if (!children)
-                    co_return std::unexpected(children.error());
-                for (auto& child : *children)
-                    nodes.push_back(std::move(child));
-            }
-            compact_buffer();
-            co_return nodes;
+            continue;
         }
-        // The parser retains the bulk header and its cumulative offset while
-        // the payload is fragmented. Keep both the parser and rpos_ anchored
-        // until the complete RESP value is available.
         if (!(co_await fill()))
             co_return std::unexpected(std::string("connection closed"));
     }
-}
-
-auto client::parse_children(std::size_t count)
-    -> task<std::expected<std::vector<resp3_node>, std::string>>
-{
-    std::vector<resp3_node> children;
-    children.reserve(count);
-    for (std::size_t i = 0; i < count; ++i)
-    {
-        resp3_parser parser;
-        std::error_code error;
-        while (true)
-        {
-            auto view = std::string_view(rbuf_).substr(rpos_);
-            if (view.empty())
-            {
-                if (!(co_await fill()))
-                    co_return std::unexpected(std::string("connection closed"));
-                continue;
-            }
-            auto node = parser.consume(view, error);
-            if (error)
-                co_return std::unexpected(error.message());
-            if (!node)
-            {
-                // A partial bulk/aggregate must resume from the same base
-                // view because resp3_parser::consumed() is cumulative.
-                if (!(co_await fill()))
-                    co_return std::unexpected(std::string("connection closed"));
-                continue;
-            }
-            rpos_ += parser.consumed();
-            children.push_back(std::move(*node));
-            auto& child = children.back();
-            if (child.is_aggregate() && child.aggregate_size > 0)
-            {
-                auto sub = co_await parse_children(
-                    child.aggregate_size * element_multiplicity(child.data_type));
-                if (!sub)
-                    co_return std::unexpected(sub.error());
-                for (auto& item : *sub)
-                    children.push_back(std::move(item));
-                i += sub->size();
-            }
-            break;
-        }
-    }
-    co_return children;
+    rpos_ += parser.consumed();
+    compact_buffer();
+    co_return std::expected<void, std::string>{};
 }
 
 auto client::fill() -> task<bool>
