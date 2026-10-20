@@ -179,12 +179,9 @@ auto client::exec(const request& request)
     if (!written)
         co_return std::unexpected(written.error().message());
     std::vector<resp3_node> result;
-    for (std::size_t index = 0; index < request.size(); ++index)
-    {
-        auto parsed = co_await append_response(result);
-        if (!parsed)
-            co_return std::unexpected(parsed.error());
-    }
+    auto parsed = co_await append_responses(result, request.size());
+    if (!parsed)
+        co_return std::unexpected(parsed.error());
     if (!is_reusable())
         co_return std::unexpected("response contains unexpected trailing data");
     guard.commit();
@@ -460,12 +457,9 @@ auto client::pipe(
     if (!written)
         co_return std::unexpected(written.error().message());
     std::vector<resp3_node> result;
-    for (std::size_t i = 0; i < commands.size(); ++i)
-    {
-        auto parsed = co_await append_response(result);
-        if (!parsed)
-            co_return std::unexpected(parsed.error());
-    }
+    auto parsed = co_await append_responses(result, commands.size());
+    if (!parsed)
+        co_return std::unexpected(parsed.error());
     if (!is_reusable())
         co_return std::unexpected("response contains unexpected trailing data");
     guard.commit();
@@ -494,12 +488,9 @@ auto client::pipe(std::span<const std::vector<std::string>> commands)
     if (!written)
         co_return std::unexpected(written.error().message());
     std::vector<resp3_node> result;
-    for (std::size_t i = 0; i < commands.size(); ++i)
-    {
-        auto parsed = co_await append_response(result);
-        if (!parsed)
-            co_return std::unexpected(parsed.error());
-    }
+    auto parsed = co_await append_responses(result, commands.size());
+    if (!parsed)
+        co_return std::unexpected(parsed.error());
     if (!is_reusable())
         co_return std::unexpected("response contains unexpected trailing data");
     guard.commit();
@@ -695,49 +686,57 @@ auto client::subscription_command(std::string_view command,
     if (!written)
         co_return std::unexpected(written.error().message());
     std::vector<resp3_node> result;
-    for (std::size_t i = 0; i < names.size(); ++i)
-    {
-        auto parsed = co_await append_response(result);
-        if (!parsed)
-            co_return std::unexpected(parsed.error());
-    }
+    auto parsed = co_await append_responses(result, names.size());
+    if (!parsed)
+        co_return std::unexpected(parsed.error());
     co_return result;
 }
 
 auto client::parse_one_response()
     -> task<std::expected<std::vector<resp3_node>, std::string>>
 {
-    std::vector<resp3_node> nodes;
-    auto result = co_await append_response(nodes);
-    if (!result)
-        co_return std::unexpected(result.error());
-    co_return nodes;
+    return parse_responses<true>(nullptr, 1);
 }
 
-auto client::append_response(std::vector<resp3_node>& nodes)
+auto client::append_responses(std::vector<resp3_node>& nodes, std::size_t count)
     -> task<std::expected<void, std::string>>
 {
-    // One bounded parser owns the entire aggregate. Its offset remains
-    // relative to rpos_ until completion, including fragmented bulk bodies.
-    // Pipeline replies append directly to their final vector.
-    resp3_parser parser;
-    while (!parser.done())
+    return parse_responses<false>(&nodes, count);
+}
+
+template <bool Own>
+auto client::parse_responses(std::vector<resp3_node>* destination, std::size_t count)
+    -> task<std::expected<std::conditional_t<Own, std::vector<resp3_node>, void>, std::string>>
+{
+    std::vector<resp3_node> owned;
+    auto& nodes = Own ? owned : *destination;
+    nodes.reserve(nodes.size() + count);
+    // A whole pipeline shares one coroutine frame and one final result vector.
+    // Each bounded parser keeps its offset anchored across fragmented reads.
+    for (std::size_t response{}; response < count; ++response)
     {
-        std::error_code error;
-        auto node = parser.consume(std::string_view{rbuf_}.substr(rpos_), error);
-        if (error)
-            co_return std::unexpected(error.message());
-        if (node)
+        resp3_parser parser;
+        while (!parser.done())
         {
-            nodes.push_back(std::move(*node));
-            continue;
+            std::error_code error;
+            auto node = parser.consume(std::string_view{rbuf_}.substr(rpos_), error);
+            if (error)
+                co_return std::unexpected(error.message());
+            if (node)
+            {
+                nodes.push_back(std::move(*node));
+                continue;
+            }
+            if (!(co_await fill()))
+                co_return std::unexpected(std::string("connection closed"));
         }
-        if (!(co_await fill()))
-            co_return std::unexpected(std::string("connection closed"));
+        rpos_ += parser.consumed();
+        compact_buffer();
     }
-    rpos_ += parser.consumed();
-    compact_buffer();
-    co_return std::expected<void, std::string>{};
+    if constexpr (Own)
+        co_return std::move(owned);
+    else
+        co_return std::expected<void, std::string>{};
 }
 
 auto client::fill() -> task<bool>

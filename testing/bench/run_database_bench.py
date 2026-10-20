@@ -8,6 +8,7 @@ import argparse
 import hashlib
 import json
 import re
+import resource
 import socket
 import statistics
 import subprocess
@@ -101,7 +102,11 @@ def main():
                     for entry in order:
                         binary = args.control if entry == 'control' else args.candidate
                         argv = ['taskset', '-c', '0', str(binary), database, mode, str(args.seconds), str(capacity)]
+                        before = resource.getrusage(resource.RUSAGE_CHILDREN)
+                        process_start = time.monotonic()
                         result = command(argv, timeout=args.seconds + 60)
+                        process_elapsed = time.monotonic() - process_start
+                        after = resource.getrusage(resource.RUSAGE_CHILDREN)
                         name = f'{database}-{mode}-{capacity}-{run}-{entry}'
                         (args.output / (name + '.log')).write_text(result.stdout + result.stderr)
                         match = re.search(r'RESULT database=(\w+) mode=(\w+) operations=(\d+) seconds=([\d.]+) ops_per_second=([\d.]+)', result.stdout + result.stderr)
@@ -109,6 +114,9 @@ def main():
                             raise RuntimeError(f'invalid result: {name}')
                         record = {'database': database, 'mode': mode, 'capacity': capacity, 'round': run, 'entry': entry,
                                   'operations': int(match[3]), 'seconds': float(match[4]), 'ops_per_second': float(match[5]),
+                                  'process_wall_seconds': process_elapsed,
+                                  'child_user_seconds': after.ru_utime - before.ru_utime,
+                                  'child_system_seconds': after.ru_stime - before.ru_stime,
                                   'argv': argv, 'log': name + '.log'}
                         records.append(record)
                         (args.output / 'rounds.json').write_text(json.dumps(records, indent=2))
