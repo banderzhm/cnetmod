@@ -1,0 +1,112 @@
+Test project /root/cnetmod-grpc-20261020/verified-build
+      Start 12: test_task_group
+ 1/20 Test #12: test_task_group .......................................   Passed    0.00 sec
+      Start 13: test_task
+ 2/20 Test #13: test_task .............................................   Passed    0.05 sec
+      Start 17: test_channel
+ 3/20 Test #17: test_channel ..........................................   Passed    0.00 sec
+      Start 18: test_mutex
+ 4/20 Test #18: test_mutex ............................................   Passed    0.00 sec
+      Start 22: test_wait_group
+ 5/20 Test #22: test_wait_group .......................................   Passed    0.00 sec
+      Start 29: test_otlp_exporter
+ 6/20 Test #29: test_otlp_exporter ....................................   Passed    0.98 sec
+      Start 34: test_http_router
+ 7/20 Test #34: test_http_router ......................................   Passed    0.00 sec
+      Start 43: test_http2_hpack
+ 8/20 Test #43: test_http2_hpack ......................................   Passed    0.00 sec
+      Start 44: test_http2_stream
+ 9/20 Test #44: test_http2_stream .....................................   Passed    0.12 sec
+      Start 46: test_grpc
+10/20 Test #46: test_grpc .............................................***Failed    0.01 sec
+[==========] Running 24 test(s).
+[ RUN      ] grpc_frame_roundtrip
+[       OK ] grpc_frame_roundtrip
+[ RUN      ] grpc_stream_decoder_handles_partial_frames
+[       OK ] grpc_stream_decoder_handles_partial_frames
+[ RUN      ] grpc_stream_decoder_rejects_oversized_incomplete_frame
+[       OK ] grpc_stream_decoder_rejects_oversized_incomplete_frame
+[ RUN      ] grpc_message_stream_decoder_emits_complete_messages_only
+[       OK ] grpc_message_stream_decoder_emits_complete_messages_only
+[ RUN      ] grpc_service_path
+[       OK ] grpc_service_path
+[ RUN      ] grpc_status_response_uses_trailers
+[       OK ] grpc_status_response_uses_trailers
+[ RUN      ] grpc_health_codec_roundtrip
+[       OK ] grpc_health_codec_roundtrip
+[ RUN      ] grpc_compressed_frames_are_rejected_without_opt_in
+[       OK ] grpc_compressed_frames_are_rejected_without_opt_in
+[ RUN      ] grpc_gzip_frame_roundtrip
+[       OK ] grpc_gzip_frame_roundtrip
+[ RUN      ] grpc_brotli_frame_roundtrip
+[       OK ] grpc_brotli_frame_roundtrip
+[ RUN      ] grpc_zstd_frame_roundtrip
+[       OK ] grpc_zstd_frame_roundtrip
+[ RUN      ] grpc_metadata_size_and_compression_helpers
+[       OK ] grpc_metadata_size_and_compression_helpers
+[ RUN      ] grpc_trace_context_is_explicit_and_single_valued
+[       OK ] grpc_trace_context_is_explicit_and_single_valued
+[ RUN      ] grpc_reflection_lists_services
+[       OK ] grpc_reflection_lists_services
+[ RUN      ] grpc_router_options_are_configurable
+[       OK ] grpc_router_options_are_configurable
+[ RUN      ] grpc_borrowed_headers_preserve_metadata_and_last_duplicate_timeout
+[       OK ] grpc_borrowed_headers_preserve_metadata_and_last_duplicate_timeout
+[ RUN      ] grpc_payload_only_adapter_keeps_limits_interceptors_and_admission
+  ASSERT FAILED: invoke().trailers().at("grpc-status") == std::string{"4"} (got: 0 vs 4) at /root/cnetmod-grpc-20261020/verified-source/testing/tests/test_grpc.cpp:328
+  ASSERT FAILED: calls == std::size_t{0} (got: 1 vs 0) at /root/cnetmod-grpc-20261020/verified-source/testing/tests/test_grpc.cpp:329
+  ASSERT FAILED: calls == std::size_t{1} (got: 2 vs 1) at /root/cnetmod-grpc-20261020/verified-source/testing/tests/test_grpc.cpp:332
+  ASSERT FAILED: calls == std::size_t{1} (got: 2 vs 1) at /root/cnetmod-grpc-20261020/verified-source/testing/tests/test_grpc.cpp:335
+  ASSERT FAILED: calls == std::size_t{1} (got: 2 vs 1) at /root/cnetmod-grpc-20261020/verified-source/testing/tests/test_grpc.cpp:338
+  ASSERT FAILED: calls == std::size_t{2} (got: 3 vs 2) at /root/cnetmod-grpc-20261020/verified-source/testing/tests/test_grpc.cpp:341
+[  FAILED  ] grpc_payload_only_adapter_keeps_limits_interceptors_and_admission (6 failure(s))
+[ RUN      ] grpc_h2_adapter_uses_shared_protocol_pipeline_and_falls_back
+[       OK ] grpc_h2_adapter_uses_shared_protocol_pipeline_and_falls_back
+[ RUN      ] grpc_sync_adapter_preserves_protocol_validation_and_compression
+[       OK ] grpc_sync_adapter_preserves_protocol_validation_and_compression
+[ RUN      ] disabled_grpc_server_observation_returns_the_original_handler
+[       OK ] disabled_grpc_server_observation_returns_the_original_handler
+[ RUN      ] grpc_server_observation_extracts_remote_context_and_records_rpc_status
+[       OK ] grpc_server_observation_extracts_remote_context_and_records_rpc_status
+[ RUN      ] grpc_server_observation_contains_exporter_failures
+[       OK ] grpc_server_observation_contains_exporter_failures
+[ RUN      ] grpc_client_observation_owns_metric_metadata_for_every_call_shape
+[       OK ] grpc_client_observation_owns_metric_metadata_for_every_call_shape
+[ RUN      ] grpc_client_observation_preserves_cancelled_terminal_status
+[       OK ] grpc_client_observation_preserves_cancelled_terminal_status
+[==========] 24 test(s) ran.
+[  PASSED  ] 23 test(s).
+[  FAILED  ] 1 test(s).
+
+      Start 47: test_grpc_proto
+11/20 Test #47: test_grpc_proto .......................................   Passed    0.00 sec
+      Start 53: test_ssl_shutdown
+12/20 Test #53: test_ssl_shutdown .....................................   Passed    0.07 sec
+      Start 56: test_grpc_proto_python
+13/20 Test #56: test_grpc_proto_python ................................   Passed    0.02 sec
+      Start 57: test_grpc_codegen_python
+14/20 Test #57: test_grpc_codegen_python ..............................   Passed    0.03 sec
+      Start 58: test_grpc_codegen_contract_python
+15/20 Test #58: test_grpc_codegen_contract_python .....................   Passed    0.05 sec
+      Start 59: test_grpcio_cross_process_interop_python
+16/20 Test #59: test_grpcio_cross_process_interop_python ..............   Passed    0.13 sec
+      Start 60: test_grpcio_server_to_cnetmod_client_interop_python
+17/20 Test #60: test_grpcio_server_to_cnetmod_client_interop_python ...   Passed    0.12 sec
+      Start 61: test_grpc_arena_harness
+18/20 Test #61: test_grpc_arena_harness ...............................   Passed    0.04 sec
+      Start 62: test_grpc_official_analysis
+19/20 Test #62: test_grpc_official_analysis ...........................   Passed    0.03 sec
+      Start 63: test_grpc_arena_smoke
+20/20 Test #63: test_grpc_arena_smoke .................................   Passed    0.97 sec
+
+95% tests passed, 1 tests failed out of 20
+
+Label Time Summary:
+shutdown    =   0.07 sec*proc (1 test)
+tls         =   0.07 sec*proc (1 test)
+
+Total Test time (real) =   2.65 sec
+
+The following tests FAILED:
+	 46 - test_grpc (Failed)
+Errors while running CTest

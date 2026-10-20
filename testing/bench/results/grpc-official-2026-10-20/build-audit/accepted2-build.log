@@ -1,0 +1,269 @@
+-- 
+-- Architecture: x64 (64 bit)
+-- Use the C++ compiler to compile (MI_USE_CXX=ON)
+-- Override standard malloc (MI_OVERRIDE=ON)
+-- Disable assertion checks (MI_DEBUG=OFF)
+-- Disable detailed statistics (MI_STATS=OFF)
+-- Disable profiling (MI_PROFILE=OFF)
+-- Enable full transparent huge pages support, where purging avoids splitting huge pages (MI_ALLOW_THP=FULL)
+-- 
+-- Library name     : mimalloc
+-- Version          : 3.5.3
+-- Build type       : release
+-- C++ Compiler     : /usr/sbin/clang++
+-- Compiler flags   : -Wall;-Wextra;-Wpedantic;-Wno-deprecated;-Wno-unknown-pragmas;-fvisibility=hidden;-Wno-static-in-inline;-mno-outline;-ftls-model=initial-exec;-fno-builtin-malloc
+-- Compiler defines : NDEBUG=1;MI_GUARDED=0;MI_STATS=0;MI_PROFILE=0;MI_DEFAULT_ALLOW_THP=2;MI_HAS_EXECINFOH=1;MI_CMAKE_BUILD_TYPE=release;MI_BUILD_RELEASE
+-- Link libraries   : pthread;rt;atomic
+-- Build targets    : static;object
+-- 
+-- Memory allocator: bundled mimalloc 3.5.3
+-- Auto-detected libc++ paths:
+--   Module directory: /usr/share/libc++/v1
+--   Header directory: /usr/include/c++/v1
+-- Using BoringSSL from submodule: /root/cnetmod-grpc-20261020/verified-source/3rdparty/boringssl
+-- BoringSSL: Building static libraries
+-- BoringSSL: Assembly optimizations enabled
+-- LLVM FileCheck Found: /usr/sbin/FileCheck
+-- Google Benchmark version: v1.9.5, normalized to 1.9.5
+-- BoringSSL submodule targets found: ssl, crypto
+-- BoringSSL TLS enabled - QUIC support not requested
+-- I/O backend: io_uring (Linux)
+-- I/O backend: epoll (Linux)
+-- ==========================================
+-- Project: cnetmod v2.1.0
+-- C++ Standard: C++23
+-- Compiler: Clang 23.1.3
+-- Build Type: Release
+-- Platform: Linux
+-- Standard Library Modules: /usr/share/libc++/v1
+-- Linker: mold (high-performance)
+-- Memory Allocator: mimalloc (high-performance)
+-- ==========================================
+-- 
+-- Performance Optimizations Enabled:
+--   mold linker: 10-20x faster linking
+--   mimalloc: 2-3x faster memory allocation
+-- 
+-- Configuring done (12.6s)
+-- Generating done (1.0s)
+-- Build files have been written to: /root/cnetmod-grpc-20261020/verified-build
+[0/2] Re-checking globbed directories...
+[1/416] Generating CXX dyndep file CMakeFiles/cnetmod_runtime.dir/CXX.dd
+[2/279] Scanning /root/cnetmod-grpc-20261020/verified-source/src/protocol/http/v2/session.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/verified-source/src/protocol/http/v2/session.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[3/279] Scanning /root/cnetmod-grpc-20261020/verified-source/src/protocol/grpc/grpc_server.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/verified-source/src/protocol/grpc/grpc_server.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[4/279] Scanning /root/cnetmod-grpc-20261020/verified-source/src/protocol/http/v2/session.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/verified-source/src/protocol/http/v2/session.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[5/279] Generating CXX dyndep file 'CMakeFiles/cnetmod_runtime@synth_0.dir/CXX.dd'
+[6/279] Generating CXX dyndep file CMakeFiles/cnetmod_http.dir/CXX.dd
+[7/246] Scanning /root/cnetmod-grpc-20261020/verified-source/src/protocol/http/v2/session.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/verified-source/src/protocol/http/v2/session.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[8/246] Generating CXX dyndep file CMakeFiles/cnetmod_grpc.dir/CXX.dd
+[9/234] Generating CXX dyndep file 'CMakeFiles/cnetmod_http@synth_0.dir/CXX.dd'
+[10/234] Generating CXX dyndep file CMakeFiles/cnetmod_application.dir/CXX.dd
+[11/193] Generating CXX dyndep file 'CMakeFiles/cnetmod_grpc@synth_0.dir/CXX.dd'
+[12/193] Generating CXX dyndep file CMakeFiles/cnetmod_core.dir/CXX.dd
+[13/191] Generating CXX dyndep file testing/tests/CMakeFiles/test_task_group.dir/CXX.dd
+[14/189] Generating CXX dyndep file testing/tests/CMakeFiles/test_task.dir/CXX.dd
+[15/187] Generating CXX dyndep file testing/tests/CMakeFiles/test_channel.dir/CXX.dd
+[16/185] Generating CXX dyndep file testing/tests/CMakeFiles/test_mutex.dir/CXX.dd
+[17/183] Generating CXX dyndep file testing/tests/CMakeFiles/test_wait_group.dir/CXX.dd
+[18/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v2/session.cppm.o
+[19/181] Generating CXX dyndep file testing/tests/CMakeFiles/test_otlp_exporter.dir/CXX.dd
+[20/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/server/http_server.cppm.o
+[21/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http.cppm.o
+[22/181] Scanning /root/cnetmod-grpc-20261020/verified-source/testing/tests/test_http2_stream.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/verified-source/testing/tests/test_http2_stream.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[23/181] Scanning /root/cnetmod-grpc-20261020/verified-source/testing/tests/test_grpc.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/verified-source/testing/tests/test_grpc.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[24/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart_builder.cpp.o
+[25/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/client/cookie.cpp.o
+[26/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart_disposition.cpp.o
+[27/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v2/session.cpp.o
+[28/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart_content_type.cpp.o
+[29/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart_url.cpp.o
+[30/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart_form.cpp.o
+[31/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/sse.cpp.o
+[32/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/sse_stream.cpp.o
+[33/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart_parser.cpp.o
+[34/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/utils.cpp.o
+[35/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/swagger_ui.cpp.o
+[36/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/client/http_client.cpp.o
+/root/cnetmod-grpc-20261020/verified-source/src/protocol/http/client/http_client.cpp:1777:19: warning: unused variable 'http3_peer_port' [-Wunused-variable]
+ 1777 |     std::uint16_t http3_peer_port{};
+      |                   ^~~~~~~~~~~~~~~
+1 warning generated.
+[37/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/message/http_response.cpp.o
+[38/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/swagger.cpp.o
+[39/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v1/http_v1_parser_buffered.cpp.o
+[40/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/client/client_pool.cppm.o
+[41/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v1/http_v1_parser.cpp.o
+[42/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/access_log.cppm.o
+[43/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/client/client_pool.cpp.o
+[44/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/authorization.cppm.o
+[45/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_access_log.cpp.o
+[46/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/authorization.cpp.o
+[47/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/compress.cppm.o
+[48/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/body_limit.cppm.o
+[49/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/cors.cppm.o
+[50/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/server/router.cpp.o
+[51/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_cors.cpp.o
+[52/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/graceful_shutdown.cppm.o
+[53/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_compress.cpp.o
+[54/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_graceful_shutdown.cpp.o
+[55/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_cache.cppm.o
+[56/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/ip_filter.cppm.o
+[57/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/health_check.cppm.o
+[58/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/ip_firewall.cppm.o
+[59/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_cache.cpp.o
+[60/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/jwt_auth.cppm.o
+[61/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/metrics.cppm.o
+[62/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_ip_filter.cpp.o
+[63/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/rate_limiter.cppm.o
+[64/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/server/http_server.cpp.o
+[65/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/recover.cppm.o
+[66/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/ip_firewall.cpp.o
+[67/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/request_id.cppm.o
+[68/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_request_id.cpp.o
+[69/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/timeout.cppm.o
+[70/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/tracing.cppm.o
+[71/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_rate_limiter.cpp.o
+[72/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/upload.cppm.o
+[73/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_recover.cpp.o
+[74/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/tracing.cpp.o
+[75/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/middleware.cppm.o
+[76/181] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/integration/http_client.cppm.o
+[77/181] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_types.cppm.o
+[78/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_metrics.cpp.o
+[79/181] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/governance/retry.cppm.o
+[80/181] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/integration/http_client.cpp.o
+[81/181] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/governance/server_policy.cppm.o
+[82/181] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/governance/retry.cpp.o
+[83/181] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_client.cppm.o
+[84/181] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_types.cpp.o
+[85/181] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/governance/governed_client.cppm.o
+[86/181] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_codec.cppm.o
+[87/181] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/governance/server_policy.cpp.o
+[88/181] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_upload.cpp.o
+[89/181] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_proto.cppm.o
+[90/181] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/governance/governed_client.cpp.o
+[91/181] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_server.cppm.o
+[92/181] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_codec.cpp.o
+[93/181] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_health.cppm.o
+[94/181] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_client.cpp.o
+[95/181] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_reflection.cppm.o
+[96/181] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_proto.cpp.o
+[97/181] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_streaming.cppm.o
+[98/181] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_health.cpp.o
+[99/181] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc.cppm.o
+[100/181] Linking CXX static library libcnetmod_http.a
+[101/181] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_streaming.cpp.o
+[102/181] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/integration/grpc_server.cppm.o
+[103/181] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/integration/grpc.cppm.o
+[104/181] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_server.cpp.o
+[105/181] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/integration/http_server.cppm.o
+[106/181] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_reflection.cpp.o
+[107/181] Linking CXX static library libcnetmod_grpc.a
+[108/181] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/integration/messaging.cppm.o
+[109/181] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/integration/messaging.cpp.o
+/root/cnetmod-grpc-20261020/verified-source/src/application/monitoring/integration/messaging.cpp:44:10: warning: unused function 'parse' [-Wunused-function]
+   44 |     auto parse(std::string_view traceparent, std::string_view tracestate)
+      |          ^~~~~
+1 warning generated.
+[110/181] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/otlp/otlp_http_exporter.cppm.o
+[111/181] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/integration/http_server.cpp.o
+[112/181] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/telemetry.cppm.o
+[113/181] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/integration/grpc_server.cpp.o
+[114/181] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/telemetry.cpp.o
+[115/181] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/observability.cppm.o
+[116/181] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/template/json_template.cppm.o
+[117/181] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/template/rest_template.cppm.o
+[118/181] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/integration/grpc.cpp.o
+[119/181] Generating CXX dyndep file testing/tests/CMakeFiles/test_http_router.dir/CXX.dd
+[120/181] Generating CXX dyndep file testing/tests/CMakeFiles/test_http2_hpack.dir/CXX.dd
+[121/180] Generating CXX dyndep file testing/tests/CMakeFiles/test_http2_stream.dir/CXX.dd
+[122/180] Generating CXX dyndep file testing/tests/CMakeFiles/test_grpc.dir/CXX.dd
+[123/180] Generating CXX dyndep file testing/tests/CMakeFiles/test_grpc_proto.dir/CXX.dd
+[124/180] Generating CXX dyndep file testing/tests/CMakeFiles/test_ssl_shutdown.dir/CXX.dd
+[125/178] Generating CXX dyndep file testing/tests/CMakeFiles/grpc_interop_server.dir/CXX.dd
+[126/178] Generating CXX dyndep file testing/tests/CMakeFiles/grpc_interop_client.dir/CXX.dd
+[127/178] Generating CXX dyndep file testing/bench/CMakeFiles/grpc_arena_server.dir/CXX.dd
+[128/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/otlp/otlp_http_exporter.cpp.o
+[129/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/template/rest_template.cpp.o
+[130/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/managed_service.cppm.o
+[131/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/managed_service.cpp.o
+[132/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/health_registry.cppm.o
+[133/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/health_registry.cpp.o
+[134/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/service_registry.cppm.o
+[135/194] Building CXX object testing/tests/CMakeFiles/test_http_router.dir/test_http_router.cpp.o
+[136/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/service_lifecycle.cppm.o
+[137/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/service_registry.cpp.o
+[138/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/configuration.cppm.o
+[139/194] Building CXX object testing/tests/CMakeFiles/test_http2_stream.dir/test_http2_stream.cpp.o
+[140/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/application_runtime.cppm.o
+[141/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/application_runtime.cpp.o
+[142/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/auto_configuration.cppm.o
+[143/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/auto_configuration.cpp.o
+[144/194] Building CXX object testing/tests/CMakeFiles/test_grpc.dir/test_grpc.cpp.o
+[145/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/service_lifecycle.cpp.o
+[146/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/integration/http_client.cppm.o
+[147/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/integration/grpc.cppm.o
+[148/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/builtin_auto_configuration.cpp.o
+[149/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/diagnostics.cppm.o
+[150/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/components.cppm.o
+[151/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/integration/http_client.cpp.o
+[152/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/json.cppm.o
+[153/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/configuration.cpp.o
+[154/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/integration/grpc.cpp.o
+[155/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/options.cppm.o
+[156/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/json.cpp.o
+[157/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/application_module.cppm.o
+[158/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/application_host.cppm.o
+[159/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/components.cpp.o
+[160/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application.cppm.o
+[161/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/options.cpp.o
+[162/194] Building CXX object testing/tests/CMakeFiles/grpc_interop_server.dir/__/grpc/grpc_interop_server.cpp.o
+[163/194] Building CXX object testing/tests/CMakeFiles/test_grpc_proto.dir/test_grpc_proto.cpp.o
+[164/194] Linking CXX executable testing/tests/test_http2_hpack
+[165/194] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/application_host.cpp.o
+[166/194] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/674f0f1f9b9e.bmi'
+[167/194] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/cbaf62b0cc81.bmi'
+[168/194] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/5a5066c3de63.bmi'
+[169/194] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/2487c2b8d1e2.bmi'
+[170/194] Building CXX object testing/tests/CMakeFiles/grpc_interop_client.dir/__/grpc/grpc_interop_client.cpp.o
+[171/194] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/65283ac41ce3.bmi'
+[172/194] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/9fe4bb48aa25.bmi'
+[173/194] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/ee6506b47852.bmi'
+[174/194] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/d4475efe4341.bmi'
+[175/194] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/eb3fb5414178.bmi'
+[176/194] Building CXX object testing/tests/CMakeFiles/test_otlp_exporter.dir/test_otlp_exporter.cpp.o
+[177/194] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/329501419589.bmi'
+[178/194] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/e198965c4bf3.bmi'
+[179/194] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/da986b88aaa6.bmi'
+[180/194] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/ac32d82688e7.bmi'
+[181/194] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/fb2986ce7529.bmi'
+[182/194] Linking CXX executable testing/tests/test_http_router
+[183/194] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/2dbd6af91df6.bmi'
+[184/194] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/b257d55f9f0a.bmi'
+[185/194] Linking CXX static library libcnetmod_application.a
+[186/194] Building CXX object testing/bench/CMakeFiles/grpc_arena_server.dir/grpc_arena_server.cpp.o
+[187/194] Linking CXX executable testing/tests/test_http2_stream
+[188/194] Linking CXX executable testing/tests/test_otlp_exporter
+[189/194] Linking CXX executable testing/tests/test_grpc
+[190/194] Linking CXX executable testing/tests/test_grpc_proto
+[191/194] Linking CXX executable testing/tests/grpc_interop_server
+[192/194] Linking CXX executable testing/tests/grpc_interop_client
+[193/194] Linking CXX executable testing/bench/grpc_arena_server

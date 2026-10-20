@@ -1,7 +1,7 @@
 # Official HttpArena gRPC / HTTP2 preparation
 
-Status updated 2026-10-20: execution resumed with the user's exclusive gRPC
-performance token. The official gRPC profiles are run using the same documented
+Status updated 2026-10-20: execution completed and the exclusive performance
+token was released. The official gRPC profiles were run using the same documented
 small-host fallback used for the WebSocket local comparisons. This is a local
 same-machine comparison, not a reproduction of the 128-CPU leaderboard host.
 Historical custom-harness results remain exploratory and do not establish the
