@@ -73,6 +73,8 @@ void set_h2_sync_adapter(v2::sync_server_handler handler,
 `v2::static_header_fields::from<fields>()` 只接受静态存储期的 const 字段数组，
 防止把请求栈上的头部视图交给异步发送器。业务响应体和动态 metadata 仍由响应拥有。
 发送端分别扣减连接和流窗口；额度不足的响应等待 WINDOW_UPDATE，SETTINGS 缩窗可产生负额度。
+`v2::server_response::automatic_content_length` 默认为 true；设为 false 时只关闭自动生成
+Content-Length，显式提供的长度头仍然发送。DATA 和 END_STREAM 仍按完整响应编码。
 
 每个 HPACK 解码方向最多复用一个不改变动态表的头块（编码不超过 512 字节、16 个字段、
 解码内容不超过 4096 字节）。插入或调整动态表会使该复用失效；敏感字段、Authorization、

@@ -383,6 +383,7 @@ TEST(grpc_h2_adapter_uses_shared_protocol_pipeline_and_falls_back)
     auto response = handler(request, cancellation);
     ASSERT_TRUE(response.has_value());
     ASSERT_EQ(response->status, std::uint32_t{200});
+    ASSERT_FALSE(response->automatic_content_length);
     ASSERT_EQ(response->static_headers.fields().size(), std::size_t{1});
     ASSERT_EQ(response->static_trailers.fields().front().name, std::string{"grpc-status"});
     ASSERT_EQ(response->static_trailers.fields().front().value, std::string{"0"});

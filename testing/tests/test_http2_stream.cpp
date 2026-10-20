@@ -38,7 +38,7 @@ auto bytes(std::string_view value) -> std::span<const std::byte>
 
 TEST(http2_server_dispatches_sync_router_handlers)
 {
-    for (int mode = 0; mode != 4; ++mode)
+    for (int mode = 0; mode != 6; ++mode)
     {
         cnetmod::net_init network;
         auto io = cnetmod::make_io_context();
@@ -57,7 +57,11 @@ TEST(http2_server_dispatches_sync_router_handlers)
                     adapted = true;
                     if (mode == 3)
                         return std::nullopt;
-                    return server_response{.body_text = "adapter"};
+                    server_response response{.body_text = "adapter"};
+                    response.automatic_content_length = mode == 5;
+                    if (mode == 4)
+                        response.headers.push_back({"content-length", "7"});
+                    return response;
                 },
                 [](std::span<const header_field>)
                 {
@@ -114,6 +118,8 @@ TEST(http2_server_dispatches_sync_router_handlers)
 
             std::vector<std::byte> wire;
             std::string body;
+            header_compression decoder;
+            std::optional<std::string> content_length;
             bool ended{};
             std::array<std::byte, 4096> buffer{};
             while (!ended)
@@ -134,6 +140,15 @@ TEST(http2_server_dispatches_sync_router_handlers)
                     if (!header ||
                         offset + frame_header_size + header->length > wire.size())
                         break;
+                    if (header->type == frame_type::headers && header->stream_id == 1)
+                    {
+                        auto fields = decoder.decode(std::span{wire}.subspan(
+                            offset + frame_header_size, header->length));
+                        ASSERT_TRUE(fields.has_value());
+                        for (const auto& field : *fields)
+                            if (field.name == "content-length")
+                                content_length = field.value;
+                    }
                     if (header->type == frame_type::data &&
                         header->stream_id == 1)
                     {
@@ -148,8 +163,16 @@ TEST(http2_server_dispatches_sync_router_handlers)
                     wire.erase(wire.begin(), wire.begin() + offset);
             }
 
-            ASSERT_EQ(body, std::string{mode == 1 ? "adapter" : "sync"});
-            ASSERT_EQ(adapted, mode == 1 || mode == 3);
+            const bool adapter_body = mode == 1 || mode == 4 || mode == 5;
+            ASSERT_EQ(body, std::string{adapter_body ? "adapter" : "sync"});
+            ASSERT_EQ(adapted, mode == 1 || mode == 3 || mode == 4 || mode == 5);
+            if (mode == 1)
+                ASSERT_FALSE(content_length.has_value());
+            else
+            {
+                ASSERT_TRUE(content_length.has_value());
+                ASSERT_EQ(*content_length, std::to_string(body.size()));
+            }
             ASSERT_EQ(middleware_called, mode == 2);
             peer->close();
             http_server.stop();

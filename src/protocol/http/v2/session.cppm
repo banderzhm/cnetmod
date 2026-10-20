@@ -66,6 +66,7 @@ struct server_response
     std::shared_ptr<cnetmod::http::response_body_source> body_source;
     static_header_fields static_headers;
     static_header_fields static_trailers;
+    bool automatic_content_length = true;
 };
 
 using server_handler =

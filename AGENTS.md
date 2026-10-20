@@ -8020,6 +8020,8 @@ void set_h2_sync_adapter(v2::sync_server_handler handler,
 `v2::static_header_fields::from<fields>()` 只接受静态存储期的 const 字段数组，
 防止把请求栈上的头部视图交给异步发送器。业务响应体和动态 metadata 仍由响应拥有。
 发送端分别扣减连接和流窗口；额度不足的响应等待 WINDOW_UPDATE，SETTINGS 缩窗可产生负额度。
+`v2::server_response::automatic_content_length` 默认为 true；设为 false 时只关闭自动生成
+Content-Length，显式提供的长度头仍然发送。DATA 和 END_STREAM 仍按完整响应编码。
 
 每个 HPACK 解码方向最多复用一个不改变动态表的头块（编码不超过 512 字节、16 个字段、
 解码内容不超过 4096 字节）。插入或调整动态表会使该复用失效；敏感字段、Authorization、
@@ -13516,6 +13518,9 @@ server.set_h2_sync_adapter(service.make_h2_sync_handler(), service.make_h2_reque
 和 middleware 继续普通 HTTP 分发。两种同步入口共享校验、调用和响应组装流程。
 固定 Content-Type 和成功状态 trailer 使用静态只读字段块；动态状态、压缩和自定义
 metadata 每次按结果生成。静态块不包含业务响应体。
+HTTP/2 同步适配器关闭自动 Content-Length：每条 gRPC 消息仍有完整长度前缀，
+响应仍以带 END_STREAM 的状态 trailer 结束；参见
+[gRPC over HTTP2](https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md)。
 
 HTTP/2 在同步、无 middleware、非 request-stream 路由上最多缓冲 16 KiB 请求体，
 可跨读取收齐后批量排队响应。超过阈值立即转回有背压的流式接收，保留先前收到的数据；

@@ -238,7 +238,7 @@ void session::queue_response(std::uint32_t stream_id, server_response response, 
         append(std::move(header));
     for (const auto& header : response.static_headers.fields())
         append(header);
-    if (!body.empty() && !has_length)
+    if (response.automatic_content_length && !body.empty() && !has_length)
         response_headers_.push_back(
             {"content-length", std::to_string(body.size())});
     auto encoded = encoder_.encode(response_headers_, encoded_headers_);
@@ -451,7 +451,7 @@ auto session::write_response(std::uint32_t stream_id,
         for (const auto& header : response.static_headers.fields())
             append(header);
         const auto expected_length = response.body_source->content_length();
-        if (expected_length && !has_length)
+        if (response.automatic_content_length && expected_length && !has_length)
             headers.push_back(
                 {"content-length", std::to_string(*expected_length)});
         auto encoded = encoder_.encode(headers);

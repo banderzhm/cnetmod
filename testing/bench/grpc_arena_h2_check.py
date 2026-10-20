@@ -82,6 +82,7 @@ def main():
                         stream = event.stream_id
                         assert statuses[stream][b":status"] == b"200"
                         assert statuses[stream][b"content-type"].startswith(b"application/grpc")
+                        assert b"content-length" not in statuses[stream]
                         assert trailers[stream][b"grpc-status"] == b"0"
                         assert bodies[stream] == bytes.fromhex("00000000020803")
                         pending.remove(stream)

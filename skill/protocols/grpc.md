@@ -171,6 +171,9 @@ server.set_h2_sync_adapter(service.make_h2_sync_handler(), service.make_h2_reque
 和 middleware 继续普通 HTTP 分发。两种同步入口共享校验、调用和响应组装流程。
 固定 Content-Type 和成功状态 trailer 使用静态只读字段块；动态状态、压缩和自定义
 metadata 每次按结果生成。静态块不包含业务响应体。
+HTTP/2 同步适配器关闭自动 Content-Length：每条 gRPC 消息仍有完整长度前缀，
+响应仍以带 END_STREAM 的状态 trailer 结束；参见
+[gRPC over HTTP2](https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md)。
 
 HTTP/2 在同步、无 middleware、非 request-stream 路由上最多缓冲 16 KiB 请求体，
 可跨读取收齐后批量排队响应。超过阈值立即转回有背压的流式接收，保留先前收到的数据；

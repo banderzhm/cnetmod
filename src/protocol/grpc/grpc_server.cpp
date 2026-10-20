@@ -786,6 +786,7 @@ auto service_router::make_h2_sync_handler() const -> http::v2::sync_server_handl
             return http::take_h2_response(response);
         }
         http::v2::server_response response;
+        response.automatic_content_length = false;
         response.body_text = std::move(reply.body);
         static const std::array common_headers{http::v2::header_field{"content-type", "application/grpc"}};
         static const std::array success_trailers{http::v2::header_field{"grpc-status", "0"}};
