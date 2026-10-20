@@ -1,0 +1,1 @@
+[2026-10-20 14:36:43.023] [info] [137720997444736] [bench_database.cpp:33] RESULT database=postgresql mode=rows operations=8309 seconds=3.000288 ops_per_second=2769.400

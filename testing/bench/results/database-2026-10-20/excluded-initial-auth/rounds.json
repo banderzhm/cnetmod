@@ -1,0 +1,254 @@
+[
+  {
+    "database": "postgresql",
+    "mode": "pool",
+    "capacity": 1,
+    "round": 1,
+    "entry": "control",
+    "operations": 9107099,
+    "seconds": 3.0,
+    "ops_per_second": 3035699.608,
+    "argv": [
+      "taskset",
+      "-c",
+      "0",
+      "/root/cnetmod-db-20261020/control-server",
+      "postgresql",
+      "pool",
+      "3",
+      "1"
+    ],
+    "log": "postgresql-pool-1-1-control.log"
+  },
+  {
+    "database": "postgresql",
+    "mode": "pool",
+    "capacity": 1,
+    "round": 1,
+    "entry": "candidate",
+    "operations": 28544032,
+    "seconds": 3.0,
+    "ops_per_second": 9514677.016,
+    "argv": [
+      "taskset",
+      "-c",
+      "0",
+      "/root/cnetmod-db-20261020/candidate-server",
+      "postgresql",
+      "pool",
+      "3",
+      "1"
+    ],
+    "log": "postgresql-pool-1-1-candidate.log"
+  },
+  {
+    "database": "postgresql",
+    "mode": "pool",
+    "capacity": 1,
+    "round": 2,
+    "entry": "candidate",
+    "operations": 28794101,
+    "seconds": 3.0,
+    "ops_per_second": 9598033.385,
+    "argv": [
+      "taskset",
+      "-c",
+      "0",
+      "/root/cnetmod-db-20261020/candidate-server",
+      "postgresql",
+      "pool",
+      "3",
+      "1"
+    ],
+    "log": "postgresql-pool-1-2-candidate.log"
+  },
+  {
+    "database": "postgresql",
+    "mode": "pool",
+    "capacity": 1,
+    "round": 2,
+    "entry": "control",
+    "operations": 9048036,
+    "seconds": 3.0,
+    "ops_per_second": 3016011.882,
+    "argv": [
+      "taskset",
+      "-c",
+      "0",
+      "/root/cnetmod-db-20261020/control-server",
+      "postgresql",
+      "pool",
+      "3",
+      "1"
+    ],
+    "log": "postgresql-pool-1-2-control.log"
+  },
+  {
+    "database": "postgresql",
+    "mode": "pool",
+    "capacity": 1,
+    "round": 3,
+    "entry": "control",
+    "operations": 8952244,
+    "seconds": 3.0,
+    "ops_per_second": 2984081.196,
+    "argv": [
+      "taskset",
+      "-c",
+      "0",
+      "/root/cnetmod-db-20261020/control-server",
+      "postgresql",
+      "pool",
+      "3",
+      "1"
+    ],
+    "log": "postgresql-pool-1-3-control.log"
+  },
+  {
+    "database": "postgresql",
+    "mode": "pool",
+    "capacity": 1,
+    "round": 3,
+    "entry": "candidate",
+    "operations": 28821829,
+    "seconds": 3.0,
+    "ops_per_second": 9607275.879,
+    "argv": [
+      "taskset",
+      "-c",
+      "0",
+      "/root/cnetmod-db-20261020/candidate-server",
+      "postgresql",
+      "pool",
+      "3",
+      "1"
+    ],
+    "log": "postgresql-pool-1-3-candidate.log"
+  },
+  {
+    "database": "postgresql",
+    "mode": "pool",
+    "capacity": 64,
+    "round": 1,
+    "entry": "control",
+    "operations": 6770004,
+    "seconds": 3.0,
+    "ops_per_second": 2256667.894,
+    "argv": [
+      "taskset",
+      "-c",
+      "0",
+      "/root/cnetmod-db-20261020/control-server",
+      "postgresql",
+      "pool",
+      "3",
+      "64"
+    ],
+    "log": "postgresql-pool-64-1-control.log"
+  },
+  {
+    "database": "postgresql",
+    "mode": "pool",
+    "capacity": 64,
+    "round": 1,
+    "entry": "candidate",
+    "operations": 28776677,
+    "seconds": 3.0,
+    "ops_per_second": 9592225.548,
+    "argv": [
+      "taskset",
+      "-c",
+      "0",
+      "/root/cnetmod-db-20261020/candidate-server",
+      "postgresql",
+      "pool",
+      "3",
+      "64"
+    ],
+    "log": "postgresql-pool-64-1-candidate.log"
+  },
+  {
+    "database": "postgresql",
+    "mode": "pool",
+    "capacity": 64,
+    "round": 2,
+    "entry": "candidate",
+    "operations": 28852828,
+    "seconds": 3.0,
+    "ops_per_second": 9617609.151,
+    "argv": [
+      "taskset",
+      "-c",
+      "0",
+      "/root/cnetmod-db-20261020/candidate-server",
+      "postgresql",
+      "pool",
+      "3",
+      "64"
+    ],
+    "log": "postgresql-pool-64-2-candidate.log"
+  },
+  {
+    "database": "postgresql",
+    "mode": "pool",
+    "capacity": 64,
+    "round": 2,
+    "entry": "control",
+    "operations": 6596310,
+    "seconds": 3.0,
+    "ops_per_second": 2198769.723,
+    "argv": [
+      "taskset",
+      "-c",
+      "0",
+      "/root/cnetmod-db-20261020/control-server",
+      "postgresql",
+      "pool",
+      "3",
+      "64"
+    ],
+    "log": "postgresql-pool-64-2-control.log"
+  },
+  {
+    "database": "postgresql",
+    "mode": "pool",
+    "capacity": 64,
+    "round": 3,
+    "entry": "control",
+    "operations": 6736909,
+    "seconds": 3.0,
+    "ops_per_second": 2245636.14,
+    "argv": [
+      "taskset",
+      "-c",
+      "0",
+      "/root/cnetmod-db-20261020/control-server",
+      "postgresql",
+      "pool",
+      "3",
+      "64"
+    ],
+    "log": "postgresql-pool-64-3-control.log"
+  },
+  {
+    "database": "postgresql",
+    "mode": "pool",
+    "capacity": 64,
+    "round": 3,
+    "entry": "candidate",
+    "operations": 28679492,
+    "seconds": 3.0,
+    "ops_per_second": 9559830.048,
+    "argv": [
+      "taskset",
+      "-c",
+      "0",
+      "/root/cnetmod-db-20261020/candidate-server",
+      "postgresql",
+      "pool",
+      "3",
+      "64"
+    ],
+    "log": "postgresql-pool-64-3-candidate.log"
+  }
+]

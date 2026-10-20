@@ -22,7 +22,7 @@
     }
   ],
   "files": {
-    ".gitattributes": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da",
+    ".gitattributes": "542fcfa3c258923f8b3af9de0e79118d760336d2b2a920db065b3c110a5ecc53",
     "asan-configure.json": "05142629c0f049ce1fda2fc9600990ec51572b2263e591e50a2dc404b2ae2141",
     "asan-tests.log": "bb7a885bc4bcf41dcd3ce8b66c8b9948ed467b8fa9524a19a44b3fd4ec86d8dc",
     "build-audit/accepted2-build.log": "5627611addd88465d9bfdea5263df3ae4447dbf3e0e76a1ccdeae53b113a5866",
@@ -281,6 +281,7 @@
     "sanitizer-environment.json": "62aca41a7fe753225f5650eb115af2aedcb9aeab0a5d59328af32ddc65b45188",
     "summary.csv": "7af84f36c63c1c97e42410871a9bc335abcf6413359f17a9f85ab4bcba197ab1",
     "trillium-Cargo.lock": "a1d317b0732a5e6eff7115bccb0c98b6642c1edb539f2c6dc2ee4e5301863f50",
-    "vanilla-source-parity.json": "307134a8483195725cf57d980657a5c4d5a32b51234cce9e2051890927b91d3c"
+    "vanilla-source-parity.json": "307134a8483195725cf57d980657a5c4d5a32b51234cce9e2051890927b91d3c",
+    "README.md": "418095b868c3521210abb796382007ed9734b5c135fbe871770f02a97cf2bc33"
   }
 }

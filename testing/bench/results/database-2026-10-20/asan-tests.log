@@ -1,0 +1,23 @@
+Test project /root/cnetmod-grpc-20261020/asan-build
+    Start  9: test_application_integrations
+1/7 Test  #9: test_application_integrations ....   Passed    1.80 sec
+    Start 28: test_http_disabled_overhead
+2/7 Test #28: test_http_disabled_overhead ......   Passed    5.32 sec
+    Start 50: test_redis
+3/7 Test #50: test_redis .......................   Passed    1.32 sec
+    Start 51: test_redis_template
+4/7 Test #51: test_redis_template ..............   Passed    1.14 sec
+    Start 55: test_mysql_pool
+5/7 Test #55: test_mysql_pool ..................   Passed    0.50 sec
+    Start 56: test_postgresql_transport
+6/7 Test #56: test_postgresql_transport ........   Passed    0.03 sec
+    Start 61: test_redis_tls
+7/7 Test #61: test_redis_tls ...................   Passed    0.68 sec
+
+100% tests passed out of 7
+
+Label Time Summary:
+mysql    =   0.50 sec*proc (1 test)
+pool     =   0.50 sec*proc (1 test)
+
+Total Test time (real) =  10.79 sec

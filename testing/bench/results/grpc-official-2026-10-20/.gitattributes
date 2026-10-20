@@ -1,1 +1,4 @@
 * -text
+*.patch -whitespace
+*.log -whitespace
+perf/** -whitespace

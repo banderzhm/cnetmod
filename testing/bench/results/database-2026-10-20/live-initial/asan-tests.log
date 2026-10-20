@@ -1,0 +1,14 @@
+Test project /root/cnetmod-grpc-20261020/asan-build
+    Start 54: test_application_mysql_live
+1/2 Test #54: test_application_mysql_live ......   Passed    0.54 sec
+    Start 58: test_application_redis_live
+2/2 Test #58: test_application_redis_live ......   Passed    0.02 sec
+
+100% tests passed out of 2
+
+Label Time Summary:
+integration    =   0.56 sec*proc (2 tests)
+mysql          =   0.54 sec*proc (1 test)
+redis          =   0.02 sec*proc (1 test)
+
+Total Test time (real) =   0.56 sec

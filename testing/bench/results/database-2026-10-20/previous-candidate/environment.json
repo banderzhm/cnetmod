@@ -1,0 +1,151 @@
+{
+  "binaries": {
+    "control": {
+      "path": "/root/cnetmod-db-20261020/control2-server",
+      "sha256": "5d5afdc85bee2108b027ee84a958e186b9e4b5c5135dc8d32afc4c73eb5a38a4"
+    },
+    "candidate": {
+      "path": "/root/cnetmod-db-20261020/candidate2-server",
+      "sha256": "74ae8fb76c5c4e2a7e96c15ecbd5f8099848ec753e4b52dd3032bec56638af14"
+    }
+  },
+  "servers": [
+    {
+      "database": "postgresql",
+      "image": "postgres:18",
+      "id": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+      "repo_digests": [
+        "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336"
+      ],
+      "argv": [
+        "docker",
+        "run",
+        "-d",
+        "--rm",
+        "--name",
+        "cnetmod-db-perf-postgresql-20261020",
+        "--network",
+        "host",
+        "--cpuset-cpus",
+        "16-19",
+        "--cpus",
+        "4",
+        "--memory",
+        "1536m",
+        "-e",
+        "POSTGRES_USER=bench",
+        "-e",
+        "POSTGRES_PASSWORD=bench",
+        "-e",
+        "POSTGRES_DB=benchmark",
+        "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+        "postgres",
+        "-p",
+        "15432",
+        "-c",
+        "listen_addresses=127.0.0.1",
+        "-c",
+        "max_connections=96",
+        "-c",
+        "shared_buffers=128MB"
+      ],
+      "container": "5acc6f40c025b881d81beadf43eda28ce796531a070690cfa8e1d0ccb22ad56a"
+    },
+    {
+      "database": "mysql",
+      "image": "mysql:8.4",
+      "id": "sha256:0f51e63e537a1f176423fa03ef559aabe6fa4372a53160a44bc7e75da7d15364",
+      "repo_digests": [
+        "mysql@sha256:0f51e63e537a1f176423fa03ef559aabe6fa4372a53160a44bc7e75da7d15364"
+      ],
+      "argv": [
+        "docker",
+        "run",
+        "-d",
+        "--rm",
+        "--name",
+        "cnetmod-db-perf-mysql-20261020",
+        "--network",
+        "host",
+        "--cpuset-cpus",
+        "20-23",
+        "--cpus",
+        "4",
+        "--memory",
+        "1536m",
+        "-e",
+        "MYSQL_ROOT_PASSWORD=bench",
+        "-e",
+        "MYSQL_USER=bench",
+        "-e",
+        "MYSQL_PASSWORD=bench",
+        "-e",
+        "MYSQL_DATABASE=benchmark",
+        "sha256:0f51e63e537a1f176423fa03ef559aabe6fa4372a53160a44bc7e75da7d15364",
+        "--port=13306",
+        "--bind-address=127.0.0.1",
+        "--mysqlx=OFF",
+        "--max-connections=96",
+        "--innodb-buffer-pool-size=128M",
+        "--performance-schema=OFF",
+        "--skip-log-bin"
+      ],
+      "container": "70ef3a3b0c07b58f5a0e3fa710479aad18754f9748a87823a914e3a2987b9d2f",
+      "auth_bootstrap": [
+        "docker",
+        "exec",
+        "70ef3a3b0c07b58f5a0e3fa710479aad18754f9748a87823a914e3a2987b9d2f",
+        "mysql",
+        "--ssl-mode=REQUIRED",
+        "-h127.0.0.1",
+        "-P13306",
+        "-ubench",
+        "-pbench",
+        "-e",
+        "SELECT 1"
+      ]
+    },
+    {
+      "database": "redis",
+      "image": "redis:8",
+      "id": "sha256:2c2dff791878316e3b083188be0d578423b24813cdda5de0e80ea4f7b3e6bfd6",
+      "repo_digests": [
+        "redis@sha256:2c2dff791878316e3b083188be0d578423b24813cdda5de0e80ea4f7b3e6bfd6"
+      ],
+      "argv": [
+        "docker",
+        "run",
+        "-d",
+        "--rm",
+        "--name",
+        "cnetmod-db-perf-redis-20261020",
+        "--network",
+        "host",
+        "--cpuset-cpus",
+        "24-27",
+        "--cpus",
+        "4",
+        "--memory",
+        "1536m",
+        "sha256:2c2dff791878316e3b083188be0d578423b24813cdda5de0e80ea4f7b3e6bfd6",
+        "redis-server",
+        "--bind",
+        "127.0.0.1",
+        "--port",
+        "16379",
+        "--save",
+        "",
+        "--appendonly",
+        "no",
+        "--maxmemory",
+        "256mb"
+      ],
+      "container": "5b49c008bdcfc1d7847067e93d246125c8d6a095af9b197db9b9b1bef385394b"
+    }
+  ],
+  "seconds": 3,
+  "rounds": 3,
+  "client_cpus": "0",
+  "source_of_truth": "validated operations per measured wall time",
+  "note": "Pool tests exclude queries. MySQL pool skips reset explicitly; reset is a separate case. Redis batch counts batches of 64 commands."
+}
