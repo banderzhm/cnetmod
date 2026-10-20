@@ -7,6 +7,7 @@ import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.spawn;
 import cnetmod.coro.task_group;
+import cnetmod.coro.cancel;
 import cnetmod.coro.timer;
 import cnetmod.protocol.postgresql;
 import cnetmod.protocol.mysql;
