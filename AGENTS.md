@@ -8873,6 +8873,34 @@ auto server = h3::make_http3_server(io, tls,
     });
 ```
 
+可在 `start()` 前调整新连接的 QUIC 空闲回收时间：
+
+```cpp
+auto configured = server->set_idle_timeout(std::chrono::seconds{10});
+// 检查 configured 后再调用 server->start()。
+```
+
+`set_idle_timeout(std::chrono::milliseconds)` 会同步应用到多 worker listener；负值返回
+`invalid_argument`，`0ms` 禁用空闲到期。短任务型客户端若直接关闭 UDP socket 而不发送
+`CONNECTION_CLOSE`，服务端无法从静默中区分断线与合法空闲，应由应用按连接复用策略选择
+合适的有限超时。
+
+受控网络可在 `start()` 前同时设置接收上限和逐路径 MTU 探测：
+
+```cpp
+auto payload = server->set_max_udp_payload_size(1472);
+auto pmtud = server->set_path_mtu_discovery(
+    1472, std::chrono::milliseconds{10});
+```
+
+`set_max_udp_payload_size()` 接受 `1200..65527`，并同步应用到所有 worker；它决定本端
+接收缓冲区大小及向 peer 通告的 QUIC UDP payload 上限。发送路径仍从 RFC 9000 的
+1200 字节安全基线开始，只有 padded PING 被确认后才提升到探测值。公网部署应按实际
+链路选择保守上限，避免 IP 分片。
+
+QUIC 新连接默认使用 CUBIC 拥塞控制。真实网络仍按 RTT 和拥塞窗口 pacing；loopback
+没有物理瓶颈队列，因此只保留拥塞窗口限制，省去本机进程间通信的短定时器唤醒。
+
 同步 handler 适合纯内存、快速响应；涉及数据库、缓存或 RPC 时使用协程 handler：
 
 ```cpp
@@ -8913,6 +8941,54 @@ h3::streaming_server_request_handler handler =
 
 handler 提前返回会关闭 body pump；消费者慢时，传输层不会无限制缓存上传数据。
 
+服务端默认限制请求 DATA 为 32 MiB。`start()` 前可通过
+`server->set_request_body_limits({.max_bytes = 64U * 1024U * 1024U,
+.chunk_capacity = 16U})` 调整；所有 worker 和普通/流式 handler 使用同一配置。
+普通 handler 仍在完整请求体到达后启动，同时限制 FIN 前的聚合 wire 缓冲为
+`max_bytes` 加允许的 header 字节（未设置 header 上限时额外 64 KiB）；大量帧开销也计入
+此聚合上限。超限只取消当前 stream，连接可继续复用。流式 handler 的 DATA 累计限制
+独立于逐帧缓冲和 channel 容量，大上传应显式提高限制。
+
+RESET 会按 final size 结算流和连接接收信用；取消后的接收方向只保留 offset，直到
+peer FIN/RESET 给出最终大小后退休。QPACK 阻塞等待绑定到流取消和连接关闭，取消会发送
+Stream Cancellation 指令，避免保留阻塞 header section。
+
+
+### 共享缓冲响应体
+
+服务端可将预加载的不可变内容放入 `response.shared_body`。多个响应共享原始存储，
+会话直接构建一次 HEADERS + DATA + FIN 写入，适合静态资源热路径：
+
+```cpp
+auto cached = std::make_shared<const std::string>("cached asset");
+response.shared_body = cached;
+response.headers.emplace("content-length", std::to_string(cached->size()));
+```
+
+`body`、`shared_body` 与 `body_source` 三者只能设置一个。
+
+重复静态响应还可以预编码完整的 QPACK 响应头。编码结果只使用静态表和字面量，
+可以安全地跨连接共享，并避免每个请求重复创建 header 容器和查询 QPACK 表：
+
+```cpp
+const std::array fields{
+    h3::header_field{"content-type", "text/css"},
+    h3::header_field{"vary", "Accept-Encoding"}};
+auto encoded = h3::qpack_static_response_headers::encode(200, fields);
+if (!encoded)
+    co_return std::unexpected(encoded.error());
+auto cached_headers =
+    std::make_shared<h3::qpack_static_response_headers>(std::move(*encoded));
+
+// 请求热路径
+response.status = 200;
+response.static_headers = cached_headers;
+response.shared_body = cached_body;
+```
+
+使用 `static_headers` 时，`response.status` 必须与预编码状态一致，
+`response.headers` 必须为空，并且不能同时使用 `body_source`。
+
 ### 响应体流式发送
 
 服务端可设置 `response.body_source`。服务端先发送 HEADERS，再按 producer 发送
@@ -8935,7 +9011,7 @@ response.body_source = std::make_shared<cn::http::response_body_source>(
     }, 18);
 ```
 
-`body` 与 `body_source` 不能同时设置。声明的长度必须与实际发送长度一致；HEAD、
+`body`、`shared_body` 与 `body_source` 不能同时设置。声明的长度必须与实际发送长度一致；HEAD、
 1xx、204、304 响应禁止发送 DATA。
 
 ### 显式 Server Push

@@ -1,0 +1,12 @@
+Test project C:/Users/25007/.codex/tmp/cnetmod-h3-windows
+    Start 73: http3_early_data_recovery
+1/1 Test #73: http3_early_data_recovery ........   Passed    2.11 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Label Time Summary:
+http3       =   2.11 sec*proc (1 test)
+quic        =   2.11 sec*proc (1 test)
+recovery    =   2.11 sec*proc (1 test)
+
+Total Test time (real) =   2.11 sec

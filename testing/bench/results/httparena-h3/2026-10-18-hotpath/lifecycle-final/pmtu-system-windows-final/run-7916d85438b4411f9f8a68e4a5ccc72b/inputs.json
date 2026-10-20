@@ -1,0 +1,22 @@
+{
+  "windows_sha256": {
+    "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\bin\\Release\\h3_interop_server.exe": "0f44d3938e235d13e15a3321b209225d5d3276e9d4edb4e4e6680920e750487f",
+    "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\bin\\Release\\h3_interop_client.exe": "de52698a5637eebe813827b4b1f0b4512c47b7e4a0ac3140f6c9ff5b6289bd69",
+    "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows-optional-peers\\curl-8.23.0_1-win64-mingw\\bin\\curl.exe": "b2ad02d8334b4a24783cb08f615236f1572ee92edc08394baf775e509721dc81",
+    "D:\\runtime\\miniconda3\\Library\\bin\\openssl.exe": "5c689c1638daef1aa8217e315f783d1bac00948bd97c20686e86bd304b9d9544"
+  },
+  "linux_sha256": "8880e45cd9902a47091f11f3ebee40b8442b31f1a5807f779875334d1d888b6a  /var/tmp/cnetmod-h3-ngtcp2-peer-build/examples/osslclient\n5d3b2ebdb1fee60d61812b966af514e0314514bafdf15ee223516a0b7ffabe0e  /var/tmp/cnetmod-h3-ngtcp2-peer-build/examples/osslserver\n",
+  "distro": "archlinux",
+  "networking": "mirrored IPv4 loopback; actual request verifies reachability",
+  "command": [
+    "C:/Users/25007/.codex/tmp/cnetmod-h3-windows-optional-peers/run_three_peers.py",
+    "--server",
+    "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/bin/Release/h3_interop_server.exe",
+    "--client",
+    "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/bin/Release/h3_interop_client.exe",
+    "--workers",
+    "2",
+    "--output-parent",
+    "C:/Users/25007/.codex/tmp/cnetmod-h3-pmtu-final-system-windows-20261018-ffa91ab479f4422791aaeacc51dbe847"
+  ]
+}

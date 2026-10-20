@@ -1,0 +1,175 @@
+{
+  "inferior_pid": 0,
+  "types": {
+    "http3_server::impl": {
+      "sizeof": 1472,
+      "fields": {
+        "connections_": {
+          "type": "std::__1::unordered_map<cnetmod::quic::connection_id, std::__1::shared_ptr<cnetmod::quic::quic_connection>, std::__1::hash<cnetmod::quic::connection_id>, std::__1::equal_to<cnetmod::quic::connection_id>, std::__1::allocator<std::__1::pair<cnetmod::quic::connection_id const, std::__1::shared_ptr<cnetmod::quic::quic_connection> > > >",
+          "bytes": 40,
+          "bitpos": 2880,
+          "bitsize": 0
+        },
+        "sessions_": {
+          "type": "std::__1::unordered_map<cnetmod::quic::quic_connection*, std::__1::shared_ptr<cnetmod::http::v3::http3_server_session>, std::__1::hash<cnetmod::quic::quic_connection*>, std::__1::equal_to<cnetmod::quic::quic_connection*>, std::__1::allocator<std::__1::pair<cnetmod::quic::quic_connection* const, std::__1::shared_ptr<cnetmod::http::v3::http3_server_session> > > >",
+          "bytes": 40,
+          "bitpos": 6848,
+          "bitsize": 0
+        },
+        "timers_": {
+          "type": "std::__1::shared_ptr<cnetmod::http::v3::http3_server::impl::connection_timer_state>",
+          "bytes": 16,
+          "bitpos": 2688,
+          "bitsize": 0
+        },
+        "active_connections_": {
+          "type": "std::__1::atomic<unsigned long>",
+          "bytes": 8,
+          "bitpos": 2816,
+          "bitsize": 0
+        },
+        "inbox_budget_": {
+          "type": "std::__1::shared_ptr<cnetmod::http::v3::http3_server::impl::inbox_budget_state>",
+          "bytes": 16,
+          "bitpos": 10624,
+          "bitsize": 0
+        },
+        "shards_": {
+          "type": "std::__1::vector<std::__1::unique_ptr<cnetmod::http::v3::http3_server::impl, std::__1::default_delete<cnetmod::http::v3::http3_server::impl> >, std::__1::allocator<std::__1::unique_ptr<cnetmod::http::v3::http3_server::impl, std::__1::default_delete<cnetmod::http::v3::http3_server::impl> > > >",
+          "bytes": 24,
+          "bitpos": 10816,
+          "bitsize": 0
+        }
+      }
+    },
+    "mi_heap_t": {
+      "sizeof": 6528,
+      "fields": {
+        "subproc": {
+          "type": "mi_subproc_t *",
+          "bytes": 8,
+          "bitpos": 0,
+          "bitsize": 0
+        },
+        "abandoned_count": {
+          "type": "std::atomic<unsigned long> [75]",
+          "bytes": 600,
+          "bitpos": 896,
+          "bitsize": 0
+        },
+        "theaps": {
+          "type": "mi_theap_t *",
+          "bytes": 8,
+          "bitpos": 448,
+          "bitsize": 0
+        },
+        "next": {
+          "type": "mi_heap_t *",
+          "bytes": 8,
+          "bitpos": 128,
+          "bitsize": 0
+        }
+      }
+    },
+    "mi_theap_t": {
+      "sizeof": 8224,
+      "fields": {
+        "pages": {
+          "type": "mi_page_queue_t [75]",
+          "bytes": 2400,
+          "bitpos": 11008,
+          "bitsize": 0
+        },
+        "hnext": {
+          "type": "mi_theap_t *",
+          "bytes": 8,
+          "bitpos": 10880,
+          "bitsize": 0
+        }
+      }
+    },
+    "mi_page_t": {
+      "sizeof": 128,
+      "fields": {
+        "block_size": {
+          "type": "size_t",
+          "bytes": 8,
+          "bitpos": 320,
+          "bitsize": 0
+        },
+        "capacity": {
+          "type": "uint16_t",
+          "bytes": 2,
+          "bitpos": 448,
+          "bitsize": 0
+        },
+        "reserved": {
+          "type": "uint16_t",
+          "bytes": 2,
+          "bitpos": 464,
+          "bitsize": 0
+        },
+        "xused": {
+          "type": "mi_used_t",
+          "bytes": 8,
+          "bitpos": 192,
+          "bitsize": 0
+        },
+        "xthread_free": {
+          "type": "std::atomic<unsigned long>",
+          "bytes": 8,
+          "bitpos": 512,
+          "bitsize": 0
+        },
+        "next": {
+          "type": "mi_page_s *",
+          "bytes": 8,
+          "bitpos": 704,
+          "bitsize": 0
+        }
+      }
+    },
+    "buffer_pool": {
+      "sizeof": 256,
+      "fields": {
+        "free_blocks_": {
+          "type": "bounded_mpmc_queue<cnetmod::buffer_pool::block_node*>",
+          "bytes": 192,
+          "bitpos": 512,
+          "bitsize": 0
+        },
+        "block_size_": {
+          "type": "std::__1::size_t",
+          "bytes": 8,
+          "bitpos": 0,
+          "bitsize": 0
+        },
+        "max_blocks_": {
+          "type": "std::__1::size_t",
+          "bytes": 8,
+          "bitpos": 64,
+          "bitsize": 0
+        }
+      }
+    }
+  },
+  "symbols": {
+    "_ZZN7cnetmod6detailW7cnetmodW8executorW8async_op23small_udp_datagram_poolEvE4pool": {
+      "link_address": "0x3dffb0",
+      "type": "<data variable, no debug info> *"
+    },
+    "_ZZN7cnetmod6detailW7cnetmodW8executorW8async_op23large_udp_datagram_poolEvE4pool": {
+      "link_address": "0x3dffc0",
+      "type": "<data variable, no debug info> *"
+    },
+    "_ZL20mi_process_heap_main": {
+      "link_address": "0x3c6740",
+      "type": "mi_heap_t *"
+    },
+    "_mi_theap_empty": {
+      "link_address": "0x3acec0",
+      "type": "const mi_theap_t *"
+    }
+  },
+  "ok": true
+}

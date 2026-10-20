@@ -1,0 +1,6 @@
+127.0.0.1       STREAM localhost
+127.0.0.1       DGRAM  
+127.0.0.1       RAW    
+::1             STREAM 
+::1             DGRAM  
+::1             RAW    

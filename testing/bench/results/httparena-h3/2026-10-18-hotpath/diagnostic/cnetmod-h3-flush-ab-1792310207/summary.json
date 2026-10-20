@@ -1,0 +1,81 @@
+{
+  "mode": "diagnostic counterbalanced A/B; all workloads serial",
+  "binaries": {
+    "stage1": {
+      "path": "/var/tmp/cnetmod-h3-stage1-variant/arena_h3_server",
+      "sha256": "bcb97359a1e4511689e4789497f13c3069ed021dbe7dbab2ab535b1aa35e2a09"
+    },
+    "stage2": {
+      "path": "/var/tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server",
+      "sha256": "cff0b635889a97be1bd9e83f42a76bc97f34bb3a687559bbcebf8a0cea8853b4"
+    }
+  },
+  "measurements": [
+    {
+      "name": "baseline-1-stage1",
+      "stage": "stage1",
+      "profile": "baseline",
+      "command": [
+        "nsenter",
+        "-t",
+        "738",
+        "-n",
+        "taskset",
+        "-c",
+        "16-31",
+        "/var/tmp/cnetmod-h3-loadgen169/h2load",
+        "--alpn-list=h3",
+        "https://localhost:8443/baseline2?a=1&b=1",
+        "-c",
+        "64",
+        "-m",
+        "64",
+        "-t",
+        "64",
+        "-D",
+        "5s"
+      ],
+      "requests_2xx": 8603816,
+      "elapsed": 5.66,
+      "valid_rps": 1520108.8339222614,
+      "server_cpu_seconds": 107.38000000000001,
+      "udp_sent": 1653719,
+      "udp_received": 9765578,
+      "udp_received_per_request": 1.1350286895954074,
+      "latency": "request     :      171us     30.76ms      1.84ms     6.39ms     9.03ms     2.39ms      1.90ms    81.98%"
+    },
+    {
+      "name": "baseline-2-stage2",
+      "stage": "stage2",
+      "profile": "baseline",
+      "command": [
+        "nsenter",
+        "-t",
+        "738",
+        "-n",
+        "taskset",
+        "-c",
+        "16-31",
+        "/var/tmp/cnetmod-h3-loadgen169/h2load",
+        "--alpn-list=h3",
+        "https://localhost:8443/baseline2?a=1&b=1",
+        "-c",
+        "64",
+        "-m",
+        "64",
+        "-t",
+        "64",
+        "-D",
+        "5s"
+      ],
+      "requests_2xx": 17161122,
+      "elapsed": 5.67,
+      "valid_rps": 3026652.91005291,
+      "server_cpu_seconds": 111.67,
+      "udp_sent": 1163871,
+      "udp_received": 1640751,
+      "udp_received_per_request": 0.09560860880774578,
+      "latency": "request     :      111us     20.58ms       915us     3.07ms     5.90ms     1.20ms      1.08ms    91.14%"
+    }
+  ]
+}

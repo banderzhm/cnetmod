@@ -1,0 +1,76 @@
+--- a/src/protocol/quic/loss_detection.cppm
++++ b/src/protocol/quic/loss_detection.cppm
+@@ -87,6 +87,11 @@
+             return std::unexpected(make_error_code(quic_errc::protocol_violation));
+         if (frame.largest_acked != largest_acked_pn)
+             return std::unexpected(make_error_code(quic_errc::frame_encoding_error));
++        // Reject the entire malformed ACK before changing RTT, largest ACK,
++        // flight accounting or node ownership. A later invalid range must not
++        // partially retire packets from the detector alone.
++        if (!valid_ack_ranges(frame, largest_acked_pn))
++            return std::unexpected(make_error_code(quic_errc::frame_encoding_error));
+         if (space_state.largest_acked_pn_ == std::numeric_limits<std::uint64_t>::max() ||
+             largest_acked_pn > space_state.largest_acked_pn_)
+             space_state.largest_acked_pn_ = largest_acked_pn;
+@@ -108,8 +113,6 @@
+         // ACK ranges are descending.  first_ack_range describes the
+         // contiguous range ending at largest_acked; every subsequent gap is
+         // the number of missing packets minus one (RFC 9000 §19.3).
+-        if (frame.first_ack_range > largest_acked_pn)
+-            return std::unexpected(make_error_code(quic_errc::frame_encoding_error));
+         auto range_high = largest_acked_pn;
+         auto range_low = range_high - frame.first_ack_range;
+         auto acknowledge_range = [&](std::uint64_t low, std::uint64_t high)
+@@ -127,11 +130,8 @@
+         acknowledge_range(range_low, range_high);
+         for (const auto& range : frame.ack_ranges)
+         {
+-            if (range_low < range.gap + 2)
+-                return std::unexpected(make_error_code(quic_errc::frame_encoding_error));
+-            range_high = range_low - range.gap - 2;
+-            if (range.ack_range_length > range_high)
+-                return std::unexpected(make_error_code(quic_errc::frame_encoding_error));
++            // The complete range sequence was validated before state changes.
++            range_high = range_low - 2U - range.gap;
+             range_low = range_high - range.ack_range_length;
+             acknowledge_range(range_low, range_high);
+         }
+@@ -298,6 +298,9 @@
+     }
+ 
+ private:
++    [[nodiscard]] static auto valid_ack_ranges(const ack_frame& frame,
++        std::uint64_t largest_acked_pn) noexcept -> bool;
++
+     using clock_type = std::chrono::steady_clock;
+     using duration_type = std::chrono::steady_clock::duration;
+ 
+--- a/src/protocol/quic/loss_detection.cpp
++++ b/src/protocol/quic/loss_detection.cpp
+@@ -8,6 +8,26 @@
+ import :loss_detection;
+ 
+ namespace cnetmod::quic {
++
++auto loss_detector::valid_ack_ranges(const ack_frame& frame,
++    std::uint64_t largest_acked_pn) noexcept -> bool
++{
++    if (frame.first_ack_range > largest_acked_pn)
++        return false;
++    auto range_low = largest_acked_pn - frame.first_ack_range;
++    for (const auto& range : frame.ack_ranges)
++    {
++        // Subtract only after checking both operands. In particular, adding
++        // two to a public ack_range::gap can wrap at UINT64_MAX.
++        if (range_low < 2U || range.gap > range_low - 2U)
++            return false;
++        const auto range_high = range_low - 2U - range.gap;
++        if (range.ack_range_length > range_high)
++            return false;
++        range_low = range_high - range.ack_range_length;
++    }
++    return true;
++}
+ 
+ loss_detector::packet_node_cache::packet_node_cache(const packet_node_cache&) noexcept
+ {

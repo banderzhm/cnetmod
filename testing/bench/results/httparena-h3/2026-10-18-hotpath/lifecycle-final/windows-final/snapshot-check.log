@@ -1,0 +1,2 @@
+Windows open reader denies concurrent destination replace: observed
+snapshot checks: 5 PASS; persistent PermissionError/JSONDecodeError fail closed

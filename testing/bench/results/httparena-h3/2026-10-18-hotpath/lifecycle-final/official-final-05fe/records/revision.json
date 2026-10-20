@@ -1,0 +1,11 @@
+{
+  "commit": "d0d920791a1d226711176df47148b5e98a2f8713",
+  "run_label": "final05fe",
+  "working_tree_modified": true,
+  "working_tree_diff_sha256": "c5606ae3c0a0d0d07c7106c371a3385dc41de2a3c7ce6e3d4edeef48d0845e41",
+  "binary_sha256": "05fe27108dd833f86493aa2d00eefe7efef9df47805be198ef3eacd09042c479",
+  "test_token": "explicitly handed over by user for this serial official retest",
+  "profiles": "cnetmod, agensio and genhttp-ioxide: baseline-h3 and static-h3, three serial official rounds each",
+  "fix": "QUIC stream state and credit accounting, cancellation ownership, bounded HTTP/3 buffering, scheduler and recovery teardown; immutable response headers retained",
+  "resource_sampling": "supplemental /proc RSS once per second; official Docker peaks unchanged"
+}

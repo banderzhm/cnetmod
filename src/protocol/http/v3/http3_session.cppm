@@ -99,14 +99,22 @@ export struct http3_response
     int status{status::ok};
     http_version version{http_version::http_3};
     header_map headers;
+    /// Optional complete immutable QPACK response header block. Build it once
+    /// with qpack_static_response_headers::encode(). `status` must match and
+    /// `headers` must stay empty when this fast path is used.
+    std::shared_ptr<const qpack_static_response_headers> static_headers;
     std::string body;
+    /// Optional immutable buffered body storage. Servers can share preloaded
+    /// content across responses while the session builds the wire image.
+    /// `body`, `shared_body`, and `body_source` are mutually exclusive.
+    std::shared_ptr<const std::string> shared_body;
     /// Explicit opt-in streaming response body.  It is populated only for
     /// `streaming_client_response_handler`; the legacy response API continues
     /// to collect the complete body in `body`.
     std::shared_ptr<request_body_stream> body_stream;
     /// Optional pull-based response body producer. It is explicit so the
     /// legacy `body` response remains allocation-free for small payloads.
-    /// `body` and `body_source` must not be used together.
+    /// `body`, `shared_body`, and `body_source` must not be used together.
     std::shared_ptr<response_body_source> body_source;
     header_map trailers;
     /// Optional resources promised before this response's final HEADERS.
@@ -299,6 +307,12 @@ public:
     /// close handling.
     [[nodiscard]] auto process_peer_unidirectional_stream(stream_id id,
         byte_view bytes) -> task<std::expected<void, std::error_code>>;
+    /// Take the validated prefix length; the caller consumes exactly these bytes.
+    [[nodiscard]] auto take_peer_unidirectional_consumed_bytes(stream_id id) noexcept
+        -> std::size_t;
+    /// Critical stream FIN/RESET is an HTTP/3 application connection error.
+    auto finish_peer_unidirectional_stream(stream_id id) -> task<void>;
+
     /// Internal peer-stream classifier used by the HTTP/3 transport loop.
     /// Returns true after the preface was routed to a WebTransport session.
     [[nodiscard]] auto route_webtransport_stream(stream_id id, byte_view bytes,
@@ -315,6 +329,7 @@ public:
 
 private:
     auto service_peer_stream(stream_id id) -> task<void>;
+    auto cancel_request(stream_id id) -> task<void>;
     quic_connection& conn_;
     server_request_handler handler_;
     async_server_request_handler async_handler_;
@@ -427,6 +442,12 @@ public:
         -> task<std::expected<webtransport_session, std::error_code>>;
     [[nodiscard]] auto process_peer_unidirectional_stream(stream_id id,
         byte_view bytes) -> task<std::expected<void, std::error_code>>;
+    /// Take the validated prefix length; the caller consumes exactly these bytes.
+    [[nodiscard]] auto take_peer_unidirectional_consumed_bytes(stream_id id) noexcept
+        -> std::size_t;
+    /// Critical stream FIN/RESET is an HTTP/3 application connection error.
+    auto finish_peer_unidirectional_stream(stream_id id) -> task<void>;
+
     /// Reports that the mandatory peer control SETTINGS frame has been
     /// consumed and its QPACK limits applied to this connection.
     [[nodiscard]] auto peer_settings_received() const noexcept -> bool;

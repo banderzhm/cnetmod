@@ -1,0 +1,1379 @@
+Start testing: Oct 19 08:25 CST
+----------------------------------------------------------
+5/88 Testing: test_concurrent_containers
+5/88 Test: test_concurrent_containers
+Command: "/tmp/cnetmod-h3-arena-build/testing/tests/test_concurrent_containers"
+Directory: /tmp/cnetmod-h3-arena-build/testing/tests
+"test_concurrent_containers" start time: Oct 19 08:25 CST
+Output:
+----------------------------------------------------------
+[==========] Running 11 test(s).
+[ RUN      ] concurrent_queue_transfers_all_values
+[       OK ] concurrent_queue_transfers_all_values
+[ RUN      ] atomic_hash_map_and_copy_on_write_publish_consistent_values
+[       OK ] atomic_hash_map_and_copy_on_write_publish_consistent_values
+[ RUN      ] atomic_hash_map_bounded_insert_and_cas_eviction
+[       OK ] atomic_hash_map_bounded_insert_and_cas_eviction
+[ RUN      ] concurrent_vector_skip_list_and_accumulator
+[       OK ] concurrent_vector_skip_list_and_accumulator
+[ RUN      ] slot_latch_and_striped_maps_preserve_key_value_semantics
+[       OK ] slot_latch_and_striped_maps_preserve_key_value_semantics
+[ RUN      ] atomic_latch_containers_survive_parallel_read_write_pressure
+[       OK ] atomic_latch_containers_survive_parallel_read_write_pressure
+[ RUN      ] buffer_pool_cross_worker_leases_are_aba_safe
+[       OK ] buffer_pool_cross_worker_leases_are_aba_safe
+[ RUN      ] udp_datagram_buffer_transfers_pooled_or_fallback_storage
+[       OK ] udp_datagram_buffer_transfers_pooled_or_fallback_storage
+[ RUN      ] atomic_hash_map_each_erase_releases_owned_value
+[       OK ] atomic_hash_map_each_erase_releases_owned_value
+[ RUN      ] atomic_hash_map_erase_preserves_concurrent_reader_snapshot
+[       OK ] atomic_hash_map_erase_preserves_concurrent_reader_snapshot
+[ RUN      ] atomic_hash_map_owner_tombstones_support_non_default_values_and_collisions
+[       OK ] atomic_hash_map_owner_tombstones_support_non_default_values_and_collisions
+[==========] 11 test(s) ran.
+[  PASSED  ] 11 test(s).
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"test_concurrent_containers" end time: Oct 19 08:25 CST
+"test_concurrent_containers" time elapsed: 00:00:00
+----------------------------------------------------------
+
+11/88 Testing: test_deadline
+11/88 Test: test_deadline
+Command: "/tmp/cnetmod-h3-arena-build/testing/tests/test_deadline"
+Directory: /tmp/cnetmod-h3-arena-build/testing/tests
+"test_deadline" start time: Oct 19 08:25 CST
+Output:
+----------------------------------------------------------
+[==========] Running 10 test(s).
+[ RUN      ] deadline_constrains_child_budget
+[       OK ] deadline_constrains_child_budget
+[ RUN      ] maximum_relative_deadline_is_unlimited
+[       OK ] maximum_relative_deadline_is_unlimited
+[ RUN      ] cancel_token_retains_first_cancellation_cause
+[       OK ] cancel_token_retains_first_cancellation_cause
+[ RUN      ] with_deadline_expired_budget_normalizes_to_timeout
+[       OK ] with_deadline_expired_budget_normalizes_to_timeout
+[ RUN      ] with_timeout_uses_deadline_cancellation_cause
+[       OK ] with_timeout_uses_deadline_cancellation_cause
+[ RUN      ] with_deadline_factory_owns_a_fresh_cancel_token
+[       OK ] with_deadline_factory_owns_a_fresh_cancel_token
+[ RUN      ] with_deadline_owns_temporary_factory_until_task_destruction
+[       OK ] with_deadline_owns_temporary_factory_until_task_destruction
+[ RUN      ] with_deadline_cancels_underlying_wait
+[       OK ] with_deadline_cancels_underlying_wait
+[ RUN      ] overlapping_timers_keep_independent_completion_ownership
+[       OK ] overlapping_timers_keep_independent_completion_ownership
+[ RUN      ] happy_eyeballs_honors_pre_cancelled_token
+[       OK ] happy_eyeballs_honors_pre_cancelled_token
+[==========] 10 test(s) ran.
+[  PASSED  ] 10 test(s).
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"test_deadline" end time: Oct 19 08:25 CST
+"test_deadline" time elapsed: 00:00:00
+----------------------------------------------------------
+
+12/88 Testing: test_task_group
+12/88 Test: test_task_group
+Command: "/tmp/cnetmod-h3-arena-build/testing/tests/test_task_group"
+Directory: /tmp/cnetmod-h3-arena-build/testing/tests
+"test_task_group" start time: Oct 19 08:25 CST
+Output:
+----------------------------------------------------------
+[==========] Running 2 test(s).
+[ RUN      ] task_group_first_error_cancels_and_joins_children
+[       OK ] task_group_first_error_cancels_and_joins_children
+[ RUN      ] task_group_deadline_cancels_and_joins_children
+[       OK ] task_group_deadline_cancels_and_joins_children
+[==========] 2 test(s) ran.
+[  PASSED  ] 2 test(s).
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_task_group" end time: Oct 19 08:25 CST
+"test_task_group" time elapsed: 00:00:00
+----------------------------------------------------------
+
+13/88 Testing: test_task
+13/88 Test: test_task
+Command: "/tmp/cnetmod-h3-arena-build/testing/tests/test_task"
+Directory: /tmp/cnetmod-h3-arena-build/testing/tests
+"test_task" start time: Oct 19 08:25 CST
+Output:
+----------------------------------------------------------
+[==========] Running 34 test(s).
+[ RUN      ] task_int_basic
+[       OK ] task_int_basic
+[ RUN      ] task_coroutine_frames_are_cache_line_aligned
+[       OK ] task_coroutine_frames_are_cache_line_aligned
+[ RUN      ] task_string_basic
+[       OK ] task_string_basic
+[ RUN      ] task_void_basic
+[       OK ] task_void_basic
+[ RUN      ] task_chained_await
+[       OK ] task_chained_await
+[ RUN      ] task_exception_propagation
+[       OK ] task_exception_propagation
+[ RUN      ] task_void_exception_propagation
+[       OK ] task_void_exception_propagation
+[ RUN      ] task_move_semantics
+[       OK ] task_move_semantics
+[ RUN      ] task_empty_await_is_deterministic
+[       OK ] task_empty_await_is_deterministic
+[ RUN      ] sync_wait_waits_for_asynchronous_completion
+[       OK ] sync_wait_waits_for_asynchronous_completion
+[ RUN      ] starts_on_starts_task_on_target_io_context
+[       OK ] starts_on_starts_task_on_target_io_context
+[ RUN      ] io_context_current_tracks_the_dispatching_loop
+[       OK ] io_context_current_tracks_the_dispatching_loop
+[ RUN      ] resume_on_returns_values_and_exceptions_to_target_context
+[       OK ] resume_on_returns_values_and_exceptions_to_target_context
+[ RUN      ] resume_on_restores_success_and_failure_to_target_io_context
+[       OK ] resume_on_restores_success_and_failure_to_target_io_context
+[ RUN      ] io_scheduler_schedule_resumes_on_target_io_context
+[       OK ] io_scheduler_schedule_resumes_on_target_io_context
+[ RUN      ] io_context_restart_preserves_work_posted_while_stopped
+[       OK ] io_context_restart_preserves_work_posted_while_stopped
+[ RUN      ] blocking_invoke_rethrows_on_requested_io_context
+[       OK ] blocking_invoke_rethrows_on_requested_io_context
+[ RUN      ] pool_post_reports_stopped_completion
+[       OK ] pool_post_reports_stopped_completion
+[ RUN      ] spawn_releases_unstarted_coroutine_when_context_is_destroyed
+[       OK ] spawn_releases_unstarted_coroutine_when_context_is_destroyed
+[ RUN      ] when_all_two_ints
+[       OK ] when_all_two_ints
+[ RUN      ] when_all_three_ints
+[       OK ] when_all_three_ints
+[ RUN      ] when_all_void
+[       OK ] when_all_void
+[ RUN      ] when_all_waits_for_external_resumes
+[       OK ] when_all_waits_for_external_resumes
+[ RUN      ] task_expected_ok
+[       OK ] task_expected_ok
+[ RUN      ] task_expected_error
+[       OK ] task_expected_error
+[ RUN      ] task_nested_co_await_10
+[       OK ] task_nested_co_await_10
+[ RUN      ] task_move_only_type
+[       OK ] task_move_only_type
+[ RUN      ] when_all_mixed_types
+[       OK ] when_all_mixed_types
+[ RUN      ] when_all_exception_propagation
+[       OK ] when_all_exception_propagation
+[ RUN      ] when_all_single_task
+[       OK ] when_all_single_task
+[ RUN      ] guarded_spawn_reports_task_failure_and_contains_observer_failure
+[       OK ] guarded_spawn_reports_task_failure_and_contains_observer_failure
+[ RUN      ] raw_post_node_can_release_its_storage_during_dispatch
+[       OK ] raw_post_node_can_release_its_storage_during_dispatch
+[ RUN      ] raw_post_node_ownership_is_captured_before_callback
+[       OK ] raw_post_node_ownership_is_captured_before_callback
+[ RUN      ] async_mutex_resumes_waiter_on_its_event_loop
+[       OK ] async_mutex_resumes_waiter_on_its_event_loop
+[==========] 34 test(s) ran.
+[  PASSED  ] 34 test(s).
+<end of output>
+Test time =   0.05 sec
+----------------------------------------------------------
+Test Passed.
+"test_task" end time: Oct 19 08:25 CST
+"test_task" time elapsed: 00:00:00
+----------------------------------------------------------
+
+21/88 Testing: test_wait_group
+21/88 Test: test_wait_group
+Command: "/tmp/cnetmod-h3-arena-build/testing/tests/test_wait_group"
+Directory: /tmp/cnetmod-h3-arena-build/testing/tests
+"test_wait_group" start time: Oct 19 08:25 CST
+Output:
+----------------------------------------------------------
+[==========] Running 8 test(s).
+[ RUN      ] wg_initial_count_zero
+[       OK ] wg_initial_count_zero
+[ RUN      ] wg_add_increases_count
+[       OK ] wg_add_increases_count
+[ RUN      ] wg_done_decreases_count
+[       OK ] wg_done_decreases_count
+[ RUN      ] wg_wait_already_zero
+[       OK ] wg_wait_already_zero
+[ RUN      ] wg_add_done_then_wait
+[       OK ] wg_add_done_then_wait
+[ RUN      ] wg_concurrent_done_and_wait
+[       OK ] wg_concurrent_done_and_wait
+[ RUN      ] wg_add_incremental
+[       OK ] wg_add_incremental
+[ RUN      ] wg_multiple_add_values
+[       OK ] wg_multiple_add_values
+[==========] 8 test(s) ran.
+[  PASSED  ] 8 test(s).
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_wait_group" end time: Oct 19 08:25 CST
+"test_wait_group" time elapsed: 00:00:00
+----------------------------------------------------------
+
+44/88 Testing: test_udp_batch
+44/88 Test: test_udp_batch
+Command: "/tmp/cnetmod-h3-arena-build/testing/tests/test_udp_batch"
+Directory: /tmp/cnetmod-h3-arena-build/testing/tests
+"test_udp_batch" start time: Oct 19 08:25 CST
+Output:
+----------------------------------------------------------
+[==========] Running 16 test(s).
+[ RUN      ] udp_batch_preserves_boundaries_and_backend_lifetime
+[       OK ] udp_batch_preserves_boundaries_and_backend_lifetime
+[ RUN      ] udp_batch_wait_honors_deadline_cancellation
+[       OK ] udp_batch_wait_honors_deadline_cancellation
+[ RUN      ] udp_batch_short_burst_does_not_wait_for_full_batch
+[       OK ] udp_batch_short_burst_does_not_wait_for_full_batch
+[ RUN      ] udp_batch_layout_preserves_ipv4_and_ipv6_boundaries
+[       OK ] udp_batch_layout_preserves_ipv4_and_ipv6_boundaries
+[ RUN      ] udp_batch_partial_prefix_and_suffix_error_are_preserved
+[       OK ] udp_batch_partial_prefix_and_suffix_error_are_preserved
+[ RUN      ] udp_batch_cancel_token_preserves_partial_prefix_and_stops_new_submission
+[       OK ] udp_batch_cancel_token_preserves_partial_prefix_and_stops_new_submission
+[ RUN      ] udp_send_prepared_operation_survives_deferred_submission_error
+[       OK ] udp_send_prepared_operation_survives_deferred_submission_error
+[ RUN      ] udp_batch_would_block_enters_async_send_path
+[       OK ] udp_batch_would_block_enters_async_send_path
+[ RUN      ] udp_batch_cancel_token_interrupts_blocked_send_without_draining_peer
+[       OK ] udp_batch_cancel_token_interrupts_blocked_send_without_draining_peer
+[ RUN      ] udp_batch_cancel_token_survives_full_submission_queue_and_reuse
+[       OK ] udp_batch_cancel_token_survives_full_submission_queue_and_reuse
+[ RUN      ] udp_batch_async_first_preserves_prefix_when_suffix_fails
+[       OK ] udp_batch_async_first_preserves_prefix_when_suffix_fails
+[ RUN      ] epoll_directional_waiters_preserve_read_write_cancel_and_hup
+[       OK ] epoll_directional_waiters_preserve_read_write_cancel_and_hup
+[ RUN      ] udp_segmented_batch_retains_native_cork_and_segment_options
+[       OK ] udp_segmented_batch_retains_native_cork_and_segment_options
+[ RUN      ] udp_segmented_batch_fallback_preserves_pending_cancel_full_queue_and_reuse
+[       OK ] udp_segmented_batch_fallback_preserves_pending_cancel_full_queue_and_reuse
+[ RUN      ] udp_segmented_batch_preserves_ipv4_ipv6_tail_empty_peer_and_cap_boundaries
+[       OK ] udp_segmented_batch_preserves_ipv4_ipv6_tail_empty_peer_and_cap_boundaries
+[ RUN      ] udp_segmented_batch_reports_original_prefix_and_preserves_early_cancel
+[       OK ] udp_segmented_batch_reports_original_prefix_and_preserves_early_cancel
+[==========] 16 test(s) ran.
+[  PASSED  ] 16 test(s).
+<end of output>
+Test time =   0.49 sec
+----------------------------------------------------------
+Test Passed.
+"test_udp_batch" end time: Oct 19 08:25 CST
+"test_udp_batch" time elapsed: 00:00:00
+----------------------------------------------------------
+
+47/88 Testing: test_quic_varint
+47/88 Test: test_quic_varint
+Command: "/tmp/cnetmod-h3-arena-build/testing/tests/test_quic_varint"
+Directory: /tmp/cnetmod-h3-arena-build/testing/tests
+"test_quic_varint" start time: Oct 19 08:25 CST
+Output:
+----------------------------------------------------------
+[==========] Running 16 test(s).
+[ RUN      ] quic_varint_encode_zero
+[       OK ] quic_varint_encode_zero
+[ RUN      ] quic_varint_encode_1byte_range
+[       OK ] quic_varint_encode_1byte_range
+[ RUN      ] quic_varint_encode_2byte_range
+[       OK ] quic_varint_encode_2byte_range
+[ RUN      ] quic_varint_encode_4byte_range
+[       OK ] quic_varint_encode_4byte_range
+[ RUN      ] quic_varint_encode_max_valid
+[       OK ] quic_varint_encode_max_valid
+[ RUN      ] quic_varint_encode_exceeds_62bit
+[       OK ] quic_varint_encode_exceeds_62bit
+[ RUN      ] quic_varint_decode_partial_input
+[       OK ] quic_varint_decode_partial_input
+[ RUN      ] quic_varint_roundtrip_random
+Random round-trip tests: 100 passed, 0 failed
+[       OK ] quic_varint_roundtrip_random
+[ RUN      ] quic_varint_all_boundary_values
+[       OK ] quic_varint_all_boundary_values
+[ RUN      ] quic_varint_decode_truncated_2byte_prefix
+[       OK ] quic_varint_decode_truncated_2byte_prefix
+[ RUN      ] quic_varint_decode_truncated_4byte_prefix
+[       OK ] quic_varint_decode_truncated_4byte_prefix
+[ RUN      ] quic_varint_decode_truncated_8byte_prefix
+[       OK ] quic_varint_decode_truncated_8byte_prefix
+[ RUN      ] quic_varint_encode_overflow_error
+[       OK ] quic_varint_encode_overflow_error
+[ RUN      ] quic_varint_encode_to_buffer_success
+[       OK ] quic_varint_encode_to_buffer_success
+[ RUN      ] quic_varint_encode_to_buffer_too_small
+[       OK ] quic_varint_encode_to_buffer_too_small
+[ RUN      ] quic_varint_size_function
+[       OK ] quic_varint_size_function
+[==========] 16 test(s) ran.
+[  PASSED  ] 16 test(s).
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_quic_varint" end time: Oct 19 08:25 CST
+"test_quic_varint" time elapsed: 00:00:00
+----------------------------------------------------------
+
+48/88 Testing: test_quic_frame
+48/88 Test: test_quic_frame
+Command: "/tmp/cnetmod-h3-arena-build/testing/tests/test_quic_frame"
+Directory: /tmp/cnetmod-h3-arena-build/testing/tests
+"test_quic_frame" start time: Oct 19 08:25 CST
+Output:
+----------------------------------------------------------
+[==========] Running 38 test(s).
+[ RUN      ] quic_ping_frame_roundtrip
+[       OK ] quic_ping_frame_roundtrip
+[ RUN      ] quic_ack_frame_with_ranges
+[       OK ] quic_ack_frame_with_ranges
+[ RUN      ] quic_stream_frame_encoding
+[       OK ] quic_stream_frame_encoding
+[ RUN      ] quic_crypto_frame_roundtrip
+[       OK ] quic_crypto_frame_roundtrip
+[ RUN      ] quic_connection_close_frame_decode
+[       OK ] quic_connection_close_frame_decode
+[ RUN      ] quic_path_challenge_roundtrip
+[       OK ] quic_path_challenge_roundtrip
+[ RUN      ] quic_unknown_frame_type_handling
+[       OK ] quic_unknown_frame_type_handling
+[ RUN      ] quic_priority_service_budget_bounds_background_starvation
+[       OK ] quic_priority_service_budget_bounds_background_starvation
+[ RUN      ] quic_shared_send_frame_renders_without_owning_body_copy
+[       OK ] quic_shared_send_frame_renders_without_owning_body_copy
+[ RUN      ] quic_stream_scheduler_preserves_default_fifo_across_payload_strategies
+[       OK ] quic_stream_scheduler_preserves_default_fifo_across_payload_strategies
+[ RUN      ] quic_empty_stream_frame
+[       OK ] quic_empty_stream_frame
+[ RUN      ] quic_large_ack_ranges_list
+[       OK ] quic_large_ack_ranges_list
+[ RUN      ] quic_max_data_frame_encoding
+[       OK ] quic_max_data_frame_encoding
+[ RUN      ] quic_new_connection_id_frame_encoding
+[       OK ] quic_new_connection_id_frame_encoding
+[ RUN      ] quic_padding_frame_encode
+[       OK ] quic_padding_frame_encode
+[ RUN      ] quic_stream_frame_fin_flag_roundtrip
+[       OK ] quic_stream_frame_fin_flag_roundtrip
+[ RUN      ] quic_crypto_frame_large_offset
+[       OK ] quic_crypto_frame_large_offset
+[ RUN      ] quic_handshake_done_frame_roundtrip
+[       OK ] quic_handshake_done_frame_roundtrip
+[ RUN      ] quic_reset_stream_frame_roundtrip
+[       OK ] quic_reset_stream_frame_roundtrip
+[ RUN      ] quic_max_stream_data_frame_roundtrip
+[       OK ] quic_max_stream_data_frame_roundtrip
+[ RUN      ] quic_frame_decode_truncated_data
+[       OK ] quic_frame_decode_truncated_data
+[ RUN      ] quic_frame_ack_eliciting_check
+[       OK ] quic_frame_ack_eliciting_check
+[ RUN      ] quic_frame_probing_check
+[       OK ] quic_frame_probing_check
+[ RUN      ] quic_stop_sending_frame_roundtrip
+[       OK ] quic_stop_sending_frame_roundtrip
+[ RUN      ] quic_data_blocked_frame_roundtrip
+[       OK ] quic_data_blocked_frame_roundtrip
+[ RUN      ] quic_retire_connection_id_frame_roundtrip
+[       OK ] quic_retire_connection_id_frame_roundtrip
+[ RUN      ] quic_datagram_frame_roundtrip
+[       OK ] quic_datagram_frame_roundtrip
+[ RUN      ] quic_datagram_frame_without_length_consumes_packet_tail
+[       OK ] quic_datagram_frame_without_length_consumes_packet_tail
+[ RUN      ] multipath_path_ack_frame_roundtrip
+[       OK ] multipath_path_ack_frame_roundtrip
+[ RUN      ] multipath_path_management_frames_roundtrip
+[       OK ] multipath_path_management_frames_roundtrip
+[ RUN      ] multipath_path_connection_id_frames_roundtrip
+[       OK ] multipath_path_connection_id_frames_roundtrip
+[ RUN      ] multipath_frames_reject_path_ids_above_the_nonce_limit
+[       OK ] multipath_frames_reject_path_ids_above_the_nonce_limit
+[ RUN      ] quic_scheduler_retirement_reclaims_priority_but_preserves_retransmission
+[       OK ] quic_scheduler_retirement_reclaims_priority_but_preserves_retransmission
+[ RUN      ] quic_mixed_send_frame_matches_public_stream_encoding
+[       OK ] quic_mixed_send_frame_matches_public_stream_encoding
+[ RUN      ] quic_mixed_send_frame_prefix_participates_in_alias_equality
+[       OK ] quic_mixed_send_frame_prefix_participates_in_alias_equality
+[ RUN      ] quic_mixed_send_frame_copy_move_clear_retains_only_live_owners
+[       OK ] quic_mixed_send_frame_copy_move_clear_retains_only_live_owners
+[ RUN      ] quic_shared_strategy_never_exports_partial_owned_prefix_or_close
+[       OK ] quic_shared_strategy_never_exports_partial_owned_prefix_or_close
+[ RUN      ] quic_mixed_send_frame_owns_temporary_header_and_prefix
+[       OK ] quic_mixed_send_frame_owns_temporary_header_and_prefix
+[==========] 38 test(s) ran.
+[  PASSED  ] 38 test(s).
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"test_quic_frame" end time: Oct 19 08:25 CST
+"test_quic_frame" time elapsed: 00:00:00
+----------------------------------------------------------
+
+49/88 Testing: test_quic_packet
+49/88 Test: test_quic_packet
+Command: "/tmp/cnetmod-h3-arena-build/testing/tests/test_quic_packet"
+Directory: /tmp/cnetmod-h3-arena-build/testing/tests
+"test_quic_packet" start time: Oct 19 08:25 CST
+Output:
+----------------------------------------------------------
+[==========] Running 34 test(s).
+[ RUN      ] long_header_initial_type_detection
+[       OK ] long_header_initial_type_detection
+[ RUN      ] long_header_handshake_type_detection
+[       OK ] long_header_handshake_type_detection
+[ RUN      ] short_header_1rtt_type_detection
+[       OK ] short_header_1rtt_type_detection
+[ RUN      ] zero_rtt_type_detection
+[       OK ] zero_rtt_type_detection
+[ RUN      ] retry_type_detection
+[       OK ] retry_type_detection
+[ RUN      ] version_negotiation_detection
+[       OK ] version_negotiation_detection
+[ RUN      ] long_header_initial_full_parse
+[       OK ] long_header_initial_full_parse
+[ RUN      ] long_header_handshake_full_parse
+[       OK ] long_header_handshake_full_parse
+[ RUN      ] long_header_initial_with_token
+[       OK ] long_header_initial_with_token
+[ RUN      ] long_header_decode_too_short
+[       OK ] long_header_decode_too_short
+[ RUN      ] long_header_short_header_rejected
+[       OK ] long_header_short_header_rejected
+[ RUN      ] short_header_1rtt_full_parse
+[       OK ] short_header_1rtt_full_parse
+[ RUN      ] short_header_key_phase_bit
+[       OK ] short_header_key_phase_bit
+[ RUN      ] short_header_spin_bit
+[       OK ] short_header_spin_bit
+[ RUN      ] short_header_too_short_rejected
+[       OK ] short_header_too_short_rejected
+[ RUN      ] packet_number_decode_basic_recovery
+[       OK ] packet_number_decode_basic_recovery
+[ RUN      ] packet_number_decode_wraparound
+[       OK ] packet_number_decode_wraparound
+[ RUN      ] packet_number_decode_first_packet
+[       OK ] packet_number_decode_first_packet
+[ RUN      ] packet_number_encode_decode_roundtrip
+[       OK ] packet_number_encode_decode_roundtrip
+[ RUN      ] packet_number_encode_min_bits
+[       OK ] packet_number_encode_min_bits
+[ RUN      ] coalesced_single_initial_packet
+[       OK ] coalesced_single_initial_packet
+[ RUN      ] coalesced_two_long_header_packets
+[       OK ] coalesced_two_long_header_packets
+[ RUN      ] initial_datagram_trailing_padding_is_not_a_short_packet
+[       OK ] initial_datagram_trailing_padding_is_not_a_short_packet
+[ RUN      ] coalesced_long_then_short
+[       OK ] coalesced_long_then_short
+[ RUN      ] coalesced_empty_datagram_rejected
+[       OK ] coalesced_empty_datagram_rejected
+[ RUN      ] long_header_encode_decode_roundtrip
+[       OK ] long_header_encode_decode_roundtrip
+[ RUN      ] short_header_encode_decode_roundtrip
+[       OK ] short_header_encode_decode_roundtrip
+[ RUN      ] empty_input_rejected
+[       OK ] empty_input_rejected
+[ RUN      ] long_header_rejects_connection_id_longer_than_rfc_limit
+[       OK ] long_header_rejects_connection_id_longer_than_rfc_limit
+[ RUN      ] retry_without_integrity_tag_is_rejected
+[       OK ] retry_without_integrity_tag_is_rejected
+[ RUN      ] coalesced_packet_with_truncated_declared_payload_is_rejected
+[       OK ] coalesced_packet_with_truncated_declared_payload_is_rejected
+[ RUN      ] chacha20_header_protection_uses_little_endian_counter
+[       OK ] chacha20_header_protection_uses_little_endian_counter
+[ RUN      ] multipath_payload_nonce_scopes_packet_numbers_by_path_id
+[       OK ] multipath_payload_nonce_scopes_packet_numbers_by_path_id
+[ RUN      ] quic_payload_seals_directly_into_packet_storage
+[       OK ] quic_payload_seals_directly_into_packet_storage
+[==========] 34 test(s) ran.
+[  PASSED  ] 34 test(s).
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"test_quic_packet" end time: Oct 19 08:25 CST
+"test_quic_packet" time elapsed: 00:00:00
+----------------------------------------------------------
+
+50/88 Testing: test_quic_stream
+50/88 Test: test_quic_stream
+Command: "/tmp/cnetmod-h3-arena-build/testing/tests/test_quic_stream"
+Directory: /tmp/cnetmod-h3-arena-build/testing/tests
+"test_quic_stream" start time: Oct 19 08:25 CST
+Output:
+----------------------------------------------------------
+[==========] Running 17 test(s).
+[ RUN      ] quic_stream_fin_cannot_shrink_received_extent
+[       OK ] quic_stream_fin_cannot_shrink_received_extent
+[ RUN      ] quic_stream_reset_cannot_exceed_receive_credit
+[       OK ] quic_stream_reset_cannot_exceed_receive_credit
+[ RUN      ] quic_stream_reset_final_size_is_accounted
+[       OK ] quic_stream_reset_final_size_is_accounted
+[ RUN      ] quic_stream_out_of_order_gap_is_not_readable
+[       OK ] quic_stream_out_of_order_gap_is_not_readable
+[ RUN      ] quic_stream_duplicate_fin_is_idempotent
+[       OK ] quic_stream_duplicate_fin_is_idempotent
+[ RUN      ] quic_stream_initial_peer_send_credit_can_be_zero
+[       OK ] quic_stream_initial_peer_send_credit_can_be_zero
+[ RUN      ] quic_stream_initial_peer_send_credit_can_exceed_fallback
+[       OK ] quic_stream_initial_peer_send_credit_can_exceed_fallback
+[ RUN      ] quic_stream_public_send_and_close_remain_lazy
+[       OK ] quic_stream_public_send_and_close_remain_lazy
+[ RUN      ] quic_stream_empty_send_preserves_local_close_behavior
+[       OK ] quic_stream_empty_send_preserves_local_close_behavior
+[ RUN      ] quic_retired_stream_history_coalesces_without_reopening_old_ids
+[       OK ] quic_retired_stream_history_coalesces_without_reopening_old_ids
+[ RUN      ] quic_retired_stream_history_preserves_gaps_and_merges_out_of_order
+[       OK ] quic_retired_stream_history_preserves_gaps_and_merges_out_of_order
+[ RUN      ] quic_stream_reset_duplicates_preserve_credit_and_final_size
+[       OK ] quic_stream_reset_duplicates_preserve_credit_and_final_size
+[ RUN      ] quic_stream_abandoned_receive_accepts_final_size_without_buffering
+[       OK ] quic_stream_abandoned_receive_accepts_final_size_without_buffering
+[ RUN      ] quic_stream_unidirectional_has_only_one_open_direction
+[       OK ] quic_stream_unidirectional_has_only_one_open_direction
+[ RUN      ] quic_stream_abandon_after_fin_closes_unconsumed_receive_direction
+[       OK ] quic_stream_abandon_after_fin_closes_unconsumed_receive_direction
+[ RUN      ] quic_connection_stop_joins_a_backpressured_kernel_send
+[       OK ] quic_connection_stop_joins_a_backpressured_kernel_send
+[ RUN      ] posted_resource_cleanup_separates_dispatch_from_discard
+[       OK ] posted_resource_cleanup_separates_dispatch_from_discard
+[==========] 17 test(s) ran.
+[  PASSED  ] 17 test(s).
+<end of output>
+Test time =   0.08 sec
+----------------------------------------------------------
+Test Passed.
+"test_quic_stream" end time: Oct 19 08:25 CST
+"test_quic_stream" time elapsed: 00:00:00
+----------------------------------------------------------
+
+51/88 Testing: test_quic_loss_detection
+51/88 Test: test_quic_loss_detection
+Command: "/tmp/cnetmod-h3-arena-build/testing/tests/test_quic_loss_detection"
+Directory: /tmp/cnetmod-h3-arena-build/testing/tests
+"test_quic_loss_detection" start time: Oct 19 08:25 CST
+Output:
+----------------------------------------------------------
+[==========] Running 30 test(s).
+[ RUN      ] loss_detector_malformed_ack_ranges_preserve_flight_rtt_pto_and_recovery
+[       OK ] loss_detector_malformed_ack_ranges_preserve_flight_rtt_pto_and_recovery
+[ RUN      ] loss_detector_ack_range_zero_boundary_duplicate_and_stale_ack
+[       OK ] loss_detector_ack_range_zero_boundary_duplicate_and_stale_ack
+[ RUN      ] loss_detector_rtt_initialization
+[       OK ] loss_detector_rtt_initialization
+[ RUN      ] loss_detector_rtt_multiple_samples
+[       OK ] loss_detector_rtt_multiple_samples
+[ RUN      ] loss_detector_pto_duration_basic
+[       OK ] loss_detector_pto_duration_basic
+[ RUN      ] loss_detector_pto_increases_with_rtt_var
+[       OK ] loss_detector_pto_increases_with_rtt_var
+[ RUN      ] loss_detector_packet_sent_tracking
+[       OK ] loss_detector_packet_sent_tracking
+[ RUN      ] loss_detector_ack_received_processing
+[       OK ] loss_detector_ack_received_processing
+[ RUN      ] loss_detector_ack_range_may_include_ack_only_packet
+[       OK ] loss_detector_ack_range_may_include_ack_only_packet
+[ RUN      ] loss_detector_rejects_ack_for_unsent_packet
+[       OK ] loss_detector_rejects_ack_for_unsent_packet
+[ RUN      ] loss_detector_no_loss_on_immediate_ack
+[       OK ] loss_detector_no_loss_on_immediate_ack
+[ RUN      ] loss_detector_pn_space_isolation
+[       OK ] loss_detector_pn_space_isolation
+[ RUN      ] loss_detector_discarded_packet_space_clears_pto_and_bytes
+[       OK ] loss_detector_discarded_packet_space_clears_pto_and_bytes
+[ RUN      ] loss_detector_rtt_sample_fields
+[       OK ] loss_detector_rtt_sample_fields
+[ RUN      ] quic_recovery_controller_removes_acknowledged_pto_aliases
+[       OK ] quic_recovery_controller_removes_acknowledged_pto_aliases
+[ RUN      ] quic_recovery_controller_emits_lost_frames
+[       OK ] quic_recovery_controller_emits_lost_frames
+[ RUN      ] quic_recovery_malformed_ack_keeps_owner_and_followup_ack_releases_it
+[       OK ] quic_recovery_malformed_ack_keeps_owner_and_followup_ack_releases_it
+[ RUN      ] quic_recovery_shared_pto_alias_releases_body_after_original_ack
+[       OK ] quic_recovery_shared_pto_alias_releases_body_after_original_ack
+[ RUN      ] quic_recovery_repeated_bursts_release_acknowledged_shared_bodies
+[       OK ] quic_recovery_repeated_bursts_release_acknowledged_shared_bodies
+[ RUN      ] quic_recovery_recycled_loss_nodes_transfer_body_ownership
+[       OK ] quic_recovery_recycled_loss_nodes_transfer_body_ownership
+[ RUN      ] quic_recovery_discard_releases_shared_bodies_and_reuses_space
+[       OK ] quic_recovery_discard_releases_shared_bodies_and_reuses_space
+[ RUN      ] quic_recovery_copy_and_move_keep_live_packets_and_empty_source_caches
+[       OK ] quic_recovery_copy_and_move_keep_live_packets_and_empty_source_caches
+[ RUN      ] quic_recovery_lost_pmtu_probe_preserves_window_and_releases_flight
+[       OK ] quic_recovery_lost_pmtu_probe_preserves_window_and_releases_flight
+[ RUN      ] quic_recovery_mixed_pmtu_and_ordinary_loss_still_reduces_window
+[       OK ] quic_recovery_mixed_pmtu_and_ordinary_loss_still_reduces_window
+[ RUN      ] quic_recovery_pmtu_probe_pto_cleanup_preserves_window
+[       OK ] quic_recovery_pmtu_probe_pto_cleanup_preserves_window
+[ RUN      ] quic_recovery_pmtu_pto_cleanup_keeps_ordinary_datagram_loss_response
+[       OK ] quic_recovery_pmtu_pto_cleanup_keeps_ordinary_datagram_loss_response
+[ RUN      ] quic_recovery_lost_pmtu_probe_preserves_reliable_frame_retransmission
+[       OK ] quic_recovery_lost_pmtu_probe_preserves_reliable_frame_retransmission
+[ RUN      ] quic_recovery_mixed_pto_alias_releases_owner_after_original_ack
+[       OK ] quic_recovery_mixed_pto_alias_releases_owner_after_original_ack
+[ RUN      ] quic_recovery_mixed_loss_event_owns_complete_wire_until_released
+[       OK ] quic_recovery_mixed_loss_event_owns_complete_wire_until_released
+[ RUN      ] quic_recovery_mixed_discard_and_destruction_release_all_owners
+[       OK ] quic_recovery_mixed_discard_and_destruction_release_all_owners
+[==========] 30 test(s) ran.
+[  PASSED  ] 30 test(s).
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"test_quic_loss_detection" end time: Oct 19 08:25 CST
+"test_quic_loss_detection" time elapsed: 00:00:00
+----------------------------------------------------------
+
+52/88 Testing: test_quic_congestion
+52/88 Test: test_quic_congestion
+Command: "/tmp/cnetmod-h3-arena-build/testing/tests/test_quic_congestion"
+Directory: /tmp/cnetmod-h3-arena-build/testing/tests
+"test_quic_congestion" start time: Oct 19 08:25 CST
+Output:
+----------------------------------------------------------
+[==========] Running 28 test(s).
+[ RUN      ] congestion_controller_initial_cwnd
+[       OK ] congestion_controller_initial_cwnd
+[ RUN      ] congestion_controller_initial_ssthresh
+[       OK ] congestion_controller_initial_ssthresh
+[ RUN      ] congestion_controller_initial_pacing_rate
+[       OK ] congestion_controller_initial_pacing_rate
+[ RUN      ] congestion_controller_can_send_below_cwnd
+[       OK ] congestion_controller_can_send_below_cwnd
+[ RUN      ] congestion_controller_can_send_at_cwnd
+[       OK ] congestion_controller_can_send_at_cwnd
+[ RUN      ] congestion_controller_on_packet_sent
+[       OK ] congestion_controller_on_packet_sent
+[ RUN      ] congestion_controller_on_packet_acked
+[       OK ] congestion_controller_on_packet_acked
+[ RUN      ] congestion_controller_discarded_packets_only_release_flight_accounting
+[       OK ] congestion_controller_discarded_packets_only_release_flight_accounting
+[ RUN      ] congestion_controller_congestion_event_no_crash
+[       OK ] congestion_controller_congestion_event_no_crash
+[ RUN      ] congestion_controller_multiple_congestion_events
+[       OK ] congestion_controller_multiple_congestion_events
+[ RUN      ] congestion_controller_recovery_re_entry_prevention
+[       OK ] congestion_controller_recovery_re_entry_prevention
+[ RUN      ] congestion_controller_cwnd_positive
+[       OK ] congestion_controller_cwnd_positive
+[ RUN      ] cubic_reduces_window_and_preserves_minimum
+[       OK ] cubic_reduces_window_and_preserves_minimum
+[ RUN      ] cubic_congestion_event_does_not_reduce_twice_during_recovery
+[       OK ] cubic_congestion_event_does_not_reduce_twice_during_recovery
+[ RUN      ] congestion_controller_selects_configured_cubic_without_heap_polymorphism
+[       OK ] congestion_controller_selects_configured_cubic_without_heap_polymorphism
+[ RUN      ] congestion_controller_uses_cubic_as_the_default
+[       OK ] congestion_controller_uses_cubic_as_the_default
+[ RUN      ] bbr_selects_model_based_controller_and_tracks_acknowledgements
+[       OK ] bbr_selects_model_based_controller_and_tracks_acknowledgements
+[ RUN      ] bbr_loss_keeps_a_safe_send_window
+[       OK ] bbr_loss_keeps_a_safe_send_window
+[ RUN      ] congestion_pacing_tracks_rtt
+[       OK ] congestion_pacing_tracks_rtt
+[ RUN      ] congestion_consecutive_losses_release_flight_during_recovery
+[       OK ] congestion_consecutive_losses_release_flight_during_recovery
+[ RUN      ] congestion_ceiling_does_not_change_legacy_initial_window
+[       OK ] congestion_ceiling_does_not_change_legacy_initial_window
+[ RUN      ] congestion_validated_mds_growth_preserves_mature_window_and_flight
+[       OK ] congestion_validated_mds_growth_preserves_mature_window_and_flight
+[ RUN      ] congestion_large_validated_mds_sets_two_packet_floor_without_erasing_flight
+[       OK ] congestion_large_validated_mds_sets_two_packet_floor_without_erasing_flight
+[ RUN      ] congestion_loss_floor_tracks_ack_validated_mds_for_each_algorithm
+[       OK ] congestion_loss_floor_tracks_ack_validated_mds_for_each_algorithm
+[ RUN      ] congestion_reno_ca_growth_uses_validated_mds
+[       OK ] congestion_reno_ca_growth_uses_validated_mds
+[ RUN      ] quic_recovery_validated_mds_is_path_local
+[       OK ] quic_recovery_validated_mds_is_path_local
+[ RUN      ] congestion_first_validated_probe_can_be_below_legacy_initial_mss
+[       OK ] congestion_first_validated_probe_can_be_below_legacy_initial_mss
+[ RUN      ] congestion_validated_mds_rejects_out_of_range_inputs_without_mutation
+[       OK ] congestion_validated_mds_rejects_out_of_range_inputs_without_mutation
+[==========] 28 test(s) ran.
+[  PASSED  ] 28 test(s).
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_quic_congestion" end time: Oct 19 08:25 CST
+"test_quic_congestion" time elapsed: 00:00:00
+----------------------------------------------------------
+
+53/88 Testing: test_quic_early_data
+53/88 Test: test_quic_early_data
+Command: "/tmp/cnetmod-h3-arena-build/testing/tests/test_quic_early_data"
+Directory: /tmp/cnetmod-h3-arena-build/testing/tests
+"test_quic_early_data" start time: Oct 19 08:25 CST
+Output:
+----------------------------------------------------------
+[==========] Running 12 test(s).
+[ RUN      ] early_data_replay_cache_consumes_ticket_once
+[       OK ] early_data_replay_cache_consumes_ticket_once
+[ RUN      ] early_data_replay_cache_rejects_expired_and_evicts
+[       OK ] early_data_replay_cache_rejects_expired_and_evicts
+[ RUN      ] early_data_replay_cache_consumes_concurrently_once
+[       OK ] early_data_replay_cache_consumes_concurrently_once
+[ RUN      ] server_ticket_callbacks_require_shared_replay_cache
+[       OK ] server_ticket_callbacks_require_shared_replay_cache
+[ RUN      ] http3_server_requires_explicit_early_data_context
+[       OK ] http3_server_requires_explicit_early_data_context
+[ RUN      ] http3_server_inbox_limits_require_bounded_nonzero_values
+[       OK ] http3_server_inbox_limits_require_bounded_nonzero_values
+[ RUN      ] http3_server_idle_timeout_rejects_only_negative_durations
+[       OK ] http3_server_idle_timeout_rejects_only_negative_durations
+[ RUN      ] http3_server_udp_payload_size_enforces_quic_datagram_bounds
+[       OK ] http3_server_udp_payload_size_enforces_quic_datagram_bounds
+[ RUN      ] application_key_update_requires_authenticated_1rtt_secrets
+[       OK ] application_key_update_requires_authenticated_1rtt_secrets
+[ RUN      ] multipath_transport_parameter_roundtrip_is_capability_only
+[       OK ] multipath_transport_parameter_roundtrip_is_capability_only
+[ RUN      ] early_data_recovery_extracts_only_unacknowledged_work
+[       OK ] early_data_recovery_extracts_only_unacknowledged_work
+[ RUN      ] early_data_retry_deduplicates_pto_and_preserves_ordinary_queue
+[       OK ] early_data_retry_deduplicates_pto_and_preserves_ordinary_queue
+[==========] 12 test(s) ran.
+[  PASSED  ] 12 test(s).
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"test_quic_early_data" end time: Oct 19 08:25 CST
+"test_quic_early_data" time elapsed: 00:00:00
+----------------------------------------------------------
+
+54/88 Testing: test_http3_qpack
+54/88 Test: test_http3_qpack
+Command: "/tmp/cnetmod-h3-arena-build/testing/tests/test_http3_qpack"
+Directory: /tmp/cnetmod-h3-arena-build/testing/tests
+"test_http3_qpack" start time: Oct 19 08:25 CST
+Output:
+----------------------------------------------------------
+[==========] Running 19 test(s).
+[ RUN      ] qpack_static_table_is_rfc9204_appendix_a
+[       OK ] qpack_static_table_is_rfc9204_appendix_a
+[ RUN      ] qpack_static_and_literal_header_block_round_trip
+[       OK ] qpack_static_and_literal_header_block_round_trip
+[ RUN      ] qpack_dynamic_indexed_header_block_ric_base_and_ack
+[       OK ] qpack_dynamic_indexed_header_block_ric_base_and_ack
+[ RUN      ] qpack_dynamic_header_blocks_remain_decodable_after_acknowledgement
+[       OK ] qpack_dynamic_header_blocks_remain_decodable_after_acknowledgement
+[ RUN      ] qpack_decoder_applies_local_maximum_table_capacity
+[       OK ] qpack_decoder_applies_local_maximum_table_capacity
+[ RUN      ] qpack_acknowledged_entries_stay_pinned_until_each_section_ack
+[       OK ] qpack_acknowledged_entries_stay_pinned_until_each_section_ack
+[ RUN      ] qpack_static_section_has_zero_required_insert_count_after_dynamic_use
+[       OK ] qpack_static_section_has_zero_required_insert_count_after_dynamic_use
+[ RUN      ] qpack_small_table_does_not_evict_an_insert_in_the_same_section
+[       OK ] qpack_small_table_does_not_evict_an_insert_in_the_same_section
+[ RUN      ] qpack_section_ack_releases_only_the_oldest_section_on_a_stream
+[       OK ] qpack_section_ack_releases_only_the_oldest_section_on_a_stream
+[ RUN      ] qpack_huffman_strings_round_trip
+[       OK ] qpack_huffman_strings_round_trip
+[ RUN      ] qpack_encoder_and_decoder_stream_instructions
+[       OK ] qpack_encoder_and_decoder_stream_instructions
+[ RUN      ] qpack_static_response_headers_round_trip
+[       OK ] qpack_static_response_headers_round_trip
+[ RUN      ] qpack_rejects_header_block_that_requires_unreceived_dynamic_entries
+[       OK ] qpack_rejects_header_block_that_requires_unreceived_dynamic_entries
+[ RUN      ] qpack_unblocks_retained_header_block_and_acknowledges_once
+[       OK ] qpack_unblocks_retained_header_block_and_acknowledges_once
+[ RUN      ] qpack_enforces_blocked_stream_limit_and_cancellation
+[       OK ] qpack_enforces_blocked_stream_limit_and_cancellation
+[ RUN      ] qpack_blocked_cancellation_is_idempotent_and_releases_slot
+[       OK ] qpack_blocked_cancellation_is_idempotent_and_releases_slot
+[ RUN      ] qpack_fragmented_unfinished_literal_has_a_table_derived_bound
+[       OK ] qpack_fragmented_unfinished_literal_has_a_table_derived_bound
+[ RUN      ] qpack_complete_instruction_batch_is_not_limited_by_total_bytes
+[       OK ] qpack_complete_instruction_batch_is_not_limited_by_total_bytes
+[ RUN      ] qpack_decoder_stream_rejects_an_unbounded_integer_prefix
+[       OK ] qpack_decoder_stream_rejects_an_unbounded_integer_prefix
+[==========] 19 test(s) ran.
+[  PASSED  ] 19 test(s).
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_http3_qpack" end time: Oct 19 08:25 CST
+"test_http3_qpack" time elapsed: 00:00:00
+----------------------------------------------------------
+
+55/88 Testing: test_http3_frame
+55/88 Test: test_http3_frame
+Command: "/tmp/cnetmod-h3-arena-build/testing/tests/test_http3_frame"
+Directory: /tmp/cnetmod-h3-arena-build/testing/tests
+"test_http3_frame" start time: Oct 19 08:25 CST
+Output:
+----------------------------------------------------------
+[==========] Running 29 test(s).
+[ RUN      ] http3_data_frame_roundtrip
+[       OK ] http3_data_frame_roundtrip
+[ RUN      ] http3_async_server_handler_contract
+[       OK ] http3_async_server_handler_contract
+[ RUN      ] http3_async_server_handler_can_share_buffered_response_body
+[       OK ] http3_async_server_handler_can_share_buffered_response_body
+[ RUN      ] webtransport_async_server_handler_contract
+[       OK ] webtransport_async_server_handler_contract
+[ RUN      ] http3_headers_frame_with_qpack
+[       OK ] http3_headers_frame_with_qpack
+[ RUN      ] http3_settings_frame_multi_entries
+[       OK ] http3_settings_frame_multi_entries
+[ RUN      ] http3_goaway_frame_decode
+[       OK ] http3_goaway_frame_decode
+[ RUN      ] http3_max_push_id_encode
+[       OK ] http3_max_push_id_encode
+[ RUN      ] http3_frame_varint_length_decoding
+[       OK ] http3_frame_varint_length_decoding
+[ RUN      ] http3_cancel_push_frame
+[       OK ] http3_cancel_push_frame
+[ RUN      ] http3_push_promise_frame
+[       OK ] http3_push_promise_frame
+[ RUN      ] http3_empty_data_frame
+[       OK ] http3_empty_data_frame
+[ RUN      ] http3_settings_single_entry
+[       OK ] http3_settings_single_entry
+[ RUN      ] http3_frame_type_variants
+[       OK ] http3_frame_type_variants
+[ RUN      ] http3_goaway_no_error
+[       OK ] http3_goaway_no_error
+[ RUN      ] http3_settings_reject_duplicate_identifier
+[       OK ] http3_settings_reject_duplicate_identifier
+[ RUN      ] http3_priority_update_frame_roundtrip
+[       OK ] http3_priority_update_frame_roundtrip
+[ RUN      ] http3_priority_field_rejects_invalid_urgency
+[       OK ] http3_priority_field_rejects_invalid_urgency
+[ RUN      ] http3_request_priority_contract
+[       OK ] http3_request_priority_contract
+[ RUN      ] http3_settings_h3_datagram_roundtrip
+[       OK ] http3_settings_h3_datagram_roundtrip
+[ RUN      ] http3_settings_extended_connect_roundtrip
+[       OK ] http3_settings_extended_connect_roundtrip
+[ RUN      ] http3_settings_enable_webtransport_roundtrip
+[       OK ] http3_settings_enable_webtransport_roundtrip
+[ RUN      ] http3_settings_webtransport_max_sessions_roundtrip
+[       OK ] http3_settings_webtransport_max_sessions_roundtrip
+[ RUN      ] http3_datagram_context_id_roundtrip
+[       OK ] http3_datagram_context_id_roundtrip
+[ RUN      ] webtransport_extended_connect_request_shape
+[       OK ] webtransport_extended_connect_request_shape
+[ RUN      ] webtransport_stream_prefaces_roundtrip_and_validate_session_id
+[       OK ] webtransport_stream_prefaces_roundtrip_and_validate_session_id
+[ RUN      ] http3_frame_rejects_truncated_varint_length
+[       OK ] http3_frame_rejects_truncated_varint_length
+[ RUN      ] http3_goaway_rejects_trailing_payload
+[       OK ] http3_goaway_rejects_trailing_payload
+[ RUN      ] http3_unknown_extension_frame_preserves_payload_and_consumed_length
+[       OK ] http3_unknown_extension_frame_preserves_payload_and_consumed_length
+[==========] 29 test(s) ran.
+[  PASSED  ] 29 test(s).
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"test_http3_frame" end time: Oct 19 08:25 CST
+"test_http3_frame" time elapsed: 00:00:00
+----------------------------------------------------------
+
+62/88 Testing: quic_pmtu_deadline_interval
+62/88 Test: quic_pmtu_deadline_interval
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/quic_pmtu_deadline.py" "/tmp/cnetmod-h3-arena-build/bin/quic_pmtu_deadline_server" "--scenario" "interval" "--helper-dir" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"quic_pmtu_deadline_interval" start time: Oct 19 08:25 CST
+Output:
+----------------------------------------------------------
+{"aioquic_version": "1.7.0", "command": ["/tmp/cnetmod-h3-arena-build/bin/quic_pmtu_deadline_server", "--port", "53227", "--cert", "/tmp/quic-pmtu-deadline-1p6ksm8g/cert.pem", "--key", "/tmp/quic-pmtu-deadline-1p6ksm8g/key.pem", "--listening-report", "/tmp/quic-pmtu-deadline-1p6ksm8g/listening.txt", "--result-report", "/tmp/quic-pmtu-deadline-1p6ksm8g/failure.txt", "--initial-delay-ms", "0", "--interval-ms", "200"], "connected_at": 744.948391729, "driver_sha256": "0a28d27d12edc2a3d0ea94662b8cb3fb5d980494397d50fc65d59852b3a74e9b", "fixture_source_sha256": "3d46358d5c7808cc672bf143bd17387b9a9a14657690cc5e32801ff23dceabc4", "measurement": {"ack_to_second_ms": 200.28038500004186, "actual_pings": 33, "first_after_connected_ms": 0.13805799994770496, "first_after_traffic_start_ms": 0.1372550000269257, "first_after_traffic_stop_ms": -661.6260839999768, "first_probe": {"action": "forward", "at": 744.948529787, "bytes": 1328, "decoded": true, "direction": "server", "frames": {"acks": [[5, 5]], "datagrams": [], "kinds": [2, 1, 24, 30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "streams": []}, "pn": 0}, "first_probe_ack_forwarded": {"action": "forward", "at": 744.950000254, "bytes": 33, "decoded": true, "direction": "client", "frames": {"acks": [[0, 1]], "datagrams": [], "kinds": [2], "streams": []}, "pn": 7}, "max_ping_gap_ms": 21.133343000087734, "second_probe": {"action": "forward", "at": 745.150280639, "bytes": 1452, "decoded": true, "direction": "server", "frames": {"acks": [], "datagrams": [], "kinds": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "streams": []}, "pn": 11}}, "parser_sha256": "7341a99b0ee4cd459b996d4d300a60907e729f198a028a2180017e8a4e1c99f8", "peer": "stock installed aioquic", "proxy_errors": [], "scenario": "interval", "server_exit": -15, "server_sha256": "e3f2d47f70430b3a2392897b26adac76ab7d48f5cab0b831e63fc1388bdf0f93", "source_sha256": "a3015adadffaa7b39fe65715fce4df212c59249d63ebbd33a453bef83b41b8ac", "status": "passed", "traffic": {"start": 744.948392532, "stop": 745.610155871}}
+<end of output>
+Test time =   1.40 sec
+----------------------------------------------------------
+Test Passed.
+"quic_pmtu_deadline_interval" end time: Oct 19 08:25 CST
+"quic_pmtu_deadline_interval" time elapsed: 00:00:01
+----------------------------------------------------------
+
+63/88 Testing: quic_pmtu_deadline_initial
+63/88 Test: quic_pmtu_deadline_initial
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/quic_pmtu_deadline.py" "/tmp/cnetmod-h3-arena-build/bin/quic_pmtu_deadline_server" "--scenario" "initial" "--helper-dir" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"quic_pmtu_deadline_initial" start time: Oct 19 08:25 CST
+Output:
+----------------------------------------------------------
+{"aioquic_version": "1.7.0", "command": ["/tmp/cnetmod-h3-arena-build/bin/quic_pmtu_deadline_server", "--port", "36595", "--cert", "/tmp/quic-pmtu-deadline-n908r4b1/cert.pem", "--key", "/tmp/quic-pmtu-deadline-n908r4b1/key.pem", "--listening-report", "/tmp/quic-pmtu-deadline-n908r4b1/listening.txt", "--result-report", "/tmp/quic-pmtu-deadline-n908r4b1/failure.txt", "--initial-delay-ms", "200", "--interval-ms", "200"], "connected_at": 746.38748788, "driver_sha256": "0a28d27d12edc2a3d0ea94662b8cb3fb5d980494397d50fc65d59852b3a74e9b", "fixture_source_sha256": "3d46358d5c7808cc672bf143bd17387b9a9a14657690cc5e32801ff23dceabc4", "measurement": {"ack_to_second_ms": 200.36071499998798, "actual_pings": 33, "first_after_connected_ms": 200.43245700003354, "first_after_traffic_start_ms": 200.43183999996472, "first_after_traffic_stop_ms": -460.95025399995393, "first_probe": {"action": "forward", "at": 746.587920337, "bytes": 1328, "decoded": true, "direction": "server", "frames": {"acks": [], "datagrams": [], "kinds": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "streams": []}, "pn": 11}, "first_probe_ack_forwarded": {"action": "forward", "at": 746.590598258, "bytes": 32, "decoded": true, "direction": "client", "frames": {"acks": [[0, 12]], "datagrams": [], "kinds": [2], "streams": []}, "pn": 18}, "max_ping_gap_ms": 21.754935000103615, "second_probe": {"action": "forward", "at": 746.790958973, "bytes": 1452, "decoded": true, "direction": "server", "frames": {"acks": [], "datagrams": [], "kinds": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "streams": []}, "pn": 23}}, "parser_sha256": "7341a99b0ee4cd459b996d4d300a60907e729f198a028a2180017e8a4e1c99f8", "peer": "stock installed aioquic", "proxy_errors": [], "scenario": "initial", "server_exit": -15, "server_sha256": "e3f2d47f70430b3a2392897b26adac76ab7d48f5cab0b831e63fc1388bdf0f93", "source_sha256": "a3015adadffaa7b39fe65715fce4df212c59249d63ebbd33a453bef83b41b8ac", "status": "passed", "traffic": {"start": 746.387488497, "stop": 747.048870591}}
+<end of output>
+Test time =   1.45 sec
+----------------------------------------------------------
+Test Passed.
+"quic_pmtu_deadline_initial" end time: Oct 19 08:25 CST
+"quic_pmtu_deadline_initial" time elapsed: 00:00:01
+----------------------------------------------------------
+
+64/88 Testing: quic_datagram_cc_admission
+64/88 Test: quic_datagram_cc_admission
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/quic_datagram_cc.py" "/tmp/cnetmod-h3-arena-build/bin/quic_datagram_cc_server" "--scenario" "admission"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"quic_datagram_cc_admission" start time: Oct 19 08:25 CST
+Output:
+----------------------------------------------------------
+{"admission": {"ack_recovery_marker": true, "burst_report": {"accepted": 64, "elapsed_us": 72, "first_recovery_deadline_us": 29345, "payload_bytes": 1100}, "cwnd_conservative_upper_bound": 17447, "held_packets": 3, "overflow": false, "prior_server_udp_bytes": 2727, "wire_datagram_packets": 13, "wire_ids": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], "wire_udp_bytes": 14716}, "aioquic_version": "1.7.0", "command": ["/tmp/cnetmod-h3-arena-build/bin/quic_datagram_cc_server", "--port", "45251", "--cert", "/tmp/quic-datagram-cc-jea2613d/cert.pem", "--key", "/tmp/quic-datagram-cc-jea2613d/key.pem", "--listening-report", "/tmp/quic-datagram-cc-jea2613d/listening.txt", "--ready-report", "/tmp/quic-datagram-cc-jea2613d/ready.txt", "--burst-report", "/tmp/quic-datagram-cc-jea2613d/burst.json", "--result-report", "/tmp/quic-datagram-cc-jea2613d/failure.txt"], "driver_sha256": "f718e565948194f363b3050b993f5030bbc7aa351427cc010c209fce20701097", "expect": "pass", "peer_aead": "unmodified installed aioquic", "proxy_errors": [], "scenario": "admission", "server_exit_code": -15, "server_sha256": "706d53c1974e74c96c0401cc7cdad2870fe98fca70bd5a2e9bec7227c4768545", "status": "passed"}
+<end of output>
+Test time =   0.70 sec
+----------------------------------------------------------
+Test Passed.
+"quic_datagram_cc_admission" end time: Oct 19 08:25 CST
+"quic_datagram_cc_admission" time elapsed: 00:00:00
+----------------------------------------------------------
+
+65/88 Testing: quic_datagram_cc_pto
+65/88 Test: quic_datagram_cc_pto
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/quic_datagram_cc.py" "/tmp/cnetmod-h3-arena-build/bin/quic_datagram_cc_server" "--scenario" "pto"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"quic_datagram_cc_pto" start time: Oct 19 08:25 CST
+Output:
+----------------------------------------------------------
+{"aioquic_version": "1.7.0", "command": ["/tmp/cnetmod-h3-arena-build/bin/quic_datagram_cc_server", "--port", "44472", "--cert", "/tmp/quic-datagram-cc-p3ce8lkv/cert.pem", "--key", "/tmp/quic-datagram-cc-p3ce8lkv/key.pem", "--listening-report", "/tmp/quic-datagram-cc-p3ce8lkv/listening.txt", "--ready-report", "/tmp/quic-datagram-cc-p3ce8lkv/ready.txt", "--burst-report", "/tmp/quic-datagram-cc-p3ce8lkv/burst.json", "--result-report", "/tmp/quic-datagram-cc-p3ce8lkv/failure.txt"], "driver_sha256": "f718e565948194f363b3050b993f5030bbc7aa351427cc010c209fce20701097", "expect": "pass", "peer_aead": "unmodified installed aioquic", "proxy_errors": [], "pto": {"complete_body_bytes": 262144, "complete_body_sha256": "b3bc55b2b3c1738327c7c1ed4b8897cb8489b1d7cd19b3127c25b283cc3c441b", "fin": true, "held_packets": 3, "received_before_ack_release": 14848, "repeat": {"frame": {"fin": false, "length": 512, "offset": 13312, "sha256": "9ea2ca99172f8143d19673eb288cb607ce2e87f09914569ac1285981dcb8803c", "stream": 8}, "original": {"action": "forward", "at": 748.277441713, "bytes": 547, "direction": "server", "frames": {"datagrams": [], "kinds": [14], "streams": [{"fin": false, "length": 512, "offset": 13312, "sha256": "9ea2ca99172f8143d19673eb288cb607ce2e87f09914569ac1285981dcb8803c", "stream": 8}]}, "phase": "pto", "pn": 32}, "repeat": {"action": "forward", "at": 748.305794405, "bytes": 1071, "direction": "server", "frames": {"datagrams": [], "kinds": [1, 18, 19, 14, 14], "streams": [{"fin": false, "length": 512, "offset": 13312, "sha256": "9ea2ca99172f8143d19673eb288cb607ce2e87f09914569ac1285981dcb8803c", "stream": 8}, {"fin": false, "length": 512, "offset": 13824, "sha256": "9ea2ca99172f8143d19673eb288cb607ce2e87f09914569ac1285981dcb8803c", "stream": 8}]}, "phase": "pto", "pn": 33}}, "repeat_elapsed_ms": 32.52603900000395, "stream": 8}, "scenario": "pto", "server_exit_code": -15, "server_sha256": "706d53c1974e74c96c0401cc7cdad2870fe98fca70bd5a2e9bec7227c4768545", "status": "passed"}
+<end of output>
+Test time =   0.57 sec
+----------------------------------------------------------
+Test Passed.
+"quic_datagram_cc_pto" end time: Oct 19 08:25 CST
+"quic_datagram_cc_pto" time elapsed: 00:00:00
+----------------------------------------------------------
+
+66/88 Testing: quic_pmtu_cc_large_response_after_loss
+66/88 Test: quic_pmtu_cc_large_response_after_loss
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/quic_pmtu_cc.py" "/tmp/cnetmod-h3-arena-build/bin/quic_pmtu_cc_server" "--large-aead-peer"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"quic_pmtu_cc_large_response_after_loss" start time: Oct 19 08:25 CST
+Output:
+----------------------------------------------------------
+{"command": ["/tmp/cnetmod-h3-arena-build/bin/quic_pmtu_cc_server", "--port", "46409", "--cert", "/tmp/quic-pmtu-cc-p__6dxg2/cert.pem", "--key", "/tmp/quic-pmtu-cc-p__6dxg2/key.pem", "--listening-report", "/tmp/quic-pmtu-cc-p__6dxg2/listening.txt", "--ready-report", "/tmp/quic-pmtu-cc-p__6dxg2/ready.txt", "--result-report", "/tmp/quic-pmtu-cc-p__6dxg2/failure.txt"], "confirmation_interval_seconds": 0.025, "confirmation_requests_per_epoch": 4, "diagnostics_required": false, "epochs": [{"drop": {"action": "drop", "at": 749.522461068, "bytes": 289, "direction": "server", "epoch": 0, "frames": [{"fin": true, "length": 256, "offset": 0}], "packet_number": 25, "target_stream": 0}, "epoch": 0, "losses": [], "quiet": null, "stream": 0}, {"drop": {"action": "drop", "at": 749.739595048, "bytes": 289, "direction": "server", "epoch": 1, "frames": [{"fin": true, "length": 256, "offset": 0}], "packet_number": 38, "target_stream": 20}, "epoch": 1, "losses": [], "quiet": null, "stream": 20}, {"drop": {"action": "drop", "at": 749.955380493, "bytes": 289, "direction": "server", "epoch": 2, "frames": [{"fin": true, "length": 256, "offset": 0}], "packet_number": 50, "target_stream": 40}, "epoch": 2, "losses": [], "quiet": null, "stream": 40}, {"drop": {"action": "drop", "at": 750.170441987, "bytes": 289, "direction": "server", "epoch": 3, "frames": [{"fin": true, "length": 256, "offset": 0}], "packet_number": 63, "target_stream": 60}, "epoch": 3, "losses": [], "quiet": null, "stream": 60}, {"drop": {"action": "drop", "at": 750.386264278, "bytes": 290, "direction": "server", "epoch": 4, "frames": [{"fin": true, "length": 256, "offset": 0}], "packet_number": 76, "target_stream": 80}, "epoch": 4, "losses": [], "quiet": null, "stream": 80}, {"drop": {"action": "drop", "at": 750.60433138, "bytes": 290, "direction": "server", "epoch": 5, "frames": [{"fin": true, "length": 256, "offset": 0}], "packet_number": 89, "target_stream": 100}, "epoch": 5, "losses": [], "quiet": null, "stream": 100}, {"drop": {"action": "drop", "at": 750.816477056, "bytes": 290, "direction": "server", "epoch": 6, "frames": [{"fin": true, "length": 256, "offset": 0}], "packet_number": 101, "target_stream": 120}, "epoch": 6, "losses": [], "quiet": null, "stream": 120}, {"drop": {"action": "drop", "at": 751.032783278, "bytes": 290, "direction": "server", "epoch": 7, "frames": [{"fin": true, "length": 256, "offset": 0}], "packet_number": 113, "target_stream": 140}, "epoch": 7, "losses": [], "quiet": null, "stream": 140}, {"drop": {"action": "drop", "at": 751.249894201, "bytes": 290, "direction": "server", "epoch": 8, "frames": [{"fin": true, "length": 256, "offset": 0}], "packet_number": 125, "target_stream": 160}, "epoch": 8, "losses": [], "quiet": null, "stream": 160}, {"drop": {"action": "drop", "at": 751.460239184, "bytes": 290, "direction": "server", "epoch": 9, "frames": [{"fin": true, "length": 256, "offset": 0}], "packet_number": 138, "target_stream": 180}, "epoch": 9, "losses": [], "quiet": null, "stream": 180}, {"drop": {"action": "drop", "at": 751.668610206, "bytes": 290, "direction": "server", "epoch": 10, "frames": [{"fin": true, "length": 256, "offset": 0}], "packet_number": 150, "target_stream": 200}, "epoch": 10, "losses": [], "quiet": null, "stream": 200}, {"drop": {"action": "drop", "at": 751.879709555, "bytes": 290, "direction": "server", "epoch": 11, "frames": [{"fin": true, "length": 256, "offset": 0}], "packet_number": 163, "target_stream": 220}, "epoch": 11, "losses": [], "quiet": null, "stream": 220}, {"drop": {"action": "drop", "at": 752.090458594, "bytes": 290, "direction": "server", "epoch": 12, "frames": [{"fin": true, "length": 256, "offset": 0}], "packet_number": 176, "target_stream": 240}, "epoch": 12, "losses": [], "quiet": null, "stream": 240}, {"drop": {"action": "drop", "at": 752.305296295, "bytes": 290, "direction": "server", "epoch": 13, "frames": [{"fin": true, "length": 256, "offset": 0}], "packet_number": 189, "target_stream": 260}, "epoch": 13, "losses": [], "quiet": null, "stream": 260}, {"drop": {"action": "drop", "at": 752.518306596, "bytes": 290, "direction": "server", "epoch": 14, "frames": [{"fin": true, "length": 256, "offset": 0}], "packet_number": 201, "target_stream": 280}, "epoch": 14, "losses": [], "quiet": null, "stream": 280}, {"drop": {"action": "drop", "at": 752.735539752, "bytes": 290, "direction": "server", "epoch": 15, "frames": [{"fin": true, "length": 256, "offset": 0}], "packet_number": 213, "target_stream": 300}, "epoch": 15, "losses": [], "quiet": null, "stream": 300}], "expect": "pass", "final_body_bytes": 16384, "final_body_sha256": "47d30d4078849f62042ce5a0e873cd00cfdaecce1b8404708580bafb42edf7e5", "final_elapsed_ms": 2.071452999985013, "final_fin": true, "final_timed_out": false, "peer_aead": {"adapter_sha256": "8edf9cfb2b5720c74db24eb182af4d8c7333d7f7d861b11e0042e89a21e1c104", "aioquic_version": "1.7.0", "cryptography_version": "50.0.2", "header_protection": "unchanged aioquic backend", "kind": "cryptography-large-packet-test-peer", "original_backend": "/var/tmp/cnetmod-h3-peer/lib/python3.14/site-packages/aioquic/_crypto.py", "original_backend_sha256": "269be9a54dece8ddee74ec519ec6f3fc832cd669d437fb4778f4f1d661d02494", "scope": "client and independent proxy CryptoContext AEAD factory", "stock_aioquic_interoperability": false}, "peer_outgoing_target": 1200, "peer_receive_limit": "omitted transport parameter; RFC default65527", "proxy_errors": [], "quiet_interval_seconds": 0.075, "records": "/tmp/quic-pmtu-cc-p__6dxg2", "server_ceiling": 4096, "server_exit_code": -15, "server_sha256": "332a970a6c18f40bb3779260f97bdc9eea6d37a615999408ce3d75154b1b6deb", "status": "passed"}
+<end of output>
+Test time =   4.78 sec
+----------------------------------------------------------
+Test Passed.
+"quic_pmtu_cc_large_response_after_loss" end time: Oct 19 08:26 CST
+"quic_pmtu_cc_large_response_after_loss" time elapsed: 00:00:04
+----------------------------------------------------------
+
+67/88 Testing: http3_lifecycle
+67/88 Test: http3_lifecycle
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http3_lifecycle.py" "/tmp/cnetmod-h3-arena-build/bin/h3_interop_server"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http3_lifecycle" start time: Oct 19 08:26 CST
+Output:
+----------------------------------------------------------
+PASS encrypted all-PADDING and PADDING between PING frames
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+<end of output>
+Test time =   2.29 sec
+----------------------------------------------------------
+Test Passed.
+"http3_lifecycle" end time: Oct 19 08:26 CST
+"http3_lifecycle" time elapsed: 00:00:02
+----------------------------------------------------------
+
+68/88 Testing: http3_cold_listener_cleanup
+68/88 Test: http3_cold_listener_cleanup
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http3_cold_cleanup.py" "/tmp/cnetmod-h3-arena-build/bin/h3_interop_server"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http3_cold_listener_cleanup" start time: Oct 19 08:26 CST
+Output:
+----------------------------------------------------------
+PASS zero-ingress 35s cleanup: [0, 4, 0, 0, 0, 0] -> [0, 0, 0, 0, 0, 0]
+<end of output>
+Test time =  35.38 sec
+----------------------------------------------------------
+Test Passed.
+"http3_cold_listener_cleanup" end time: Oct 19 08:26 CST
+"http3_cold_listener_cleanup" time elapsed: 00:00:35
+----------------------------------------------------------
+
+69/88 Testing: http3_outbound_pto_close_restart_1
+69/88 Test: http3_outbound_pto_close_restart_1
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http3_outbound_pto.py" "/tmp/cnetmod-h3-arena-build/bin/h3_interop_server" "--workers" "1" "--restart"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http3_outbound_pto_close_restart_1" start time: Oct 19 08:26 CST
+Output:
+----------------------------------------------------------
+{"case": "pto", "client_blocked": 0, "client_forwarded": 9, "client_forwarded_at_gate": 8, "client_forwarded_at_response": 8, "client_forwarded_while_gated": 0, "control_only_after_drop": 0, "decode_errors": [], "drop_at_ms": 1201.3682049999943, "dropped_datagram_bytes": 60, "dropped_packet_number": 8, "dropped_stream_frames": [{"fin": true, "length": 28, "offset": 0}], "gate_at_ms": 101.77032700005384, "listener_healthy": true, "request_fin_acked": true, "response_at_ms": 1232.0098620000408, "response_body": "delayed pto response\n", "response_datagrams_dropped": 1, "restart": true, "restart_budget": [0, 0, 0], "restart_report": "restarted", "retransmitted_stream_frames": [{"fin": true, "length": 28, "offset": 0}, {"fin": true, "length": 28, "offset": 0}], "server_forwarded_while_gated": 2, "socket_error_events": [], "socket_errors": [], "status": "passed", "workers": 1}
+{"case": "pto-full", "client_blocked": 0, "client_forwarded": 9, "client_forwarded_at_gate": 8, "client_forwarded_at_response": 8, "client_forwarded_while_gated": 0, "control_only_after_drop": 2, "decode_errors": [], "drop_at_ms": 1201.019057999929, "dropped_datagram_bytes": 1199, "dropped_packet_number": 8, "dropped_stream_frames": [{"fin": true, "length": 1166, "offset": 0}], "gate_at_ms": 101.1495489999561, "listener_healthy": true, "request_fin_acked": true, "response_at_ms": 1231.8718469999794, "response_body": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "response_datagrams_dropped": 1, "restart": true, "restart_budget": [0, 0, 0], "restart_report": "restarted", "retransmitted_stream_frames": [{"fin": true, "length": 1166, "offset": 0}, {"fin": true, "length": 1166, "offset": 0}], "server_forwarded_while_gated": 4, "socket_error_events": [], "socket_errors": [], "status": "passed", "workers": 1}
+{"active_connections_after_peer_close": 1, "case": "close", "listener_healthy": true, "restart": true, "restart_budget": [0, 0, 0], "restart_report": "restarted", "status": "passed", "workers": 1}
+{"case": "draining", "client_blocked": 0, "client_forwarded": 10, "client_forwarded_while_gated": 0, "close_processed_at_ms": 2.8769479999937175, "control_only_after_drop": 0, "decode_errors": [], "first_matching_reset_at_ms": 142.52026899998782, "first_old_packet_at_ms": 2.920106999908967, "listener_healthy": true, "minimum_drain_ms": 78.0, "probe_replies": [{"at_ms": 142.51667199994245, "bytes": 33, "reset_token_match": true}], "reset_token_matched": true, "response_datagrams_dropped": 0, "restart": true, "restart_budget": [0, 0, 0], "restart_report": "restarted", "retransmitted_stream_frames": [], "server_forwarded_while_gated": 1, "silence_observed_until_ms": 40.11295999998765, "socket_error_events": [], "socket_errors": [], "status": "passed", "workers": 1}
+{"active_restart_budget": [0, 0, 0], "active_restart_report": "restarted", "case": "active", "listener_healthy": true, "old_connection_close_code": 0, "old_request_error": "ConnectionTerminated(error_code=0, frame_type=0, reason_phrase='HTTP/3 server session closed')", "old_request_terminated": true, "restart": true, "restart_budget": [0, 0, 0], "restart_report": "restarted", "status": "passed", "workers": 1}
+<end of output>
+Test time =   4.53 sec
+----------------------------------------------------------
+Test Passed.
+"http3_outbound_pto_close_restart_1" end time: Oct 19 08:26 CST
+"http3_outbound_pto_close_restart_1" time elapsed: 00:00:04
+----------------------------------------------------------
+
+70/88 Testing: http3_outbound_pto_close_restart_2
+70/88 Test: http3_outbound_pto_close_restart_2
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http3_outbound_pto.py" "/tmp/cnetmod-h3-arena-build/bin/h3_interop_server" "--workers" "2" "--restart"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http3_outbound_pto_close_restart_2" start time: Oct 19 08:26 CST
+Output:
+----------------------------------------------------------
+{"case": "pto", "client_blocked": 0, "client_forwarded": 9, "client_forwarded_at_gate": 8, "client_forwarded_at_response": 8, "client_forwarded_while_gated": 0, "control_only_after_drop": 0, "decode_errors": [], "drop_at_ms": 1201.4319520000072, "dropped_datagram_bytes": 60, "dropped_packet_number": 8, "dropped_stream_frames": [{"fin": true, "length": 28, "offset": 0}], "gate_at_ms": 100.57390400004351, "listener_healthy": true, "request_fin_acked": true, "response_at_ms": 1231.840616999989, "response_body": "delayed pto response\n", "response_datagrams_dropped": 1, "restart": true, "restart_budget": [0, 0, 0], "restart_report": "restarted", "retransmitted_stream_frames": [{"fin": true, "length": 28, "offset": 0}, {"fin": true, "length": 28, "offset": 0}], "server_forwarded_while_gated": 2, "socket_error_events": [], "socket_errors": [], "status": "passed", "workers": 2}
+{"case": "pto-full", "client_blocked": 0, "client_forwarded": 9, "client_forwarded_at_gate": 8, "client_forwarded_at_response": 8, "client_forwarded_while_gated": 0, "control_only_after_drop": 2, "decode_errors": [], "drop_at_ms": 1201.1809470000117, "dropped_datagram_bytes": 1199, "dropped_packet_number": 8, "dropped_stream_frames": [{"fin": true, "length": 1166, "offset": 0}], "gate_at_ms": 101.00350499999422, "listener_healthy": true, "request_fin_acked": true, "response_at_ms": 1230.835264999996, "response_body": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "response_datagrams_dropped": 1, "restart": true, "restart_budget": [0, 0, 0], "restart_report": "restarted", "retransmitted_stream_frames": [{"fin": true, "length": 1166, "offset": 0}, {"fin": true, "length": 1166, "offset": 0}], "server_forwarded_while_gated": 4, "socket_error_events": [], "socket_errors": [], "status": "passed", "workers": 2}
+{"active_connections_after_peer_close": 1, "case": "close", "listener_healthy": true, "restart": true, "restart_budget": [0, 0, 0], "restart_report": "restarted", "status": "passed", "workers": 2}
+{"case": "draining", "client_blocked": 0, "client_forwarded": 10, "client_forwarded_while_gated": 0, "close_processed_at_ms": 0.5923510000229726, "control_only_after_drop": 0, "decode_errors": [], "first_matching_reset_at_ms": 167.74008800007323, "first_old_packet_at_ms": 0.6114779999961684, "listener_healthy": true, "minimum_drain_ms": 78.0, "probe_replies": [{"at_ms": 167.73806200001218, "bytes": 33, "reset_token_match": true}], "reset_token_matched": true, "response_datagrams_dropped": 0, "restart": true, "restart_budget": [0, 0, 0], "restart_report": "restarted", "retransmitted_stream_frames": [], "server_forwarded_while_gated": 1, "silence_observed_until_ms": 39.98029400008818, "socket_error_events": [], "socket_errors": [], "status": "passed", "workers": 2}
+{"active_restart_budget": [0, 0, 0], "active_restart_report": "restarted", "case": "active", "listener_healthy": true, "old_connection_close_code": 0, "old_request_error": "ConnectionTerminated(error_code=0, frame_type=0, reason_phrase='HTTP/3 server session closed')", "old_request_terminated": true, "restart": true, "restart_budget": [0, 0, 0], "restart_report": "restarted", "status": "passed", "workers": 2}
+<end of output>
+Test time =   5.09 sec
+----------------------------------------------------------
+Test Passed.
+"http3_outbound_pto_close_restart_2" end time: Oct 19 08:26 CST
+"http3_outbound_pto_close_restart_2" time elapsed: 00:00:05
+----------------------------------------------------------
+
+71/88 Testing: quic_retire_stream_credit_wakeup
+71/88 Test: quic_retire_stream_credit_wakeup
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/quic_retire_stream.py" "/tmp/cnetmod-h3-arena-build/bin/quic_retire_stream_server" "--mode" "all"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"quic_retire_stream_credit_wakeup" start time: Oct 19 08:26 CST
+Output:
+----------------------------------------------------------
+{"case": "credit", "client_blocked": 3, "client_forwarded_after_gate": 0, "credit_at_ms": 5.86886600001435, "final_max_streams": 2, "fixture_ingress_count": 5, "initial_max_streams": 1, "mode": "observer", "observer_notifications_after_retire": 7, "pre_retire_deadline_ms": 5893, "proxy_errors": [], "request_fin_acked": true, "server_datagrams_after_gate": 5, "server_stderr": "", "server_stdout": "", "status": "passed"}
+{"case": "credit", "client_blocked": 3, "client_forwarded_after_gate": 0, "credit_at_ms": 10.685045999935028, "final_max_streams": 2, "fixture_ingress_count": 0, "initial_max_streams": 1, "mode": "private", "observer_notifications_after_retire": 0, "pre_retire_deadline_ms": 5888, "proxy_errors": [], "request_fin_acked": true, "server_datagrams_after_gate": 5, "server_stderr": "", "server_stdout": "", "status": "passed"}
+<end of output>
+Test time =   1.25 sec
+----------------------------------------------------------
+Test Passed.
+"quic_retire_stream_credit_wakeup" end time: Oct 19 08:26 CST
+"quic_retire_stream_credit_wakeup" time elapsed: 00:00:01
+----------------------------------------------------------
+
+72/88 Testing: quic_retire_stream_notification_lifetime
+72/88 Test: quic_retire_stream_notification_lifetime
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/quic_retire_stream.py" "/tmp/cnetmod-h3-arena-build/bin/quic_retire_stream_server" "--scenario" "notification-lifetime"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"quic_retire_stream_notification_lifetime" start time: Oct 19 08:26 CST
+Output:
+----------------------------------------------------------
+{"case": "notification-lifetime", "client_blocked": 3, "client_forwarded_after_gate": 0, "credit_at_ms": 6.222116999992977, "final_max_streams": 2, "fixture_ingress_count": 5, "initial_max_streams": 1, "mode": "observer", "notification_capture_expired_after_unobserve": true, "notification_capture_owners_after_dispatch": 1, "notification_capture_owners_before": 1, "observer_notifications_after_retire": 7, "pre_retire_deadline_ms": 5893, "proxy_errors": [], "request_fin_acked": true, "server_datagrams_after_gate": 5, "server_stderr": "", "server_stdout": "", "status": "passed"}
+<end of output>
+Test time =   0.69 sec
+----------------------------------------------------------
+Test Passed.
+"quic_retire_stream_notification_lifetime" end time: Oct 19 08:26 CST
+"quic_retire_stream_notification_lifetime" time elapsed: 00:00:00
+----------------------------------------------------------
+
+73/88 Testing: quic_private_outbound_pto
+73/88 Test: quic_private_outbound_pto
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/quic_retire_stream.py" "/tmp/cnetmod-h3-arena-build/bin/quic_retire_stream_server" "--scenario" "private-pto"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"quic_private_outbound_pto" start time: Oct 19 08:26 CST
+Output:
+----------------------------------------------------------
+{"case": "private-pto", "client_blocked": 0, "client_forwarded": 8, "client_forwarded_at_gate": 7, "client_forwarded_while_gated": 0, "control_only_after_drop": 0, "decode_errors": [], "drop_at_ms": 54.351364000012836, "dropped_datagram_bytes": 57, "dropped_packet_number": 3, "dropped_stream_frames": [{"fin": true, "length": 25, "offset": 0}], "gate_at_ms": 0.13626999998450628, "mode": "private", "observer_notifications": 0, "pre_send_deadline_ms": 5889, "response_at_ms": 84.18217299993103, "response_datagrams_dropped": 1, "retransmitted_stream_frames": [{"fin": true, "length": 25, "offset": 0}, {"fin": true, "length": 25, "offset": 0}], "server_forwarded_while_gated": 2, "server_stderr": "", "server_stdout": "", "socket_error_events": [], "socket_errors": [], "status": "passed"}
+<end of output>
+Test time =   0.98 sec
+----------------------------------------------------------
+Test Passed.
+"quic_private_outbound_pto" end time: Oct 19 08:26 CST
+"quic_private_outbound_pto" time elapsed: 00:00:00
+----------------------------------------------------------
+
+74/88 Testing: quic_handshake_confirmation
+74/88 Test: quic_handshake_confirmation
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/quic_handshake_confirmation.py" "/tmp/cnetmod-h3-arena-build/bin/quic_retire_stream_server"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"quic_handshake_confirmation" start time: Oct 19 08:26 CST
+Output:
+----------------------------------------------------------
+{"case": "handshake_confirmation", "client_application_pto_count": 1, "client_packets_blocked_before_confirmation": 0, "confirmed_after_tls_complete": false, "decode_errors": [], "done_packets": [{"at_ms": 15.152301000057378, "bytes": 63, "frames": [2, 24, 30], "pn": 0}, {"at_ms": 1039.6606269999893, "bytes": 63, "frames": [1, 18, 19, 24, 30], "pn": 1}, {"at_ms": 1039.7989220000454, "bytes": 63, "frames": [1, 18, 19, 24, 30], "pn": 2}], "dropped_done": true, "dropped_request": true, "handshake_confirmed": true, "illegal_client_done_error_code": 10, "illegal_client_done_frame_type": 30, "illegal_client_done_packet_numbers": [10], "mode": "observer", "request_fin_acked": true, "request_packets": [{"at_ms": 0.3752439999971102, "bytes": 46, "pn": 8}, {"at_ms": 28.03878299994267, "bytes": 47, "pn": 9}], "server_stderr": "", "server_stdout": "", "socket_errors": [], "status": "passed", "tls_completed": true}
+<end of output>
+Test time =   1.60 sec
+----------------------------------------------------------
+Test Passed.
+"quic_handshake_confirmation" end time: Oct 19 08:26 CST
+"quic_handshake_confirmation" time elapsed: 00:00:01
+----------------------------------------------------------
+
+75/88 Testing: h3_webtransport_aioquic_probe_unit
+75/88 Test: h3_webtransport_aioquic_probe_unit
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "-m" "unittest" "discover" "-s" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3" "-p" "test_webtransport_aioquic_probe.py"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"h3_webtransport_aioquic_probe_unit" start time: Oct 19 08:26 CST
+Output:
+----------------------------------------------------------
+..Executing <Task finished name='Task-11' coro=<WebTransportProbeTests.asyncSetUp() done, defined at /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/test_webtransport_aioquic_probe.py:12> result=None created at /usr/lib/python3.14/asyncio/runners.py:110> took 0.202 seconds
+..Executing <Task finished name='Task-21' coro=<WebTransportProbeTests.asyncSetUp() done, defined at /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/test_webtransport_aioquic_probe.py:12> result=None created at /usr/lib/python3.14/asyncio/runners.py:110> took 0.135 seconds
+.Executing <Task finished name='Task-26' coro=<WebTransportProbeTests.asyncSetUp() done, defined at /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/test_webtransport_aioquic_probe.py:12> result=None created at /usr/lib/python3.14/asyncio/runners.py:110> took 0.144 seconds
+.
+----------------------------------------------------------------------
+Ran 6 tests in 0.704s
+
+OK
+<end of output>
+Test time =   1.06 sec
+----------------------------------------------------------
+Test Passed.
+"h3_webtransport_aioquic_probe_unit" end time: Oct 19 08:26 CST
+"h3_webtransport_aioquic_probe_unit" time elapsed: 00:00:01
+----------------------------------------------------------
+
+77/88 Testing: http3_early_data_recovery
+77/88 Test: http3_early_data_recovery
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--early-data-loss" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http3_early_data_recovery" start time: Oct 19 08:26 CST
+Output:
+----------------------------------------------------------
+[2026-10-19 00:26:54.628] [info] [124914676017088] [http_client_e2e.cpp:750] HTTP/3 priority E2E passed: first foreground=1, first background=49
+[2026-10-19 00:26:55.162] [info] [124914676017088] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+early-data fault evidence: {'retries_delayed': 20, 'early_before_retry': 10, 'early_dropped_after_retry': 2, 'initial_pn_regressions': 0, 'source_address_reuse': 0, 'initial_pn_regression_events': []}
+<end of output>
+Test time =   2.25 sec
+----------------------------------------------------------
+Test Passed.
+"http3_early_data_recovery" end time: Oct 19 08:26 CST
+"http3_early_data_recovery" time elapsed: 00:00:02
+----------------------------------------------------------
+
+78/88 Testing: http3_streaming_cancellation
+78/88 Test: http3_streaming_cancellation
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http3_streaming_cancellation.py" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http3_streaming_cancellation" start time: Oct 19 08:26 CST
+Output:
+----------------------------------------------------------
+PASS streaming downstream IO + peer RESET x3 + normal early response + reuse
+<end of output>
+Test time =   1.21 sec
+----------------------------------------------------------
+Test Passed.
+"http3_streaming_cancellation" end time: Oct 19 08:26 CST
+"http3_streaming_cancellation" time elapsed: 00:00:01
+----------------------------------------------------------
+
+79/88 Testing: http3_idle_connection_cleanup
+79/88 Test: http3_idle_connection_cleanup
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http3_idle_cleanup.py" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http3_idle_connection_cleanup" start time: Oct 19 08:26 CST
+Output:
+----------------------------------------------------------
+idle peers reclaimed: 4 -> 1; samples=[(0.0, 4), (1.0, 4), (2.0, 4), (3.01, 4), (4.01, 4), (5.01, 4), (6.01, 4), (7.02, 4), (8.02, 4), (9.03, 4), (10.03, 4), (11.03, 4), (12.03, 4), (13.04, 4), (14.04, 4), (15.04, 4), (16.04, 4), (17.05, 4), (18.05, 4), (19.05, 4), (20.06, 4), (21.06, 4), (22.06, 4), (23.07, 4), (24.07, 4), (25.07, 4), (26.08, 4), (27.08, 4), (28.08, 4), (29.08, 4), (30.09, 1)]
+<end of output>
+Test time =  31.51 sec
+----------------------------------------------------------
+Test Passed.
+"http3_idle_connection_cleanup" end time: Oct 19 08:27 CST
+"http3_idle_connection_cleanup" time elapsed: 00:00:31
+----------------------------------------------------------
+
+80/88 Testing: http_client_http3_end_to_end
+80/88 Test: http_client_http3_end_to_end
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http_client_http3_end_to_end" start time: Oct 19 08:27 CST
+Output:
+----------------------------------------------------------
+[2026-10-19 00:27:28.552] [info] [125047271061440] [http_client_e2e.cpp:750] HTTP/3 priority E2E passed: first foreground=1, first background=49
+[2026-10-19 00:27:28.695] [info] [125047271061440] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+<end of output>
+Test time =   0.81 sec
+----------------------------------------------------------
+Test Passed.
+"http_client_http3_end_to_end" end time: Oct 19 08:27 CST
+"http_client_http3_end_to_end" time elapsed: 00:00:00
+----------------------------------------------------------
+
+81/88 Testing: http_client_http3_dynamic_qpack_end_to_end
+81/88 Test: http_client_http3_dynamic_qpack_end_to_end
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--dynamic-qpack" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http_client_http3_dynamic_qpack_end_to_end" start time: Oct 19 08:27 CST
+Output:
+----------------------------------------------------------
+[2026-10-19 00:27:29.504] [info] [134911246739392] [http_client_e2e.cpp:750] HTTP/3 priority E2E passed: first foreground=1, first background=26
+[2026-10-19 00:27:29.647] [info] [134911246739392] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+<end of output>
+Test time =   0.95 sec
+----------------------------------------------------------
+Test Passed.
+"http_client_http3_dynamic_qpack_end_to_end" end time: Oct 19 08:27 CST
+"http_client_http3_dynamic_qpack_end_to_end" time elapsed: 00:00:00
+----------------------------------------------------------
+
+82/88 Testing: http3_multipath_end_to_end
+82/88 Test: http3_multipath_end_to_end
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--multipath" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http3_multipath_end_to_end" start time: Oct 19 08:27 CST
+Output:
+----------------------------------------------------------
+[2026-10-19 00:27:30.158] [info] [128056113588160] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+<end of output>
+Test time =   0.51 sec
+----------------------------------------------------------
+Test Passed.
+"http3_multipath_end_to_end" end time: Oct 19 08:27 CST
+"http3_multipath_end_to_end" time elapsed: 00:00:00
+----------------------------------------------------------
+
+83/88 Testing: http3_multipath_path_mtu_end_to_end
+83/88 Test: http3_multipath_path_mtu_end_to_end
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--multipath-pmtu" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http3_multipath_path_mtu_end_to_end" start time: Oct 19 08:27 CST
+Output:
+----------------------------------------------------------
+[2026-10-19 00:27:30.651] [info] [140642737379264] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+<end of output>
+Test time =   0.49 sec
+----------------------------------------------------------
+Test Passed.
+"http3_multipath_path_mtu_end_to_end" end time: Oct 19 08:27 CST
+"http3_multipath_path_mtu_end_to_end" time elapsed: 00:00:00
+----------------------------------------------------------
+
+84/88 Testing: http3_multipath_path_mtu_blackhole_end_to_end
+84/88 Test: http3_multipath_path_mtu_blackhole_end_to_end
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--multipath-pmtu-blackhole" "--pmtu-blackhole-proxy" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/pmtu_blackhole_proxy.py" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http3_multipath_path_mtu_blackhole_end_to_end" start time: Oct 19 08:27 CST
+Output:
+----------------------------------------------------------
+[2026-10-19 00:27:33.514] [info] [130962564360128] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+<end of output>
+Test time =   2.86 sec
+----------------------------------------------------------
+Test Passed.
+"http3_multipath_path_mtu_blackhole_end_to_end" end time: Oct 19 08:27 CST
+"http3_multipath_path_mtu_blackhole_end_to_end" time elapsed: 00:00:02
+----------------------------------------------------------
+
+85/88 Testing: http3_multipath_local_path_close_end_to_end
+85/88 Test: http3_multipath_local_path_close_end_to_end
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--multipath-close" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http3_multipath_local_path_close_end_to_end" start time: Oct 19 08:27 CST
+Output:
+----------------------------------------------------------
+[2026-10-19 00:27:34.208] [info] [125837447079872] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+<end of output>
+Test time =   0.69 sec
+----------------------------------------------------------
+Test Passed.
+"http3_multipath_local_path_close_end_to_end" end time: Oct 19 08:27 CST
+"http3_multipath_local_path_close_end_to_end" time elapsed: 00:00:00
+----------------------------------------------------------
+
+86/88 Testing: http3_connect_close_end_to_end
+86/88 Test: http3_connect_close_end_to_end
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--connect-close" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http3_connect_close_end_to_end" start time: Oct 19 08:27 CST
+Output:
+----------------------------------------------------------
+[2026-10-19 00:27:34.987] [info] [139457538471872] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+<end of output>
+Test time =   0.78 sec
+----------------------------------------------------------
+Test Passed.
+"http3_connect_close_end_to_end" end time: Oct 19 08:27 CST
+"http3_connect_close_end_to_end" time elapsed: 00:00:00
+----------------------------------------------------------
+
+87/88 Testing: http3_multipath_path_validation_timeout_end_to_end
+87/88 Test: http3_multipath_path_validation_timeout_end_to_end
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http_client_e2e.py" "--multipath-timeout" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_e2e_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http_client_http3_e2e"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http3_multipath_path_validation_timeout_end_to_end" start time: Oct 19 08:27 CST
+Output:
+----------------------------------------------------------
+[2026-10-19 00:27:38.345] [info] [131521136347072] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+<end of output>
+Test time =   3.36 sec
+----------------------------------------------------------
+Test Passed.
+"http3_multipath_path_validation_timeout_end_to_end" end time: Oct 19 08:27 CST
+"http3_multipath_path_validation_timeout_end_to_end" time elapsed: 00:00:03
+----------------------------------------------------------
+
+88/88 Testing: http3_connection_migration
+88/88 Test: http3_connection_migration
+Command: "/var/tmp/cnetmod-h3-peer/bin/python" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/migration_e2e.py" "/tmp/cnetmod-h3-arena-build/bin/h3_interop_server" "/tmp/cnetmod-h3-arena-build/testing/http3/http3_migration_e2e" "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/migration_udp_proxy.py"
+Directory: /tmp/cnetmod-h3-arena-build/testing/http3
+"http3_connection_migration" start time: Oct 19 08:27 CST
+Output:
+----------------------------------------------------------
+HTTP/3 connection migration: path validation and second request passed
+<end of output>
+Test time =   2.36 sec
+----------------------------------------------------------
+Test Passed.
+"http3_connection_migration" end time: Oct 19 08:27 CST
+"http3_connection_migration" time elapsed: 00:00:02
+----------------------------------------------------------
+
+End testing: Oct 19 08:27 CST
+
+blackhole =   2.86 sec*proc
+
+client =   2.54 sec*proc
+
+close =   1.47 sec*proc
+
+connect =   0.78 sec*proc
+
+datagram =   1.27 sec*proc
+
+end_to_end =  10.46 sec*proc
+
+flow_control =   1.25 sec*proc
+
+http3 = 109.57 sec*proc
+
+interop =  48.35 sec*proc
+
+lifecycle =  84.54 sec*proc
+
+memory =   0.69 sec*proc
+
+migration =   2.36 sec*proc
+
+multipath =   7.92 sec*proc
+
+pmtu =  10.98 sec*proc
+
+qpack =   0.95 sec*proc
+
+quic =  59.46 sec*proc
+
+recovery =  20.50 sec*proc
+
+test_peer_adapter =   4.78 sec*proc
+
+timeout =   3.36 sec*proc
+
+timer =   2.85 sec*proc
+
+unit =   1.06 sec*proc
+
+webtransport =   1.06 sec*proc
+

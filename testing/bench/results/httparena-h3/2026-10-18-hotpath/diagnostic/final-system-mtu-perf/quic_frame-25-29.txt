@@ -1,0 +1,5 @@
+25:     auto append_bytes(std::vector<std::byte>& out, std::span<const std::byte> data)
+26:         -> void
+27:     {
+28:         out.insert(out.end(), data.begin(), data.end());
+29:     }

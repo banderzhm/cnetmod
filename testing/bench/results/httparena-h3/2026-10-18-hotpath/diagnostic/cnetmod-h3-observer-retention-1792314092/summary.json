@@ -1,0 +1,19 @@
+{
+  "scope": "observer-enabled build1 plus node cache, before final locked snapshots and shutdown changes; uninstrumented diagnostic only",
+  "binary_sha256": "3178b52b161e686ff5fe39a1ad2f0b66e97ea26690b25f44c7532525b122b503",
+  "samples": [
+    {
+      "name": "failure-immediate",
+      "time": 1792314103.593032,
+      "rss": 48267264,
+      "private": 45928448
+    },
+    {
+      "name": "failure-idle-35s",
+      "time": 1792314138.5936992,
+      "rss": 48267264,
+      "private": 45928448
+    }
+  ],
+  "rounds": []
+}

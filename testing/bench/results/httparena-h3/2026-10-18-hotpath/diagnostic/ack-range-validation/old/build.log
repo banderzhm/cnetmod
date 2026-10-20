@@ -1,0 +1,8 @@
+[0/2] Re-checking globbed directories...
+[1/4] Scanning /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/tests/test_quic_loss_detection.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/tests/test_quic_loss_detection.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[2/4] Generating CXX dyndep file testing/tests/CMakeFiles/test_quic_loss_detection.dir/CXX.dd
+[3/4] Building CXX object testing/tests/CMakeFiles/test_quic_loss_detection.dir/test_quic_loss_detection.cpp.o
+[4/4] Linking CXX executable testing/tests/test_quic_loss_detection

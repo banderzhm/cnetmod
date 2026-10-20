@@ -1,0 +1,24 @@
+{
+  "off": {
+    "root": "/var/tmp/cnetmod-h3-system-perf-75d3473f92744a87ad2bf125387ea28e",
+    "binary": "/var/tmp/cnetmod-h3-system-perf-75d3473f92744a87ad2bf125387ea28e/arena_h3_server",
+    "binary_sha256": "2cb22a32818646fbf63575370adf6a0c48b3ba5df4bbbc3d3002ab2838003e0a",
+    "perf_data": "/var/tmp/cnetmod-h3-system-perf-75d3473f92744a87ad2bf125387ea28e/static-perf.data",
+    "perf_data_sha256": "2556a0b89d0a6c80ae97c86e378e1d1226e4e1bc08247dfd8b9e170106fc53c6",
+    "perf_data_bytes": 2079867,
+    "original_summary_sha256": "ede89133853a7aec449f40daf41ce78e705509c16e670bee26cdbef755335344",
+    "raw_stacks_sha256": "139e800b663469a4d892408bdbd9f1281a359909034b2d9724cfe75bcae52df0",
+    "self_counts_raw_sha256": "7a31b6f0797121679a0340cfe8abe169979b2d2d18e5e184bb66816f7264e06b"
+  },
+  "on": {
+    "root": "/var/tmp/cnetmod-h3-system-perf-7fff9ece9adc48bfb0e81a0f5c9dc4fe",
+    "binary": "/var/tmp/cnetmod-h3-system-perf-7fff9ece9adc48bfb0e81a0f5c9dc4fe/arena_h3_server",
+    "binary_sha256": "2cb22a32818646fbf63575370adf6a0c48b3ba5df4bbbc3d3002ab2838003e0a",
+    "perf_data": "/var/tmp/cnetmod-h3-system-perf-7fff9ece9adc48bfb0e81a0f5c9dc4fe/static-perf.data",
+    "perf_data_sha256": "7a65b54f8c5c3b106b26ab7f967e9aa1d8babb594a28a472b7a81dd7cb2f3a0e",
+    "perf_data_bytes": 1717659,
+    "original_summary_sha256": "4c809bb6f530efb7792fc073f4d3232470838d443c8de53917ff5125011e9755",
+    "raw_stacks_sha256": "1edcf70a208ec4a3ddd5896767351e863f89e2c8981d12d7e49a2c45e66baeb3",
+    "self_counts_raw_sha256": "f263207dfd42fd4afb93e46a898111af7bf56c107039b4cd94801b83171dfab4"
+  }
+}

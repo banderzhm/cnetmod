@@ -12,6 +12,7 @@ import cnetmod.executor.pool;
 import cnetmod.coro.task;
 import cnetmod.protocol.quic;
 import cnetmod.protocol.http.v3.session;
+import cnetmod.protocol.http.semantics;
 
 namespace cnetmod::http::v3 {
 
@@ -43,6 +44,17 @@ export struct http3_server_statistics
     std::uint64_t rio_send_datagrams{};
     std::uint64_t rio_receive_queue_dropped_datagrams{};
     std::uint64_t rio_fallbacks{};
+    /// Connections outside draining/closed state, independent of CID count.
+    /// Draining connections retain silent CID routes until their deadline.
+    std::size_t active_connections{};
+    /// Cold-state ownership snapshots; reading these takes the listener's
+    /// structural latch, without counters on the per-request path.
+    std::size_t retained_reset_routes{};
+    /// Initial-route expiration records (promoted aliases may remain here
+    /// until their original ten-second expiration).
+    std::size_t pending_initial_routes{};
+    std::size_t pending_connection_timers{};
+    std::size_t retired_dispatch_routes{};
 };
 
 /// Bounded listener-side buffering. These limits apply before a UDP datagram
@@ -111,11 +123,28 @@ public:
         std::chrono::milliseconds probe_interval = std::chrono::seconds{1},
         std::chrono::milliseconds initial_probe_delay = {})
         -> std::expected<void, std::error_code>;
+    /// Explicit Linux io_uring offload attempt before start(). Defaults off;
+    /// independently sealed datagrams and their PMTU limit remain unchanged.
+    auto set_udp_segmentation_offload(bool enabled)
+        -> std::expected<void, std::error_code>;
+    /// Set the largest UDP payload this listener advertises and accepts.
+    /// Configure this before start; the RFC 9000 minimum is 1200 bytes.
+    auto set_max_udp_payload_size(std::uint64_t bytes)
+        -> std::expected<void, std::error_code>;
     /// Opt in to QPACK dynamic-table compression for newly accepted HTTP/3
     /// connections.  Both values must be zero to retain the static-table-only
     /// default; a non-zero capacity requires a non-zero blocked-stream limit.
     auto set_qpack_settings(std::uint64_t max_table_capacity,
         std::uint64_t max_blocked_streams) -> std::expected<void, std::error_code>;
+    /// Configure cumulative DATA/body bounds before start(). Buffered requests
+    /// also cap wire storage at max_bytes plus the allowed header bytes.
+    auto set_request_body_limits(request_body_stream_options options)
+        -> std::expected<void, std::error_code>;
+    /// Configure the QUIC idle timeout advertised by newly accepted
+    /// connections. A zero duration disables idle expiry; negative durations
+    /// are rejected. Configure this before `start()`.
+    auto set_idle_timeout(std::chrono::milliseconds timeout)
+        -> std::expected<void, std::error_code>;
     /// Configure bounded per-connection and listener-wide UDP inbox memory
     /// before start(). Values are rounded up by the lock-free queue itself.
     auto set_inbox_limits(http3_inbox_limits limits)

@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="3"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="0"
+	timestamp="2026-10-18T21:16:00"
+	>
+	<testcase name="test_quic_stream" classname="test_quic_stream" time="0.0748995" status="run">
+		<properties/>
+		<system-out>[==========] Running 17 test(s).
+[ RUN      ] quic_stream_fin_cannot_shrink_received_extent
+[       OK ] quic_stream_fin_cannot_shrink_received_extent
+[ RUN      ] quic_stream_reset_cannot_exceed_receive_credit
+[       OK ] quic_stream_reset_cannot_exceed_receive_credit
+[ RUN      ] quic_stream_reset_final_size_is_accounted
+[       OK ] quic_stream_reset_final_size_is_accounted
+[ RUN      ] quic_stream_out_of_order_gap_is_not_readable
+[       OK ] quic_stream_out_of_order_gap_is_not_readable
+[ RUN      ] quic_stream_duplicate_fin_is_idempotent
+[       OK ] quic_stream_duplicate_fin_is_idempotent
+[ RUN      ] quic_stream_initial_peer_send_credit_can_be_zero
+[       OK ] quic_stream_initial_peer_send_credit_can_be_zero
+[ RUN      ] quic_stream_initial_peer_send_credit_can_exceed_fallback
+[       OK ] quic_stream_initial_peer_send_credit_can_exceed_fallback
+[ RUN      ] quic_stream_public_send_and_close_remain_lazy
+[       OK ] quic_stream_public_send_and_close_remain_lazy
+[ RUN      ] quic_stream_empty_send_pre...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_quic_loss_detection" classname="test_quic_loss_detection" time="0.00188657" status="run">
+		<properties/>
+		<system-out>[==========] Running 27 test(s).
+[ RUN      ] loss_detector_malformed_ack_ranges_preserve_flight_rtt_pto_and_recovery
+[       OK ] loss_detector_malformed_ack_ranges_preserve_flight_rtt_pto_and_recovery
+[ RUN      ] loss_detector_ack_range_zero_boundary_duplicate_and_stale_ack
+[       OK ] loss_detector_ack_range_zero_boundary_duplicate_and_stale_ack
+[ RUN      ] loss_detector_rtt_initialization
+[       OK ] loss_detector_rtt_initialization
+[ RUN      ] loss_detector_rtt_multiple_samples
+[       OK ] loss_detector_rtt_multiple_samples
+[ RUN      ] loss_detector_pto_duration_basic
+[       OK ] loss_detector_pto_duration_basic
+[ RUN      ] loss_detector_pto_increases_with_rtt_var
+[       OK ] loss_detector_pto_increases_with_rtt_var
+[ RUN      ] loss_detector_packet_sent_tracking
+[       OK ] loss_detector_packet_sent_tracking
+[ RUN      ] loss_detector_ack_received_processing
+[       OK ] loss_detector_ack_received_processing
+[ RUN      ] loss_detector_ack_range_may_include_ack_only_packet
+[       OK ] loss_de...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_quic_congestion" classname="test_quic_congestion" time="0.000863662" status="run">
+		<properties/>
+		<system-out>[==========] Running 20 test(s).
+[ RUN      ] congestion_controller_initial_cwnd
+[       OK ] congestion_controller_initial_cwnd
+[ RUN      ] congestion_controller_initial_ssthresh
+[       OK ] congestion_controller_initial_ssthresh
+[ RUN      ] congestion_controller_initial_pacing_rate
+[       OK ] congestion_controller_initial_pacing_rate
+[ RUN      ] congestion_controller_can_send_below_cwnd
+[       OK ] congestion_controller_can_send_below_cwnd
+[ RUN      ] congestion_controller_can_send_at_cwnd
+[       OK ] congestion_controller_can_send_at_cwnd
+[ RUN      ] congestion_controller_on_packet_sent
+[       OK ] congestion_controller_on_packet_sent
+[ RUN      ] congestion_controller_on_packet_acked
+[       OK ] congestion_controller_on_packet_acked
+[ RUN      ] congestion_controller_discarded_packets_only_release_flight_accounting
+[       OK ] congestion_controller_discarded_packets_only_release_flight_accounting
+[ RUN      ] congestion_controller_congestion_event_no_crash
+[       OK ] congestion_controller_c...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+</testsuite>

@@ -1,0 +1,529 @@
+LONG {'streams': 1000, 'active_connections': 1, 'rss_bytes': 28708864, 'private_bytes': 29401088}
+LONG {'streams': 2000, 'active_connections': 1, 'rss_bytes': 28725248, 'private_bytes': 29401088}
+LONG {'streams': 3000, 'active_connections': 1, 'rss_bytes': 28725248, 'private_bytes': 29401088}
+LONG {'streams': 4000, 'active_connections': 1, 'rss_bytes': 28725248, 'private_bytes': 29401088}
+LONG {'streams': 5000, 'active_connections': 1, 'rss_bytes': 28725248, 'private_bytes': 29401088}
+LONG {'streams': 6000, 'active_connections': 1, 'rss_bytes': 28798976, 'private_bytes': 29401088}
+LONG {'streams': 7000, 'active_connections': 1, 'rss_bytes': 28798976, 'private_bytes': 29401088}
+LONG {'streams': 8000, 'active_connections': 1, 'rss_bytes': 28798976, 'private_bytes': 29401088}
+LONG {'streams': 9000, 'active_connections': 1, 'rss_bytes': 28798976, 'private_bytes': 29401088}
+LONG {'streams': 10000, 'active_connections': 1, 'rss_bytes': 28798976, 'private_bytes': 29401088}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 1, 'active_connections_with_probe': 1, 'elapsed_seconds': 8.213, 'rss_bytes': 32141312, 'private_bytes': 37969920}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 2, 'active_connections_with_probe': 1, 'elapsed_seconds': 12.023, 'rss_bytes': 34127872, 'private_bytes': 43155456}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 3, 'active_connections_with_probe': 1, 'elapsed_seconds': 15.874, 'rss_bytes': 32546816, 'private_bytes': 36134912}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 4, 'active_connections_with_probe': 1, 'elapsed_seconds': 19.744, 'rss_bytes': 32559104, 'private_bytes': 36134912}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 5, 'active_connections_with_probe': 1, 'elapsed_seconds': 23.583, 'rss_bytes': 32407552, 'private_bytes': 36069376}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 6, 'active_connections_with_probe': 1, 'elapsed_seconds': 27.463, 'rss_bytes': 32436224, 'private_bytes': 36069376}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 7, 'active_connections_with_probe': 1, 'elapsed_seconds': 31.399, 'rss_bytes': 32374784, 'private_bytes': 35971072}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 8, 'active_connections_with_probe': 1, 'elapsed_seconds': 35.231, 'rss_bytes': 32497664, 'private_bytes': 36036608}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 9, 'active_connections_with_probe': 1, 'elapsed_seconds': 39.102, 'rss_bytes': 32432128, 'private_bytes': 35971072}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 10, 'active_connections_with_probe': 1, 'elapsed_seconds': 43.025, 'rss_bytes': 32522240, 'private_bytes': 36036608}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 11, 'active_connections_with_probe': 1, 'elapsed_seconds': 46.904, 'rss_bytes': 32657408, 'private_bytes': 36495360}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 12, 'active_connections_with_probe': 1, 'elapsed_seconds': 50.933, 'rss_bytes': 32780288, 'private_bytes': 36560896}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 13, 'active_connections_with_probe': 1, 'elapsed_seconds': 54.764, 'rss_bytes': 32665600, 'private_bytes': 36495360}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 14, 'active_connections_with_probe': 1, 'elapsed_seconds': 58.573, 'rss_bytes': 30756864, 'private_bytes': 30457856}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 15, 'active_connections_with_probe': 1, 'elapsed_seconds': 62.436, 'rss_bytes': 32890880, 'private_bytes': 36495360}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 16, 'active_connections_with_probe': 1, 'elapsed_seconds': 66.257, 'rss_bytes': 30785536, 'private_bytes': 30457856}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 17, 'active_connections_with_probe': 1, 'elapsed_seconds': 70.088, 'rss_bytes': 32899072, 'private_bytes': 36495360}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 18, 'active_connections_with_probe': 1, 'elapsed_seconds': 73.893, 'rss_bytes': 30793728, 'private_bytes': 30457856}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 19, 'active_connections_with_probe': 1, 'elapsed_seconds': 77.722, 'rss_bytes': 33021952, 'private_bytes': 36560896}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 20, 'active_connections_with_probe': 1, 'elapsed_seconds': 81.53, 'rss_bytes': 33030144, 'private_bytes': 36495360}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 21, 'active_connections_with_probe': 1, 'elapsed_seconds': 85.384, 'rss_bytes': 33030144, 'private_bytes': 36495360}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 22, 'active_connections_with_probe': 1, 'elapsed_seconds': 89.242, 'rss_bytes': 33030144, 'private_bytes': 36495360}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 23, 'active_connections_with_probe': 1, 'elapsed_seconds': 93.115, 'rss_bytes': 33030144, 'private_bytes': 36560896}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 24, 'active_connections_with_probe': 1, 'elapsed_seconds': 96.986, 'rss_bytes': 32976896, 'private_bytes': 36560896}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 25, 'active_connections_with_probe': 1, 'elapsed_seconds': 100.798, 'rss_bytes': 32325632, 'private_bytes': 36560896}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 26, 'active_connections_with_probe': 1, 'elapsed_seconds': 104.638, 'rss_bytes': 32321536, 'private_bytes': 36560896}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 27, 'active_connections_with_probe': 1, 'elapsed_seconds': 108.441, 'rss_bytes': 32329728, 'private_bytes': 36560896}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 28, 'active_connections_with_probe': 1, 'elapsed_seconds': 112.236, 'rss_bytes': 32321536, 'private_bytes': 36560896}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 29, 'active_connections_with_probe': 1, 'elapsed_seconds': 116.044, 'rss_bytes': 32329728, 'private_bytes': 36560896}
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-credit ConnectionTerminated(error_code=3, frame_type=4, reason_phrase='flow control error')
+PASS listener survives rejected RESET connections
+PASS critical stream FIN application CLOSE control
+PASS critical stream FIN application CLOSE encoder
+PASS critical stream FIN application CLOSE decoder
+ROUND {'round': 30, 'active_connections_with_probe': 1, 'elapsed_seconds': 119.82, 'rss_bytes': 32321536, 'private_bytes': 36560896}
+{
+  "samples": 25,
+  "private_min": 30457856,
+  "private_max": 36560896,
+  "private_start": 36069376,
+  "private_end": 36560896,
+  "private_end_growth": 491520,
+  "private_slope_bytes_per_sample": 49391.45846153846
+}

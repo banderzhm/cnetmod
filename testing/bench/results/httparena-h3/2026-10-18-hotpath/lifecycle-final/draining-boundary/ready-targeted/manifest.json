@@ -1,0 +1,31 @@
+{
+  "scope": "Directed tests after expired-batch reference release and draining route retention. Includes previous lifecycle fixes; no new PTO priority strategy. Prior full32/Windows33 evidence belongs to preceding source freeze.",
+  "command": "unshare --mount --net bash /mnt/c/Users/25007/.codex/tmp/cnetmod-h3-isolated.sh bash run.sh",
+  "network": "isolated fresh netns true lo, no parallel load",
+  "binaries": {
+    "/var/tmp/cnetmod-h3-arena-build/bin/h3_interop_server": "8c1097ff82bd5c44e0ff4843d2e9e42acd648a7bf22bf90d8d105e9c61872ac9",
+    "/var/tmp/cnetmod-h3-arena-build/bin/quic_retire_stream_server": "ec5d1e5d107af3687a44fff6117a2aee63b3354095675c62408d575df430a081"
+  },
+  "source_note": "C++ snapshot reconstructs exactly the pre-review indentation and stats comment used by this build; later formatting/docs only do not change semantics. Python snapshot is the actual ready-barrier version executed.",
+  "files": {
+    "build.log": "0f1e8e23ffc8a436baefdb942b6cc6e5fdcf76f1061c5a677ccfa83f19fd7924",
+    "cnetmod-h3-boundary-positive-all-1.json": "2ec8e20cabbee5d8bb95598dfab9ca2450136f085f2171151a8c9ffc41e8a789",
+    "cnetmod-h3-boundary-positive-all-1.log": "036a8a779eb81d95937a36ec8dcd961ea03165fe8375e59b0f55fb0b76cf38fc",
+    "cnetmod-h3-boundary-positive-all-2.json": "519c59021331a3b47213159c7c12c4dbf09ebfe204301fe0c5ded83588261b40",
+    "cnetmod-h3-boundary-positive-all-2.log": "b5e56dead0cc232c92ad35ce17d783c339f410ae90b35ac79d490c6b1199e9a5",
+    "cnetmod-h3-boundary-positive-credit.json": "7336d9c6cbe43e98aa27c275b7544711035eea735b9e66dfa56bf37805e339c1",
+    "cnetmod-h3-boundary-positive-credit.log": "c78175f0396a6125df3138e69ac376f177c8dad143d39d690a1d7d170b6b633d",
+    "cnetmod-h3-boundary-positive-private.json": "b89d96a64ac8d45c23bd763a3fcfe640149a2417f3afec1b7973b8139c38fa04",
+    "cnetmod-h3-boundary-positive-private.log": "0cfbf4babab69ffaec64ad9217264a9ac8e2db12c4aa06ab5c23c706f973f38c",
+    "run.sh": "9282a80559ec3c830fec7da92119e60d0a084edef73ee1973168dd8f76ab76a3",
+    "source/testing/http3/h3_interop_server.cpp": "c7033d4a6f0eda7fee537fb51357d2f4298405244b31fe99980aab0412cd7ab3",
+    "source/testing/http3/http3_outbound_pto.py": "0be23ea18df417ef4a6006f63aa8ee1296bd6fbaa3fb49b7057fcfc6f183350b",
+    "source/testing/http3/quic_retire_stream.py": "d4d28f690d9919c286fb120719efabc4c9bb577d3c9e2973427769009541e26c",
+    "source/testing/http3/quic_retire_stream_server.cpp": "0b64eb4f8b10fd7499319e65886c27950ff60eb7205bf42191e1903d90a8c3db",
+    "source/src/protocol/quic/quic_connection.cpp": "c256461313181534eb7bc5f474a296190de0af9192a55f5a3b2ff7b2d4b0f8c2",
+    "source/src/protocol/quic/quic_connection.cppm": "261e63f95689c175319393093ff39b597a53065f588b08dbeb76ebf732669269",
+    "source/src/protocol/http/v3/http3_server.cpp": "43ace02a0b7a3bac65ef5ef9d6a91dc246445f6e9dc2d763b44739c55d494019",
+    "source/src/protocol/http/v3/http3_server.cppm": "e03256785309a1ec433bcaa9f483e21bfa58d076a3fd85af542be163ea619d5b"
+  },
+  "source_line_endings": "Source snapshots normalize line endings to LF; their hashes describe snapshot bytes, not the Windows working-tree CRLF bytes."
+}

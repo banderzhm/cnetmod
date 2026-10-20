@@ -1,0 +1,12 @@
+=== Validating: genhttp-ioxide-official-h3 ===
+[info] Subscribed tests: baseline-h3 static-h3
+[build] Building Docker image...
+d5dc786d71ed922525cc89f7e4f4370725e7975c5f04c75d7783b1d7d4554d53
+[wait] Waiting for server...
+[ready] Server is up
+[test] h3 endpoints (QUIC on :48443/udp)
+  PASS [baseline-h3 over QUIC] (4/4 2xx, ALPN h3)
+  PASS [static-h3 over QUIC] (4/4 2xx, ALPN h3)
+
+=== Results: 2 passed, 0 failed ===
+httparena-validate-genhttp-ioxide-official-h3

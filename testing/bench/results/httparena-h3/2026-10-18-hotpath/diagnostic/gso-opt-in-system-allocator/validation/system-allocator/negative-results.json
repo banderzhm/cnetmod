@@ -1,0 +1,19 @@
+{
+  "all_expected_fail": true,
+  "results": [
+    {
+      "variant": "raw-kernel-prefix",
+      "binary_sha256": "a1cffd5b12f55db415a6dc2ee10abd13bc81f5147f13fead584f0f1fec49f2e8",
+      "filter": "udp_segmented_batch_reports_original_prefix_and_preserves_early_cancel",
+      "actual_returncode": 1,
+      "expected_negative_failure": true
+    },
+    {
+      "variant": "ignore-native-overrides",
+      "binary_sha256": "3f40b33d639f66a4187c1f7f1592139b9020ef7543c4b6a39308d34346604b8c",
+      "filter": "udp_segmented_batch_retains_native_cork_and_segment_options",
+      "actual_returncode": 1,
+      "expected_negative_failure": true
+    }
+  ]
+}

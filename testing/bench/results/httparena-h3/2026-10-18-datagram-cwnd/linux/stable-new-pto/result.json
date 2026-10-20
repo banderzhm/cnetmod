@@ -1,0 +1,103 @@
+{
+  "status": "passed",
+  "expect": "pass",
+  "scenario": "pto",
+  "server_sha256": "af0a87a07e46c15974bfe96feffed32227d0d6f4820213565ec92bbe427d81cd",
+  "driver_sha256": "f718e565948194f363b3050b993f5030bbc7aa351427cc010c209fce20701097",
+  "aioquic_version": "1.7.0",
+  "peer_aead": "unmodified installed aioquic",
+  "command": [
+    "/var/tmp/cnetmod-datagram-cc-51d443d2/quic_datagram_cc_server.fixed-final",
+    "--port",
+    "54168",
+    "--cert",
+    "/mnt/c/Users/25007/.codex/tmp/datagram-cc-review-51d443d2/stable-new-pto/cert.pem",
+    "--key",
+    "/mnt/c/Users/25007/.codex/tmp/datagram-cc-review-51d443d2/stable-new-pto/key.pem",
+    "--listening-report",
+    "/mnt/c/Users/25007/.codex/tmp/datagram-cc-review-51d443d2/stable-new-pto/listening.txt",
+    "--ready-report",
+    "/mnt/c/Users/25007/.codex/tmp/datagram-cc-review-51d443d2/stable-new-pto/ready.txt",
+    "--burst-report",
+    "/mnt/c/Users/25007/.codex/tmp/datagram-cc-review-51d443d2/stable-new-pto/burst.json",
+    "--result-report",
+    "/mnt/c/Users/25007/.codex/tmp/datagram-cc-review-51d443d2/stable-new-pto/failure.txt"
+  ],
+  "pto": {
+    "stream": 8,
+    "repeat": {
+      "original": {
+        "at": 95.516719778,
+        "direction": "server",
+        "bytes": 547,
+        "action": "forward",
+        "phase": "pto",
+        "pn": 32,
+        "frames": {
+          "streams": [
+            {
+              "stream": 8,
+              "offset": 13312,
+              "length": 512,
+              "fin": false,
+              "sha256": "9ea2ca99172f8143d19673eb288cb607ce2e87f09914569ac1285981dcb8803c"
+            }
+          ],
+          "datagrams": [],
+          "kinds": [
+            14
+          ]
+        }
+      },
+      "repeat": {
+        "at": 95.545204803,
+        "direction": "server",
+        "bytes": 1071,
+        "action": "forward",
+        "phase": "pto",
+        "pn": 33,
+        "frames": {
+          "streams": [
+            {
+              "stream": 8,
+              "offset": 13312,
+              "length": 512,
+              "fin": false,
+              "sha256": "9ea2ca99172f8143d19673eb288cb607ce2e87f09914569ac1285981dcb8803c"
+            },
+            {
+              "stream": 8,
+              "offset": 13824,
+              "length": 512,
+              "fin": false,
+              "sha256": "9ea2ca99172f8143d19673eb288cb607ce2e87f09914569ac1285981dcb8803c"
+            }
+          ],
+          "datagrams": [],
+          "kinds": [
+            1,
+            18,
+            19,
+            14,
+            14
+          ]
+        }
+      },
+      "frame": {
+        "stream": 8,
+        "offset": 13312,
+        "length": 512,
+        "fin": false,
+        "sha256": "9ea2ca99172f8143d19673eb288cb607ce2e87f09914569ac1285981dcb8803c"
+      }
+    },
+    "held_packets": 3,
+    "received_before_ack_release": 14848,
+    "repeat_elapsed_ms": 33.113088999996876,
+    "complete_body_bytes": 262144,
+    "complete_body_sha256": "b3bc55b2b3c1738327c7c1ed4b8897cb8489b1d7cd19b3127c25b283cc3c441b",
+    "fin": true
+  },
+  "proxy_errors": [],
+  "server_exit_code": -15
+}

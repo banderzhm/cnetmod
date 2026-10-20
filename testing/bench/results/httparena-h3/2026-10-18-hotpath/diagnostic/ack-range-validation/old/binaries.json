@@ -1,0 +1,6 @@
+{
+  "test_quic_loss_detection": {
+    "path": "/tmp/cnetmod-h3-arena-build/testing/tests/test_quic_loss_detection",
+    "sha256": "da4148c468e44d4254afb07bfaeb7936f45b35bf91570f52cdacbdd1b55fb03f"
+  }
+}

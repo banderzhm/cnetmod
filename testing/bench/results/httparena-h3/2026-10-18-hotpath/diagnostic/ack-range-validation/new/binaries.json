@@ -1,0 +1,14 @@
+{
+  "test_quic_loss_detection": {
+    "path": "/tmp/cnetmod-h3-arena-build/testing/tests/test_quic_loss_detection",
+    "sha256": "cdf2d4e2e1baaa825efe5ad113f29f08f108b407c67769c51097ed1a19105099"
+  },
+  "test_quic_congestion": {
+    "path": "/tmp/cnetmod-h3-arena-build/testing/tests/test_quic_congestion",
+    "sha256": "3401227f75876ab1707e64e01e63616529a39b642957aee0181f0f3ed0b2782c"
+  },
+  "test_quic_stream": {
+    "path": "/tmp/cnetmod-h3-arena-build/testing/tests/test_quic_stream",
+    "sha256": "48fe084c4627b5e6f1de95b15addc96fd148f3ea10f12bfab7f79c85f5b6ea59"
+  }
+}

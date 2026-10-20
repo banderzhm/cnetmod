@@ -1,0 +1,13 @@
+{
+  "provenance": "Coordinator /root confirmation of final exec tool session40035 exit0, plus original full console log",
+  "reported_exit_code": 0,
+  "tool_session": 40035,
+  "console_file": "cnetmod-h3-system-retention-180-console.log",
+  "console_sha256": "b0b5f99a378889840ae97a8942df23612af327e105985559515f49b76ef57b60",
+  "results_directory": "/var/tmp/cnetmod-h3-system-retention-03b6c34bf7154d55ba0c935e0ba9a5d8",
+  "console_results_line_verified": true,
+  "console_final_sample_matches_summary": true,
+  "cleanup": "Extended runner waits for its server and docker rm check=True before printing RESULTS. Reported exit0 and captured RESULTS establish that this cleanup path completed; no additional process inventory is inferred.",
+  "archived_runner_sha256": "cc6038029fec14bd5510468ce0294912e6897d972f07e05407cb5a4a89a3ff29",
+  "runner_hash_scope": "archive-time copy; runner did not record runtime self-hash"
+}

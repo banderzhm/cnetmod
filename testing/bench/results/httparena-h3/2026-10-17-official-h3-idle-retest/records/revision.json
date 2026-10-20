@@ -1,0 +1,7 @@
+{
+  "commit": "e20010d20b2df1e3f0c17d82b1b66c5592a0ca5c",
+  "binary_sha256": "ee7f9273c57c8e75aebfbae6c6cdda1022bed0fd5b0fab89003877961138a23b",
+  "test_token": "explicitly handed over by user for serial official retest",
+  "profiles": "two cnetmod profiles after idle-route cleanup fix, three rounds each; all previous 27 rounds retained",
+  "resource_sampling": "supplemental /proc RSS once per second; official Docker peaks unchanged"
+}

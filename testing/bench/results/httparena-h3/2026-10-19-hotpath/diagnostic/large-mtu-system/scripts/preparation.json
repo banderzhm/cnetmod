@@ -1,0 +1,29 @@
+{
+  "prepared_only": true,
+  "runner_sha256": "70172b235e79887ddafccfda8e3d1054a23cb0d74039ac6f5db6501e7348a457",
+  "syntax": "AST PASS",
+  "synthetic": "host/thread deltas PASS; no runtime IO/subprocess executed",
+  "configurations": [
+    [
+      4096,
+      8192
+    ],
+    [
+      16384,
+      65507
+    ],
+    [
+      32768,
+      65507
+    ],
+    [
+      65507,
+      65507
+    ]
+  ],
+  "selection": "Coordinator chooses two after guard repair; no default sweep",
+  "limitations": [
+    "New --sample-cpu flag not runtime-checked here; runner fails if profiler cannot attach.",
+    "Host busy includes loadgen and unrelated processes; per-thread time is not causal blocking or ownership evidence."
+  ]
+}

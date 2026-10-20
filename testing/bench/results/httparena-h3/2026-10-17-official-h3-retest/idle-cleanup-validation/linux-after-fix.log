@@ -1,0 +1,37 @@
+Test project /tmp/cnetmod-h3-arena-build
+    Start 65: http3_idle_connection_cleanup
+1/9 Test #65: http3_idle_connection_cleanup ........................   Passed   31.58 sec
+    Start 66: http_client_http3_end_to_end
+2/9 Test #66: http_client_http3_end_to_end .........................   Passed    0.84 sec
+    Start 67: http_client_http3_dynamic_qpack_end_to_end
+3/9 Test #67: http_client_http3_dynamic_qpack_end_to_end ...........   Passed    0.52 sec
+    Start 68: http3_multipath_end_to_end
+4/9 Test #68: http3_multipath_end_to_end ...........................   Passed    0.42 sec
+    Start 69: http3_multipath_path_mtu_end_to_end
+5/9 Test #69: http3_multipath_path_mtu_end_to_end ..................   Passed    0.58 sec
+    Start 70: http3_multipath_path_mtu_blackhole_end_to_end
+6/9 Test #70: http3_multipath_path_mtu_blackhole_end_to_end ........   Passed    2.76 sec
+    Start 71: http3_multipath_local_path_close_end_to_end
+7/9 Test #71: http3_multipath_local_path_close_end_to_end ..........   Passed    0.76 sec
+    Start 72: http3_connect_close_end_to_end
+8/9 Test #72: http3_connect_close_end_to_end .......................   Passed    0.17 sec
+    Start 73: http3_multipath_path_validation_timeout_end_to_end
+9/9 Test #73: http3_multipath_path_validation_timeout_end_to_end ...   Passed    3.25 sec
+
+100% tests passed out of 9
+
+Label Time Summary:
+blackhole     =   2.76 sec*proc (1 test)
+client        =   1.54 sec*proc (3 tests)
+close         =   0.93 sec*proc (2 tests)
+connect       =   0.17 sec*proc (1 test)
+end_to_end    =   9.30 sec*proc (8 tests)
+http3         =  40.88 sec*proc (9 tests)
+lifecycle     =  31.58 sec*proc (1 test)
+multipath     =   7.76 sec*proc (5 tests)
+pmtu          =   3.33 sec*proc (2 tests)
+qpack         =   0.52 sec*proc (1 test)
+quic          =  39.52 sec*proc (7 tests)
+timeout       =   3.25 sec*proc (1 test)
+
+Total Test time (real) =  40.88 sec

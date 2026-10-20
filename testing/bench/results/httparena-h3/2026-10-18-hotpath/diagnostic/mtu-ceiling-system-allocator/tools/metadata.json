@@ -1,0 +1,13 @@
+{
+  "production_not_modified": true,
+  "base": "testing/bench/arena_h3_server.cpp",
+  "base_sha256": "9f0b62463961b92b47c29403222db65b4b938ccf6e4263257bffc308ad4dcdb5",
+  "candidate_lf_sha256": "09dffdca4abcd01ad0d1dc53f759f1f1b45572d6b16895d65615b1f0430c618f",
+  "patch_sha256": "ff8eeeea325521098c5ebefd75fb384a8a55d33db17644b928f1980515640f0b",
+  "existing_runner": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-gso-ab.py",
+  "existing_runner_sha256": "586d7f5c2b1bcfe425e6760edcf27841282220c60c7a84caa69b9ebb0e25974e",
+  "prepared_runner": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-mtu-ceiling-ab.py",
+  "prepared_runner_sha256": "f88b1701c9fed2c6279042756a3cfc3cad86fad2596a20786f3d7a8cf99aa000",
+  "runner_ast_parse_passed": true,
+  "executed": false
+}

@@ -1,0 +1,21 @@
+{
+  "pid": 68048,
+  "command": [
+    "D:\\runtime\\miniconda3\\Library\\bin\\openssl.exe",
+    "req",
+    "-x509",
+    "-newkey",
+    "rsa:2048",
+    "-nodes",
+    "-days",
+    "1",
+    "-config",
+    "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-pmtu-final-system-windows-20261018-ffa91ab479f4422791aaeacc51dbe847\\run-653c4f3eda064e8280a601cdc3f0d82b\\nghttp3-server_to_cnetmod-client\\openssl.cnf",
+    "-keyout",
+    "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-pmtu-final-system-windows-20261018-ffa91ab479f4422791aaeacc51dbe847\\run-653c4f3eda064e8280a601cdc3f0d82b\\nghttp3-server_to_cnetmod-client\\key.pem",
+    "-out",
+    "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-pmtu-final-system-windows-20261018-ffa91ab479f4422791aaeacc51dbe847\\run-653c4f3eda064e8280a601cdc3f0d82b\\nghttp3-server_to_cnetmod-client\\cert.pem"
+  ],
+  "cwd": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-pmtu-final-system-windows-20261018-ffa91ab479f4422791aaeacc51dbe847\\run-653c4f3eda064e8280a601cdc3f0d82b\\nghttp3-server_to_cnetmod-client",
+  "target_platform": "Windows"
+}

@@ -1,0 +1,339 @@
+{
+  "server": "/var/tmp/cnetmod-h3-arena-build/bin/h3_interop_server",
+  "pid": 644,
+  "long_connection": [
+    {
+      "streams": 1000,
+      "active_connections": 1,
+      "rss_bytes": 30453760,
+      "pss_bytes": 28135424,
+      "private_bytes": 27996160
+    },
+    {
+      "streams": 2000,
+      "active_connections": 1,
+      "rss_bytes": 30453760,
+      "pss_bytes": 28135424,
+      "private_bytes": 27996160
+    },
+    {
+      "streams": 3000,
+      "active_connections": 1,
+      "rss_bytes": 30453760,
+      "pss_bytes": 28135424,
+      "private_bytes": 27996160
+    },
+    {
+      "streams": 4000,
+      "active_connections": 1,
+      "rss_bytes": 30453760,
+      "pss_bytes": 28135424,
+      "private_bytes": 27996160
+    },
+    {
+      "streams": 5000,
+      "active_connections": 1,
+      "rss_bytes": 30453760,
+      "pss_bytes": 28135424,
+      "private_bytes": 27996160
+    },
+    {
+      "streams": 6000,
+      "active_connections": 1,
+      "rss_bytes": 30453760,
+      "pss_bytes": 28135424,
+      "private_bytes": 27996160
+    },
+    {
+      "streams": 7000,
+      "active_connections": 1,
+      "rss_bytes": 30453760,
+      "pss_bytes": 28135424,
+      "private_bytes": 27996160
+    },
+    {
+      "streams": 8000,
+      "active_connections": 1,
+      "rss_bytes": 30453760,
+      "pss_bytes": 28135424,
+      "private_bytes": 27996160
+    },
+    {
+      "streams": 9000,
+      "active_connections": 1,
+      "rss_bytes": 30453760,
+      "pss_bytes": 28135424,
+      "private_bytes": 27996160
+    },
+    {
+      "streams": 10000,
+      "active_connections": 1,
+      "rss_bytes": 30453760,
+      "pss_bytes": 28135424,
+      "private_bytes": 27996160
+    }
+  ],
+  "rounds": [
+    {
+      "round": 1,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 9.267,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28164096,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 2,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 13.217,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28164096,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 3,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 17.144,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28155904,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 4,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 21.054,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28164096,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 5,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 25.003,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28164096,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 6,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 28.888,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28164096,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 7,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 32.83,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28154880,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 8,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 36.753,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28164096,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 9,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 40.626,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28154880,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 10,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 44.526,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28164096,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 11,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 48.528,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28158976,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 12,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 52.519,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28164096,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 13,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 56.427,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28164096,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 14,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 60.377,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28164096,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 15,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 64.256,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28164096,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 16,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 68.18,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28164096,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 17,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 72.131,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28164096,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 18,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 76.109,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28164096,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 19,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 80.091,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28164096,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 20,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 84.019,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28154880,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 21,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 87.9,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28154880,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 22,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 91.848,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28157952,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 23,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 95.761,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28157952,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 24,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 99.659,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28164096,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 25,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 103.642,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28164096,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 26,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 107.574,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28164096,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 27,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 111.56,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28164096,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 28,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 115.526,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28164096,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 29,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 119.469,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28153856,
+      "private_bytes": 28016640
+    },
+    {
+      "round": 30,
+      "active_connections_with_probe": 1,
+      "elapsed_seconds": 123.422,
+      "rss_bytes": 30474240,
+      "pss_bytes": 28164096,
+      "private_bytes": 28016640
+    }
+  ],
+  "passed": true,
+  "warmup_rounds": 5,
+  "round_summary_after_warmup": {
+    "samples": 25,
+    "private_min": 28016640,
+    "private_max": 28016640,
+    "private_start": 28016640,
+    "private_end": 28016640,
+    "private_end_growth": 0,
+    "private_slope_bytes_per_sample": 0.0
+  },
+  "long_connection_summary": {
+    "samples": 10,
+    "private_min": 27996160,
+    "private_max": 27996160,
+    "private_start": 27996160,
+    "private_end": 27996160,
+    "private_end_growth": 0,
+    "private_slope_bytes_per_sample": 0.0
+  },
+  "elapsed_seconds": 123.42300825299998
+}

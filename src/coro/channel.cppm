@@ -213,7 +213,11 @@ class channel
 
 public:
     explicit channel(std::size_t capacity = 1)
-        : capacity_(capacity), slots_(capacity > 0 ? std::make_unique<slot_t[]>(capacity) : nullptr) {}
+        : capacity_(capacity),
+          allocated_slots_(capacity > 1U ? std::make_unique<slot_t[]>(capacity) : nullptr),
+          slots_(capacity == 1U ? std::addressof(inline_slot_) : allocated_slots_.get())
+    {
+    }
 
     ~channel()
     {
@@ -628,7 +632,12 @@ public:
 
 private:
     std::size_t capacity_;
-    std::unique_ptr<slot_t[]> slots_;
+    // One-token readiness latches are the dominant channel shape for network
+    // streams. Store that slot in the channel object so opening and retiring a
+    // stream does not allocate and free a one-element heap array.
+    slot_t inline_slot_{};
+    std::unique_ptr<slot_t[]> allocated_slots_;
+    slot_t* slots_{};
 
     mutable spinlock lock_;
     bool closed_ = false;

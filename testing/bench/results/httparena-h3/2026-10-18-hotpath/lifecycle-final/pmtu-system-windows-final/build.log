@@ -1,0 +1,549 @@
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  async_op.cppm
+  正在编译...
+  async_op.cppm
+  ssl_ktls.cpp
+  dtls_impl.cpp
+  executor.cppm
+  iocp_async_op.cpp
+  timer.cppm
+  udp_impl.cpp
+  async_op.cpp
+  ssl_impl.cpp
+  dns_impl.cpp
+  task_group.cppm
+  retry.cppm
+  timer_impl.cpp
+  core.cppm
+  coro.cppm
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  test_udp_sendto_on_cancel.cpp
+  正在编译...
+  test_udp_sendto_on_cancel.cpp
+  test_udp_sendto_on_cancel.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_udp_sendto_on_cancel.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  quic_recovery.cpp
+  congestion_control.cpp
+  congestion_control.cppm
+  quic_recovery.cppm
+  loss_detection.cppm
+  loss_detection.cpp
+  quic_connection.cpp
+  quic_foundation.cppm
+  正在编译...
+  quic_foundation.cppm
+  quic_packet.cppm
+  quic_frame.cppm
+  congestion_control.cppm
+  quic_write_queue.cppm
+  quic_crypto.cppm
+  quic_stream.cppm
+  loss_detection.cppm
+  quic_recovery.cppm
+  quic_connection.cppm
+  quic.cppm
+  congestion_control.cpp
+  quic_recovery.cpp
+  quic_write_queue.cpp
+  loss_detection.cpp
+  quic_crypto.cpp
+  quic_foundation.cpp
+  varint.cpp
+  quic_connection.cpp
+  quic_frame.cpp
+  quic_flow_control.cpp
+  quic_stream.cpp
+  quic_packet.cpp
+D:\runtime\vs\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.51.36231\include\memory(4042,17): warning C4996: 'std::atomic_compare_exchange_weak_explicit': warning STL4029: std::atomic_*() overloads for shared_ptr are deprecated in C++20. The shared_ptr specialization of std::atomic provides superior functionality. You can define _SILENCE_CXX20_OLD_SHARED_PTR_ATOMIC_SUPPORT_DEPRECATION_WARNING or _SILENCE_ALL_CXX20_DEPRECATION_WARNINGS to suppress this warning. [C:\Users\25007\.codex\tmp\cnetmod-h3-windows\cnetmod_quic.vcxproj]
+  (编译源文件“../../worktrees/2c3c/cnetmod/src/protocol/quic/quic_crypto.cpp”)
+      D:\runtime\vs\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.51.36231\include\memory(4042,17):
+      模板实例化上下文(最早的实例化上下文)为
+          C:\Users\25007\.codex\worktrees\2c3c\cnetmod\src\protocol\quic\quic_crypto.cpp(1582,19):
+          查看对正在编译的函数 模板 实例化“bool std::atomic_compare_exchange_strong_explicit<cnetmod::quic::quic_aead_context>(std::shared_ptr<cnetmod::quic::quic_aead_context> *,std::shared_ptr<cnetmod::quic::quic_aead_context> *,std::shared_ptr<cnetmod::quic::quic_aead_context>,std::memory_order,std::memory_order)”的引用
+  
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  http3_server.cpp
+  http3_server.cppm
+  正在编译...
+  session.cppm
+  router.cppm
+  http3_session.cppm
+  session.cpp
+  http3_server.cppm
+  http3_session.cpp
+  http3_client.cppm
+  http_client.cppm
+  swagger_ui.cppm
+  utils.cppm
+  swagger.cppm
+  http_server.cppm
+  http3_server.cpp
+  http3_client.cpp
+  http.cppm
+  cookie.cpp
+  multipart_content_type.cpp
+  jwt_auth.cppm
+  access_log.cppm
+  multipart_parser.cpp
+  multipart_form.cpp
+  http_v1_parser.cpp
+  http_client.cpp
+  http_response.cpp
+  metrics.cppm
+  multipart_url.cpp
+  body_limit.cppm
+  multipart_disposition.cpp
+  authorization.cppm
+  http_server.cpp
+  compress.cppm
+  swagger.cpp
+  ip_firewall.cppm
+  sse.cpp
+  cors.cppm
+  swagger_ui.cpp
+  sse_stream.cpp
+  http_cache.cppm
+  ip_filter.cppm
+  router.cpp
+  health_check.cppm
+  multipart_builder.cpp
+  recover.cppm
+  utils.cpp
+  client_pool.cppm
+  rate_limiter.cppm
+  graceful_shutdown.cppm
+  tracing.cppm
+  timeout.cppm
+  http_metrics.cpp
+  upload.cppm
+  http_access_log.cpp
+  request_id.cppm
+  tracing.cpp
+  http_graceful_shutdown.cpp
+  http_recover.cpp
+  http_cache.cpp
+  ip_firewall.cpp
+  middleware.cppm
+  authorization.cpp
+  http_rate_limiter.cpp
+  http_cors.cpp
+  http_compress.cpp
+  http_ip_filter.cpp
+  http_request_id.cpp
+  http_upload.cpp
+  client_pool.cpp
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  正在扫描源以查找模块依赖项...
+  正在编译...
+  http_client.cppm
+  otlp_http_exporter.cppm
+  http_server.cppm
+  json_template.cppm
+  messaging.cppm
+  task_supervisor.cppm
+  async_file_template.cppm
+  http_client.cpp
+  async_file_template.cpp
+  telemetry.cppm
+  task_supervisor.cpp
+  otlp_http_exporter.cpp
+  messaging.cpp
+  http_server.cpp
+  managed_service.cppm
+  telemetry.cpp
+  rest_template.cppm
+  observability.cppm
+  rest_template.cpp
+  service_registry.cppm
+  health_registry.cppm
+  managed_service.cpp
+  health_registry.cpp
+  service_lifecycle.cppm
+  service_registry.cpp
+  service_lifecycle.cpp
+  configuration.cppm
+  diagnostics.cppm
+  auto_configuration.cppm
+  configuration.cpp
+  application_runtime.cppm
+  auto_configuration.cpp
+  http_client.cppm
+  components.cppm
+  builtin_auto_configuration.cpp
+  http_client.cpp
+  options.cppm
+  components.cpp
+  application_runtime.cpp
+  json.cppm
+  json.cpp
+  application_module.cppm
+  options.cpp
+  application_host.cppm
+  application_host.cpp
+  application.cppm
+  cnetmod_application.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_application.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_core.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_core.lib
+  正在扫描源以查找模块依赖项...
+  quic_retire_stream_server.cpp
+  正在编译...
+  quic_retire_stream_server.cpp
+  quic_retire_stream_server.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\bin\Release\quic_retire_stream_server.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_application.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_application.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_core.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_core.lib
+  正在扫描源以查找模块依赖项...
+  quic_pmtu_cc_server.cpp
+  正在编译...
+  quic_pmtu_cc_server.cpp
+  quic_pmtu_cc_server.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\bin\Release\quic_pmtu_cc_server.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  test_concurrent_containers.cpp
+  正在编译...
+  test_concurrent_containers.cpp
+  test_concurrent_containers.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_concurrent_containers.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  test_deadline.cpp
+  正在编译...
+  test_deadline.cpp
+  test_deadline.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_deadline.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  test_task_group.cpp
+  正在编译...
+  test_task_group.cpp
+  test_task_group.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_task_group.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  test_wait_group.cpp
+  正在编译...
+  test_wait_group.cpp
+  test_wait_group.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_wait_group.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  test_task.cpp
+  正在编译...
+  test_task.cpp
+C:\Users\25007\.codex\worktrees\2c3c\cnetmod\testing\tests\test_task.cpp(136,1): warning C4033: “throws_on”必须返回值 [C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\test_task.vcxproj]
+      C:\Users\25007\.codex\worktrees\2c3c\cnetmod\testing\tests\test_task.cpp(136,1):
+      当承诺类型“cnetmod::task<int>::promise_type”未声明 "return_void" 时，从协同例程结果末尾关闭流会导致未定义的行为
+  
+  test_task.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_task.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  test_udp_batch.cpp
+  正在编译...
+  test_udp_batch.cpp
+  test_udp_batch.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_udp_batch.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  test_quic_varint.cpp
+  正在编译...
+  test_quic_varint.cpp
+  test_quic_varint.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_quic_varint.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  test_quic_frame.cpp
+  正在编译...
+  test_quic_frame.cpp
+  test_quic_frame.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_quic_frame.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  test_quic_packet.cpp
+  正在编译...
+  test_quic_packet.cpp
+  test_quic_packet.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_quic_packet.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  test_quic_stream.cpp
+  正在编译...
+  test_quic_stream.cpp
+  test_quic_stream.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_quic_stream.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  test_quic_loss_detection.cpp
+  正在编译...
+  test_quic_loss_detection.cpp
+  test_quic_loss_detection.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_quic_loss_detection.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  test_quic_congestion.cpp
+  正在编译...
+  test_quic_congestion.cpp
+  test_quic_congestion.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_quic_congestion.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  正在扫描源以查找模块依赖项...
+  test_quic_early_data.cpp
+  正在编译...
+  test_quic_early_data.cpp
+  test_quic_early_data.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_quic_early_data.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  正在扫描源以查找模块依赖项...
+  test_http3_qpack.cpp
+  正在编译...
+  test_http3_qpack.cpp
+  test_http3_qpack.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_http3_qpack.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  正在扫描源以查找模块依赖项...
+  test_http3_frame.cpp
+  正在编译...
+  test_http3_frame.cpp
+  test_http3_frame.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_http3_frame.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_application.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_application.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_core.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_core.lib
+  正在扫描源以查找模块依赖项...
+  h3_interop_server.cpp
+  正在编译...
+  h3_interop_server.cpp
+  h3_interop_server.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\bin\Release\h3_interop_server.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_application.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_application.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_core.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_core.lib
+  正在扫描源以查找模块依赖项...
+  h3_interop_client.cpp
+  正在编译...
+  h3_interop_client.cpp
+  h3_interop_client.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\bin\Release\h3_interop_client.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_application.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_application.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_core.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_core.lib
+  正在扫描源以查找模块依赖项...
+  http_client_e2e_server.cpp
+  正在编译...
+  http_client_e2e_server.cpp
+  http3_e2e_server.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\http3\Release\http3_e2e_server.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_application.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_application.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_core.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_core.lib
+  正在扫描源以查找模块依赖项...
+  http_client_e2e.cpp
+  正在编译...
+  http_client_e2e.cpp
+  http_client_http3_e2e.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\http3\Release\http_client_http3_e2e.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_application.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_application.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_core.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_core.lib
+  正在扫描源以查找模块依赖项...
+  http3_migration_e2e.cpp
+  正在编译...
+  http3_migration_e2e.cpp
+  http3_migration_e2e.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\http3\Release\http3_migration_e2e.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  正在扫描源以查找模块依赖项...
+  arena_h3_server.cpp
+  正在编译...
+  arena_h3_server.cpp
+  arena_h3_server.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\bench\Release\arena_h3_server.exe

@@ -34,6 +34,15 @@ auto quic_stream::init() -> void
         return;
     }
 
+    if (!impl_->bidirectional_)
+    {
+        const bool local = is_client_initiated(impl_->id_) ==
+            (impl_->owner_ == quic_role::client);
+        impl_->state_ = local ? stream_state::half_closed_remote
+                             : stream_state::half_closed_local;
+        return;
+    }
+
     // For client-initiated streams, immediately mark as open locally
     if ((impl_->owner_ == quic_role::client && is_client_initiated(impl_->id_)) ||
         (impl_->owner_ == quic_role::server && is_server_initiated(impl_->id_)))
@@ -45,19 +54,25 @@ auto quic_stream::init() -> void
 auto quic_stream::send(std::span<const std::byte> data)
     -> task<std::expected<void, std::error_code>>
 {
+    co_return apply_send_state(data);
+}
+
+auto quic_stream::apply_send_state(std::span<const std::byte> data)
+    -> std::expected<void, std::error_code>
+{
     auto& impl = *impl_;
 
     // Check state
     if (impl.state_ == stream_state::closed ||
         impl.state_ == stream_state::half_closed_local)
     {
-        co_return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
+        return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
     }
 
     // Check flow control limit
     if (data.size() > impl.max_send_data_ - impl.total_sent_)
     {
-        co_return std::unexpected(make_error_code(quic_errc::flow_control_error));
+        return std::unexpected(make_error_code(quic_errc::flow_control_error));
     }
     else
     {
@@ -74,19 +89,29 @@ auto quic_stream::send(std::span<const std::byte> data)
         }
     }
 
-    co_return {};
+    return {};
 }
 
 auto quic_stream::close_local() -> task<void>
 {
+    apply_close_local_state();
+    co_return;
+}
+
+auto quic_stream::apply_close_local_state() -> void
+{
+    if (impl_->state_ == stream_state::closed)
+        return;
     impl_->state_ = impl_->state_ == stream_state::half_closed_remote
         ? stream_state::closed
         : stream_state::half_closed_local;
-    co_return;
+    return;
 }
 
 auto quic_stream::close_remote() -> void
 {
+    if (impl_->state_ == stream_state::closed)
+        return;
     impl_->state_ = impl_->state_ == stream_state::half_closed_local
         ? stream_state::closed
         : stream_state::half_closed_remote;
@@ -98,73 +123,37 @@ auto quic_stream::close_both() -> task<void>
     co_return;
 }
 
-[[nodiscard]] static auto next_offset_from_map(const std::map<std::uint64_t, std::vector<std::byte>>& buf, std::uint64_t offset) -> std::optional<std::pair<std::uint64_t, std::size_t>>
-{
-    auto it = buf.lower_bound(offset);
-    if (it == buf.end())
-        return std::nullopt;
-
-    if (it->first != offset)
-        return std::nullopt;
-
-    return std::make_pair(it->first, it->second.size());
-}
-
 auto quic_stream::receive(mutable_buffer buf)
     -> task<std::expected<std::size_t, std::error_code>>
 {
+    co_return apply_receive_state(buf);
+}
+
+auto quic_stream::apply_receive_state(mutable_buffer buf)
+    -> std::expected<std::size_t, std::error_code>
+{
     auto& impl = *impl_;
+
+    if (impl.receive_abandoned_)
+        return std::unexpected(std::make_error_code(std::errc::operation_canceled));
 
     if (impl.state_ == stream_state::closed)
     {
-        co_return std::size_t{0};
+        return std::size_t{0};
     }
 
     if (impl.receive_buffer_.empty())
     {
         if (impl.state_ == stream_state::half_closed_remote)
         {
-            co_return std::size_t{0};
+            return std::size_t{0};
         }
 
         // Need to wait for more data
-        co_return std::unexpected(std::make_error_code(std::errc::operation_would_block));
+        return std::unexpected(std::make_error_code(std::errc::operation_would_block));
     }
 
-    std::size_t total_copied = 0;
-
-    // Copy all contiguous data starting from next_expected_offset_
-    while (buf.size > total_copied)
-    {
-        auto maybe_range = next_offset_from_map(impl.receive_buffer_, impl.next_expected_offset_);
-        if (!maybe_range.has_value())
-        {
-            break;
-        }
-
-        const auto& [offset, data_size] = *maybe_range;
-        const auto& data_vec = impl.receive_buffer_[offset];
-
-        const auto copy_amt = std::min(buf.size - total_copied, data_size);
-        std::memcpy(static_cast<std::byte*>(buf.data) + total_copied, data_vec.data(), copy_amt);
-        total_copied += copy_amt;
-        impl.next_expected_offset_ += copy_amt;
-
-        // Remove completely consumed entry
-        if (copy_amt >= data_size)
-        {
-            impl.receive_buffer_.erase(offset);
-        }
-        else
-        {
-            // Create new entry without copied portion
-            auto remaining = std::vector<std::byte>(
-                data_vec.begin() + copy_amt,
-                data_vec.end());
-            impl.receive_buffer_.erase(offset);
-            impl.receive_buffer_[offset + copy_amt] = std::move(remaining);
-        }
-    }
+    const auto total_copied = deliver_contiguous_data(buf);
 
     if (total_copied > 0)
     {
@@ -183,15 +172,20 @@ auto quic_stream::receive(mutable_buffer buf)
     // operation_would_block to await the missing contiguous range.
     if (total_copied == 0 && impl.state_ != stream_state::closed &&
         impl.state_ != stream_state::half_closed_remote)
-        co_return std::unexpected(
+        return std::unexpected(
             std::make_error_code(std::errc::operation_would_block));
 
-    co_return total_copied;
+    return total_copied;
 }
 
 void quic_stream::update_send_limit(std::uint64_t maximum) noexcept
 {
     impl_->max_send_data_ = std::max(impl_->max_send_data_, maximum);
+}
+
+void quic_stream::set_initial_send_limit(std::uint64_t maximum) noexcept
+{
+    impl_->max_send_data_ = maximum;
 }
 
 void quic_stream::set_initial_receive_limit(std::uint64_t maximum) noexcept
@@ -207,38 +201,37 @@ void quic_stream::extend_receive_limit(std::uint64_t maximum) noexcept
 
 auto quic_stream::deliver_contiguous_data(mutable_buffer buf) -> std::size_t
 {
-    // Same logic as receive but without suspension
-    std::size_t copied = 0;
-
+    std::size_t copied{};
     while (copied < buf.size)
     {
         auto it = impl_->receive_buffer_.find(impl_->next_expected_offset_);
         if (it == impl_->receive_buffer_.end())
-        {
             break;
-        }
 
         const auto available = it->second.size();
-        const auto to_copy = std::min(buf.size - copied, available);
-
-        std::memcpy(static_cast<std::byte*>(buf.data) + copied, it->second.data(), to_copy);
-        copied += to_copy;
-        impl_->next_expected_offset_ += to_copy;
-
-        if (to_copy >= available)
+        const auto count = std::min(buf.size - copied, available);
+        std::memcpy(static_cast<std::byte*>(buf.data) + copied, it->second.data(), count);
+        if (count == available)
         {
             impl_->receive_buffer_.erase(it);
         }
         else
         {
-            auto remaining = std::vector<std::byte>(
-                it->second.begin() + to_copy,
-                it->second.end());
-            impl_->receive_buffer_.erase(it);
-            impl_->receive_buffer_[impl_->next_expected_offset_] = std::move(remaining);
+            // byte move/erase cannot throw or allocate. Retain this segment's
+            // capacity until it is consumed, reset or abandoned instead of
+            // allocating a new tail after some bytes have already been read.
+            it->second.erase(it->second.begin(), it->second.begin() + count);
+            auto node = impl_->receive_buffer_.extract(it);
+            node.key() += count;
+            const auto inserted = impl_->receive_buffer_.insert(std::move(node));
+            // push_received stores non-overlapping ranges; this key remains
+            // inside the old range, strictly before every following range.
+            if (!inserted.inserted)
+                std::terminate(); // Never silently discard a rejected node.
         }
+        copied += count;
+        impl_->next_expected_offset_ += count;
     }
-
     return copied;
 }
 
@@ -286,6 +279,8 @@ auto quic_stream::push_received(std::uint64_t offset,
     if (offset > std::numeric_limits<std::uint64_t>::max() - data.size())
         return std::unexpected(make_error_code(quic_errc::final_size_error));
     const auto end = offset + data.size();
+    if (fin && end < state.highest_received_offset_)
+        return std::unexpected(make_error_code(quic_errc::final_size_error));
     if (state.final_size_ &&
         (end > *state.final_size_ || (fin && end != *state.final_size_)))
         return std::unexpected(make_error_code(quic_errc::final_size_error));
@@ -306,6 +301,13 @@ auto quic_stream::push_received(std::uint64_t offset,
         if (state.final_size_ && *state.final_size_ != end)
             return std::unexpected(make_error_code(quic_errc::final_size_error));
         state.final_size_ = end;
+    }
+    if (state.receive_abandoned_)
+    {
+        state.highest_received_offset_ = std::max(state.highest_received_offset_, end);
+        if (fin)
+            close_remote();
+        return {};
     }
 
     // Already-consumed bytes and exact duplicates do not alter the receive
@@ -384,9 +386,14 @@ auto quic_stream::reset_remote(std::uint64_t final_size)
         return std::unexpected(make_error_code(quic_errc::final_size_error));
     if (state.highest_received_offset_ > final_size)
         return std::unexpected(make_error_code(quic_errc::final_size_error));
+    if (final_size > state.max_data_)
+        return std::unexpected(make_error_code(quic_errc::flow_control_error));
     state.final_size_ = final_size;
+    state.highest_received_offset_ = final_size;
+    state.next_expected_offset_ = final_size;
     state.receive_buffer_.clear();
-    state.state_ = state.state_ == stream_state::half_closed_local
+    state.state_ = state.state_ == stream_state::closed ||
+            state.state_ == stream_state::half_closed_local
         ? stream_state::closed
         : stream_state::half_closed_remote;
     return {};
@@ -400,6 +407,19 @@ void quic_stream::stop_local() noexcept
         impl_->state_ = stream_state::half_closed_local;
 }
 
+void quic_stream::abandon_receive() noexcept
+{
+    impl_->receive_abandoned_ = true;
+    impl_->receive_buffer_.clear();
+    if (impl_->final_size_)
+        close_remote();
+}
+
+auto quic_stream::receive_abandoned() const noexcept -> bool
+{
+    return impl_->receive_abandoned_;
+}
+
 auto quic_stream::state() const noexcept -> stream_state
 {
     return impl_->state_;
@@ -407,6 +427,8 @@ auto quic_stream::state() const noexcept -> stream_state
 
 auto quic_stream::is_readable() const noexcept -> bool
 {
+    if (impl_->receive_abandoned_)
+        return true;
     if (impl_->state_ == stream_state::closed ||
         impl_->state_ == stream_state::half_closed_remote)
         return true;
@@ -417,6 +439,12 @@ auto quic_stream::is_writable() const noexcept -> bool
 {
     return impl_->state_ != stream_state::half_closed_local &&
         impl_->state_ != stream_state::closed;
+}
+
+auto quic_stream::remaining_send_window() const noexcept -> std::uint64_t
+{
+    return impl_->max_send_data_ > impl_->total_sent_
+        ? impl_->max_send_data_ - impl_->total_sent_ : 0U;
 }
 
 auto quic_stream::remaining_receive_window() const noexcept -> std::uint64_t

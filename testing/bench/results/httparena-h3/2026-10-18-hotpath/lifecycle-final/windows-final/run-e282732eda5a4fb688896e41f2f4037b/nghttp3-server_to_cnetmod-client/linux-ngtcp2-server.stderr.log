@@ -1,0 +1,3 @@
+mime-types-file: Could not read MIME media types file /etc/mime.types
+Using document root /mnt/c/Users/25007/.codex/tmp/h3-hotpath-windows-final-20261018-193412-0aba7d1e/run-e282732eda5a4fb688896e41f2f4037b/nghttp3-server_to_cnetmod-client
+ngtcp2_conn_read_pkt: ERR_DRAINING

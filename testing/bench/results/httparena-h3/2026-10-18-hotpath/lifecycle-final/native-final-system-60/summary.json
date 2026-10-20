@@ -1,0 +1,635 @@
+{
+  "scope": "Frozen system-allocator ownership, ACK and PMTU candidate; sixty serial 200k static rounds, not official ranking",
+  "binary_sha256": "5bf46aeeee227934742969972dfa3e4705d5fb87e66289c9109f41d89f353470",
+  "samples": [
+    {
+      "name": "initial",
+      "time": 1792332676.6034043,
+      "rss": 27131904,
+      "private": 24690688
+    },
+    {
+      "name": "round-1-idle-2s",
+      "time": 1792332679.4634383,
+      "rss": 77897728,
+      "private": 75378688
+    },
+    {
+      "name": "round-2-idle-2s",
+      "time": 1792332682.22629,
+      "rss": 88817664,
+      "private": 86298624
+    },
+    {
+      "name": "round-3-idle-2s",
+      "time": 1792332684.988881,
+      "rss": 93491200,
+      "private": 90972160
+    },
+    {
+      "name": "round-4-idle-2s",
+      "time": 1792332687.7518394,
+      "rss": 96768000,
+      "private": 94248960
+    },
+    {
+      "name": "round-5-idle-2s",
+      "time": 1792332690.552283,
+      "rss": 97685504,
+      "private": 95166464
+    },
+    {
+      "name": "round-6-idle-2s",
+      "time": 1792332693.385458,
+      "rss": 99954688,
+      "private": 97435648
+    },
+    {
+      "name": "round-7-idle-2s",
+      "time": 1792332696.2040153,
+      "rss": 108822528,
+      "private": 106303488
+    },
+    {
+      "name": "round-8-idle-2s",
+      "time": 1792332699.020493,
+      "rss": 109760512,
+      "private": 107241472
+    },
+    {
+      "name": "round-9-idle-2s",
+      "time": 1792332701.8428552,
+      "rss": 111759360,
+      "private": 109240320
+    },
+    {
+      "name": "round-10-idle-2s",
+      "time": 1792332704.6288545,
+      "rss": 106205184,
+      "private": 103686144
+    },
+    {
+      "name": "round-11-idle-2s",
+      "time": 1792332707.3864906,
+      "rss": 110325760,
+      "private": 107806720
+    },
+    {
+      "name": "round-12-idle-2s",
+      "time": 1792332710.1404057,
+      "rss": 113401856,
+      "private": 110882816
+    },
+    {
+      "name": "round-13-idle-2s",
+      "time": 1792332712.9186273,
+      "rss": 112582656,
+      "private": 110063616
+    },
+    {
+      "name": "round-14-idle-2s",
+      "time": 1792332715.6681392,
+      "rss": 118104064,
+      "private": 115585024
+    },
+    {
+      "name": "round-15-idle-2s",
+      "time": 1792332718.4172254,
+      "rss": 118394880,
+      "private": 115875840
+    },
+    {
+      "name": "round-16-idle-2s",
+      "time": 1792332721.1866734,
+      "rss": 119336960,
+      "private": 116817920
+    },
+    {
+      "name": "round-17-idle-2s",
+      "time": 1792332723.9737897,
+      "rss": 124940288,
+      "private": 122421248
+    },
+    {
+      "name": "round-18-idle-2s",
+      "time": 1792332726.7717814,
+      "rss": 126111744,
+      "private": 123592704
+    },
+    {
+      "name": "round-19-idle-2s",
+      "time": 1792332729.5881355,
+      "rss": 123375616,
+      "private": 120856576
+    },
+    {
+      "name": "round-20-idle-2s",
+      "time": 1792332732.4411745,
+      "rss": 124743680,
+      "private": 122224640
+    },
+    {
+      "name": "round-21-idle-2s",
+      "time": 1792332735.2304223,
+      "rss": 123535360,
+      "private": 121016320
+    },
+    {
+      "name": "round-22-idle-2s",
+      "time": 1792332738.0746882,
+      "rss": 127950848,
+      "private": 125431808
+    },
+    {
+      "name": "round-23-idle-2s",
+      "time": 1792332740.926175,
+      "rss": 128077824,
+      "private": 125558784
+    },
+    {
+      "name": "round-24-idle-2s",
+      "time": 1792332743.6901543,
+      "rss": 126771200,
+      "private": 124252160
+    },
+    {
+      "name": "round-25-idle-2s",
+      "time": 1792332746.476725,
+      "rss": 126963712,
+      "private": 124444672
+    },
+    {
+      "name": "round-26-idle-2s",
+      "time": 1792332749.2533545,
+      "rss": 127361024,
+      "private": 124841984
+    },
+    {
+      "name": "round-27-idle-2s",
+      "time": 1792332752.0891151,
+      "rss": 128880640,
+      "private": 126361600
+    },
+    {
+      "name": "round-28-idle-2s",
+      "time": 1792332754.8482182,
+      "rss": 126545920,
+      "private": 124026880
+    },
+    {
+      "name": "round-29-idle-2s",
+      "time": 1792332757.6304054,
+      "rss": 128065536,
+      "private": 125546496
+    },
+    {
+      "name": "round-30-idle-2s",
+      "time": 1792332760.3771417,
+      "rss": 128802816,
+      "private": 126283776
+    },
+    {
+      "name": "round-31-idle-2s",
+      "time": 1792332763.1300888,
+      "rss": 127066112,
+      "private": 124547072
+    },
+    {
+      "name": "round-32-idle-2s",
+      "time": 1792332765.9044144,
+      "rss": 130023424,
+      "private": 127504384
+    },
+    {
+      "name": "round-33-idle-2s",
+      "time": 1792332768.6637027,
+      "rss": 132202496,
+      "private": 129683456
+    },
+    {
+      "name": "round-34-idle-2s",
+      "time": 1792332771.4589794,
+      "rss": 127524864,
+      "private": 125005824
+    },
+    {
+      "name": "round-35-idle-2s",
+      "time": 1792332774.264642,
+      "rss": 128180224,
+      "private": 125661184
+    },
+    {
+      "name": "round-36-idle-2s",
+      "time": 1792332777.098677,
+      "rss": 126382080,
+      "private": 123863040
+    },
+    {
+      "name": "round-37-idle-2s",
+      "time": 1792332779.883012,
+      "rss": 128270336,
+      "private": 125751296
+    },
+    {
+      "name": "round-38-idle-2s",
+      "time": 1792332782.628428,
+      "rss": 128389120,
+      "private": 125870080
+    },
+    {
+      "name": "round-39-idle-2s",
+      "time": 1792332785.4412777,
+      "rss": 128495616,
+      "private": 125976576
+    },
+    {
+      "name": "round-40-idle-2s",
+      "time": 1792332788.204003,
+      "rss": 126066688,
+      "private": 123547648
+    },
+    {
+      "name": "round-41-idle-2s",
+      "time": 1792332790.969249,
+      "rss": 125833216,
+      "private": 123314176
+    },
+    {
+      "name": "round-42-idle-2s",
+      "time": 1792332793.7458026,
+      "rss": 125857792,
+      "private": 123338752
+    },
+    {
+      "name": "round-43-idle-2s",
+      "time": 1792332796.5050673,
+      "rss": 127250432,
+      "private": 124731392
+    },
+    {
+      "name": "round-44-idle-2s",
+      "time": 1792332799.2706258,
+      "rss": 127328256,
+      "private": 124809216
+    },
+    {
+      "name": "round-45-idle-2s",
+      "time": 1792332802.0297816,
+      "rss": 129486848,
+      "private": 126967808
+    },
+    {
+      "name": "round-46-idle-2s",
+      "time": 1792332804.8534079,
+      "rss": 128946176,
+      "private": 126427136
+    },
+    {
+      "name": "round-47-idle-2s",
+      "time": 1792332807.6600885,
+      "rss": 129486848,
+      "private": 126967808
+    },
+    {
+      "name": "round-48-idle-2s",
+      "time": 1792332810.5175118,
+      "rss": 129724416,
+      "private": 127205376
+    },
+    {
+      "name": "round-49-idle-2s",
+      "time": 1792332813.2806132,
+      "rss": 129576960,
+      "private": 127057920
+    },
+    {
+      "name": "round-50-idle-2s",
+      "time": 1792332816.0982018,
+      "rss": 131231744,
+      "private": 128712704
+    },
+    {
+      "name": "round-51-idle-2s",
+      "time": 1792332818.9558544,
+      "rss": 130273280,
+      "private": 127754240
+    },
+    {
+      "name": "round-52-idle-2s",
+      "time": 1792332821.7556005,
+      "rss": 130093056,
+      "private": 127574016
+    },
+    {
+      "name": "round-53-idle-2s",
+      "time": 1792332824.5973015,
+      "rss": 130244608,
+      "private": 127725568
+    },
+    {
+      "name": "round-54-idle-2s",
+      "time": 1792332827.3738818,
+      "rss": 130514944,
+      "private": 127995904
+    },
+    {
+      "name": "round-55-idle-2s",
+      "time": 1792332830.134373,
+      "rss": 131026944,
+      "private": 128507904
+    },
+    {
+      "name": "round-56-idle-2s",
+      "time": 1792332832.9578447,
+      "rss": 130940928,
+      "private": 128421888
+    },
+    {
+      "name": "round-57-idle-2s",
+      "time": 1792332835.7175248,
+      "rss": 132894720,
+      "private": 130375680
+    },
+    {
+      "name": "round-58-idle-2s",
+      "time": 1792332838.47531,
+      "rss": 135319552,
+      "private": 132800512
+    },
+    {
+      "name": "round-59-idle-2s",
+      "time": 1792332841.2520466,
+      "rss": 138903552,
+      "private": 136384512
+    },
+    {
+      "name": "round-60-idle-2s",
+      "time": 1792332844.011101,
+      "rss": 138674176,
+      "private": 136155136
+    },
+    {
+      "name": "final-idle-37s",
+      "time": 1792332886.3463662,
+      "rss": 138039296,
+      "private": 135520256
+    }
+  ],
+  "rounds": [
+    {
+      "index": 1,
+      "requests": 200000
+    },
+    {
+      "index": 2,
+      "requests": 200000
+    },
+    {
+      "index": 3,
+      "requests": 200000
+    },
+    {
+      "index": 4,
+      "requests": 200000
+    },
+    {
+      "index": 5,
+      "requests": 200000
+    },
+    {
+      "index": 6,
+      "requests": 200000
+    },
+    {
+      "index": 7,
+      "requests": 200000
+    },
+    {
+      "index": 8,
+      "requests": 200000
+    },
+    {
+      "index": 9,
+      "requests": 200000
+    },
+    {
+      "index": 10,
+      "requests": 200000
+    },
+    {
+      "index": 11,
+      "requests": 200000
+    },
+    {
+      "index": 12,
+      "requests": 200000
+    },
+    {
+      "index": 13,
+      "requests": 200000
+    },
+    {
+      "index": 14,
+      "requests": 200000
+    },
+    {
+      "index": 15,
+      "requests": 200000
+    },
+    {
+      "index": 16,
+      "requests": 200000
+    },
+    {
+      "index": 17,
+      "requests": 200000
+    },
+    {
+      "index": 18,
+      "requests": 200000
+    },
+    {
+      "index": 19,
+      "requests": 200000
+    },
+    {
+      "index": 20,
+      "requests": 200000
+    },
+    {
+      "index": 21,
+      "requests": 200000
+    },
+    {
+      "index": 22,
+      "requests": 200000
+    },
+    {
+      "index": 23,
+      "requests": 200000
+    },
+    {
+      "index": 24,
+      "requests": 200000
+    },
+    {
+      "index": 25,
+      "requests": 200000
+    },
+    {
+      "index": 26,
+      "requests": 200000
+    },
+    {
+      "index": 27,
+      "requests": 200000
+    },
+    {
+      "index": 28,
+      "requests": 200000
+    },
+    {
+      "index": 29,
+      "requests": 200000
+    },
+    {
+      "index": 30,
+      "requests": 200000
+    },
+    {
+      "index": 31,
+      "requests": 200000
+    },
+    {
+      "index": 32,
+      "requests": 200000
+    },
+    {
+      "index": 33,
+      "requests": 200000
+    },
+    {
+      "index": 34,
+      "requests": 200000
+    },
+    {
+      "index": 35,
+      "requests": 200000
+    },
+    {
+      "index": 36,
+      "requests": 200000
+    },
+    {
+      "index": 37,
+      "requests": 200000
+    },
+    {
+      "index": 38,
+      "requests": 200000
+    },
+    {
+      "index": 39,
+      "requests": 200000
+    },
+    {
+      "index": 40,
+      "requests": 200000
+    },
+    {
+      "index": 41,
+      "requests": 200000
+    },
+    {
+      "index": 42,
+      "requests": 200000
+    },
+    {
+      "index": 43,
+      "requests": 200000
+    },
+    {
+      "index": 44,
+      "requests": 200000
+    },
+    {
+      "index": 45,
+      "requests": 200000
+    },
+    {
+      "index": 46,
+      "requests": 200000
+    },
+    {
+      "index": 47,
+      "requests": 200000
+    },
+    {
+      "index": 48,
+      "requests": 200000
+    },
+    {
+      "index": 49,
+      "requests": 200000
+    },
+    {
+      "index": 50,
+      "requests": 200000
+    },
+    {
+      "index": 51,
+      "requests": 200000
+    },
+    {
+      "index": 52,
+      "requests": 200000
+    },
+    {
+      "index": 53,
+      "requests": 200000
+    },
+    {
+      "index": 54,
+      "requests": 200000
+    },
+    {
+      "index": 55,
+      "requests": 200000
+    },
+    {
+      "index": 56,
+      "requests": 200000
+    },
+    {
+      "index": 57,
+      "requests": 200000
+    },
+    {
+      "index": 58,
+      "requests": 200000
+    },
+    {
+      "index": 59,
+      "requests": 200000
+    },
+    {
+      "index": 60,
+      "requests": 200000
+    }
+  ],
+  "loadgen_sha256": "9a35cefa52e809a32f1898d65575a2cbbf54555031604830b852e2f6b5a4484f",
+  "workers": 32,
+  "connections": 64,
+  "max_streams": 64,
+  "client_threads": 64,
+  "client_cpus": "16-31",
+  "settings": {
+    "gso": "1",
+    "send_ceiling": 4096,
+    "receive_capacity": 8192
+  },
+  "allocator_proof_sha256": "64e67f09d49418b52d34407157c70d34dc9750c28cd09440c19e8324909642c4",
+  "source_metadata_sha256": "2d43c86f04044e01a1ec43130e86dc13b6a3b269507e5272e4f1e5b5e5fce143",
+  "allocator": "system",
+  "valid": true
+}

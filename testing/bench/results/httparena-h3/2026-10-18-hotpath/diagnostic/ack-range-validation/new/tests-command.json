@@ -1,0 +1,11 @@
+[
+  "ctest",
+  "--output-on-failure",
+  "-j1",
+  "--timeout",
+  "75",
+  "-R",
+  "^(test_quic_loss_detection|test_quic_congestion|test_quic_stream)$",
+  "--output-junit",
+  "/mnt/c/Users/25007/.codex/tmp/cnetmod-quic-ack-validation-1792329600/new/tests.xml"
+]

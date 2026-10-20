@@ -1,0 +1,139 @@
+{
+  "scope": "native frozen conditional binary, no counter instrumentation, no gdb attachment; independent retention test",
+  "samples": [
+    {
+      "name": "initial",
+      "time": 1792312919.9540026,
+      "rss": 53063680,
+      "private": 50577408
+    },
+    {
+      "name": "round-1-idle-2s",
+      "time": 1792312923.031799,
+      "rss": 177467392,
+      "private": 174882816
+    },
+    {
+      "name": "round-2-idle-2s",
+      "time": 1792312925.9306808,
+      "rss": 198479872,
+      "private": 195895296
+    },
+    {
+      "name": "round-3-idle-2s",
+      "time": 1792312928.9381561,
+      "rss": 204783616,
+      "private": 202199040
+    },
+    {
+      "name": "round-4-idle-2s",
+      "time": 1792312931.8846424,
+      "rss": 203194368,
+      "private": 200609792
+    },
+    {
+      "name": "round-5-idle-2s",
+      "time": 1792312934.8226438,
+      "rss": 209772544,
+      "private": 207187968
+    },
+    {
+      "name": "round-6-idle-2s",
+      "time": 1792312937.7263935,
+      "rss": 206184448,
+      "private": 203599872
+    },
+    {
+      "name": "round-7-idle-2s",
+      "time": 1792312940.8468995,
+      "rss": 208752640,
+      "private": 206168064
+    },
+    {
+      "name": "round-8-idle-2s",
+      "time": 1792312943.7426505,
+      "rss": 204578816,
+      "private": 201994240
+    },
+    {
+      "name": "round-9-idle-2s",
+      "time": 1792312946.6780264,
+      "rss": 208887808,
+      "private": 206303232
+    },
+    {
+      "name": "round-10-idle-2s",
+      "time": 1792312949.5906498,
+      "rss": 215179264,
+      "private": 212594688
+    },
+    {
+      "name": "round-11-idle-2s",
+      "time": 1792312952.6547494,
+      "rss": 215179264,
+      "private": 212594688
+    },
+    {
+      "name": "round-12-idle-2s",
+      "time": 1792312955.5199814,
+      "rss": 208891904,
+      "private": 206307328
+    },
+    {
+      "name": "final-idle-37s",
+      "time": 1792312990.520908,
+      "rss": 208891904,
+      "private": 206307328
+    }
+  ],
+  "rounds": [
+    {
+      "index": 1,
+      "requests": 200000
+    },
+    {
+      "index": 2,
+      "requests": 200000
+    },
+    {
+      "index": 3,
+      "requests": 200000
+    },
+    {
+      "index": 4,
+      "requests": 200000
+    },
+    {
+      "index": 5,
+      "requests": 200000
+    },
+    {
+      "index": 6,
+      "requests": 200000
+    },
+    {
+      "index": 7,
+      "requests": 200000
+    },
+    {
+      "index": 8,
+      "requests": 200000
+    },
+    {
+      "index": 9,
+      "requests": 200000
+    },
+    {
+      "index": 10,
+      "requests": 200000
+    },
+    {
+      "index": 11,
+      "requests": 200000
+    },
+    {
+      "index": 12,
+      "requests": 200000
+    }
+  ]
+}

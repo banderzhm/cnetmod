@@ -1,0 +1,6 @@
+{
+  "status": "external-only; not applied/built/run",
+  "source_sha256": "f8469e76e65f65243c8eb0c3402a178dba8d9e245d1b51f71b12336fa72089fc",
+  "candidate_sha256": "50cd8c3ba2cc226c45e83a483ba4c04665e229b76aae69ebf4523170abb7f1c2",
+  "patch_sha256": "7a7f7e994522b29c795ba87e63921d28e4a18b404357e5793ab676de3ff380e8"
+}

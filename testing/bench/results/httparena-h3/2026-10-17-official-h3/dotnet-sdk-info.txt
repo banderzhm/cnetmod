@@ -1,0 +1,49 @@
+.NET SDK:
+ Version:           11.0.100-rc.2.26504.105
+ Commit:            820230c386
+ Workload version:  11.0.100-manifests.4d7a54d2
+ MSBuild version:   18.12.0-1.26504.105+820230c38
+
+Runtime Environment:
+ OS Name:     ubuntu
+ OS Version:  26.04
+ OS Platform: Linux
+ RID:         linux-x64
+ Base Path:   /usr/share/dotnet/sdk/11.0.100-rc.2.26504.105
+
+.NET workloads installed:
+There are no installed workloads to display.
+Configured to use workload sets when installing new manifests.
+No workload sets are installed. Run "dotnet workload restore" to install a workload set.
+
+Host:
+  Version:      11.0.0-rc.2.26504.105
+  Architecture: x64
+  Commit:       820230c386
+
+.NET SDKs installed:
+  11.0.100-rc.2.26504.105 [/usr/share/dotnet/sdk]
+
+.NET runtimes installed:
+  Microsoft.AspNetCore.App 11.0.0-rc.2.26504.105 [/usr/share/dotnet/shared/Microsoft.AspNetCore.App]
+  Microsoft.NETCore.App 11.0.0-rc.2.26504.105 [/usr/share/dotnet/shared/Microsoft.NETCore.App]
+
+Other architectures found:
+  None
+
+Environment variables:
+  DOTNET_GENERATE_ASPNET_CERTIFICATE       [false]
+  DOTNET_NOLOGO                            [true]
+  DOTNET_RUNNING_IN_CONTAINER              [true]
+  DOTNET_SDK_VERSION                       [11.0.100-rc.2.26504.105]
+  DOTNET_USE_POLLING_FILE_WATCHER          [true]
+  DOTNET_VERSION                           [11.0.0-rc.2.26504.105]
+
+global.json file:
+  Not found
+
+Learn more:
+  https://aka.ms/dotnet/info
+
+Download .NET:
+  https://aka.ms/dotnet/download

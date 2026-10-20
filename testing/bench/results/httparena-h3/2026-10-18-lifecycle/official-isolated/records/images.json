@@ -1,0 +1,32 @@
+{
+  "cnetmod-official-optimized": {
+    "image": "sha256:761f49f399017dbf601c3f8c2f0542be5f94308e2c5e855cdc9c6a0a8cbec98d",
+    "language": "C++",
+    "tests": [
+      "baseline-h3"
+    ]
+  },
+  "cnetmod-official-static": {
+    "image": "sha256:10fd224591461a2a3d5ace7b28ac4fa446e3ef4a08f8d4e74775735cbedc10cc",
+    "language": "C++",
+    "tests": [
+      "static-h3"
+    ]
+  },
+  "agensio-official-h3": {
+    "image": "sha256:dd75c50576e08009267603a62a55f01e59b7e79891c6eb81420735a78e28b504",
+    "language": "C++",
+    "tests": [
+      "baseline-h3",
+      "static-h3"
+    ]
+  },
+  "genhttp-ioxide-official-h3": {
+    "image": "sha256:72d6de94308798c44f38e98576f132ea1daf4bba07463011eadbb2f859beb8be",
+    "language": "C#",
+    "tests": [
+      "baseline-h3",
+      "static-h3"
+    ]
+  }
+}

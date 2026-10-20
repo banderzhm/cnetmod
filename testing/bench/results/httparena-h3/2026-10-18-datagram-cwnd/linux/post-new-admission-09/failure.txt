@@ -1,0 +1,1 @@
+failed: invalid setup: elapsed_us=62 first_deadline_us=1024003 sampled_us=6 first_is_due=false

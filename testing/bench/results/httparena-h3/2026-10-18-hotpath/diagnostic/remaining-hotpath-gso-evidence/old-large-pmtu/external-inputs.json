@@ -1,0 +1,8 @@
+{
+  "run": "/var/tmp/cnetmod-h3-large-udp-ab-1792311419",
+  "binary_sha256": "639a91c7580a851a0cd5c416d7114007ef7718b3fd9a03d0841c918ea5e02a70",
+  "source_sha256": "589fe3f16164cd8d2b9b3f934f2b9c4f952f2e5f59f4e87bd9ce3f34aeb902af",
+  "summary_sha256": "67116c6bfa9ba8eb9e68dccc351fb378f3a37d3a6d43895c7552ccdbd7efc55d",
+  "date": "2026-10-18 16:16-16:18 local file timestamps; before HANDSHAKE_DONE/reliable notification fixes",
+  "limits": "Server logs are zero-byte; no probe PN/size, PMTU value, syscall errno or per-connection stall ledger was recorded."
+}

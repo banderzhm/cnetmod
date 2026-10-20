@@ -1,0 +1,43 @@
+[
+  {
+    "case": "draining",
+    "workers": 2,
+    "restart": false,
+    "client_forwarded": 11,
+    "client_blocked": 0,
+    "client_forwarded_while_gated": 0,
+    "server_forwarded_while_gated": 1,
+    "response_datagrams_dropped": 0,
+    "socket_errors": [
+      "ConnectionRefusedError(111, 'Connection refused')"
+    ],
+    "decode_errors": [],
+    "retransmitted_stream_frames": [],
+    "control_only_after_drop": 0,
+    "socket_error_events": [
+      {
+        "source": "backend",
+        "error": "ConnectionRefusedError(111, 'Connection refused')",
+        "after_matching_reset": false,
+        "at_ms": null
+      }
+    ],
+    "close_processed_at_ms": 1.0738369999216957,
+    "first_old_packet_at_ms": 1.0983829999986483,
+    "minimum_drain_ms": 78.0,
+    "silence_observed_until_ms": 39.433272999986,
+    "probe_replies": [
+      {
+        "at_ms": 90.33131699993646,
+        "bytes": 32,
+        "reset_token_match": true
+      }
+    ],
+    "first_matching_reset_at_ms": 90.33693699996093,
+    "reset_token_matched": true,
+    "listener_healthy": true,
+    "status": "failed",
+    "error": "AssertionError: {'case': 'draining', 'workers': 2, 'restart': False, 'client_forwarded': 11, 'client_blocked': 0, 'client_forwarded_while_gated': 0, 'server_forwarded_while_gated': 1, 'response_datagrams_dropped': 0, 'socket_errors': [\"ConnectionRefusedError(111, 'Connection refused')\"], 'decode_errors': [], 'retransmitted_stream_frames': [], 'control_only_after_drop': 0, 'socket_error_events': [{'source': 'backend', 'error': \"ConnectionRefusedError(111, 'Connection refused')\", 'after_matching_reset': False, 'at_ms': None}], 'close_processed_at_ms': 1.0738369999216957, 'first_old_packet_at_ms': 1.0983829999986483, 'minimum_drain_ms': 78.0, 'silence_observed_until_ms': 39.433272999986, 'probe_replies': [{'at_ms': 90.33131699993646, 'bytes': 32, 'reset_token_match': True}], 'first_matching_reset_at_ms': 90.33693699996093, 'reset_token_matched': True, 'listener_healthy': True, 'status': 'failed'}",
+    "server_log": "[2026-10-18 10:19:10.698] [info] [137493499560384] [h3_interop_server.cpp:322] HTTP/3 interop listener started on UDP 39440 with 2 workers\n"
+  }
+]

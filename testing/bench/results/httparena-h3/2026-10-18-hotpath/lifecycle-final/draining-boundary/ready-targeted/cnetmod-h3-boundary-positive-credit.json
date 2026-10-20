@@ -1,0 +1,38 @@
+[
+  {
+    "case": "credit",
+    "mode": "observer",
+    "status": "passed",
+    "request_fin_acked": true,
+    "initial_max_streams": 1,
+    "credit_at_ms": 5.70247400014523,
+    "final_max_streams": 2,
+    "pre_retire_deadline_ms": 5890,
+    "observer_notifications_after_retire": 7,
+    "fixture_ingress_count": 5,
+    "client_forwarded_after_gate": 0,
+    "client_blocked": 3,
+    "server_datagrams_after_gate": 5,
+    "proxy_errors": [],
+    "server_stdout": "",
+    "server_stderr": ""
+  },
+  {
+    "case": "credit",
+    "mode": "private",
+    "status": "passed",
+    "request_fin_acked": true,
+    "initial_max_streams": 1,
+    "credit_at_ms": 5.554186999916055,
+    "final_max_streams": 2,
+    "pre_retire_deadline_ms": 5890,
+    "observer_notifications_after_retire": 0,
+    "fixture_ingress_count": 0,
+    "client_forwarded_after_gate": 0,
+    "client_blocked": 3,
+    "server_datagrams_after_gate": 5,
+    "proxy_errors": [],
+    "server_stdout": "",
+    "server_stderr": ""
+  }
+]

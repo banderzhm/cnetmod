@@ -1,0 +1,37 @@
+Test project /tmp/cnetmod-h3-arena-build
+      Start 44: test_udp_batch
+ 1/12 Test #44: test_udp_batch .............................   Passed    0.48 sec
+      Start 47: test_quic_varint
+ 2/12 Test #47: test_quic_varint ...........................   Passed    0.00 sec
+      Start 48: test_quic_frame
+ 3/12 Test #48: test_quic_frame ............................   Passed    0.00 sec
+      Start 49: test_quic_packet
+ 4/12 Test #49: test_quic_packet ...........................   Passed    0.00 sec
+      Start 50: test_quic_stream
+ 5/12 Test #50: test_quic_stream ...........................   Passed    0.08 sec
+      Start 51: test_quic_loss_detection
+ 6/12 Test #51: test_quic_loss_detection ...................   Passed    0.00 sec
+      Start 52: test_quic_congestion
+ 7/12 Test #52: test_quic_congestion .......................   Passed    0.00 sec
+      Start 53: test_quic_early_data
+ 8/12 Test #53: test_quic_early_data .......................   Passed    0.01 sec
+      Start 66: quic_retire_stream_credit_wakeup
+ 9/12 Test #66: quic_retire_stream_credit_wakeup ...........   Passed    1.76 sec
+      Start 67: quic_retire_stream_notification_lifetime
+10/12 Test #67: quic_retire_stream_notification_lifetime ...   Passed    0.61 sec
+      Start 68: quic_private_outbound_pto
+11/12 Test #68: quic_private_outbound_pto ..................   Passed    0.50 sec
+      Start 69: quic_handshake_confirmation
+12/12 Test #69: quic_handshake_confirmation ................   Passed    1.51 sec
+
+100% tests passed out of 12
+
+Label Time Summary:
+flow_control    =   1.76 sec*proc (1 test)
+http3           =   4.38 sec*proc (4 tests)
+lifecycle       =   4.38 sec*proc (4 tests)
+memory          =   0.61 sec*proc (1 test)
+quic            =   4.38 sec*proc (4 tests)
+recovery        =   2.01 sec*proc (2 tests)
+
+Total Test time (real) =   5.01 sec

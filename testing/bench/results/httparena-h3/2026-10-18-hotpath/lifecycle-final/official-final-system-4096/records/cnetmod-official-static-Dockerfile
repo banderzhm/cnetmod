@@ -1,0 +1,8 @@
+FROM scratch
+COPY program /program
+COPY lib/ /lib/
+COPY loader /lib64/ld-linux-x86-64.so.2
+COPY gai.conf /etc/gai.conf
+LABEL cnetmod.official.run="4c178de9d76f4c63adb15a4ebe898833"
+ENV CNETMOD_QUIC_MAX_PATH_MTU=4096 CNETMOD_QUIC_MAX_UDP_PAYLOAD_SIZE=8192 CNETMOD_QUIC_GSO=1
+ENTRYPOINT ["/lib64/ld-linux-x86-64.so.2", "--library-path", "/lib", "/program", "/certs/server.crt", "/certs/server.key", "8443", "32", "/data/static"]

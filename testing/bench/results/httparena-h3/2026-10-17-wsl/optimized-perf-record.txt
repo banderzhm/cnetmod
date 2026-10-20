@@ -1,0 +1,2 @@
+[ perf record: Woken up 329 times to write data ]
+[ perf record: Captured and wrote 86.583 MB /tmp/cnetmod-h3-arena-169/optimized.perf.data (10770 samples) ]

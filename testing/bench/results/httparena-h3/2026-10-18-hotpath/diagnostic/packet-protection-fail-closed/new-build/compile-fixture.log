@@ -1,0 +1,4 @@
+/var/tmp/cnetmod-h3-crypto-new-real-fault/quic_packet_failure_server.cpp:337:54: warning: missing field 'connection' initializer [-Wmissing-field-initializers]
+  337 |     fixture state{*context, tls, std::move(arguments)};
+      |                                                      ^
+1 warning generated.

@@ -1,0 +1,2 @@
+[ perf record: Woken up 1 times to write data ]
+[ perf record: Captured and wrote 1.680 MB /var/tmp/cnetmod-h3-system-perf-91b5cc8bd99c410585a9f598f920b767/static-perf.data (9344 samples) ]

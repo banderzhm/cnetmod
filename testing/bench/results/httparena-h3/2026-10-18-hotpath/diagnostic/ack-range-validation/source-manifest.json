@@ -1,0 +1,41 @@
+[
+  {
+    "path": "src/protocol/quic/loss_detection.cppm",
+    "before_sha256": "0bd16c5cc653b15da74a85a36c6761e15d09cbd9e6c3fc0ddbe4d22f9b8e342c",
+    "after_sha256": "81b2090c49c28ed28dadca2685b63c299850527222adee0d5e0df65916a1898e"
+  },
+  {
+    "path": "src/protocol/quic/loss_detection.cpp",
+    "before_sha256": "701c254bf894966ff52a28a850848df63f0f4ae3eeaeeab04baa6c8125817cfb",
+    "after_sha256": "a425c6baa0c8ef5c40311d11d0b56de53126dfc80fdc7144e244388b9583b432"
+  },
+  {
+    "path": "testing/tests/test_quic_loss_detection.cpp",
+    "before_sha256": "5d662a495c13eb949c069ab59af6836bc3db827653ac23c3cc5c9ab5dabe20df",
+    "after_sha256": "a18340485720d315b887a38e9cf0c450e93d0595424427b7bc176b592ae89f46"
+  },
+  {
+    "path": "src/protocol/quic/quic_connection.cpp",
+    "unchanged_during_this_stage_sha256": "557116570fbb076705e2411762bf865434947d848f465b680af39ad6364ccd67"
+  },
+  {
+    "path": "src/protocol/quic/quic_recovery.cpp",
+    "unchanged_during_this_stage_sha256": "45cd8c5230516781d3d7451bde235b56e835bbfa180fd43f1ac2715f0c60374e"
+  },
+  {
+    "path": "src/protocol/quic/congestion_control.cpp",
+    "unchanged_during_this_stage_sha256": "ed87ff858f68324822f1e6da3400b95dd94cdca1f7979d8d8f3fef2af2c75e63"
+  },
+  {
+    "path": "CMakeLists.txt",
+    "unchanged_during_this_stage_sha256": "d72f897dad2dd6588fecd6cb199c6cd03ce4e45da311d1b6420017e3f3a4b228"
+  },
+  {
+    "path": "testing/tests/CMakeLists.txt",
+    "unchanged_during_this_stage_sha256": "c5942b5e1a1d711585bdb492a4bf7ade36fc41901c8f1d64d7f2cde7223e0b99"
+  },
+  {
+    "path": "testing/http3/h3-interop-results.json",
+    "unchanged_during_this_stage_sha256": "ca41c4cb5adcc34ee16042e00ea9c6dfb248b9a17649995dbacfeb43b64d8b66"
+  }
+]

@@ -1,0 +1,144 @@
+{
+  "off": {
+    "groups": {
+      "recovery_named_only": {
+        "samples": 175,
+        "sample_share_percent": 1.9500780031201248,
+        "estimated_cpu_us_per_completed": 0.9739759906006499,
+        "symbols": [
+          {
+            "symbol": "cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::insert_sent_packet(cnetmod::quic::pn_space@cnetmod.protocol.quic, unsigned long, cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::sent_packet)",
+            "dso": "arena_h3_server",
+            "samples": 71
+          },
+          {
+            "symbol": "cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::recycle_sent_packet(cnetmod::quic::pn_space@cnetmod.protocol.quic, std::__1::__map_iterator<std::__1::__tree_iterator<std::__1::__value_type<unsigned long, cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::sent_packet>, std::__1::__tree_node<std::__1::__value_type<unsigned long, cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::sent_packet>, void*>*, long> >)",
+            "dso": "arena_h3_server",
+            "samples": 48
+          },
+          {
+            "symbol": "cnetmod::quic::loss_detector@cnetmod.protocol.quic::insert_inflight_packet(cnetmod::quic::loss_detector@cnetmod.protocol.quic::pn_space_state&, cnetmod::quic::loss_detector@cnetmod.protocol.quic::inflight_packet)",
+            "dso": "arena_h3_server",
+            "samples": 46
+          },
+          {
+            "symbol": "cnetmod::quic::loss_detector@cnetmod.protocol.quic::recycle_inflight_packet(cnetmod::quic::loss_detector@cnetmod.protocol.quic::pn_space_state&, std::__1::__map_iterator<std::__1::__tree_iterator<std::__1::__value_type<unsigned long, cnetmod::quic::loss_detector@cnetmod.protocol.quic::inflight_packet>, std::__1::__tree_node<std::__1::__value_type<unsigned long, cnetmod::quic::loss_detector@cnetmod.protocol.quic::inflight_packet>, void*>*, long> >)",
+            "dso": "arena_h3_server",
+            "samples": 10
+          }
+        ]
+      },
+      "generic_tree_helpers": {
+        "samples": 158,
+        "sample_share_percent": 1.7606418542455984,
+        "estimated_cpu_us_per_completed": 0.8793611800851582,
+        "symbols": [
+          {
+            "symbol": "void std::__1::__tree_remove[abi:nqe220108]<std::__1::__tree_node_base<void*>*>(std::__1::__tree_node_base<void*>*, std::__1::__tree_node_base<void*>*)",
+            "dso": "arena_h3_server",
+            "samples": 94
+          },
+          {
+            "symbol": "void std::__1::__tree_balance_after_insert[abi:nqe220108]<std::__1::__tree_node_base<void*>*>(std::__1::__tree_node_base<void*>*, std::__1::__tree_node_base<void*>*)",
+            "dso": "arena_h3_server",
+            "samples": 64
+          }
+        ]
+      },
+      "named_malloc_free": {
+        "samples": 126,
+        "sample_share_percent": 1.4040561622464898,
+        "estimated_cpu_us_per_completed": 0.7012627132324679,
+        "symbols": [
+          {
+            "symbol": "malloc",
+            "dso": "libc.so.6",
+            "samples": 69
+          },
+          {
+            "symbol": "cfree",
+            "dso": "libc.so.6",
+            "samples": 57
+          }
+        ]
+      }
+    },
+    "raw_address_samples_by_named_dso": {
+      "libc.so.6": 479,
+      "liburing.so.2.15": 11,
+      "libc++.so.1.0": 14,
+      "libm.so.6": 54
+    }
+  },
+  "on": {
+    "groups": {
+      "recovery_named_only": {
+        "samples": 284,
+        "sample_share_percent": 3.207227555053642,
+        "estimated_cpu_us_per_completed": 1.1319785768419848,
+        "symbols": [
+          {
+            "symbol": "cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::insert_sent_packet(cnetmod::quic::pn_space@cnetmod.protocol.quic, unsigned long, cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::sent_packet)",
+            "dso": "arena_h3_server",
+            "samples": 117
+          },
+          {
+            "symbol": "cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::recycle_sent_packet(cnetmod::quic::pn_space@cnetmod.protocol.quic, std::__1::__map_iterator<std::__1::__tree_iterator<std::__1::__value_type<unsigned long, cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::sent_packet>, std::__1::__tree_node<std::__1::__value_type<unsigned long, cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::sent_packet>, void*>*, long> >)",
+            "dso": "arena_h3_server",
+            "samples": 87
+          },
+          {
+            "symbol": "cnetmod::quic::loss_detector@cnetmod.protocol.quic::insert_inflight_packet(cnetmod::quic::loss_detector@cnetmod.protocol.quic::pn_space_state&, cnetmod::quic::loss_detector@cnetmod.protocol.quic::inflight_packet)",
+            "dso": "arena_h3_server",
+            "samples": 69
+          },
+          {
+            "symbol": "cnetmod::quic::loss_detector@cnetmod.protocol.quic::recycle_inflight_packet(cnetmod::quic::loss_detector@cnetmod.protocol.quic::pn_space_state&, std::__1::__map_iterator<std::__1::__tree_iterator<std::__1::__value_type<unsigned long, cnetmod::quic::loss_detector@cnetmod.protocol.quic::inflight_packet>, std::__1::__tree_node<std::__1::__value_type<unsigned long, cnetmod::quic::loss_detector@cnetmod.protocol.quic::inflight_packet>, void*>*, long> >)",
+            "dso": "arena_h3_server",
+            "samples": 11
+          }
+        ]
+      },
+      "generic_tree_helpers": {
+        "samples": 262,
+        "sample_share_percent": 2.958780350084698,
+        "estimated_cpu_us_per_completed": 1.0442900955373238,
+        "symbols": [
+          {
+            "symbol": "void std::__1::__tree_remove[abi:nqe220108]<std::__1::__tree_node_base<void*>*>(std::__1::__tree_node_base<void*>*, std::__1::__tree_node_base<void*>*)",
+            "dso": "arena_h3_server",
+            "samples": 177
+          },
+          {
+            "symbol": "void std::__1::__tree_balance_after_insert[abi:nqe220108]<std::__1::__tree_node_base<void*>*>(std::__1::__tree_node_base<void*>*, std::__1::__tree_node_base<void*>*)",
+            "dso": "arena_h3_server",
+            "samples": 85
+          }
+        ]
+      },
+      "named_malloc_free": {
+        "samples": 168,
+        "sample_share_percent": 1.8972332015810276,
+        "estimated_cpu_us_per_completed": 0.6696211299628642,
+        "symbols": [
+          {
+            "symbol": "malloc",
+            "dso": "libc.so.6",
+            "samples": 86
+          },
+          {
+            "symbol": "cfree",
+            "dso": "libc.so.6",
+            "samples": 82
+          }
+        ]
+      }
+    },
+    "raw_address_samples_by_named_dso": {
+      "libc.so.6": 752,
+      "libm.so.6": 84,
+      "libc++.so.1.0": 31,
+      "liburing.so.2.15": 6
+    }
+  }
+}

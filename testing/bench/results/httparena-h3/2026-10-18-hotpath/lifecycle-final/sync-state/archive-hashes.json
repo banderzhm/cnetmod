@@ -1,0 +1,42 @@
+[
+  {
+    "file": "README.md",
+    "bytes": 4870,
+    "sha256": "fcf6f13266d5b365dc16ae3c007846b69ccf0f29c70d12167da3f85c64b88507"
+  },
+  {
+    "file": "applied.patch",
+    "bytes": 14263,
+    "sha256": "56bb8c089d1431c4189e13624ec978c61374d36fbdbb24ddd4ed7ce28395d5f3"
+  },
+  {
+    "file": "build.log",
+    "bytes": 24422,
+    "sha256": "a02fc749eae543b1d0c0fd24951c94bfee19fcbc5ee2b59a802849b83116edaf"
+  },
+  {
+    "file": "clean.log",
+    "bytes": 119,
+    "sha256": "20b299a4257dabe1ebb5729669eae49fb972bc912b46ed4a3260023988cbfe96"
+  },
+  {
+    "file": "manifest.json",
+    "bytes": 179304,
+    "sha256": "00b8eca6f8637bb287853865c67f1106abeaeaa3592e8e33d50359d2a79c6cfd"
+  },
+  {
+    "file": "patch-base-inputs.json",
+    "bytes": 808,
+    "sha256": "3fe43380a8c64365eadf1a8972a8986da83813665ce14ea2b154f16f4d242a11"
+  },
+  {
+    "file": "source-hashes.json",
+    "bytes": 1205,
+    "sha256": "8d17911f12cbc0a61aa215c5b8937b8f65517c1ff9a727728a98a1a472df0c19"
+  },
+  {
+    "file": "tests.log",
+    "bytes": 2902,
+    "sha256": "d40fbe80c1e43e898911a5fd2aff0ed8e00918bad1812d8cb53781a1c0c1f9de"
+  }
+]

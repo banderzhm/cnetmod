@@ -1,0 +1,866 @@
+{
+  "mode": "on",
+  "valid_original": true,
+  "original_summary_sha256": "4c809bb6f530efb7792fc073f4d3232470838d443c8de53917ff5125011e9755",
+  "binary_sha256": "2cb22a32818646fbf63575370adf6a0c48b3ba5df4bbbc3d3002ab2838003e0a",
+  "source_snapshot_sha256": "a61ee3337e6060e895bae34196dca99f2025dc5b0c2899cb8475ce45d8060899",
+  "source_diff_sha256": "706676e86abe1e8c4ff39d44e12d5ace0f4c3a2683fa14face90c8705a726f76",
+  "source_input_count": 1684,
+  "source_check_scope": "Frozen recorded metadata and diff verified; current production is not rehashed while another agent builds.",
+  "allocator": "system",
+  "allocator_proof_sha256": "c08c7fc929fd985892a7c1dc3f29a117d3b7ce82ba92c283e8c9f07a0f984bdb",
+  "perf_record_exit_code": -2,
+  "perf_stop_requested": "SIGINT after workload completion",
+  "data_sha256": "7a65b54f8c5c3b106b26ab7f967e9aa1d8babb594a28a472b7a81dd7cb2f3a0e",
+  "data_bytes": 1717659,
+  "captured_samples": 8855,
+  "total_samples": 8855,
+  "lost_samples": 0,
+  "total_period": 89444443550,
+  "symbols": 879,
+  "dso": [
+    {
+      "dso": "arena_h3_server",
+      "samples": 4118,
+      "period": 41595959180,
+      "sample_share_percent": 46.50479954827781,
+      "period_share_percent": 46.50479954827781,
+      "estimated_cpu_us_per_completed": 16.413689364208775
+    },
+    {
+      "dso": "[kernel.kallsyms]",
+      "samples": 2944,
+      "period": 29737373440,
+      "sample_share_percent": 33.246753246753244,
+      "period_share_percent": 33.246753246753244,
+      "estimated_cpu_us_per_completed": 11.734313134587333
+    },
+    {
+      "dso": "libc.so.6",
+      "samples": 1127,
+      "period": 11383838270,
+      "sample_share_percent": 12.727272727272727,
+      "period_share_percent": 12.727272727272727,
+      "estimated_cpu_us_per_completed": 4.4920417468342135
+    },
+    {
+      "dso": "libc++.so.1.0",
+      "samples": 263,
+      "period": 2656565630,
+      "sample_share_percent": 2.9700734048560133,
+      "period_share_percent": 2.9700734048560133,
+      "estimated_cpu_us_per_completed": 1.0482759355966265
+    },
+    {
+      "dso": "libm.so.6",
+      "samples": 160,
+      "period": 1616161600,
+      "sample_share_percent": 1.8068887634105026,
+      "period_share_percent": 1.8068887634105026,
+      "estimated_cpu_us_per_completed": 0.6377344094884421
+    },
+    {
+      "dso": "[vdso]",
+      "samples": 145,
+      "period": 1464646450,
+      "sample_share_percent": 1.637492941840768,
+      "period_share_percent": 1.637492941840768,
+      "estimated_cpu_us_per_completed": 0.5779468085989006
+    },
+    {
+      "dso": "libc++abi.so.1.0",
+      "samples": 85,
+      "period": 858585850,
+      "sample_share_percent": 0.9599096555618295,
+      "period_share_percent": 0.9599096555618295,
+      "estimated_cpu_us_per_completed": 0.3387964050407348
+    },
+    {
+      "dso": "liburing.so.2.15",
+      "samples": 13,
+      "period": 131313130,
+      "sample_share_percent": 0.14680971202710333,
+      "period_share_percent": 0.14680971202710333,
+      "estimated_cpu_us_per_completed": 0.051815920770935914
+    }
+  ],
+  "categories": {
+    "kernel": {
+      "samples": 2944,
+      "period": 29737373440,
+      "sample_share_percent": 33.246753246753244,
+      "period_share_percent": 33.246753246753244,
+      "estimated_cpu_us_per_completed": 11.734313134587333
+    },
+    "userspace": {
+      "samples": 5911,
+      "period": 59707070110,
+      "sample_share_percent": 66.75324675324676,
+      "period_share_percent": 66.75324675324676,
+      "estimated_cpu_us_per_completed": 23.56030059053863
+    },
+    "unresolved_union": {
+      "samples": 873,
+      "period": 8818181730,
+      "sample_share_percent": 9.858836815358554,
+      "period_share_percent": 9.858836815358554,
+      "estimated_cpu_us_per_completed": 3.4796383717713115
+    },
+    "raw_addresses": {
+      "samples": 873,
+      "period": 8818181730,
+      "sample_share_percent": 9.858836815358554,
+      "period_share_percent": 9.858836815358554,
+      "estimated_cpu_us_per_completed": 3.4796383717713115
+    },
+    "unknown_dso": {
+      "samples": 0,
+      "period": 0,
+      "sample_share_percent": 0.0,
+      "period_share_percent": 0.0,
+      "estimated_cpu_us_per_completed": 0.0
+    }
+  },
+  "top_self": [
+    {
+      "percent_rounded": 6.1,
+      "samples": 540,
+      "period": 5454545400,
+      "flag": "[.]",
+      "symbol": "aes_gcm_enc_update_vaes_avx2",
+      "dso": "arena_h3_server",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 6.098249576510446,
+      "period_share_percent": 6.098249576510446,
+      "estimated_cpu_us_per_completed": 2.152353632023492
+    },
+    {
+      "percent_rounded": 4.02,
+      "samples": 356,
+      "period": 3595959560,
+      "flag": "[k]",
+      "symbol": "_raw_spin_unlock_irqrestore",
+      "dso": "[kernel.kallsyms]",
+      "kernel": true,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 4.020327498588368,
+      "period_share_percent": 4.020327498588368,
+      "estimated_cpu_us_per_completed": 1.4189590611117835
+    },
+    {
+      "percent_rounded": 2.86,
+      "samples": 253,
+      "period": 2555555530,
+      "flag": "[.]",
+      "symbol": "std::__1::__wrap_iter<std::byte*> std::__1::vector<std::byte, std::__1::allocator<std::byte> >::__insert_with_size[abi:nqe220108]<std::__1::_ClassicAlgPolicy, std::__1::__wrap_iter<std::byte const*>, std::__1::__wrap_iter<std::byte const*> >(std::__1::__wrap_iter<std::byte const*>, std::__1::__wrap_iter<std::byte const*>, std::__1::__wrap_iter<std::byte const*>, long)",
+      "dso": "arena_h3_server",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 2.857142857142857,
+      "period_share_percent": 2.857142857142857,
+      "estimated_cpu_us_per_completed": 1.0084175350035989
+    },
+    {
+      "percent_rounded": 2.67,
+      "samples": 236,
+      "period": 2383838360,
+      "flag": "[.]",
+      "symbol": "cnetmod::quic::quic_connection@cnetmod.protocol.quic::pack_one_rtt_packet(bool, std::__1::vector<std::byte, std::__1::allocator<std::byte> >, std::__1::vector<std::byte, std::__1::allocator<std::byte> >*)",
+      "dso": "arena_h3_server",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 2.665160926030491,
+      "period_share_percent": 2.665160926030491,
+      "estimated_cpu_us_per_completed": 0.940658253995452
+    },
+    {
+      "percent_rounded": 2.39,
+      "samples": 212,
+      "period": 2141414120,
+      "flag": "[k]",
+      "symbol": "_copy_from_iter",
+      "dso": "[kernel.kallsyms]",
+      "kernel": true,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 2.394127611518916,
+      "period_share_percent": 2.394127611518916,
+      "estimated_cpu_us_per_completed": 0.8449980925721857
+    },
+    {
+      "percent_rounded": 2.0,
+      "samples": 177,
+      "period": 1787878770,
+      "flag": "[.]",
+      "symbol": "void std::__1::__tree_remove[abi:nqe220108]<std::__1::__tree_node_base<void*>*>(std::__1::__tree_node_base<void*>*, std::__1::__tree_node_base<void*>*)",
+      "dso": "arena_h3_server",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 1.9988706945228685,
+      "period_share_percent": 1.9988706945228685,
+      "estimated_cpu_us_per_completed": 0.705493690496589
+    },
+    {
+      "percent_rounded": 1.95,
+      "samples": 173,
+      "period": 1747474730,
+      "flag": "[k]",
+      "symbol": "clear_page_erms",
+      "dso": "[kernel.kallsyms]",
+      "kernel": true,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 1.9536984754376059,
+      "period_share_percent": 1.9536984754376059,
+      "estimated_cpu_us_per_completed": 0.689550330259378
+    },
+    {
+      "percent_rounded": 1.9,
+      "samples": 168,
+      "period": 1696969680,
+      "flag": "[.]",
+      "symbol": "cnetmod::quic::quic_stream_scheduler@cnetmod.protocol.quic.send_pipeline::take()",
+      "dso": "arena_h3_server",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 1.8972332015810276,
+      "period_share_percent": 1.8972332015810276,
+      "estimated_cpu_us_per_completed": 0.6696211299628642
+    },
+    {
+      "percent_rounded": 1.64,
+      "samples": 145,
+      "period": 1464646450,
+      "flag": "[.]",
+      "symbol": "__vdso_clock_gettime",
+      "dso": "[vdso]",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 1.637492941840768,
+      "period_share_percent": 1.637492941840768,
+      "estimated_cpu_us_per_completed": 0.5779468085989006
+    },
+    {
+      "percent_rounded": 1.57,
+      "samples": 139,
+      "period": 1404040390,
+      "flag": "[k]",
+      "symbol": "_raw_spin_unlock_irq",
+      "dso": "[kernel.kallsyms]",
+      "kernel": true,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 1.569734613212874,
+      "period_share_percent": 1.569734613212874,
+      "estimated_cpu_us_per_completed": 0.554031768243084
+    },
+    {
+      "percent_rounded": 1.32,
+      "samples": 117,
+      "period": 1181818170,
+      "flag": "[.]",
+      "symbol": "cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::insert_sent_packet(cnetmod::quic::pn_space@cnetmod.protocol.quic, unsigned long, cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::sent_packet)",
+      "dso": "arena_h3_server",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 1.3212874082439299,
+      "period_share_percent": 1.3212874082439299,
+      "estimated_cpu_us_per_completed": 0.4663432869384232
+    },
+    {
+      "percent_rounded": 1.3,
+      "samples": 115,
+      "period": 1161616150,
+      "flag": "[.]",
+      "symbol": "cnetmod::quic::quic_connection@cnetmod.protocol.quic::apply_stream_write(unsigned long, std::__1::vector<std::byte, std::__1::allocator<std::byte> > const&, std::__1::shared_ptr<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > const> const&, bool)",
+      "dso": "arena_h3_server",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 1.2987012987012987,
+      "period_share_percent": 1.2987012987012987,
+      "estimated_cpu_us_per_completed": 0.4583716068198177
+    },
+    {
+      "percent_rounded": 1.25,
+      "samples": 111,
+      "period": 1121212110,
+      "flag": "[.]",
+      "symbol": "pthread_mutex_lock",
+      "dso": "libc.so.6",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 1.253529079616036,
+      "period_share_percent": 1.253529079616036,
+      "estimated_cpu_us_per_completed": 0.4424282465826066
+    },
+    {
+      "percent_rounded": 1.07,
+      "samples": 95,
+      "period": 959595950,
+      "flag": "[.]",
+      "symbol": "cnetmod::quic::quic_connection@cnetmod.protocol.quic::pack_and_send_packets() [clone .resume]",
+      "dso": "arena_h3_server",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 1.072840203274986,
+      "period_share_percent": 1.072840203274986,
+      "estimated_cpu_us_per_completed": 0.3786548056337624
+    },
+    {
+      "percent_rounded": 0.98,
+      "samples": 87,
+      "period": 878787870,
+      "flag": "[.]",
+      "symbol": "aes_hw_encrypt",
+      "dso": "arena_h3_server",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 0.9824957651044608,
+      "period_share_percent": 0.9824957651044608,
+      "estimated_cpu_us_per_completed": 0.3467680851593404
+    },
+    {
+      "percent_rounded": 0.98,
+      "samples": 87,
+      "period": 878787870,
+      "flag": "[.]",
+      "symbol": "cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::recycle_sent_packet(cnetmod::quic::pn_space@cnetmod.protocol.quic, std::__1::__map_iterator<std::__1::__tree_iterator<std::__1::__value_type<unsigned long, cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::sent_packet>, std::__1::__tree_node<std::__1::__value_type<unsigned long, cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::sent_packet>, void*>*, long> >)",
+      "dso": "arena_h3_server",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 0.9824957651044608,
+      "period_share_percent": 0.9824957651044608,
+      "estimated_cpu_us_per_completed": 0.3467680851593404
+    },
+    {
+      "percent_rounded": 0.97,
+      "samples": 86,
+      "period": 868686860,
+      "flag": "[.]",
+      "symbol": "malloc",
+      "dso": "libc.so.6",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 0.9712027103331451,
+      "period_share_percent": 0.9712027103331451,
+      "estimated_cpu_us_per_completed": 0.3427822451000376
+    },
+    {
+      "percent_rounded": 0.96,
+      "samples": 85,
+      "period": 858585850,
+      "flag": "[.]",
+      "symbol": "void std::__1::__tree_balance_after_insert[abi:nqe220108]<std::__1::__tree_node_base<void*>*>(std::__1::__tree_node_base<void*>*, std::__1::__tree_node_base<void*>*)",
+      "dso": "arena_h3_server",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 0.9599096555618295,
+      "period_share_percent": 0.9599096555618295,
+      "estimated_cpu_us_per_completed": 0.3387964050407348
+    },
+    {
+      "percent_rounded": 0.93,
+      "samples": 82,
+      "period": 828282820,
+      "flag": "[.]",
+      "symbol": "cfree",
+      "dso": "libc.so.6",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 0.9260304912478825,
+      "period_share_percent": 0.9260304912478825,
+      "estimated_cpu_us_per_completed": 0.32683888486282653
+    },
+    {
+      "percent_rounded": 0.9,
+      "samples": 80,
+      "period": 808080800,
+      "flag": "[.]",
+      "symbol": "cnetmod::quic::retransmittable_frame_storage@cnetmod.protocol.quic::push_back(cnetmod::quic::quic_send_frame@cnetmod.protocol.quic.send_pipeline)",
+      "dso": "arena_h3_server",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 0.9034443817052513,
+      "period_share_percent": 0.9034443817052513,
+      "estimated_cpu_us_per_completed": 0.31886720474422103
+    },
+    {
+      "percent_rounded": 0.88,
+      "samples": 78,
+      "period": 787878780,
+      "flag": "[.]",
+      "symbol": "cnetmod::http::v2::huffman_decode@cnetmod.protocol.http.v2.huffman(std::__1::span<std::byte const, 18446744073709551615ul>, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >&)",
+      "dso": "arena_h3_server",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 0.88085827216262,
+      "period_share_percent": 0.88085827216262,
+      "estimated_cpu_us_per_completed": 0.3108955246256155
+    },
+    {
+      "percent_rounded": 0.85,
+      "samples": 75,
+      "period": 757575750,
+      "flag": "[.]",
+      "symbol": "cnetmod::quic::quic_connection@cnetmod.protocol.quic::retire_stream(unsigned long)",
+      "dso": "arena_h3_server",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 0.846979107848673,
+      "period_share_percent": 0.846979107848673,
+      "estimated_cpu_us_per_completed": 0.2989380044477072
+    },
+    {
+      "percent_rounded": 0.78,
+      "samples": 69,
+      "period": 696969690,
+      "flag": "[.]",
+      "symbol": "cnetmod::quic::loss_detector@cnetmod.protocol.quic::insert_inflight_packet(cnetmod::quic::loss_detector@cnetmod.protocol.quic::pn_space_state&, cnetmod::quic::loss_detector@cnetmod.protocol.quic::inflight_packet)",
+      "dso": "arena_h3_server",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 0.7792207792207793,
+      "period_share_percent": 0.7792207792207793,
+      "estimated_cpu_us_per_completed": 0.27502296409189064
+    },
+    {
+      "percent_rounded": 0.77,
+      "samples": 68,
+      "period": 686868680,
+      "flag": "[.]",
+      "symbol": "cnetmod::http::v3::http3_server_session@cnetmod.protocol.http.v3.session::service_peer_stream(unsigned long) [clone .resume]",
+      "dso": "arena_h3_server",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 0.7679277244494636,
+      "period_share_percent": 0.7679277244494636,
+      "estimated_cpu_us_per_completed": 0.27103712403258784
+    },
+    {
+      "percent_rounded": 0.71,
+      "samples": 63,
+      "period": 636363630,
+      "flag": "[.]",
+      "symbol": "std::__1::__atomic_notify_one_global_table(void const*)",
+      "dso": "libc++.so.1.0",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 0.7114624505928854,
+      "period_share_percent": 0.7114624505928854,
+      "estimated_cpu_us_per_completed": 0.25110792373607405
+    },
+    {
+      "percent_rounded": 0.69,
+      "samples": 61,
+      "period": 616161610,
+      "flag": "[.]",
+      "symbol": "gcm_gmult_vpclmulqdq_avx2",
+      "dso": "arena_h3_server",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 0.6888763410502541,
+      "period_share_percent": 0.6888763410502541,
+      "estimated_cpu_us_per_completed": 0.2431362436174685
+    },
+    {
+      "percent_rounded": 0.68,
+      "samples": 60,
+      "period": 606060600,
+      "flag": "[k]",
+      "symbol": "do_syscall_64",
+      "dso": "[kernel.kallsyms]",
+      "kernel": true,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 0.6775832862789385,
+      "period_share_percent": 0.6775832862789385,
+      "estimated_cpu_us_per_completed": 0.23915040355816577
+    },
+    {
+      "percent_rounded": 0.64,
+      "samples": 57,
+      "period": 575757570,
+      "flag": "[.]",
+      "symbol": "aes_hw_set_encrypt_key_alt",
+      "dso": "arena_h3_server",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 0.6437041219649915,
+      "period_share_percent": 0.6437041219649915,
+      "estimated_cpu_us_per_completed": 0.22719288338025745
+    },
+    {
+      "percent_rounded": 0.62,
+      "samples": 55,
+      "period": 555555550,
+      "flag": "[.]",
+      "symbol": "cbrtf32x",
+      "dso": "libm.so.6",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 0.6211180124223602,
+      "period_share_percent": 0.6211180124223602,
+      "estimated_cpu_us_per_completed": 0.21922120326165195
+    },
+    {
+      "percent_rounded": 0.61,
+      "samples": 54,
+      "period": 545454540,
+      "flag": "[.]",
+      "symbol": "cnetmod::quic::append_sealed_payload@cnetmod.protocol.quic(cnetmod::quic::quic_level_keys@cnetmod.protocol.quic const&, std::__1::span<std::byte const, 18446744073709551615ul>, std::__1::vector<std::byte, std::__1::allocator<std::byte> >&, unsigned long, unsigned int)",
+      "dso": "arena_h3_server",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 0.6098249576510446,
+      "period_share_percent": 0.6098249576510446,
+      "estimated_cpu_us_per_completed": 0.21523536320234918
+    },
+    {
+      "percent_rounded": 0.61,
+      "samples": 54,
+      "period": 545454540,
+      "flag": "[.]",
+      "symbol": "cnetmod::quic::quic_connection@cnetmod.protocol.quic::async_send_shared(unsigned long, std::__1::vector<std::byte, std::__1::allocator<std::byte> >&&, std::__1::shared_ptr<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > const>, bool) [clone .resume]",
+      "dso": "arena_h3_server",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 0.6098249576510446,
+      "period_share_percent": 0.6098249576510446,
+      "estimated_cpu_us_per_completed": 0.21523536320234918
+    },
+    {
+      "percent_rounded": 0.59,
+      "samples": 52,
+      "period": 525252520,
+      "flag": "[k]",
+      "symbol": "kmem_cache_alloc_node_noprof",
+      "dso": "[kernel.kallsyms]",
+      "kernel": true,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 0.5872388481084133,
+      "period_share_percent": 0.5872388481084133,
+      "estimated_cpu_us_per_completed": 0.20726368308374366
+    },
+    {
+      "percent_rounded": 0.58,
+      "samples": 51,
+      "period": 515151510,
+      "flag": "[.]",
+      "symbol": "cnetmod::quic::quic_connection@cnetmod.protocol.quic::flush_send_queue() [clone .resume]",
+      "dso": "arena_h3_server",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 0.5759457933370977,
+      "period_share_percent": 0.5759457933370977,
+      "estimated_cpu_us_per_completed": 0.20327784302444088
+    },
+    {
+      "percent_rounded": 0.56,
+      "samples": 50,
+      "period": 505050500,
+      "flag": "[.]",
+      "symbol": "cnetmod::async_sendto_segmented_batch@cnetmod.executor.async_op(cnetmod::io_context@cnetmod.io.io_context&, cnetmod::socket@cnetmod.core.socket&, std::__1::span<cnetmod::udp_send_datagram@cnetmod.executor.async_op const, 18446744073709551615ul>, cnetmod::cancel_token@cnetmod.coro.cancel&) [clone .resume]",
+      "dso": "arena_h3_server",
+      "kernel": false,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 0.564652738565782,
+      "period_share_percent": 0.564652738565782,
+      "estimated_cpu_us_per_completed": 0.1992920029651381
+    },
+    {
+      "percent_rounded": 0.56,
+      "samples": 50,
+      "period": 505050500,
+      "flag": "[k]",
+      "symbol": "finish_task_switch.isra.0",
+      "dso": "[kernel.kallsyms]",
+      "kernel": true,
+      "unresolved": false,
+      "raw_address": false,
+      "unknown_dso": false,
+      "sample_share_percent": 0.564652738565782,
+      "period_share_percent": 0.564652738565782,
+      "estimated_cpu_us_per_completed": 0.1992920029651381
+    }
+  ],
+  "selected_symbols": [
+    {
+      "fragment": "aes_gcm_enc_update_vaes_avx2",
+      "samples": 540,
+      "period": 5454545400,
+      "period_share_percent": 6.098249576510446,
+      "estimated_cpu_us_per_completed": 2.152353632023492,
+      "symbols": [
+        {
+          "symbol": "aes_gcm_enc_update_vaes_avx2",
+          "dso": "arena_h3_server"
+        }
+      ]
+    },
+    {
+      "fragment": "sendto_segmented_batch_now",
+      "samples": 0,
+      "period": 0,
+      "period_share_percent": 0.0,
+      "estimated_cpu_us_per_completed": 0.0,
+      "symbols": []
+    },
+    {
+      "fragment": "async_sendto_segmented_batch",
+      "samples": 51,
+      "period": 515151510,
+      "period_share_percent": 0.5759457933370977,
+      "estimated_cpu_us_per_completed": 0.20327784302444088,
+      "symbols": [
+        {
+          "symbol": "cnetmod::async_sendto_segmented_batch@cnetmod.executor.async_op(cnetmod::io_context@cnetmod.io.io_context&, cnetmod::socket@cnetmod.core.socket&, std::__1::span<cnetmod::udp_send_datagram@cnetmod.executor.async_op const, 18446744073709551615ul>, cnetmod::cancel_token@cnetmod.coro.cancel&) [clone .resume]",
+          "dso": "arena_h3_server"
+        },
+        {
+          "symbol": "cnetmod::async_sendto_segmented_batch@cnetmod.executor.async_op(cnetmod::io_context@cnetmod.io.io_context&, cnetmod::socket@cnetmod.core.socket&, std::__1::span<cnetmod::udp_send_datagram@cnetmod.executor.async_op const, 18446744073709551615ul>, cnetmod::cancel_token@cnetmod.coro.cancel&) [clone .destroy]",
+          "dso": "arena_h3_server"
+        }
+      ]
+    },
+    {
+      "fragment": "sendmmsg",
+      "samples": 20,
+      "period": 202020200,
+      "period_share_percent": 0.22586109542631283,
+      "estimated_cpu_us_per_completed": 0.07971680118605526,
+      "symbols": [
+        {
+          "symbol": "__sys_sendmmsg",
+          "dso": "[kernel.kallsyms]"
+        },
+        {
+          "symbol": "__sendmmsg",
+          "dso": "libc.so.6"
+        },
+        {
+          "symbol": "__x64_sys_sendmmsg",
+          "dso": "[kernel.kallsyms]"
+        }
+      ]
+    },
+    {
+      "fragment": "getsockopt",
+      "samples": 65,
+      "period": 656565650,
+      "period_share_percent": 0.7340485601355167,
+      "estimated_cpu_us_per_completed": 0.25907960385467954,
+      "symbols": [
+        {
+          "symbol": "getsockopt",
+          "dso": "libc.so.6"
+        },
+        {
+          "symbol": "do_sock_getsockopt",
+          "dso": "[kernel.kallsyms]"
+        },
+        {
+          "symbol": "selinux_socket_getsockopt",
+          "dso": "[kernel.kallsyms]"
+        },
+        {
+          "symbol": "udp_lib_getsockopt",
+          "dso": "[kernel.kallsyms]"
+        },
+        {
+          "symbol": "sock_common_getsockopt",
+          "dso": "[kernel.kallsyms]"
+        },
+        {
+          "symbol": "udp_getsockopt",
+          "dso": "[kernel.kallsyms]"
+        },
+        {
+          "symbol": "__sys_getsockopt",
+          "dso": "[kernel.kallsyms]"
+        },
+        {
+          "symbol": "__x64_sys_getsockopt",
+          "dso": "[kernel.kallsyms]"
+        }
+      ]
+    },
+    {
+      "fragment": "__libc_malloc",
+      "samples": 0,
+      "period": 0,
+      "period_share_percent": 0.0,
+      "estimated_cpu_us_per_completed": 0.0,
+      "symbols": []
+    },
+    {
+      "fragment": "__libc_free",
+      "samples": 0,
+      "period": 0,
+      "period_share_percent": 0.0,
+      "estimated_cpu_us_per_completed": 0.0,
+      "symbols": []
+    },
+    {
+      "fragment": "__insert_with_size",
+      "samples": 302,
+      "period": 3050505020,
+      "period_share_percent": 3.4105025409373235,
+      "estimated_cpu_us_per_completed": 1.2037236979094343,
+      "symbols": [
+        {
+          "symbol": "std::__1::__wrap_iter<std::byte*> std::__1::vector<std::byte, std::__1::allocator<std::byte> >::__insert_with_size[abi:nqe220108]<std::__1::_ClassicAlgPolicy, std::__1::__wrap_iter<std::byte const*>, std::__1::__wrap_iter<std::byte const*> >(std::__1::__wrap_iter<std::byte const*>, std::__1::__wrap_iter<std::byte const*>, std::__1::__wrap_iter<std::byte const*>, long)",
+          "dso": "arena_h3_server"
+        },
+        {
+          "symbol": "std::__1::__wrap_iter<std::byte*> std::__1::vector<std::byte, std::__1::allocator<std::byte> >::__insert_with_size[abi:nqe220108]<std::__1::_ClassicAlgPolicy, std::byte const*, std::byte const*>(std::__1::__wrap_iter<std::byte const*>, std::byte const*, std::byte const*, long)",
+          "dso": "arena_h3_server"
+        }
+      ]
+    },
+    {
+      "fragment": "pack_one_rtt_packet",
+      "samples": 236,
+      "period": 2383838360,
+      "period_share_percent": 2.665160926030491,
+      "estimated_cpu_us_per_completed": 0.940658253995452,
+      "symbols": [
+        {
+          "symbol": "cnetmod::quic::quic_connection@cnetmod.protocol.quic::pack_one_rtt_packet(bool, std::__1::vector<std::byte, std::__1::allocator<std::byte> >, std::__1::vector<std::byte, std::__1::allocator<std::byte> >*)",
+          "dso": "arena_h3_server"
+        }
+      ]
+    },
+    {
+      "fragment": "apply_stream_write",
+      "samples": 115,
+      "period": 1161616150,
+      "period_share_percent": 1.2987012987012987,
+      "estimated_cpu_us_per_completed": 0.4583716068198177,
+      "symbols": [
+        {
+          "symbol": "cnetmod::quic::quic_connection@cnetmod.protocol.quic::apply_stream_write(unsigned long, std::__1::vector<std::byte, std::__1::allocator<std::byte> > const&, std::__1::shared_ptr<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > const> const&, bool)",
+          "dso": "arena_h3_server"
+        }
+      ]
+    },
+    {
+      "fragment": "tree_remove",
+      "samples": 177,
+      "period": 1787878770,
+      "period_share_percent": 1.9988706945228685,
+      "estimated_cpu_us_per_completed": 0.705493690496589,
+      "symbols": [
+        {
+          "symbol": "void std::__1::__tree_remove[abi:nqe220108]<std::__1::__tree_node_base<void*>*>(std::__1::__tree_node_base<void*>*, std::__1::__tree_node_base<void*>*)",
+          "dso": "arena_h3_server"
+        }
+      ]
+    },
+    {
+      "fragment": "quic_stream_scheduler",
+      "samples": 221,
+      "period": 2232323210,
+      "period_share_percent": 2.4957651044607565,
+      "estimated_cpu_us_per_completed": 0.8808706531059106,
+      "symbols": [
+        {
+          "symbol": "cnetmod::quic::quic_stream_scheduler@cnetmod.protocol.quic.send_pipeline::take()",
+          "dso": "arena_h3_server"
+        },
+        {
+          "symbol": "cnetmod::quic::quic_stream_scheduler@cnetmod.protocol.quic.send_pipeline::enqueue(unsigned long, cnetmod::quic::quic_send_frame@cnetmod.protocol.quic.send_pipeline)",
+          "dso": "arena_h3_server"
+        },
+        {
+          "symbol": "cnetmod::quic::quic_stream_scheduler@cnetmod.protocol.quic.send_pipeline::requeue(cnetmod::quic::scheduled_quic_frame@cnetmod.protocol.quic.send_pipeline)",
+          "dso": "arena_h3_server"
+        },
+        {
+          "symbol": "cnetmod::quic::quic_stream_scheduler@cnetmod.protocol.quic.send_pipeline::size() const",
+          "dso": "arena_h3_server"
+        }
+      ]
+    }
+  ],
+  "workload": {
+    "done": 2632413,
+    "status_2xx": 2632469,
+    "elapsed_seconds": 5.65,
+    "printed_rps": 526482.6,
+    "completed_per_elapsed_second": 465913.8053097345,
+    "server_cpu_seconds": 92.91000000000001,
+    "cpu_microseconds_per_completed": 35.29461372512596
+  },
+  "limitations": [
+    "Two single perturbed profiles, not an RPS ranking or repeated CPU benchmark.",
+    "Sample period weighted CPU attribution per completed request is an estimate (process CPU delta multiplied by sampled share), not directly measured leaf timing.",
+    "fp stacks can truncate optimized frames; inclusive call chains must not be summed.",
+    "Sampling is not a syscall/packet/allocation count. Small leaf changes have sampling/run variation.",
+    "Old 05fe mimalloc profile uses another binary and allocator; do not mix it into this matched system off/on comparison."
+  ]
+}

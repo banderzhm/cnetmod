@@ -1,0 +1,4 @@
+{"stage":"mandatory","workers":1,"exit":0,"time":"2026-10-18T21:51:06.0392067+08:00"}
+{"stage":"mandatory","workers":2,"exit":0,"time":"2026-10-18T21:51:12.6681652+08:00"}
+{"stage":"optional","workers":1,"exit":0,"time":"2026-10-18T21:51:25.1935629+08:00"}
+{"stage":"optional","workers":2,"exit":0,"time":"2026-10-18T21:51:29.4875235+08:00"}

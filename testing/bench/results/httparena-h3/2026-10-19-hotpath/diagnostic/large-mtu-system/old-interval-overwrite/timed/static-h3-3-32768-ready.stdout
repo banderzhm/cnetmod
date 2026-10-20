@@ -1,0 +1,27 @@
+starting benchmark...
+spawning thread #0: 1 total client(s). 1 total requests
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Certificate: RSA 2048 bits
+Negotiated Group: x25519
+Resumption: no
+Application protocol: h3
+progress: 100% done
+
+finished in 8.85ms, 112.98 req/s, 1.88KB/s
+requests: 1 total, 1 started, 1 done, 1 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 1 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 17B (17) total, 4B (4) headers (space savings 87.50%), 1B (1) data
+UDP datagram: 7 sent, 14 received
+                 min         max         median     p95        p99        mean         sd        +/- sd
+request     :      537us       537us       537us      537us      537us      537us         0us   100.00%
+connect     :     7.40ms      7.40ms      7.40ms     7.40ms     7.40ms     7.40ms         0us   100.00%
+TTFB        :     7.94ms      7.94ms      7.94ms     7.94ms     7.94ms     7.94ms         0us   100.00%
+req/s       :     115.76      115.76      115.76     115.76     115.76     115.76        0.00   100.00%
+min RTT     :      121us       121us       121us      121us      121us      121us         0us   100.00%
+smoothed RTT:      453us       453us       453us      453us      453us      453us         0us   100.00%
+packets sent:          9           9           9          9          9       9.00        0.00   100.00%
+packets recv:         14          14          14         14         14      14.00        0.00   100.00%
+packets lost:          0           0           0          0          0       0.00        0.00   100.00%
+GRO packets :          1           1           1          1          1       1.00        0.00   100.00%

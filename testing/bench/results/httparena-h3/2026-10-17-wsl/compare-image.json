@@ -1,0 +1,64 @@
+[
+    {
+        "Architecture": "amd64",
+        "Config": {
+            "Entrypoint": [
+                "dotnet",
+                "genhttp.dll"
+            ],
+            "Env": [
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "APP_UID=1654",
+                "ASPNETCORE_HTTP_PORTS=8080",
+                "DOTNET_RUNNING_IN_CONTAINER=true",
+                "DOTNET_VERSION=11.0.0-rc.2.26504.105"
+            ],
+            "ExposedPorts": {
+                "8080/tcp": {},
+                "8081/tcp": {},
+                "8082/tcp": {},
+                "8443/tcp": {},
+                "8443/udp": {}
+            },
+            "Labels": {
+                "org.opencontainers.image.created": "2026-10-06T21:25:30.040262+00:00",
+                "org.opencontainers.image.description": "The Ubuntu container image maintained by Canonical\n\nUbuntu is a Debian-based Linux operating system that runs from the desktop to the cloud, to all your internet connected things.\nIt is the world's most popular operating system across public clouds and OpenStack clouds.\nIt is the number one platform for containers; from Docker to Kubernetes to LXD, Ubuntu can run your containers at scale.\nFast, secure and simple, Ubuntu powers millions of PCs worldwide.\n",
+                "org.opencontainers.image.title": "ubuntu",
+                "org.opencontainers.image.version": "26.04"
+            },
+            "WorkingDir": "/app"
+        },
+        "Created": "2026-10-17T13:48:47.458749378+08:00",
+        "Descriptor": {
+            "digest": "sha256:72d6de94308798c44f38e98576f132ea1daf4bba07463011eadbb2f859beb8be",
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "size": 2086
+        },
+        "Id": "sha256:72d6de94308798c44f38e98576f132ea1daf4bba07463011eadbb2f859beb8be",
+        "Metadata": {
+            "LastTagTime": "2026-10-17T05:48:47.567603298Z"
+        },
+        "Os": "linux",
+        "Parent": "sha256:b23ebfc3dcbad749016c881247425b66475166c57812af3f592b6ee2062cb571",
+        "RepoDigests": [
+            "httparena-genhttp-ioxide-local@sha256:72d6de94308798c44f38e98576f132ea1daf4bba07463011eadbb2f859beb8be"
+        ],
+        "RepoTags": [
+            "httparena-genhttp-ioxide-local:latest"
+        ],
+        "RootFS": {
+            "Layers": [
+                "sha256:edf698db7561f9f53f2b22b9d417f9fde0be95175736b6954c7ef917c7114cb1",
+                "sha256:6be3abfee1446ddfb97160837ec6ea1edec87a006b73a02dca2bae5de070302e",
+                "sha256:cab96dd735c3b973a2c15609c4a02a2c85087f082433fe820f7525e5216c51af",
+                "sha256:a92709c746c1d5eccc3fe87d812eca5b914175e745625e7ae3fa5c53b9d8b5fe",
+                "sha256:1b8a1440eefce0c7a0e2ebb58b63b60a32ff616552a771099f902cebc9c7ad28",
+                "sha256:e5224887f06198fab028f866ed62aab397c89d703a1dc8d4050cf6a1dfce90e2",
+                "sha256:c6666db0dc67b83dc45485454a3433208887f93f4e45136daaa0a51e126fdfb1",
+                "sha256:f8fe84aff4591430a53519bf228c2d8cb7b250af21dec024a39a84be4991b3ac"
+            ],
+            "Type": "layers"
+        },
+        "Size": 376149153
+    }
+]

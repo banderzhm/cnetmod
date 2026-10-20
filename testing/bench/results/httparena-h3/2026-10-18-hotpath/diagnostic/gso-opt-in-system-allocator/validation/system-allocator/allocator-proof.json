@@ -1,0 +1,18 @@
+{
+  "system_allocator_verified": true,
+  "binary": "/tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server",
+  "binary_sha256": "2cb22a32818646fbf63575370adf6a0c48b3ba5df4bbbc3d3002ab2838003e0a",
+  "noargs_returncode": 2,
+  "ld_preload": null,
+  "ld_audit": null,
+  "cmake_use_mimalloc_off": true,
+  "files": {
+    "CMakeCache.txt": "f285ee9761f1bc31485935a988dedef120acfdef59b4ab6ae2e70bdb4244c859",
+    "build.ninja": "46510303e2260849af54f46beab44aa3efac7c2b4cf48ccd236e96a0ec263e52",
+    "libcnetmod_runtime.a": "d17df7b64d1b16371f0f2e4084718ab701c742c46ec635bdac8a8c74a4338e59",
+    "libcnetmod_quic.a": "3b58c7a81da25e5acd64165ebc24f0be8c19eedf80f163b394e96e54297121f0",
+    "libcnetmod_http.a": "62940d5c1c2d48b99ac90c9ee07f2fccfdf7785022775304231f8b99db166b36",
+    "testing/bench/arena_h3_server": "2cb22a32818646fbf63575370adf6a0c48b3ba5df4bbbc3d3002ab2838003e0a",
+    "testing/tests/test_udp_batch": "fb2fb189d0b2e51546d67efa79f08db3c8c3955249b6897f0dda1616fa242933"
+  }
+}

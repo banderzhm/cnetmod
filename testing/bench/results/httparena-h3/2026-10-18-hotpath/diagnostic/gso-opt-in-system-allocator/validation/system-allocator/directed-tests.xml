@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="12"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="5"
+	timestamp="2026-10-18T20:35:46"
+	>
+	<testcase name="test_udp_batch" classname="test_udp_batch" time="0.484071" status="run">
+		<properties/>
+		<system-out>[==========] Running 16 test(s).
+[ RUN      ] udp_batch_preserves_boundaries_and_backend_lifetime
+[       OK ] udp_batch_preserves_boundaries_and_backend_lifetime
+[ RUN      ] udp_batch_wait_honors_deadline_cancellation
+[       OK ] udp_batch_wait_honors_deadline_cancellation
+[ RUN      ] udp_batch_short_burst_does_not_wait_for_full_batch
+[       OK ] udp_batch_short_burst_does_not_wait_for_full_batch
+[ RUN      ] udp_batch_layout_preserves_ipv4_and_ipv6_boundaries
+[       OK ] udp_batch_layout_preserves_ipv4_and_ipv6_boundaries
+[ RUN      ] udp_batch_partial_prefix_and_suffix_error_are_preserved
+[       OK ] udp_batch_partial_prefix_and_suffix_error_are_preserved
+[ RUN      ] udp_batch_cancel_token_preserves_partial_prefix_and_stops_new_submission
+[       OK ] udp_batch_cancel_token_preserves_partial_prefix_and_stops_new_submission
+[ RUN      ] udp_send_prepared_operation_survives_deferred_submission_error
+[       OK ] udp_send_prepared_operation_survives_deferred_submission_error
+[ RUN      ] udp_batch_woul...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_quic_varint" classname="test_quic_varint" time="0.00194114" status="run">
+		<properties/>
+		<system-out>[==========] Running 16 test(s).
+[ RUN      ] quic_varint_encode_zero
+[       OK ] quic_varint_encode_zero
+[ RUN      ] quic_varint_encode_1byte_range
+[       OK ] quic_varint_encode_1byte_range
+[ RUN      ] quic_varint_encode_2byte_range
+[       OK ] quic_varint_encode_2byte_range
+[ RUN      ] quic_varint_encode_4byte_range
+[       OK ] quic_varint_encode_4byte_range
+[ RUN      ] quic_varint_encode_max_valid
+[       OK ] quic_varint_encode_max_valid
+[ RUN      ] quic_varint_encode_exceeds_62bit
+[       OK ] quic_varint_encode_exceeds_62bit
+[ RUN      ] quic_varint_decode_partial_input
+[       OK ] quic_varint_decode_partial_input
+[ RUN      ] quic_varint_roundtrip_random
+Random round-trip tests: 100 passed, 0 failed
+[       OK ] quic_varint_roundtrip_random
+[ RUN      ] quic_varint_all_boundary_values
+[       OK ] quic_varint_all_boundary_values
+[ RUN      ] quic_varint_decode_truncated_2byte_prefix
+[       OK ] quic_varint_decode_truncated_2byte_prefix
+[ RUN      ] quic_varint_decode_truncated_4byte_prefix
+...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_quic_frame" classname="test_quic_frame" time="0.00471575" status="run">
+		<properties/>
+		<system-out>[==========] Running 33 test(s).
+[ RUN      ] quic_ping_frame_roundtrip
+[       OK ] quic_ping_frame_roundtrip
+[ RUN      ] quic_ack_frame_with_ranges
+[       OK ] quic_ack_frame_with_ranges
+[ RUN      ] quic_stream_frame_encoding
+[       OK ] quic_stream_frame_encoding
+[ RUN      ] quic_crypto_frame_roundtrip
+[       OK ] quic_crypto_frame_roundtrip
+[ RUN      ] quic_connection_close_frame_decode
+[       OK ] quic_connection_close_frame_decode
+[ RUN      ] quic_path_challenge_roundtrip
+[       OK ] quic_path_challenge_roundtrip
+[ RUN      ] quic_unknown_frame_type_handling
+[       OK ] quic_unknown_frame_type_handling
+[ RUN      ] quic_priority_service_budget_bounds_background_starvation
+[       OK ] quic_priority_service_budget_bounds_background_starvation
+[ RUN      ] quic_shared_send_frame_renders_without_owning_body_copy
+[       OK ] quic_shared_send_frame_renders_without_owning_body_copy
+[ RUN      ] quic_stream_scheduler_preserves_default_fifo_across_payload_strategies
+[       OK ] quic_stream_schedule...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_quic_packet" classname="test_quic_packet" time="0.00489683" status="run">
+		<properties/>
+		<system-out>[==========] Running 34 test(s).
+[ RUN      ] long_header_initial_type_detection
+[       OK ] long_header_initial_type_detection
+[ RUN      ] long_header_handshake_type_detection
+[       OK ] long_header_handshake_type_detection
+[ RUN      ] short_header_1rtt_type_detection
+[       OK ] short_header_1rtt_type_detection
+[ RUN      ] zero_rtt_type_detection
+[       OK ] zero_rtt_type_detection
+[ RUN      ] retry_type_detection
+[       OK ] retry_type_detection
+[ RUN      ] version_negotiation_detection
+[       OK ] version_negotiation_detection
+[ RUN      ] long_header_initial_full_parse
+[       OK ] long_header_initial_full_parse
+[ RUN      ] long_header_handshake_full_parse
+[       OK ] long_header_handshake_full_parse
+[ RUN      ] long_header_initial_with_token
+[       OK ] long_header_initial_with_token
+[ RUN      ] long_header_decode_too_short
+[       OK ] long_header_decode_too_short
+[ RUN      ] long_header_short_header_rejected
+[       OK ] long_header_short_header_rejected
+[ RUN      ] short_header_1rt...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_quic_stream" classname="test_quic_stream" time="0.077017" status="run">
+		<properties/>
+		<system-out>[==========] Running 17 test(s).
+[ RUN      ] quic_stream_fin_cannot_shrink_received_extent
+[       OK ] quic_stream_fin_cannot_shrink_received_extent
+[ RUN      ] quic_stream_reset_cannot_exceed_receive_credit
+[       OK ] quic_stream_reset_cannot_exceed_receive_credit
+[ RUN      ] quic_stream_reset_final_size_is_accounted
+[       OK ] quic_stream_reset_final_size_is_accounted
+[ RUN      ] quic_stream_out_of_order_gap_is_not_readable
+[       OK ] quic_stream_out_of_order_gap_is_not_readable
+[ RUN      ] quic_stream_duplicate_fin_is_idempotent
+[       OK ] quic_stream_duplicate_fin_is_idempotent
+[ RUN      ] quic_stream_initial_peer_send_credit_can_be_zero
+[       OK ] quic_stream_initial_peer_send_credit_can_be_zero
+[ RUN      ] quic_stream_initial_peer_send_credit_can_exceed_fallback
+[       OK ] quic_stream_initial_peer_send_credit_can_exceed_fallback
+[ RUN      ] quic_stream_public_send_and_close_remain_lazy
+[       OK ] quic_stream_public_send_and_close_remain_lazy
+[ RUN      ] quic_stream_empty_send_pre...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_quic_loss_detection" classname="test_quic_loss_detection" time="0.00386887" status="run">
+		<properties/>
+		<system-out>[==========] Running 24 test(s).
+[ RUN      ] loss_detector_rtt_initialization
+[       OK ] loss_detector_rtt_initialization
+[ RUN      ] loss_detector_rtt_multiple_samples
+[       OK ] loss_detector_rtt_multiple_samples
+[ RUN      ] loss_detector_pto_duration_basic
+[       OK ] loss_detector_pto_duration_basic
+[ RUN      ] loss_detector_pto_increases_with_rtt_var
+[       OK ] loss_detector_pto_increases_with_rtt_var
+[ RUN      ] loss_detector_packet_sent_tracking
+[       OK ] loss_detector_packet_sent_tracking
+[ RUN      ] loss_detector_ack_received_processing
+[       OK ] loss_detector_ack_received_processing
+[ RUN      ] loss_detector_ack_range_may_include_ack_only_packet
+[       OK ] loss_detector_ack_range_may_include_ack_only_packet
+[ RUN      ] loss_detector_rejects_ack_for_unsent_packet
+[       OK ] loss_detector_rejects_ack_for_unsent_packet
+[ RUN      ] loss_detector_no_loss_on_immediate_ack
+[       OK ] loss_detector_no_loss_on_immediate_ack
+[ RUN      ] loss_detector_pn_space_isolation
+[       OK ...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_quic_congestion" classname="test_quic_congestion" time="0.00185779" status="run">
+		<properties/>
+		<system-out>[==========] Running 20 test(s).
+[ RUN      ] congestion_controller_initial_cwnd
+[       OK ] congestion_controller_initial_cwnd
+[ RUN      ] congestion_controller_initial_ssthresh
+[       OK ] congestion_controller_initial_ssthresh
+[ RUN      ] congestion_controller_initial_pacing_rate
+[       OK ] congestion_controller_initial_pacing_rate
+[ RUN      ] congestion_controller_can_send_below_cwnd
+[       OK ] congestion_controller_can_send_below_cwnd
+[ RUN      ] congestion_controller_can_send_at_cwnd
+[       OK ] congestion_controller_can_send_at_cwnd
+[ RUN      ] congestion_controller_on_packet_sent
+[       OK ] congestion_controller_on_packet_sent
+[ RUN      ] congestion_controller_on_packet_acked
+[       OK ] congestion_controller_on_packet_acked
+[ RUN      ] congestion_controller_discarded_packets_only_release_flight_accounting
+[       OK ] congestion_controller_discarded_packets_only_release_flight_accounting
+[ RUN      ] congestion_controller_congestion_event_no_crash
+[       OK ] congestion_controller_c...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_quic_early_data" classname="test_quic_early_data" time="0.00992148" status="run">
+		<properties/>
+		<system-out>[==========] Running 12 test(s).
+[ RUN      ] early_data_replay_cache_consumes_ticket_once
+[       OK ] early_data_replay_cache_consumes_ticket_once
+[ RUN      ] early_data_replay_cache_rejects_expired_and_evicts
+[       OK ] early_data_replay_cache_rejects_expired_and_evicts
+[ RUN      ] early_data_replay_cache_consumes_concurrently_once
+[       OK ] early_data_replay_cache_consumes_concurrently_once
+[ RUN      ] server_ticket_callbacks_require_shared_replay_cache
+[       OK ] server_ticket_callbacks_require_shared_replay_cache
+[ RUN      ] http3_server_requires_explicit_early_data_context
+[       OK ] http3_server_requires_explicit_early_data_context
+[ RUN      ] http3_server_inbox_limits_require_bounded_nonzero_values
+[       OK ] http3_server_inbox_limits_require_bounded_nonzero_values
+[ RUN      ] http3_server_idle_timeout_rejects_only_negative_durations
+[       OK ] http3_server_idle_timeout_rejects_only_negative_durations
+[ RUN      ] http3_server_udp_payload_size_enforces_quic_datagram_bounds
+[       ...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="quic_retire_stream_credit_wakeup" classname="quic_retire_stream_credit_wakeup" time="1.76034" status="run">
+		<properties>
+			<property name="cmake_labels" value="flow_control;http3;lifecycle;quic"/>
+		</properties>
+		<system-out>{"case": "credit", "client_blocked": 3, "client_forwarded_after_gate": 0, "credit_at_ms": 5.25831000004473, "final_max_streams": 2, "fixture_ingress_count": 5, "initial_max_streams": 1, "mode": "observer", "observer_notifications_after_retire": 7, "pre_retire_deadline_ms": 5889, "proxy_errors": [], "request_fin_acked": true, "server_datagrams_after_gate": 5, "server_stderr": "", "server_stdout": "", "status": "passed"}
+{"case": "credit", "client_blocked": 3, "client_forwarded_after_gate": 0, "credit_at_ms": 5.608695000091757, "final_max_streams": 2, "fixture_ingress_count": 0, "initial_max_streams": 1, "mode": "private", "observer_notifications_after_retire": 0, "pre_retire_deadline_ms": 5889, "proxy_errors": [], "request_fin_acked": true, "server_datagrams_after_gate": 5, "server_stderr": "", "server_stdout": "", "status": "passed"}
+</system-out>
+	</testcase>
+	<testcase name="quic_retire_stream_notification_lifetime" classname="quic_retire_stream_notification_lifetime" time="0.608319" status="run">
+		<properties>
+			<property name="cmake_labels" value="http3;lifecycle;memory;quic"/>
+		</properties>
+		<system-out>{"case": "notification-lifetime", "client_blocked": 3, "client_forwarded_after_gate": 0, "credit_at_ms": 5.257818000018233, "final_max_streams": 2, "fixture_ingress_count": 5, "initial_max_streams": 1, "mode": "observer", "notification_capture_expired_after_unobserve": true, "notification_capture_owners_after_dispatch": 1, "notification_capture_owners_before": 1, "observer_notifications_after_retire": 7, "pre_retire_deadline_ms": 5890, "proxy_errors": [], "request_fin_acked": true, "server_datagrams_after_gate": 5, "server_stderr": "", "server_stdout": "", "status": "passed"}
+</system-out>
+	</testcase>
+	<testcase name="quic_private_outbound_pto" classname="quic_private_outbound_pto" time="0.496765" status="run">
+		<properties>
+			<property name="cmake_labels" value="http3;lifecycle;quic;recovery"/>
+		</properties>
+		<system-out>{"case": "private-pto", "client_blocked": 0, "client_forwarded": 8, "client_forwarded_at_gate": 7, "client_forwarded_while_gated": 0, "control_only_after_drop": 0, "decode_errors": [], "drop_at_ms": 54.26036100016063, "dropped_datagram_bytes": 57, "dropped_packet_number": 3, "dropped_stream_frames": [{"fin": true, "length": 25, "offset": 0}], "gate_at_ms": 0.1810690000638715, "mode": "private", "observer_notifications": 0, "pre_send_deadline_ms": 5890, "response_at_ms": 84.06548600009955, "response_datagrams_dropped": 1, "retransmitted_stream_frames": [{"fin": true, "length": 25, "offset": 0}, {"fin": true, "length": 25, "offset": 0}], "server_forwarded_while_gated": 2, "server_stderr": "", "server_stdout": "", "socket_error_events": [], "socket_errors": [], "status": "passed"}
+</system-out>
+	</testcase>
+	<testcase name="quic_handshake_confirmation" classname="quic_handshake_confirmation" time="1.51131" status="run">
+		<properties>
+			<property name="cmake_labels" value="http3;lifecycle;quic;recovery"/>
+		</properties>
+		<system-out>{"case": "handshake_confirmation", "client_application_pto_count": 1, "client_packets_blocked_before_confirmation": 0, "confirmed_after_tls_complete": false, "decode_errors": [], "done_packets": [{"at_ms": 14.90595000018402, "bytes": 63, "frames": [2, 24, 30], "pn": 0}, {"at_ms": 1039.0429960000347, "bytes": 63, "frames": [1, 18, 19, 24, 30], "pn": 1}, {"at_ms": 1039.0870250000717, "bytes": 63, "frames": [1, 18, 19, 24, 30], "pn": 2}], "dropped_done": true, "dropped_request": true, "handshake_confirmed": true, "illegal_client_done_error_code": 10, "illegal_client_done_frame_type": 30, "illegal_client_done_packet_numbers": [10], "mode": "observer", "request_fin_acked": true, "request_packets": [{"at_ms": 0.32162699994842114, "bytes": 46, "pn": 8}, {"at_ms": 27.707448000001023, "bytes": 47, "pn": 9}], "server_stderr": "", "server_stdout": "", "socket_errors": [], "status": "passed", "tls_completed": true}
+</system-out>
+	</testcase>
+</testsuite>

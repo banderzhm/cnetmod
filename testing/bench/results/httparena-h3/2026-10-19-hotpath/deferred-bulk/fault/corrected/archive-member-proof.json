@@ -1,0 +1,7 @@
+{
+  "archive": "/var/tmp/cnetmod-h3-deferred-bulk-fault-29750984cd8945798f9f0832ef63cc9c-link-fix/libcnetmod_quic.a",
+  "member": "quic_connection.cpp.o",
+  "original_sha256": "c09d5e7b9b51e271c534f64559b2366e41de5747d2048fd42ebcf25c81dbd54e",
+  "replacement_sha256": "8a6193c39a6f61ff248b349ef1cf439c5e9a0955d50dce828e9624949641f4f4",
+  "object_sha256": "8a6193c39a6f61ff248b349ef1cf439c5e9a0955d50dce828e9624949641f4f4"
+}

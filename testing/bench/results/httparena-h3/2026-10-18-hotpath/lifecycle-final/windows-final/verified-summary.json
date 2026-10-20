@@ -1,0 +1,182 @@
+{
+  "status": "passed",
+  "scope": "Windows native cnetmod final validation; ngtcp2 peers explicitly WSL/Linux",
+  "external_run": "C:\\Users\\25007\\.codex\\tmp\\h3-hotpath-windows-final-20261018-193412-0aba7d1e",
+  "ctest": {
+    "enumerated": 36,
+    "passed": 36,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 96.7,
+    "final_log": "tests-retry1.log",
+    "first_attempt": "tests.log (failed at early-data fixture stats PermissionError after 24 PASS)"
+  },
+  "peers": [
+    {
+      "name": "aioquic-server_to_cnetmod-client",
+      "status": "passed",
+      "detail": "request and response validated",
+      "elapsed_ms": 1094,
+      "workers": 1,
+      "evidence": "mandatory-workers1.json",
+      "cnetmod_platform": "Windows",
+      "peer_platform": "Windows/native"
+    },
+    {
+      "name": "aioquic-webtransport_to_cnetmod-server",
+      "status": "passed",
+      "detail": "request and response validated",
+      "elapsed_ms": 1320,
+      "workers": 1,
+      "evidence": "mandatory-workers1.json",
+      "cnetmod_platform": "Windows",
+      "peer_platform": "Windows/native"
+    },
+    {
+      "name": "wtransport-webtransport_to_cnetmod-server",
+      "status": "passed",
+      "detail": "3 independent connections validated",
+      "elapsed_ms": 3122,
+      "workers": 1,
+      "evidence": "mandatory-workers1.json",
+      "cnetmod_platform": "Windows",
+      "peer_platform": "Windows/native"
+    },
+    {
+      "name": "aioquic-server_to_cnetmod-client",
+      "status": "passed",
+      "detail": "request and response validated",
+      "elapsed_ms": 1089,
+      "workers": 2,
+      "evidence": "mandatory-workers2.json",
+      "cnetmod_platform": "Windows",
+      "peer_platform": "Windows/native"
+    },
+    {
+      "name": "aioquic-webtransport_to_cnetmod-server",
+      "status": "passed",
+      "detail": "request and response validated",
+      "elapsed_ms": 1328,
+      "workers": 2,
+      "evidence": "mandatory-workers2.json",
+      "cnetmod_platform": "Windows",
+      "peer_platform": "Windows/native"
+    },
+    {
+      "name": "wtransport-webtransport_to_cnetmod-server",
+      "status": "passed",
+      "detail": "3 independent connections validated",
+      "elapsed_ms": 3071,
+      "workers": 2,
+      "evidence": "mandatory-workers2.json",
+      "cnetmod_platform": "Windows",
+      "peer_platform": "Windows/native"
+    },
+    {
+      "name": "cnetmod-server_to_curl-http3",
+      "status": "passed",
+      "cnetmod_platform": "Windows",
+      "peer_platform": "Windows/native",
+      "workers": 1,
+      "address": "127.0.0.1",
+      "detail": "request and response validated",
+      "logs": "C:\\Users\\25007\\.codex\\tmp\\h3-hotpath-windows-final-20261018-193412-0aba7d1e\\run-d16b7f5f8fd7401fb5c3c213c0bf34bb\\cnetmod-server_to_curl-http3",
+      "elapsed_ms": 1186,
+      "evidence": "run-d16b7f5f8fd7401fb5c3c213c0bf34bb\\results.json"
+    },
+    {
+      "name": "cnetmod-server_to_nghttp3-client",
+      "status": "passed",
+      "cnetmod_platform": "Windows",
+      "peer_platform": "WSL/Linux",
+      "workers": 1,
+      "address": "127.0.0.1",
+      "detail": "request and response validated",
+      "logs": "C:\\Users\\25007\\.codex\\tmp\\h3-hotpath-windows-final-20261018-193412-0aba7d1e\\run-d16b7f5f8fd7401fb5c3c213c0bf34bb\\cnetmod-server_to_nghttp3-client",
+      "elapsed_ms": 1445,
+      "evidence": "run-d16b7f5f8fd7401fb5c3c213c0bf34bb\\results.json"
+    },
+    {
+      "name": "nghttp3-server_to_cnetmod-client",
+      "status": "passed",
+      "cnetmod_platform": "Windows",
+      "peer_platform": "WSL/Linux",
+      "workers": 1,
+      "address": "127.0.0.1",
+      "detail": "request and response validated",
+      "logs": "C:\\Users\\25007\\.codex\\tmp\\h3-hotpath-windows-final-20261018-193412-0aba7d1e\\run-d16b7f5f8fd7401fb5c3c213c0bf34bb\\nghttp3-server_to_cnetmod-client",
+      "elapsed_ms": 1583,
+      "evidence": "run-d16b7f5f8fd7401fb5c3c213c0bf34bb\\results.json"
+    },
+    {
+      "name": "cnetmod-server_to_curl-http3",
+      "status": "passed",
+      "cnetmod_platform": "Windows",
+      "peer_platform": "Windows/native",
+      "workers": 2,
+      "address": "127.0.0.1",
+      "detail": "request and response validated",
+      "logs": "C:\\Users\\25007\\.codex\\tmp\\h3-hotpath-windows-final-20261018-193412-0aba7d1e\\run-e282732eda5a4fb688896e41f2f4037b\\cnetmod-server_to_curl-http3",
+      "elapsed_ms": 1101,
+      "evidence": "run-e282732eda5a4fb688896e41f2f4037b\\results.json"
+    },
+    {
+      "name": "cnetmod-server_to_nghttp3-client",
+      "status": "passed",
+      "cnetmod_platform": "Windows",
+      "peer_platform": "WSL/Linux",
+      "workers": 2,
+      "address": "127.0.0.1",
+      "detail": "request and response validated",
+      "logs": "C:\\Users\\25007\\.codex\\tmp\\h3-hotpath-windows-final-20261018-193412-0aba7d1e\\run-e282732eda5a4fb688896e41f2f4037b\\cnetmod-server_to_nghttp3-client",
+      "elapsed_ms": 1437,
+      "evidence": "run-e282732eda5a4fb688896e41f2f4037b\\results.json"
+    },
+    {
+      "name": "nghttp3-server_to_cnetmod-client",
+      "status": "passed",
+      "cnetmod_platform": "Windows",
+      "peer_platform": "WSL/Linux",
+      "workers": 2,
+      "address": "127.0.0.1",
+      "detail": "request and response validated",
+      "logs": "C:\\Users\\25007\\.codex\\tmp\\h3-hotpath-windows-final-20261018-193412-0aba7d1e\\run-e282732eda5a4fb688896e41f2f4037b\\nghttp3-server_to_cnetmod-client",
+      "elapsed_ms": 1809,
+      "evidence": "run-e282732eda5a4fb688896e41f2f4037b\\results.json"
+    }
+  ],
+  "production_source_drift": false,
+  "protected_peer_json_sha256": "ca41c4cb5adcc34ee16042e00ea9c6dfb248b9a17649995dbacfeb43b64d8b66",
+  "fixture_change": {
+    "file": "testing/http3/http_client_e2e.py",
+    "sha256": "38d350594ae3b64d997590b67bcd1fde37fb4aa308f4f248ea7d411e60a0e8e9",
+    "scope": "Bounded reader snapshot retry only; no claim to eliminate all reverse writer-sharing races"
+  },
+  "native_binary_hashes": [
+    {
+      "file": "arena_h3_server.exe",
+      "bytes": 2529792,
+      "sha256": "9f0b102e3c2731fc4327d8b99f04fa5426d19ff16a1c315d64a55575fd1498e0"
+    },
+    {
+      "file": "h3_interop_client.exe",
+      "bytes": 2494464,
+      "sha256": "65b340df7b60cb0016e468ca113cb734846f7e816abebb5b9b9107dadef7b520"
+    },
+    {
+      "file": "h3_interop_server.exe",
+      "bytes": 2574848,
+      "sha256": "2947d656822524916119c1272dd51eb5743942cb33dd42ed1ef70a46ec30596a"
+    },
+    {
+      "file": "mimalloc-redirect.dll",
+      "bytes": 60416,
+      "sha256": "bc3dfdf51fbc80b88cb62cdb6a6784ecc894164bdd4ae7f3885048d870809491"
+    },
+    {
+      "file": "mimalloc.dll",
+      "bytes": 180224,
+      "sha256": "37b665cf41c779abcb60b665c07fec73fa602e3a6d30a1e84dc65a5b141b56df"
+    }
+  ]
+}

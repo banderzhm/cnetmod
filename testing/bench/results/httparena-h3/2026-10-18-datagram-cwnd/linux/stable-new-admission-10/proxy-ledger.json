@@ -1,0 +1,862 @@
+[
+  {
+    "at": 94.703409462,
+    "direction": "client",
+    "bytes": 1200,
+    "action": "forward",
+    "phase": "warmup"
+  },
+  {
+    "at": 94.703736322,
+    "direction": "server",
+    "bytes": 40,
+    "action": "forward",
+    "phase": "warmup"
+  },
+  {
+    "at": 94.704616224,
+    "direction": "client",
+    "bytes": 1200,
+    "action": "forward",
+    "phase": "warmup"
+  },
+  {
+    "at": 94.705435711,
+    "direction": "server",
+    "bytes": 1200,
+    "action": "forward",
+    "phase": "warmup"
+  },
+  {
+    "at": 94.705460483,
+    "direction": "server",
+    "bytes": 1200,
+    "action": "forward",
+    "phase": "warmup"
+  },
+  {
+    "at": 94.705985946,
+    "direction": "server",
+    "bytes": 108,
+    "action": "forward",
+    "phase": "warmup"
+  },
+  {
+    "at": 94.706269785,
+    "direction": "client",
+    "bytes": 1200,
+    "action": "forward",
+    "phase": "warmup"
+  },
+  {
+    "at": 94.706827579,
+    "direction": "client",
+    "bytes": 48,
+    "action": "forward",
+    "phase": "warmup"
+  },
+  {
+    "at": 94.706874072,
+    "direction": "client",
+    "bytes": 159,
+    "action": "forward",
+    "phase": "warmup"
+  },
+  {
+    "at": 94.707646277,
+    "direction": "server",
+    "bytes": 49,
+    "action": "forward",
+    "phase": "warmup"
+  },
+  {
+    "at": 94.707654614,
+    "direction": "client",
+    "bytes": 38,
+    "action": "forward",
+    "phase": "warmup",
+    "pn": 6,
+    "frames": {
+      "streams": [
+        {
+          "stream": 0,
+          "offset": 0,
+          "length": 7,
+          "fin": true,
+          "sha256": "b8d3be7939f632e4ddc4684ba7a964a7c516a43ec61d91eb0efe9fb2fb37f7ac"
+        }
+      ],
+      "datagrams": [],
+      "kinds": [
+        11
+      ]
+    }
+  },
+  {
+    "at": 94.707867331,
+    "direction": "server",
+    "bytes": 63,
+    "action": "forward",
+    "phase": "warmup",
+    "pn": 0,
+    "frames": {
+      "streams": [],
+      "datagrams": [],
+      "kinds": [
+        2,
+        24,
+        30
+      ]
+    }
+  },
+  {
+    "at": 94.708081815,
+    "direction": "server",
+    "bytes": 34,
+    "action": "forward",
+    "phase": "warmup",
+    "pn": 1,
+    "frames": {
+      "streams": [],
+      "datagrams": [],
+      "kinds": [
+        2
+      ]
+    }
+  },
+  {
+    "at": 94.708201296,
+    "direction": "server",
+    "bytes": 33,
+    "action": "forward",
+    "phase": "warmup",
+    "pn": 2,
+    "frames": {
+      "streams": [
+        {
+          "stream": 0,
+          "offset": 0,
+          "length": 1,
+          "fin": true,
+          "sha256": "2e7d2c03a9507ae265ecf5b5356885a53393a2029d241394997265a1a25aefc6"
+        }
+      ],
+      "datagrams": [],
+      "kinds": [
+        11
+      ]
+    }
+  },
+  {
+    "at": 94.710138193,
+    "direction": "client",
+    "bytes": 33,
+    "action": "forward",
+    "phase": "warmup",
+    "pn": 7,
+    "frames": {
+      "streams": [],
+      "datagrams": [],
+      "kinds": [
+        2
+      ]
+    }
+  },
+  {
+    "at": 94.715660374,
+    "direction": "client",
+    "bytes": 37,
+    "action": "forward_command_then_hold",
+    "phase": "burst",
+    "pn": 8,
+    "frames": {
+      "streams": [
+        {
+          "stream": 4,
+          "offset": 0,
+          "length": 6,
+          "fin": true,
+          "sha256": "5d4c5be04af85aed71e13e2cd248785bdc1612b67ea6b5feab412a4f3588b300"
+        }
+      ],
+      "datagrams": [],
+      "kinds": [
+        11
+      ]
+    }
+  },
+  {
+    "at": 94.715829011,
+    "direction": "server",
+    "bytes": 34,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 3,
+    "frames": {
+      "streams": [],
+      "datagrams": [],
+      "kinds": [
+        2
+      ]
+    }
+  },
+  {
+    "at": 94.715857491,
+    "direction": "server",
+    "bytes": 1132,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 4,
+    "frames": {
+      "streams": [],
+      "datagrams": [
+        {
+          "kind": "burst",
+          "id": 0,
+          "length": 1100
+        }
+      ],
+      "kinds": [
+        49
+      ]
+    }
+  },
+  {
+    "at": 94.715989735,
+    "direction": "server",
+    "bytes": 1132,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 5,
+    "frames": {
+      "streams": [],
+      "datagrams": [
+        {
+          "kind": "burst",
+          "id": 1,
+          "length": 1100
+        }
+      ],
+      "kinds": [
+        49
+      ]
+    }
+  },
+  {
+    "at": 94.716071801,
+    "direction": "server",
+    "bytes": 1132,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 6,
+    "frames": {
+      "streams": [],
+      "datagrams": [
+        {
+          "kind": "burst",
+          "id": 2,
+          "length": 1100
+        }
+      ],
+      "kinds": [
+        49
+      ]
+    }
+  },
+  {
+    "at": 94.71611963,
+    "direction": "server",
+    "bytes": 1132,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 7,
+    "frames": {
+      "streams": [],
+      "datagrams": [
+        {
+          "kind": "burst",
+          "id": 3,
+          "length": 1100
+        }
+      ],
+      "kinds": [
+        49
+      ]
+    }
+  },
+  {
+    "at": 94.716169486,
+    "direction": "server",
+    "bytes": 1132,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 8,
+    "frames": {
+      "streams": [],
+      "datagrams": [
+        {
+          "kind": "burst",
+          "id": 4,
+          "length": 1100
+        }
+      ],
+      "kinds": [
+        49
+      ]
+    }
+  },
+  {
+    "at": 94.716223128,
+    "direction": "server",
+    "bytes": 1132,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 9,
+    "frames": {
+      "streams": [],
+      "datagrams": [
+        {
+          "kind": "burst",
+          "id": 5,
+          "length": 1100
+        }
+      ],
+      "kinds": [
+        49
+      ]
+    }
+  },
+  {
+    "at": 94.716262626,
+    "direction": "server",
+    "bytes": 1132,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 10,
+    "frames": {
+      "streams": [],
+      "datagrams": [
+        {
+          "kind": "burst",
+          "id": 6,
+          "length": 1100
+        }
+      ],
+      "kinds": [
+        49
+      ]
+    }
+  },
+  {
+    "at": 94.716303726,
+    "direction": "server",
+    "bytes": 1132,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 11,
+    "frames": {
+      "streams": [],
+      "datagrams": [
+        {
+          "kind": "burst",
+          "id": 7,
+          "length": 1100
+        }
+      ],
+      "kinds": [
+        49
+      ]
+    }
+  },
+  {
+    "at": 94.716348499,
+    "direction": "server",
+    "bytes": 1132,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 12,
+    "frames": {
+      "streams": [],
+      "datagrams": [
+        {
+          "kind": "burst",
+          "id": 8,
+          "length": 1100
+        }
+      ],
+      "kinds": [
+        49
+      ]
+    }
+  },
+  {
+    "at": 94.716604709,
+    "direction": "server",
+    "bytes": 1132,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 13,
+    "frames": {
+      "streams": [],
+      "datagrams": [
+        {
+          "kind": "burst",
+          "id": 9,
+          "length": 1100
+        }
+      ],
+      "kinds": [
+        49
+      ]
+    }
+  },
+  {
+    "at": 94.716647226,
+    "direction": "server",
+    "bytes": 1132,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 14,
+    "frames": {
+      "streams": [],
+      "datagrams": [
+        {
+          "kind": "burst",
+          "id": 10,
+          "length": 1100
+        }
+      ],
+      "kinds": [
+        49
+      ]
+    }
+  },
+  {
+    "at": 94.716687526,
+    "direction": "server",
+    "bytes": 1132,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 15,
+    "frames": {
+      "streams": [],
+      "datagrams": [
+        {
+          "kind": "burst",
+          "id": 11,
+          "length": 1100
+        }
+      ],
+      "kinds": [
+        49
+      ]
+    }
+  },
+  {
+    "at": 94.716729195,
+    "direction": "server",
+    "bytes": 1132,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 16,
+    "frames": {
+      "streams": [],
+      "datagrams": [
+        {
+          "kind": "burst",
+          "id": 12,
+          "length": 1100
+        }
+      ],
+      "kinds": [
+        49
+      ]
+    }
+  },
+  {
+    "at": 94.717877065,
+    "direction": "server",
+    "bytes": 33,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 17,
+    "frames": {
+      "streams": [
+        {
+          "stream": 4,
+          "offset": 0,
+          "length": 1,
+          "fin": true,
+          "sha256": "2e7d2c03a9507ae265ecf5b5356885a53393a2029d241394997265a1a25aefc6"
+        }
+      ],
+      "datagrams": [],
+      "kinds": [
+        11
+      ]
+    }
+  },
+  {
+    "at": 94.718129676,
+    "direction": "client",
+    "bytes": 33,
+    "action": "hold",
+    "phase": "burst",
+    "pn": 9,
+    "frames": {
+      "streams": [],
+      "datagrams": [],
+      "kinds": [
+        2
+      ]
+    }
+  },
+  {
+    "at": 94.71943783,
+    "direction": "client",
+    "bytes": 33,
+    "action": "hold",
+    "phase": "burst",
+    "pn": 10,
+    "frames": {
+      "streams": [],
+      "datagrams": [],
+      "kinds": [
+        2
+      ]
+    }
+  },
+  {
+    "at": 94.749975575,
+    "direction": "server",
+    "bytes": 39,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 18,
+    "frames": {
+      "streams": [
+        {
+          "stream": 4,
+          "offset": 0,
+          "length": 1,
+          "fin": true,
+          "sha256": "2e7d2c03a9507ae265ecf5b5356885a53393a2029d241394997265a1a25aefc6"
+        }
+      ],
+      "datagrams": [],
+      "kinds": [
+        1,
+        18,
+        19,
+        11
+      ]
+    }
+  },
+  {
+    "at": 94.750086813,
+    "direction": "server",
+    "bytes": 39,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 19,
+    "frames": {
+      "streams": [
+        {
+          "stream": 4,
+          "offset": 0,
+          "length": 1,
+          "fin": true,
+          "sha256": "2e7d2c03a9507ae265ecf5b5356885a53393a2029d241394997265a1a25aefc6"
+        }
+      ],
+      "datagrams": [],
+      "kinds": [
+        1,
+        18,
+        19,
+        11
+      ]
+    }
+  },
+  {
+    "at": 94.751558419,
+    "direction": "client",
+    "bytes": 33,
+    "action": "hold",
+    "phase": "burst",
+    "pn": 11,
+    "frames": {
+      "streams": [],
+      "datagrams": [],
+      "kinds": [
+        2
+      ]
+    }
+  },
+  {
+    "at": 94.81396368,
+    "direction": "server",
+    "bytes": 45,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 20,
+    "frames": {
+      "streams": [
+        {
+          "stream": 4,
+          "offset": 0,
+          "length": 1,
+          "fin": true,
+          "sha256": "2e7d2c03a9507ae265ecf5b5356885a53393a2029d241394997265a1a25aefc6"
+        }
+      ],
+      "datagrams": [],
+      "kinds": [
+        1,
+        18,
+        19,
+        1,
+        18,
+        19,
+        11
+      ]
+    }
+  },
+  {
+    "at": 94.814110509,
+    "direction": "server",
+    "bytes": 45,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 21,
+    "frames": {
+      "streams": [
+        {
+          "stream": 4,
+          "offset": 0,
+          "length": 1,
+          "fin": true,
+          "sha256": "2e7d2c03a9507ae265ecf5b5356885a53393a2029d241394997265a1a25aefc6"
+        }
+      ],
+      "datagrams": [],
+      "kinds": [
+        1,
+        18,
+        19,
+        1,
+        18,
+        19,
+        11
+      ]
+    }
+  },
+  {
+    "at": 94.815586735,
+    "direction": "client",
+    "bytes": 33,
+    "action": "hold",
+    "phase": "burst",
+    "pn": 12,
+    "frames": {
+      "streams": [],
+      "datagrams": [],
+      "kinds": [
+        2
+      ]
+    }
+  },
+  {
+    "action": "release",
+    "phase": "burst",
+    "packets": 4,
+    "at": 94.826271615
+  },
+  {
+    "at": 94.827274139,
+    "direction": "client",
+    "bytes": 38,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 13,
+    "frames": {
+      "streams": [
+        {
+          "stream": 8,
+          "offset": 0,
+          "length": 7,
+          "fin": true,
+          "sha256": "b8d3be7939f632e4ddc4684ba7a964a7c516a43ec61d91eb0efe9fb2fb37f7ac"
+        }
+      ],
+      "datagrams": [],
+      "kinds": [
+        11
+      ]
+    }
+  },
+  {
+    "at": 94.827405035,
+    "direction": "server",
+    "bytes": 34,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 22,
+    "frames": {
+      "streams": [],
+      "datagrams": [],
+      "kinds": [
+        2
+      ]
+    }
+  },
+  {
+    "at": 94.827455637,
+    "direction": "server",
+    "bytes": 33,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 23,
+    "frames": {
+      "streams": [
+        {
+          "stream": 8,
+          "offset": 0,
+          "length": 1,
+          "fin": true,
+          "sha256": "2e7d2c03a9507ae265ecf5b5356885a53393a2029d241394997265a1a25aefc6"
+        }
+      ],
+      "datagrams": [],
+      "kinds": [
+        11
+      ]
+    }
+  },
+  {
+    "at": 94.829041366,
+    "direction": "client",
+    "bytes": 33,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 14,
+    "frames": {
+      "streams": [],
+      "datagrams": [],
+      "kinds": [
+        2
+      ]
+    }
+  },
+  {
+    "at": 94.834005402,
+    "direction": "client",
+    "bytes": 38,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 15,
+    "frames": {
+      "streams": [
+        {
+          "stream": 12,
+          "offset": 0,
+          "length": 7,
+          "fin": true,
+          "sha256": "d4169ac586761c1e922c624e2655466dea2b3266c3c9af4c88b08908f8a12ce8"
+        }
+      ],
+      "datagrams": [],
+      "kinds": [
+        11
+      ]
+    }
+  },
+  {
+    "at": 94.834132274,
+    "direction": "server",
+    "bytes": 34,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 24,
+    "frames": {
+      "streams": [],
+      "datagrams": [],
+      "kinds": [
+        2
+      ]
+    }
+  },
+  {
+    "at": 94.834179391,
+    "direction": "server",
+    "bytes": 40,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 25,
+    "frames": {
+      "streams": [],
+      "datagrams": [
+        {
+          "kind": "marker",
+          "length": 9
+        }
+      ],
+      "kinds": [
+        49
+      ]
+    }
+  },
+  {
+    "at": 94.834306874,
+    "direction": "server",
+    "bytes": 33,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 26,
+    "frames": {
+      "streams": [
+        {
+          "stream": 12,
+          "offset": 0,
+          "length": 1,
+          "fin": true,
+          "sha256": "2e7d2c03a9507ae265ecf5b5356885a53393a2029d241394997265a1a25aefc6"
+        }
+      ],
+      "datagrams": [],
+      "kinds": [
+        11
+      ]
+    }
+  },
+  {
+    "at": 94.835736495,
+    "direction": "client",
+    "bytes": 33,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 16,
+    "frames": {
+      "streams": [],
+      "datagrams": [],
+      "kinds": [
+        2
+      ]
+    }
+  },
+  {
+    "at": 94.910577437,
+    "direction": "client",
+    "bytes": 30,
+    "action": "forward",
+    "phase": "burst",
+    "pn": 17,
+    "frames": {
+      "streams": [],
+      "datagrams": [],
+      "kinds": [
+        29
+      ]
+    }
+  }
+]

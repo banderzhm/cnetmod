@@ -1,0 +1,35 @@
+*   Trying 127.0.0.1:44933...
+* SSL Trust: peer verification disabled
+* SSL connection using TLSv1.3 / TLS_AES_256_GCM_SHA384 / X25519MLKEM768 / RSASSA-PSS
+* Server certificate:
+*   subject: CN=localhost
+*   start date: Aug 22 17:56:11 2026 GMT
+*   expire date: Aug 19 17:56:11 2036 GMT
+*   issuer: CN=localhost
+*   Certificate level 0: Public key type RSA (2048/112 Bits/secBits), signed using sha256WithRSAEncryption
+* OpenSSL verify result: 12
+*  SSL certificate verification failed, continuing anyway!
+* Established connection to 127.0.0.1 (127.0.0.1 port 44933) from 127.0.0.1 port 41245 
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0* using HTTP/3
+* [HTTP/3] [0] OPENED stream for https://127.0.0.1:44933/static/reset.css
+* [HTTP/3] [0] [:method: GET]
+* [HTTP/3] [0] [:scheme: https]
+* [HTTP/3] [0] [:authority: 127.0.0.1:44933]
+* [HTTP/3] [0] [:path: /static/reset.css]
+* [HTTP/3] [0] [user-agent: curl/8.22.0]
+* [HTTP/3] [0] [accept: */*]
+> GET /static/reset.css HTTP/3
+> Host: 127.0.0.1:44933
+> User-Agent: curl/8.22.0
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/3 200 
+< content-type: text/css; charset=utf-8
+< vary: Accept-Encoding
+< 
+{ [1062 bytes data]
+100   8192   0   8192   0      0  1.07M      0                              0100   8192   0   8192   0      0  1.07M      0                              0100   8192   0   8192   0      0  1.07M      0                              0
+* Connection #0 to host 127.0.0.1:44933 left intact

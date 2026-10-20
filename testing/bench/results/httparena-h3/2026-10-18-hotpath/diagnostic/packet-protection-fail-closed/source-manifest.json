@@ -1,0 +1,10 @@
+{
+  "src/protocol/quic/quic_connection.cppm": {
+    "base_sha256": "e97704fc5324e6a2a94356e416d12e99b49db037f53639b75dce82acdc1df6fa",
+    "candidate_sha256": "94f6ccaaef8520332d2d88e77ae67ba6dc5480bf99c00f04921a898914038e54"
+  },
+  "src/protocol/quic/quic_connection.cpp": {
+    "base_sha256": "573261cc8dd2711b4f715df82f4f31695dcb28927e89484464016670153c845a",
+    "candidate_sha256": "7681a46f45ee44af9866d6454788ec972f57018e550ae642f96fa1051f7b6cb7"
+  }
+}

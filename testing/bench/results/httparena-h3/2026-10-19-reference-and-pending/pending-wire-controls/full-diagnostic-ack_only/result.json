@@ -1,0 +1,332 @@
+{
+  "status": "passed",
+  "scenario": "ack_only",
+  "source_sha256": "e885d1394c98ebd6946270965b55e06fde7e1b9de0f7d0a6d0658ea42d020468",
+  "server_sha256": "6f5af9852e310409d69610da2ed16605420643977e7d430cc5c48c2e5d1d6bb7",
+  "driver_sha256": "c01b8262be7df5c41b4aacb7f1aa72a74e3e83d4f36270333e7342ffc0765143",
+  "server_cpp_sha256": "79b6f315cd257814c5a0b901f0294988c26c7dd462eacb4e053524367eedf0d5",
+  "parser_sha256": "7341a99b0ee4cd459b996d4d300a60907e729f198a028a2180017e8a4e1c99f8",
+  "aioquic_version": "1.7.0",
+  "peer": "unmodified installed aioquic",
+  "command": [
+    "/var/tmp/cnetmod-pmtu-pending-mixed-20261019/build-recovered/full-diagnostic/quic_pmtu_pending_server",
+    "--port",
+    "40282",
+    "--cert",
+    "/var/tmp/cnetmod-pmtu-pending-mixed-20261019/wire-runtime-v2/full-diagnostic-ack_only/cert.pem",
+    "--key",
+    "/var/tmp/cnetmod-pmtu-pending-mixed-20261019/wire-runtime-v2/full-diagnostic-ack_only/key.pem",
+    "--listening-report",
+    "/var/tmp/cnetmod-pmtu-pending-mixed-20261019/wire-runtime-v2/full-diagnostic-ack_only/listening.txt",
+    "--result-report",
+    "/var/tmp/cnetmod-pmtu-pending-mixed-20261019/wire-runtime-v2/full-diagnostic-ack_only/failure.txt",
+    "--burst-report",
+    "/var/tmp/cnetmod-pmtu-pending-mixed-20261019/wire-runtime-v2/full-diagnostic-ack_only/burst.json",
+    "--attempt-report",
+    "/var/tmp/cnetmod-pmtu-pending-mixed-20261019/wire-runtime-v2/full-diagnostic-ack_only/attempt.json",
+    "--state-report",
+    "/var/tmp/cnetmod-pmtu-pending-mixed-20261019/wire-runtime-v2/full-diagnostic-ack_only/state.json",
+    "--initial-delay-ms",
+    "200",
+    "--interval-ms",
+    "10"
+  ],
+  "measurement": {
+    "burst": {
+      "accepted": 64,
+      "elapsed_us": 175,
+      "finished_us": 324675404,
+      "observed_deadline_us": 324685121,
+      "mds_observed_us": 324675218,
+      "configured_interval_us": 10000
+    },
+    "attempt": {
+      "at_us": 324685414,
+      "next_deadline_us": 324983653,
+      "mds": 1328,
+      "ingress": 5
+    },
+    "report_lag_ms": 1.4546540000424102,
+    "wire_datagram_packets": 14,
+    "wire_datagram_udp_bytes": 15848,
+    "original_public_deadline": 324.983653,
+    "delay_seconds": 0.05,
+    "ping": {
+      "direction": "client",
+      "at": 324.68713734,
+      "bytes": 29,
+      "decoded": true,
+      "pn": 8,
+      "frames": {
+        "streams": [],
+        "datagrams": [],
+        "kinds": [
+          1,
+          0
+        ],
+        "acks": []
+      },
+      "scheduled_forward_at": 324.737164963,
+      "action": "scheduled_forward",
+      "forwarded_at": 324.737756098
+    },
+    "ack": {
+      "direction": "server",
+      "at": 324.738145664,
+      "bytes": 34,
+      "decoded": true,
+      "pn": 16,
+      "frames": {
+        "streams": [],
+        "datagrams": [],
+        "kinds": [
+          2
+        ],
+        "acks": [
+          [
+            8,
+            8
+          ]
+        ]
+      },
+      "scheduled_forward_at": 324.788212913,
+      "action": "scheduled_forward",
+      "forwarded_at": 324.788840593
+    },
+    "last_public_state": {
+      "at_us": 324737919,
+      "next_deadline_us": 324737919,
+      "mds": 1328,
+      "ingress": 6
+    },
+    "primary_oracle": "ordinary ACK-only packet before original recovery deadline"
+  },
+  "proxy_errors": [],
+  "forward_delay_proof": [
+    {
+      "direction": "client",
+      "received_at": 324.115654749,
+      "scheduled_forward_at": 324.165658995,
+      "forwarded_at": 324.165831931,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 324.166134577,
+      "scheduled_forward_at": 324.21614137200004,
+      "forwarded_at": 324.216347106,
+      "released_at": null
+    },
+    {
+      "direction": "client",
+      "received_at": 324.217592032,
+      "scheduled_forward_at": 324.267596724,
+      "forwarded_at": 324.267749538,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 324.268990784,
+      "scheduled_forward_at": 324.318994937,
+      "forwarded_at": 324.319220932,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 324.269021537,
+      "scheduled_forward_at": 324.319022963,
+      "forwarded_at": 324.319266022,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 324.26903289,
+      "scheduled_forward_at": 324.319033847,
+      "forwarded_at": 324.319270931,
+      "released_at": null
+    },
+    {
+      "direction": "client",
+      "received_at": 324.320146665,
+      "scheduled_forward_at": 324.370149889,
+      "forwarded_at": 324.370278217,
+      "released_at": null
+    },
+    {
+      "direction": "client",
+      "received_at": 324.32057168,
+      "scheduled_forward_at": 324.370573653,
+      "forwarded_at": 324.371589075,
+      "released_at": null
+    },
+    {
+      "direction": "client",
+      "received_at": 324.320587991,
+      "scheduled_forward_at": 324.370589213,
+      "forwarded_at": 324.371613569,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 324.371702593,
+      "scheduled_forward_at": 324.42170517200003,
+      "forwarded_at": 324.42184493,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 324.371741546,
+      "scheduled_forward_at": 324.42179916500004,
+      "forwarded_at": 324.421876993,
+      "released_at": null
+    },
+    {
+      "direction": "client",
+      "received_at": 324.423891131,
+      "scheduled_forward_at": 324.473973533,
+      "forwarded_at": 324.474486261,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 324.572198711,
+      "scheduled_forward_at": 324.62245558300003,
+      "forwarded_at": 324.622650661,
+      "released_at": null
+    },
+    {
+      "direction": "client",
+      "received_at": 324.624757814,
+      "scheduled_forward_at": 324.67480226600003,
+      "forwarded_at": 324.674822832,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 324.675325524,
+      "scheduled_forward_at": 324.72541253,
+      "forwarded_at": 324.725513139,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 324.675431528,
+      "scheduled_forward_at": 324.725448686,
+      "forwarded_at": 324.725563458,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 324.675455262,
+      "scheduled_forward_at": 324.72546501700003,
+      "forwarded_at": 324.725571174,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 324.675475058,
+      "scheduled_forward_at": 324.72548817800003,
+      "forwarded_at": 324.725577698,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 324.675495093,
+      "scheduled_forward_at": 324.725503161,
+      "forwarded_at": 324.726091439,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 324.675507517,
+      "scheduled_forward_at": 324.725517086,
+      "forwarded_at": 324.726110821,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 324.675521238,
+      "scheduled_forward_at": 324.725527751,
+      "forwarded_at": 324.726117748,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 324.675531491,
+      "scheduled_forward_at": 324.72553776800004,
+      "forwarded_at": 324.72612352,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 324.675546342,
+      "scheduled_forward_at": 324.72555251,
+      "forwarded_at": 324.726127875,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 324.675556219,
+      "scheduled_forward_at": 324.725561925,
+      "forwarded_at": 324.726133036,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 324.67556778,
+      "scheduled_forward_at": 324.72557431,
+      "forwarded_at": 324.726137653,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 324.675578804,
+      "scheduled_forward_at": 324.725584409,
+      "forwarded_at": 324.726154934,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 324.675587891,
+      "scheduled_forward_at": 324.72559564,
+      "forwarded_at": 324.726334857,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 324.675599914,
+      "scheduled_forward_at": 324.725605205,
+      "forwarded_at": 324.726354104,
+      "released_at": null
+    },
+    {
+      "direction": "client",
+      "received_at": 324.68713734,
+      "scheduled_forward_at": 324.737164963,
+      "forwarded_at": 324.737756098,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 324.738145664,
+      "scheduled_forward_at": 324.788212913,
+      "forwarded_at": 324.788840593,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 324.984419079,
+      "scheduled_forward_at": 325.034748407,
+      "forwarded_at": 325.035225867,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 325.303742059,
+      "scheduled_forward_at": 325.354405368,
+      "forwarded_at": 325.354752868,
+      "released_at": null
+    }
+  ],
+  "server_exit": -15
+}

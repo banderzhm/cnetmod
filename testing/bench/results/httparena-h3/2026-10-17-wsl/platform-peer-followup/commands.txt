@@ -1,0 +1,37 @@
+Windows PowerShell, repository root; Release only. No load benchmarks.
+$cmakeExe = 'D:/runtime/vs/Microsoft Visual Studio/18/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe'
+$ctestExe = 'D:/runtime/vs/Microsoft Visual Studio/18/BuildTools/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/ctest.exe'
+& $cmakeExe -S . -B C:/Users/25007/.codex/tmp/cnetmod-h3-windows -G 'Visual Studio 18 2026' -A x64 -DCNETMOD_ENABLE_HTTP=ON -DCNETMOD_ENABLE_QUIC=ON -DCNETMOD_ENABLE_BORINGSSL_QUIC=ON -DCNETMOD_ENABLE_ORM=OFF -DCNETMOD_ENABLE_YAML_CONFIGURATION=OFF -DCNETMOD_BUILD_TESTS=ON -DCNETMOD_BUILD_BENCH=ON
+& $cmakeExe --build C:/Users/25007/.codex/tmp/cnetmod-h3-windows --config Release --target h3_interop_server h3_interop_client http3_e2e_server http_client_http3_e2e arena_h3_server test_quic_packet test_quic_stream test_quic_frame test_quic_loss_detection test_quic_congestion test_http3_qpack test_http3_frame -- /m:1
+python -m venv C:/Users/25007/.codex/tmp/cnetmod-h3-windows-python
+& C:/Users/25007/.codex/tmp/cnetmod-h3-windows-python/Scripts/python.exe -m pip install aioquic==1.7.0
+
+Create an isolated Cargo workspace at C:/Users/25007/.codex/tmp/cnetmod-h3-wtransport:
+- Copy recorded wtransport-Cargo.toml to Cargo.toml, wtransport-Cargo.lock to Cargo.lock.
+- Copy unchanged testing/bench/crosslang/rust/src/bin/webtransport_probe.rs to webtransport_probe.rs.
+This builds only the optional peer, without unrelated Linux-only benchmark dependencies.
+cargo build --release --locked -j 4 --manifest-path C:/Users/25007/.codex/tmp/cnetmod-h3-wtransport/Cargo.toml
+& $cmakeExe -S . -B C:/Users/25007/.codex/tmp/cnetmod-h3-windows -DPython3_EXECUTABLE=C:/Users/25007/.codex/tmp/cnetmod-h3-windows-python/Scripts/python.exe -DCNETMOD_WTRANSPORT_PROBE=C:/Users/25007/.codex/tmp/cnetmod-h3-wtransport/target/release/webtransport_probe.exe
+& $ctestExe --test-dir C:/Users/25007/.codex/tmp/cnetmod-h3-windows -C Release -j 1 --output-on-failure -R '^(test_quic_(packet|stream|frame|loss_detection|congestion)|test_http3_(qpack|frame)|arena_h3_measurement_unit|h3_webtransport_aioquic_probe_unit|h3_interop.*release_gate|http_client_http3_(end_to_end|dynamic_qpack_end_to_end))$'
+
+After adding status + exact expected health-body validation, repeat the affected gates:
+& $ctestExe --test-dir C:/Users/25007/.codex/tmp/cnetmod-h3-windows -C Release -j 1 -V -R '^h3_interop.*release_gate$'
+windows-ctest-details.log preserves all 13 initial CTest outputs (before strengthening body validation).
+windows-final-gates.log preserves the final two interop gates, including all per-peer skips.
+windows-multi-worker.json is the final two-worker gate; the one-worker results are in windows-final-gates.log.
+
+Arch Linux WSL, builds sequential with the Windows/Rust builds above:
+cd /tmp
+git clone --depth 1 --branch v1.25.0 https://github.com/ngtcp2/ngtcp2.git cnetmod-h3-ngtcp2-peer
+git -C /tmp/cnetmod-h3-ngtcp2-peer submodule update --init third-party/urlparse
+cmake -S /tmp/cnetmod-h3-ngtcp2-peer -B /tmp/cnetmod-h3-ngtcp2-peer-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED_LIB=OFF -DBUILD_TESTING=OFF
+cmake --build /tmp/cnetmod-h3-ngtcp2-peer-build --target osslclient osslserver -j4
+mkdir -p /mnt/c/Users/25007/.codex/tmp/cnetmod-h3-linux-tmp
+TMPDIR=/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-linux-tmp cargo build --release --locked -j4 --manifest-path /mnt/c/Users/25007/.codex/tmp/cnetmod-h3-wtransport/Cargo.toml --target-dir /mnt/c/Users/25007/.codex/tmp/cnetmod-h3-wtransport-linux-target
+Use the exact argv/cwd/TMPDIR in linux-all-peers-command.json for final acceptance.
+It asserts six passed cases, no skipped/failed cases. Rust uses three fresh fixtures.
+
+Validation environment recovery:
+The pinned BoringSSL submodule was restored from E:/github/cnetmod/3rdparty/boringssl.
+The first Linux Rust build failed because /tmp tmpfs was full. Only this run's Rust target directory was moved to disk, then rebuilt successfully with the disk-backed TMPDIR above. Existing benchmark/perf outputs were retained.
+The Rust source is unchanged; source and executable hashes and tool identities are in environment.json.

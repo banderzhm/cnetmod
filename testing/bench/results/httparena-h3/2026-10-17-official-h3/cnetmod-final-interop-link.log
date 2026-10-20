@@ -1,0 +1,3 @@
+[0/2] Re-checking globbed directories...
+[1/3] Linking CXX executable bin/h3_interop_server
+[2/3] Linking CXX executable bin/h3_interop_client

@@ -53,6 +53,28 @@ TEST(http3_async_server_handler_contract)
     ASSERT_EQ(response.body, "/dynamic");
 }
 
+TEST(http3_async_server_handler_can_share_buffered_response_body)
+{
+    const auto cached = std::make_shared<const std::string>("cached asset");
+    cnetmod::http::v3::async_server_request_handler handler =
+        [cached](cnetmod::http::v3::http3_request&,
+            cnetmod::http::v3::http3_response& response,
+            cnetmod::cancel_token&)
+        -> cnetmod::task<std::expected<void, std::error_code>>
+    {
+        response.shared_body = cached;
+        co_return {};
+    };
+
+    cnetmod::http::v3::http3_request request;
+    cnetmod::http::v3::http3_response response;
+    cnetmod::cancel_token token;
+    const auto handled = cnetmod::sync_wait(handler(request, response, token));
+    ASSERT_TRUE(handled.has_value());
+    ASSERT_TRUE(response.body.empty());
+    ASSERT_TRUE(response.shared_body == cached);
+}
+
 TEST(webtransport_async_server_handler_contract)
 {
     cnetmod::http::v3::async_webtransport_handler handler =

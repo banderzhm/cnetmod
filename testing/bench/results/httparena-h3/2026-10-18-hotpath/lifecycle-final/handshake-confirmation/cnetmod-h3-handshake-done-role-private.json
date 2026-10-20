@@ -1,0 +1,70 @@
+{
+  "case": "handshake_confirmation",
+  "mode": "private",
+  "status": "passed",
+  "done_packets": [
+    {
+      "pn": 0,
+      "bytes": 63,
+      "at_ms": 15.987971000015477,
+      "frames": [
+        2,
+        24,
+        30
+      ]
+    },
+    {
+      "pn": 1,
+      "bytes": 63,
+      "at_ms": 1040.044480000006,
+      "frames": [
+        1,
+        18,
+        19,
+        24,
+        30
+      ]
+    },
+    {
+      "pn": 2,
+      "bytes": 63,
+      "at_ms": 1040.082429999984,
+      "frames": [
+        1,
+        18,
+        19,
+        24,
+        30
+      ]
+    }
+  ],
+  "request_packets": [
+    {
+      "pn": 8,
+      "bytes": 46,
+      "at_ms": 0.24828900001239163
+    },
+    {
+      "pn": 9,
+      "bytes": 47,
+      "at_ms": 28.71686700001419
+    }
+  ],
+  "socket_errors": [],
+  "decode_errors": [],
+  "dropped_done": true,
+  "dropped_request": true,
+  "client_packets_blocked_before_confirmation": 0,
+  "client_application_pto_count": 1,
+  "tls_completed": true,
+  "confirmed_after_tls_complete": false,
+  "handshake_confirmed": true,
+  "request_fin_acked": true,
+  "illegal_client_done_packet_numbers": [
+    10
+  ],
+  "illegal_client_done_error_code": 10,
+  "illegal_client_done_frame_type": 30,
+  "server_stdout": "",
+  "server_stderr": ""
+}

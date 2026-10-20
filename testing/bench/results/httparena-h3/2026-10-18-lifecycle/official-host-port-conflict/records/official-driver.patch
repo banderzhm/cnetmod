@@ -1,0 +1,58 @@
+--- official/scripts/benchmark.sh
++++ staged/scripts/benchmark.sh
+@@ -66,8 +66,6 @@
+     #   - dangling images from earlier --build cycles (each iteration of
+     #     aspnet-minimal_nginx rebuilds ~300 MB of image layers)
+     # Both are idempotent and fast when there's nothing to clean.
+-    docker volume prune -f >/dev/null 2>&1 || true
+-    docker image prune  -f >/dev/null 2>&1 || true
+ }
+ if [ "${SKIP_TUNE:-}" != "true" ]; then
+     trap 'cleanup_all; system_restore' EXIT
+@@ -78,10 +76,6 @@
+ # Clean slate: stop any leftover benchmark containers from a previous
+ # crashed run, AND prune any leftover dangling volumes/images from the
+ # same source. Belt-and-suspenders vs. the cleanup_all at exit.
+-docker ps -q  --filter "name=httparena-" | xargs -r docker stop -t 5 2>/dev/null || true
+-docker ps -aq --filter "name=httparena-" | xargs -r docker rm -f -v 2>/dev/null || true
+-docker volume prune -f >/dev/null 2>&1 || true
+-docker image prune  -f >/dev/null 2>&1 || true
+ 
+ info "available CPUs: $(nproc 2>/dev/null || echo ?)"
+ 
+--- official/scripts/lib/framework.sh
++++ staged/scripts/lib/framework.sh
+@@ -184,6 +184,7 @@
+             ;;
+         h3|static-h3)
+             probe_url="https://localhost:$H2PORT/baseline2?a=1&b=1"
++            probe_extra+=(--http3-only)
+             ;;
+         h2|baseline-h2)
+             probe_url="https://localhost:$H2PORT/baseline2?a=1&b=1"
+--- official/scripts/validate.sh
++++ staged/scripts/validate.sh
+@@ -4,10 +4,10 @@
+ FRAMEWORK="$1"
+ IMAGE_NAME="httparena-${FRAMEWORK}"
+ CONTAINER_NAME="httparena-validate-${FRAMEWORK}"
+-PORT=8080
+-H2PORT=8443
+-H1TLS_PORT=8081
+-H2C_PORT=8082
++PORT=18080
++H2PORT=48443
++H1TLS_PORT=18081
++H2C_PORT=18082
+ # The opt-in TLS section gets its own listener and its own certificate pair.
+ # It rotates certificates underneath a running server, and doing that to the
+ # shared /certs would move the ground under json-tls, static-tls and every h2
+@@ -436,7 +436,7 @@
+                && docker run --rm --network host "${H2LOAD_H3_IMAGE:-h2load-h3}" \
+                     --alpn-list=h3 -n 1 -c 1 -t 1 \
+                     "https://localhost:$H2PORT/baseline2?a=1&b=1" 2>/dev/null \
+-                  | grep -q ' 1 2xx'; then
++                  | grep ' 1 2xx' >/dev/null; then
+                 break
+             fi
+             if [ "$i" -eq 30 ]; then

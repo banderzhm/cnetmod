@@ -1,0 +1,13 @@
+=== Validating: genhttp-ioxide-official-h3 ===
+[info] Subscribed tests: baseline-h3 static-h3
+[build] Building Docker image...
+bc17f1c7d40836b220b72dccf8c4624c821559723d01509fbbf560d1e761b53c
+[wait] Waiting for server...
+[ready] Server is up
+[test] h3 endpoints (QUIC on :48443/udp)
+  PASS [baseline-h3 over QUIC] (4/4 2xx, ALPN h3)
+  PASS [static-h3 over QUIC] (4/4 2xx, ALPN h3)
+
+=== Results: 2 passed, 0 failed ===
+cnetmod-final-4c178de9d76f4c63adb15a4ebe898833-validate-genhttp-ioxide-official-h3
+Terminated                 sleep "$VALIDATE_TIMEOUT"

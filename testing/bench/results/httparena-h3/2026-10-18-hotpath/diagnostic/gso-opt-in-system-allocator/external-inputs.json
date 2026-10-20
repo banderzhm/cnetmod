@@ -1,0 +1,11 @@
+{
+  "binary_sha256": "2cb22a32818646fbf63575370adf6a0c48b3ba5df4bbbc3d3002ab2838003e0a",
+  "frozen_binary": "/var/tmp/cnetmod-h3-gso-ab-6b5814077a8241019e5c55f9393229a6/arena_h3_server",
+  "live_build_binary": "/var/tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server",
+  "validation": "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-gso-validation-1fdab0ae660649bf83f09840e8459d4f",
+  "ab": "/var/tmp/cnetmod-h3-gso-ab-6b5814077a8241019e5c55f9393229a6",
+  "fault": "/var/tmp/cnetmod-h3-gso-fault-711208d9a899467b87fc7582d7ea9460",
+  "source_snapshot": "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-gso-validation-1fdab0ae660649bf83f09840e8459d4f/source-snapshot",
+  "purpose": "Reproducibility pointers; no ELF/PCM/object/static archives copied into repository.",
+  "scope": "System allocator same-binary short A/B, not official ranking or retention proof."
+}

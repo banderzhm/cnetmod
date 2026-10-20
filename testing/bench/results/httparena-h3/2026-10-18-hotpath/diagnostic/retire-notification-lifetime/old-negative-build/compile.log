@@ -1,0 +1,4 @@
+/var/tmp/cnetmod-h3-notification-old-proof-build/quic_retire_stream_server.cpp:411:54: warning: missing field 'connection' initializer [-Wmissing-field-initializers]
+  411 |     fixture state{*context, tls, std::move(arguments)};
+      |                                                      ^
+1 warning generated.

@@ -1,0 +1,32 @@
+{
+  "/var/tmp/cnetmod-h3-close-diagnostic-latest-native-r9c/arena_h3_server": {
+    "sha256": "8ac72cfa883816cd97a6d4b68688461ee8f158fc9f4fbab3412ac9f5debdd99a",
+    "bytes": 41155448,
+    "mtime_ns": 1792318044703583744
+  },
+  "/var/tmp/cnetmod-h3-close-diagnostic-latest-native-r9c/libcnetmod_quic.a": {
+    "sha256": "4817e265c1970f31a07bcf502b9a8542ad05464da52e6cac55076f746b0161ff",
+    "bytes": 22856554,
+    "mtime_ns": 1792318040631584855
+  },
+  "/var/tmp/cnetmod-h3-close-diagnostic-latest-native-r9c/quic_connection.cpp": {
+    "sha256": "20d054f1da6fe84e2f34f905d4dc8d7cff1d3b55d5b8b245c5b4095e28ee9a0f",
+    "bytes": 271819,
+    "mtime_ns": 1792318032533630156
+  },
+  "/var/tmp/cnetmod-h3-close-diagnostic-latest-native-r9c/quic_connection.cpp.o": {
+    "sha256": "14e5b3afc91ee9cf6546815ad5797ef26e3f6dbd7ec84fba4a3358fba97855b2",
+    "bytes": 9780456,
+    "mtime_ns": 1792318039247585238
+  },
+  "/var/tmp/cnetmod-h3-close-diagnostic-latest-native-r9c/quic_recovery.cpp": {
+    "sha256": "30b85b0fab6680bf7c2e7f940cb8738cc680e67370e2e2f58144b2d6e9ff4347",
+    "bytes": 14322,
+    "mtime_ns": 1792318039268001794
+  },
+  "/var/tmp/cnetmod-h3-close-diagnostic-latest-native-r9c/quic_recovery.cpp.o": {
+    "sha256": "913068fbaf6b1d8eb5fa9fd8587a418e6f25abf70a7d8c2fa61cb88c174e14da",
+    "bytes": 1693916,
+    "mtime_ns": 1792318040591584866
+  }
+}

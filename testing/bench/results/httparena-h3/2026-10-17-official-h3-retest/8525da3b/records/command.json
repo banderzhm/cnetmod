@@ -1,0 +1,16 @@
+[
+  "unshare",
+  "--mount",
+  "bash",
+  "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-isolated.sh",
+  "/tmp/cnetmod-h3-peer/bin/python",
+  "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/bench/run_official_h3.py",
+  "--official",
+  "/tmp/cnetmod-http-arena",
+  "--stage",
+  "/var/tmp/cnetmod-h3-retest-8525da3b/arena",
+  "--h2load",
+  "/tmp/cnetmod-h3-loadgen169/src/h2load",
+  "--images",
+  "/var/tmp/cnetmod-h3-retest-8525da3b/images.json"
+]

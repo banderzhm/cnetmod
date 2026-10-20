@@ -1,0 +1,23 @@
+[
+  "nsenter",
+  "-t",
+  "800",
+  "-n",
+  "taskset",
+  "-c",
+  "16-31",
+  "/var/tmp/cnetmod-h3-loadgen169/h2load",
+  "--alpn-list=h3",
+  "-i",
+  "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307675/arena/requests/static-h2-uris.txt",
+  "-H",
+  "Accept-Encoding: br;q=1, gzip;q=0.8",
+  "-c",
+  "64",
+  "-m",
+  "64",
+  "-t",
+  "64",
+  "-D",
+  "5s"
+]

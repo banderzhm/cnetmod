@@ -1,0 +1,22 @@
+Test project C:/Users/25007/.codex/tmp/cnetmod-h3-windows
+    Start 63: h3_interop_release_gate
+1/4 Test #63: h3_interop_release_gate ......................   Passed    6.81 sec
+    Start 64: h3_interop_multi_worker_release_gate
+2/4 Test #64: h3_interop_multi_worker_release_gate .........   Passed    6.75 sec
+    Start 65: http_client_http3_end_to_end
+3/4 Test #65: http_client_http3_end_to_end .................   Passed   31.57 sec
+    Start 66: http_client_http3_dynamic_qpack_end_to_end
+4/4 Test #66: http_client_http3_dynamic_qpack_end_to_end ...   Passed    0.56 sec
+
+100% tests passed, 0 tests failed out of 4
+
+Label Time Summary:
+client          =  32.12 sec*proc (2 tests)
+end_to_end      =  32.12 sec*proc (2 tests)
+http3           =  45.68 sec*proc (4 tests)
+interop         =  13.56 sec*proc (2 tests)
+multi_worker    =   6.75 sec*proc (1 test)
+qpack           =   0.56 sec*proc (1 test)
+release_gate    =  13.56 sec*proc (2 tests)
+
+Total Test time (real) =  45.69 sec

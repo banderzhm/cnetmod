@@ -1,0 +1,35 @@
+{
+  "scope": "native frozen conditional binary, no counter instrumentation, no gdb attachment; independent retention test",
+  "samples": [
+    {
+      "name": "initial",
+      "time": 1792312259.3441346,
+      "rss": 50888704,
+      "private": 48504832
+    },
+    {
+      "name": "round-1-idle-2s",
+      "time": 1792312262.4414704,
+      "rss": 177401856,
+      "private": 174948352
+    },
+    {
+      "name": "failure-immediate",
+      "time": 1792312264.5855114,
+      "rss": 198303744,
+      "private": 195850240
+    },
+    {
+      "name": "failure-idle-35s",
+      "time": 1792312299.5859685,
+      "rss": 198303744,
+      "private": 195850240
+    }
+  ],
+  "rounds": [
+    {
+      "index": 1,
+      "requests": 200000
+    }
+  ]
+}

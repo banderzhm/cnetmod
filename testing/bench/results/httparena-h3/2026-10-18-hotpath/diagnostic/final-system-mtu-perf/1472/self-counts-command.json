@@ -1,0 +1,16 @@
+[
+  "/usr/sbin/perf",
+  "report",
+  "--stdio",
+  "--no-children",
+  "--percent-limit",
+  "0",
+  "--show-nr-samples",
+  "--show-total-period",
+  "--sort",
+  "symbol,dso",
+  "-g",
+  "none",
+  "-i",
+  "/var/tmp/cnetmod-h3-system-perf-91b5cc8bd99c410585a9f598f920b767/static-perf.data"
+]

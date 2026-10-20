@@ -1,0 +1,55 @@
+{
+  "retained_external_only": [
+    {
+      "path": "/var/tmp/cnetmod-h3-large-mtu-ab-d411da495070401985b365d4e8e26e52/arena_h3_server",
+      "bytes": 39616816,
+      "sha256": "fc6e50f5935ab7bde6b3767a459fc36efc4b2e666239c0f5099de812db7061c3"
+    },
+    {
+      "path": "/var/tmp/cnetmod-h3-large-mtu-preflight-feeddffd59fd4befaaf905b17ced73f7/16384/client.0.0.sqlog",
+      "bytes": 6929135,
+      "sha256": "5f09edd9f8251199487884248acd78ad14c9a803573b50b232f19b55bd49d5b7"
+    },
+    {
+      "path": "/var/tmp/cnetmod-h3-large-mtu-preflight-feeddffd59fd4befaaf905b17ced73f7/32768/client.0.0.sqlog",
+      "bytes": 6328691,
+      "sha256": "05e55ab480f8c1e9322c8b9c5fe0cee2166d9238add27c66fb69e0fedc2a3680"
+    },
+    {
+      "path": "/var/tmp/cnetmod-h3-large-mtu-preflight-feeddffd59fd4befaaf905b17ced73f7/65507/client.0.0.sqlog",
+      "bytes": 6363942,
+      "sha256": "5168a96cc91197dd3e42ca3ddd20d6f9a211b9aadc689272fef79a89583c0f5c"
+    },
+    {
+      "path": "/var/tmp/cnetmod-h3-large-mtu-perf-a4018f36386a48b5a85b0146a90f03ef/arena_h3_server",
+      "bytes": 39617384,
+      "sha256": "2fa51db8652cf8a0d166d79ab4d36241c9a5c789aa8ed4c0cb5e57eb56bb7d28"
+    },
+    {
+      "path": "/var/tmp/cnetmod-h3-large-mtu-perf-a4018f36386a48b5a85b0146a90f03ef/static-perf.data",
+      "bytes": 1894419,
+      "sha256": "8c3c61bfdbd1f45f91678ca7de9efca39d862291ce6f7fa493a7a2002c5ceba4"
+    },
+    {
+      "path": "/var/tmp/cnetmod-h3-large-mtu-perf-a4018f36386a48b5a85b0146a90f03ef/offline-analysis-guard-mtu/samples.txt",
+      "bytes": 36116514,
+      "sha256": "a181d10a0f047a632bbf4c5f0de7691334e612455577c694c6ca393346091750"
+    },
+    {
+      "path": "/var/tmp/cnetmod-h3-large-mtu-perf-c6333e93d31b45c689c0146783514018/arena_h3_server",
+      "bytes": 39617384,
+      "sha256": "2fa51db8652cf8a0d166d79ab4d36241c9a5c789aa8ed4c0cb5e57eb56bb7d28"
+    },
+    {
+      "path": "/var/tmp/cnetmod-h3-large-mtu-perf-c6333e93d31b45c689c0146783514018/static-perf.data",
+      "bytes": 1917099,
+      "sha256": "564786a42702cc07b9a67db4ac4d4a01d439bd00d616b3eca5c15864dcdad9c0"
+    },
+    {
+      "path": "/var/tmp/cnetmod-h3-large-mtu-perf-c6333e93d31b45c689c0146783514018/offline-analysis-guard-mtu/samples.txt",
+      "bytes": 41906555,
+      "sha256": "81eee78caade631974f85281eadff0da2e1a1e8a6381e0eddb92c6748cb259bc"
+    }
+  ],
+  "scope": "No ELF, raw qlog, raw perf, TLS keys or certificates are archived."
+}

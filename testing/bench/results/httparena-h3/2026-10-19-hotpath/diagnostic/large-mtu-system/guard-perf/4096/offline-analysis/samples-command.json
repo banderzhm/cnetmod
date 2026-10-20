@@ -1,0 +1,1 @@
+["/usr/sbin/perf", "script", "-i", "/var/tmp/cnetmod-h3-large-mtu-perf-a4018f36386a48b5a85b0146a90f03ef/static-perf.data", "-F", "ip,sym,symoff,dso", "--no-demangle"]

@@ -1,0 +1,11 @@
+[
+  "cc",
+  "-shared",
+  "-fPIC",
+  "-O2",
+  "-o",
+  "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-gso-validation-1fdab0ae660649bf83f09840e8459d4f/system-allocator/gso_fault.so",
+  "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-gso-prepared/gso_fault.c",
+  "-ldl",
+  "-pthread"
+]

@@ -1,0 +1,16 @@
+{
+  "cnetmod-official-optimized": {
+    "image": "sha256:193c1241fdd08de08ea00851c748d9632ad2977623ef716afb7224ca1292b598",
+    "language": "C++",
+    "tests": [
+      "baseline-h3"
+    ]
+  },
+  "cnetmod-official-static": {
+    "image": "sha256:7775735e490976c83005b11f8f3d8227d3076e5ad3397028041dba54cc8e8c2e",
+    "language": "C++",
+    "tests": [
+      "static-h3"
+    ]
+  }
+}

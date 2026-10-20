@@ -1,0 +1,176 @@
+# scripts/lib/tools/gcannon.sh — gcannon (io_uring) dispatch + parse.
+#
+# gcannon handles HTTP/1.1, --raw multi-template rotation, --ws WebSocket,
+# and gRPC plaintext (indirectly via -H and -d, though we use h2load for
+# that in practice). This file owns the gcannon ↔ driver interface.
+
+# ── Build arguments ─────────────────────────────────────────────────────────
+
+# Usage: gcannon_build_args <endpoint> <conns> <pipeline> <duration> [req_per_conn]
+# Emits one token per line — caller captures with `mapfile -t gc_args`.
+#
+# req_per_conn is only honored for endpoints that don't hardcode their own -r.
+# Today that's the empty (baseline/limited-conn) and ws-echo (echo-ws-limited)
+# cases.
+gcannon_build_args() {
+    local endpoint="$1" conns="$2" pipeline="$3" duration="$4" req_per_conn="${5:-0}"
+    local -a args
+
+    case "$endpoint" in
+        "")  # default: baseline / limited-conn
+            # Mixed GET / POST-Content-Length / POST-Transfer-Encoding:chunked
+            # rotation, matching the "Mixed GET/POST with query parsing" README
+            # description and validate.sh's three-shape correctness suite.
+            args=("http://localhost:$PORT"
+                  --raw "$REQUESTS_DIR/get.raw,$REQUESTS_DIR/post_cl.raw,$REQUESTS_DIR/post_chunked.raw"
+                  -c "$conns" -t "$THREADS" -d "$duration" -p "$pipeline")
+            [ "$req_per_conn" -gt 0 ] 2>/dev/null && args+=(-r "$req_per_conn")
+            ;;
+        pipeline)
+            args=("http://localhost:$PORT/pipeline"
+                  -c "$conns" -t "$THREADS" -d "$duration" -p "$pipeline")
+            ;;
+        async-db)
+            args=("http://localhost:$PORT"
+                  --raw "$REQUESTS_DIR/async-db-5.raw,$REQUESTS_DIR/async-db-10.raw,$REQUESTS_DIR/async-db-20.raw,$REQUESTS_DIR/async-db-35.raw,$REQUESTS_DIR/async-db-50.raw"
+                  -c "$conns" -t "$THREADS" -d 10s -p "$pipeline" -r 25)
+            ;;
+        async)
+            # One template, a flat wait. The value still travels in the path, so
+            # the handler has to parse it out of the route -- what a constant
+            # delay gives up is the on-the-wire variation, which is why
+            # validate.sh draws its own values and asserts the differential.
+            #
+            # No -r: connections are held for the whole run. That is the point.
+            # Every held connection is one request the server is currently
+            # sleeping on, so 32K connections means 32K live timers.
+            #
+            # 10s rather than the 5s default: long enough that establishing the
+            # connections is a small share of the window, short enough to keep
+            # three runs plus their cool-downs reasonable.
+            #
+            # ASYNC_THREADS overrides the generator's thread count for this
+            # profile alone. It exists because the result moves with it: on a
+            # 32-core box, holding the server fixed and changing only this took
+            # throughput from 1.42M at 8 threads to 2.16M at 16, so some of what
+            # the profile reports is the generator rather than the server. The
+            # default stays at THREADS so nothing changes unless it is set.
+            args=("http://localhost:$PORT"
+                  --raw "$REQUESTS_DIR/async-delay.raw"
+                  -c "$conns" -t "${ASYNC_THREADS:-$THREADS}" -d 10s -p "$pipeline")
+            ;;
+        fortunes)
+            # Single endpoint, fixed 12-row seed + 1 runtime-injected row.
+            # No --raw rotation: every request is the same GET; the per-request
+            # variance lives inside the handler (sort + render).
+            args=("http://localhost:$PORT/fortunes"
+                  -c "$conns" -t "$THREADS" -d "$duration" -p "$pipeline")
+            ;;
+        json-compressed)
+            args=("http://localhost:$PORT"
+                  --raw "$REQUESTS_DIR/json-gzip-25.raw,$REQUESTS_DIR/json-gzip-40.raw,$REQUESTS_DIR/json-gzip-50.raw"
+                  -c "$conns" -t "$THREADS" -d "$duration" -p "$pipeline" -r 25)
+            ;;
+        ws-echo)
+            args=("http://localhost:$PORT/ws" --ws
+                  -c "$conns" -t "$THREADS" -d "$duration" -p "$pipeline")
+            # echo-ws-limited passes req_per_conn: gcannon's quota check sits
+            # above its ws/http branch, so -r caps frames per connection and
+            # retires the socket once drained. Each replacement connection
+            # redoes the HTTP/1.1 upgrade, which is what that profile measures.
+            [ "$req_per_conn" -gt 0 ] 2>/dev/null && args+=(-r "$req_per_conn")
+            ;;
+        *)
+            fail "gcannon_build_args: unknown endpoint '$endpoint'"
+            ;;
+    esac
+
+    printf '%s\n' "${args[@]}"
+}
+
+# ── Execute ─────────────────────────────────────────────────────────────────
+
+# Run gcannon with the given args, return output on stdout.
+# Honors GCANNON_MODE=native|docker.
+gcannon_run() {
+    local -a args=("$@")
+    if [ "$GCANNON_MODE" = "native" ]; then
+        timeout 45 taskset -c "$GCANNON_CPUS" \
+            env LD_LIBRARY_PATH=/usr/lib "$GCANNON" "${args[@]}" 2>&1 || true
+    else
+        timeout 45 docker run --rm --network host \
+            --cpuset-cpus="$GCANNON_CPUS" \
+            --security-opt seccomp=unconfined \
+            --ulimit memlock=-1:-1 --ulimit nofile=1048576:1048576 \
+            -v "$REQUESTS_DIR:$REQUESTS_DIR:ro" \
+            "$GCANNON_IMAGE" "${args[@]}" 2>&1 || true
+    fi
+}
+
+# ── Parse output ────────────────────────────────────────────────────────────
+
+# Usage: gcannon_parse <endpoint> <output>
+# Echoes KEY=VALUE lines. Caller reads into an assoc array.
+gcannon_parse() {
+    local endpoint="$1" output="$2"
+
+    # rps — compute from 2xx (or 3xx for caching, or WS frames for ws-echo)
+    # divided by the actual measured duration.
+    #
+    # grep + head don't fail on empty input, so their fallbacks never fire —
+    # the `:-` default on the variable itself is what guarantees a number.
+    #
+    # The "summary" line is the single source of truth across gcannon
+    # versions and modes. Its shape is one of:
+    #
+    #   <req>  requests     in <dur>s, <resp>  responses       (plain http)
+    #   <req>  frames sent  in <dur>s, <resp>  frames received (--ws, new gcannon)
+    #
+    # We pull <dur> from the middle field and <resp> (the *second* number on
+    # the line) from the tail. For ws-echo we use <resp> directly as the
+    # received-frame count; for everything else we take 2xx/3xx as before.
+    local duration_secs ok
+    duration_secs=$(echo "$output" | grep -oP '(?:requests|frames sent) in \K[\d.]+' | head -1)
+    duration_secs=${duration_secs:-1}
+
+    case "$endpoint" in
+        caching)
+            ok=$(echo "$output" | grep -oP '3xx=\K\d+' | head -1)
+            ;;
+        ws-echo)
+            # Prefer the "N (responses|frames received)" tail of the summary
+            # line — present in every gcannon version. Fall back to the
+            # explicit "WS frames:" / "2xx=" counters if that regex misses.
+            ok=$(echo "$output" | grep -oP '\d+\s+(?:responses|frames received)' | head -1 | grep -oP '\d+')
+            [ -z "$ok" ] && ok=$(echo "$output" | grep -oP 'WS frames:\s*\K\d+' | head -1)
+            [ -z "$ok" ] && ok=$(echo "$output" | grep -oP '2xx=\K\d+' | head -1)
+            ;;
+        *)
+            ok=$(echo "$output" | grep -oP '2xx=\K\d+' | head -1)
+            ;;
+    esac
+    ok=${ok:-0}
+
+    echo "rps=$(awk -v ok="$ok" -v dur="$duration_secs" \
+        'BEGIN { if (dur+0 > 0) printf "%d", ok/dur; else print 0 }' 2>/dev/null || echo 0)"
+    echo "avg_lat=$(echo "$output" | grep "Latency" | head -1 | awk '{print $2}')"
+    echo "p99_lat=$(echo "$output" | grep "Latency" | head -1 | awk '{print $5}')"
+    echo "reconnects=$(echo "$output" | grep -oP 'Reconnects: \K\d+' | head -1 || echo 0)"
+    echo "bandwidth=$(echo "$output" | grep -oP 'Bandwidth:\s+\K\S+' | head -1 || echo 0)"
+
+    if [ "$endpoint" = "ws-echo" ]; then
+        # Reuse the same "responses|frames received" fallback cascade used
+        # above for the rps computation.
+        local ws_total
+        ws_total=$(echo "$output" | grep -oP '\d+\s+(?:responses|frames received)' | head -1 | grep -oP '\d+')
+        [ -z "$ws_total" ] && ws_total=$(echo "$output" | grep -oP 'WS frames:\s*\K\d+' | head -1)
+        [ -z "$ws_total" ] && ws_total=$(echo "$output" | grep -oP '2xx=\K\d+' | head -1)
+        echo "status_2xx=${ws_total:-0}"
+        echo "status_3xx=0"; echo "status_4xx=0"; echo "status_5xx=0"
+    else
+        echo "status_2xx=$(echo "$output" | grep -oP '2xx=\K\d+' | head -1 || echo 0)"
+        echo "status_3xx=$(echo "$output" | grep -oP '3xx=\K\d+' | head -1 || echo 0)"
+        echo "status_4xx=$(echo "$output" | grep -oP '4xx=\K\d+' | head -1 || echo 0)"
+        echo "status_5xx=$(echo "$output" | grep -oP '5xx=\K\d+' | head -1 || echo 0)"
+    fi
+}

@@ -1,0 +1,39 @@
+[
+    {
+        "Architecture": "amd64",
+        "Config": {
+            "Cmd": [
+                "bash"
+            ],
+            "Env": [
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "CMAKE_BUILD_PARALLEL_LEVEL=4"
+            ],
+            "WorkingDir": "/src"
+        },
+        "Created": "2026-10-17T18:46:48.393127698+08:00",
+        "Descriptor": {
+            "digest": "sha256:e544b11758fa3db89f33a56e6676db5b29506cc5478ad3c84f0e5b37676dae2b",
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "size": 1184
+        },
+        "Id": "sha256:e544b11758fa3db89f33a56e6676db5b29506cc5478ad3c84f0e5b37676dae2b",
+        "Metadata": {
+            "LastTagTime": "2026-10-17T10:46:48.933910709Z"
+        },
+        "Os": "linux",
+        "Parent": "sha256:4b787cc690cd1dd9198705accdac9a27e49347eb8204ba123006f81ac3a6943a",
+        "RepoDigests": [],
+        "RepoTags": [],
+        "RootFS": {
+            "Layers": [
+                "sha256:0487fc82d485c6e44b5d5474f45d9740d7009d35040b4f0aad06327293ae5128",
+                "sha256:b5cd0f57d2999748285138c7a32193aaa7883e2be6561db026abf3776faeae2b",
+                "sha256:c4c141b23e027d6ca37e2bd84c5e1b0c2d08a49963615e793e4dfa6a93d38d51",
+                "sha256:3075d8359a71c35c1b2fe4f13256f20697eba6102a96f8ff3dcd276ed405800f"
+            ],
+            "Type": "layers"
+        },
+        "Size": 1029940423
+    }
+]

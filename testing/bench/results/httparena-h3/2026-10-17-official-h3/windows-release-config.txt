@@ -1,0 +1,6 @@
+CMAKE_CXX_FLAGS:STRING=/DWIN32 /D_WINDOWS /EHsc
+CMAKE_CXX_FLAGS_RELEASE:STRING=/O2 /Ob2 /DNDEBUG
+CNETMOD_WTRANSPORT_PROBE:FILEPATH=C:/Users/25007/.codex/tmp/cnetmod-h3-wtransport/target/release/webtransport_probe.exe
+Python3_EXECUTABLE:UNINITIALIZED=C:/Users/25007/.codex/tmp/cnetmod-h3-windows-python/Scripts/python.exe
+CMAKE_GENERATOR:INTERNAL=Visual Studio 18 2026
+CMAKE_GENERATOR_PLATFORM:INTERNAL=x64

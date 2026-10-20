@@ -1,0 +1,1 @@
+Initial full41 executed with mount-only namespace and inherited WSL mirrored network, unlike historical test isolation. Preserve original logs. Root confirmed isolated mount+net/lo up is required; same source/binary will be rerun without source edits. Benchmark network settings stay original isolated anchor conditions.

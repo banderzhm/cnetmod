@@ -1,0 +1,19 @@
+Prepared only. Do not execute until root explicitly grants the exclusive window after official measurements have stopped and cleaned up.
+
+Run1: same frozen binary/source/allocator/GSO-on, send ceiling1472, receive8192.
+
+unshare --mount bash /mnt/c/Users/25007/.codex/tmp/cnetmod-h3-isolated.sh python /mnt/c/Users/25007/.codex/tmp/cnetmod-h3-final-system-perf.py --binary /var/tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server --binary-sha 5bf46aeeee227934742969972dfa3e4705d5fb87e66289c9109f41d89f353470 --gso on --path-mtu 1472 --source-snapshot /mnt/c/Users/25007/.codex/tmp/cnetmod-h3-final-system-validation/source-snapshot --allocator-proof /mnt/c/Users/25007/.codex/tmp/cnetmod-h3-final-system-validation/system-allocator/allocator-proof.json
+
+Wait for exit0, valid=true and namespace_cleanup.returncode0, preserve the unique output directory and logs. Then, serially:
+
+unshare --mount bash /mnt/c/Users/25007/.codex/tmp/cnetmod-h3-isolated.sh python /mnt/c/Users/25007/.codex/tmp/cnetmod-h3-final-system-perf.py --binary /var/tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server --binary-sha 5bf46aeeee227934742969972dfa3e4705d5fb87e66289c9109f41d89f353470 --gso on --path-mtu 4096 --source-snapshot /mnt/c/Users/25007/.codex/tmp/cnetmod-h3-final-system-validation/source-snapshot --allocator-proof /mnt/c/Users/25007/.codex/tmp/cnetmod-h3-final-system-validation/system-allocator/allocator-proof.json
+
+Release the execution window immediately after the second run exits and cleans up. Root then owns the extended180round retention window. Only subsequent low-priority offline perf report/analysis/archive is permitted during that window; no repeat perf record, server, client, build or source edits.
+
+Both profiles are diagnostic, not ranking:32workers,64clients/streams/threads,5second static workload and CPU16-31 as already fixed in the runner. The wrapper binds gai.conf for IPv4-first localhost. The runner rejects LD_PRELOAD/LD_AUDIT, checks system-allocator proof and all frozen source hashes, copies its own ELF/source/proof into a unique external directory, bounds perf.data256MiB, and records actual SIGINT exit. Original invalid runs remain preserved if any stage fails. Do not relabel prior2cb/mimalloc data as this5bf comparison.
+
+After receiving both actual completed result paths, the prepared offline analysis command is:
+
+python /mnt/c/Users/25007/.codex/tmp/cnetmod-h3-final-system-perf-analyze.py --baseline-root ACTUAL_1472_DIRECTORY --candidate-root ACTUAL_4096_DIRECTORY --binary-sha 5bf46aeeee227934742969972dfa3e4705d5fb87e66289c9109f41d89f353470 --out NEW_COMPARISON_JSON
+
+Final repository text archive destination: testing/bench/results/httparena-h3/2026-10-18-hotpath/diagnostic/final-system-mtu-perf. Do not copy perf.data, ELF, PCM or keys into it. Report actual samples/lost/unknown symbols and completed-request CPU; sample-derived function attribution remains approximate.

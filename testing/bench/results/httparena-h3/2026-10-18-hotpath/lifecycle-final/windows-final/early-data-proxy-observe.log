@@ -1,0 +1,4 @@
+[2026-10-18 11:40:30.653] [info] [1655652333260961782] [http_client_e2e.cpp:750] HTTP/3 priority E2E passed: first foreground=1, first background=49
+[2026-10-18 11:40:31.209] [info] [1655652333260961782] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+early-data fault evidence: {'retries_delayed': 20, 'early_before_retry': 10, 'early_dropped_after_retry': 2, 'initial_pn_regressions': 0, 'source_address_reuse': 0, 'initial_pn_regression_events': []}
+PROXY_LIFECYCLE {"pid": 49948, "poll_before_cleanup": null, "exit_after_cleanup": 1, "stdout": "", "stderr": ""}

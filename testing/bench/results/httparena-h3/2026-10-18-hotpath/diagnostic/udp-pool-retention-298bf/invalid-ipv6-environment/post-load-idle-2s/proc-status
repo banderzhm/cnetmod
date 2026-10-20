@@ -1,0 +1,59 @@
+Name:	arena_h3_server
+Umask:	0022
+State:	S (sleeping)
+Tgid:	662
+Ngid:	0
+Pid:	662
+PPid:	547
+TracerPid:	0
+Uid:	0	0	0	0
+Gid:	0	0	0	0
+FDSize:	256
+Groups:	0 0 
+NStgid:	662
+NSpid:	662
+NSpgid:	662
+NSsid:	662
+Kthread:	0
+VmPeak:	 1594260 kB
+VmSize:	 1594260 kB
+VmLck:	       0 kB
+VmPin:	       0 kB
+VmHWM:	   47260 kB
+VmRSS:	   47260 kB
+RssAnon:	   40104 kB
+RssFile:	    7156 kB
+RssShmem:	       0 kB
+VmData:	 1583952 kB
+VmStk:	     136 kB
+VmExe:	    2784 kB
+VmLib:	    3280 kB
+VmPTE:	     404 kB
+VmSwap:	       0 kB
+HugetlbPages:	       0 kB
+CoreDumping:	0
+THP_enabled:	1
+untag_mask:	0xffffffffffffffff
+Threads:	66
+SigQ:	3/63276
+SigPnd:	0000000000000000
+ShdPnd:	0000000000000000
+SigBlk:	0000000000000000
+SigIgn:	0000000000000000
+SigCgt:	0000000100000000
+CapInh:	0000000000000000
+CapPrm:	000001ffffffffff
+CapEff:	000001ffffffffff
+CapBnd:	000001ffffffffff
+CapAmb:	0000000000000000
+NoNewPrivs:	0
+Seccomp:	2
+Seccomp_filters:	1
+Speculation_Store_Bypass:	thread vulnerable
+SpeculationIndirectBranch:	conditional enabled
+Cpus_allowed:	ffffffff
+Cpus_allowed_list:	0-31
+Mems_allowed:	00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001
+Mems_allowed_list:	0
+voluntary_ctxt_switches:	48
+nonvoluntary_ctxt_switches:	1

@@ -1,0 +1,110 @@
+{
+  "test_udp_sendto_on_cancel": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_udp_sendto_on_cancel.exe",
+    "sha256": "44a87ca32437d3d12258df172ce3d5fc5a417ea39389e3ddfa6af4028af7b8aa"
+  },
+  "quic_retire_stream_server": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\bin\\Release\\quic_retire_stream_server.exe",
+    "sha256": "244e913904e1d6ff738c2d5c192725d324f4d9e5e46e8d0be4c72ada3e07c927"
+  },
+  "quic_pmtu_cc_server": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\bin\\Release\\quic_pmtu_cc_server.exe",
+    "sha256": "6745161751876b4280b97af8b55c6036273a51a021d7e14b424b9ff9e20bf2fa"
+  },
+  "quic_pmtu_deadline_server": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\bin\\Release\\quic_pmtu_deadline_server.exe",
+    "sha256": "df73e6af23ac71456d6c8de914f4798d11859f479290c96137508b4649b8c5f5"
+  },
+  "quic_pmtu_pending_server": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\bin\\Release\\quic_pmtu_pending_server.exe",
+    "sha256": "ec44b2a8eaf8237322c220d4105cf0acea3ce925e1686af05f1d274fe7a76cf4"
+  },
+  "quic_datagram_cc_server": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\bin\\Release\\quic_datagram_cc_server.exe",
+    "sha256": "2c16ef93eda4505d9c2147dea19e5fe05d71e7076a133cfc503551e268081c67"
+  },
+  "test_concurrent_containers": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_concurrent_containers.exe",
+    "sha256": "28db22bffba936081b2b1126f8d7140b27506c1fa2fa7fcc859ea8f8650b94b1"
+  },
+  "test_deadline": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_deadline.exe",
+    "sha256": "70cf09c6f8ed300134a6e3f2f60db2c020fd22bd91a267698b411fea0fe81c15"
+  },
+  "test_task_group": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_task_group.exe",
+    "sha256": "d2a4dd6a6be136c24290e389ba2cd39a65060e61a34b7b4a7cb65fb5dcfde599"
+  },
+  "test_wait_group": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_wait_group.exe",
+    "sha256": "7062f13f896994213f7bda8a44bc4c152bb789ba5b607209783ad4767861578c"
+  },
+  "test_task": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_task.exe",
+    "sha256": "237288e25468ba8539a1393396285111196c8b888014106cf4e97c7a846ff650"
+  },
+  "test_udp_batch": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_udp_batch.exe",
+    "sha256": "4785191e7e187fa49b7873a68cb2d503f7af664a3cf815655a1bdd6951ee027e"
+  },
+  "test_quic_varint": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_quic_varint.exe",
+    "sha256": "6d9add4fbef075e22ff68f93c37be360a4721cbf477b38ba6388fe11e8d3e201"
+  },
+  "test_quic_frame": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_quic_frame.exe",
+    "sha256": "da83967f8c63e66baff3d94a5349ac60b71aad421391a8f2f5cdaa87e8731014"
+  },
+  "test_quic_packet": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_quic_packet.exe",
+    "sha256": "b63cb7a27f3f56b219b90d646ae12f959ecd0fe0e51d80f3385698a832177b0d"
+  },
+  "test_quic_stream": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_quic_stream.exe",
+    "sha256": "afa6ed14266e686131c5d29cdd8116a1bdb9ea9ac13fcd830a25fd5b7e136775"
+  },
+  "test_quic_loss_detection": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_quic_loss_detection.exe",
+    "sha256": "abe5d31b4262f5055e7f4a649aad7bca84d83cc88a72313c5acaf360564375c8"
+  },
+  "test_quic_congestion": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_quic_congestion.exe",
+    "sha256": "778f94dfa4235bef242991ccfde3776b3b577f1816963b954760245e01f1ee8d"
+  },
+  "test_quic_early_data": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_quic_early_data.exe",
+    "sha256": "d7307b1d01c0bde38a6f2b3799c1672ff2753a75b7e064bb7acc551aea99e6f5"
+  },
+  "test_http3_qpack": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_http3_qpack.exe",
+    "sha256": "2d0188e0a87b4ba43989f85a5c27dc33431af2077f6bfc7e6699386b639e7b70"
+  },
+  "test_http3_frame": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\tests\\Release\\test_http3_frame.exe",
+    "sha256": "eafc93fdf7d7b43c3011a1f946e51dd15420c1dcf599b24655fb73702e896288"
+  },
+  "h3_interop_server": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\bin\\Release\\h3_interop_server.exe",
+    "sha256": "9d064b29b6e27223b40e9f77c1d4e3274aa470e98fc5c6835c74e8fe43324b90"
+  },
+  "h3_interop_client": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\bin\\Release\\h3_interop_client.exe",
+    "sha256": "841c469f50583eb377575ced6683eaf49ceff148d89a0f4c849aefa84cbaff5d"
+  },
+  "http3_e2e_server": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\http3\\Release\\http3_e2e_server.exe",
+    "sha256": "f0465909bb77dc5c25a52237d044a2c48096c80faa4da8b4f38ceeab64a784a2"
+  },
+  "http_client_http3_e2e": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\http3\\Release\\http_client_http3_e2e.exe",
+    "sha256": "a16dc24172ff4db5b655380d00ab1a9dabc5eee0491c5085a75688165ef35ba7"
+  },
+  "http3_migration_e2e": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\http3\\Release\\http3_migration_e2e.exe",
+    "sha256": "859119de8e7fcfe7730276d20d32311ba0c325fc8293e66f10a23d610d68463f"
+  },
+  "arena_h3_server": {
+    "path": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\testing\\bench\\Release\\arena_h3_server.exe",
+    "sha256": "5c1cf2c58c5196945ef9cb0d125088522bcab901f03c87f93add72997babfae2"
+  }
+}

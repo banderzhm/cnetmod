@@ -11,6 +11,7 @@ import cnetmod.core.log;
 import cnetmod.coro.spawn;
 import cnetmod.coro.task;
 import cnetmod.coro.cancel;
+import cnetmod.io.io_context;
 import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.quic;
 import cnetmod.protocol.http.v3.frame;
@@ -52,6 +53,16 @@ namespace {
         return length;
     }
 
+    auto buffered_response_body(const http3_response& response)
+        -> std::expected<std::string_view, std::error_code>
+    {
+        if (response.shared_body && !response.body.empty())
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        if (response.shared_body)
+            return std::string_view{*response.shared_body};
+        return std::string_view{response.body};
+    }
+
     // RFC 9297 uses a Quarter Stream ID as the HTTP Datagram context ID for
     // request/response streams. A WebTransport session is identified by its
     // CONNECT stream, so its context ID is the QUIC stream ID divided by four.
@@ -69,34 +80,124 @@ namespace {
         return static_cast<stream_id>(context_id * 4U);
     }
 
-    struct qpack_wait_cancel_state
+    class qpack_wait_cancellation
     {
-        channel<std::monostate>* progress{};
+    public:
+        qpack_wait_cancellation(io_context& io, cancel_token& token,
+            std::shared_ptr<channel<std::monostate>> progress)
+            : io_(io), token_(token), progress_(std::move(progress))
+        {
+            node_.callback_arg = this;
+            node_.callback = [](void* value)
+            {
+                auto& self = *static_cast<qpack_wait_cancellation*>(value);
+                self.dispatched_ = true;
+                const auto waiter = self.waiter_;
+                auto progress = self.progress_;
+                // Sending may resume and destroy this registration.
+                (void)progress->try_send({});
+                if (waiter)
+                    waiter.resume();
+            };
+            const auto notify = [](void* value) noexcept
+            {
+                auto& self = *static_cast<qpack_wait_cancellation*>(value);
+                self.io_.post_node_raw(&self.node_);
+            };
+            if (!token_.register_callback(this, notify))
+                notify(this);
+        }
+        auto await_ready() noexcept -> bool
+        {
+            return token_.complete_callback(this) || dispatched_;
+        }
+        void await_suspend(std::coroutine_handle<> waiter) noexcept
+        {
+            waiter_ = waiter;
+        }
+        void await_resume() noexcept
+        {
+            token_.finish_callback(this);
+        }
+    private:
+        io_context& io_;
+        cancel_token& token_;
+        std::shared_ptr<channel<std::monostate>> progress_;
+        post_node node_;
+        std::coroutine_handle<> waiter_;
+        bool dispatched_{};
     };
 
-    void cancel_qpack_wait(cnetmod::cancel_token& token) noexcept
+    // Only the streaming response has two concurrent cancellable operations.
+    // Keep the caller's single callback slot for this owner-thread adapter;
+    // downstream application IO and the receive pump each use their own slot.
+    class streaming_cancellation
     {
-        auto* state = static_cast<qpack_wait_cancel_state*>(token.ctx_);
-        if (state && state->progress)
-            (void)state->progress->try_send({});
-    }
+    public:
+        streaming_cancellation(io_context& io, cancel_token& parent)
+            : io_(io), parent_(parent)
+        {
+            node_.callback_arg = this;
+            node_.callback = [](void* value)
+            {
+                auto& self = *static_cast<streaming_cancellation*>(value);
+                if (self.parent_.reason() == cancellation_reason::deadline_exceeded)
+                {
+                    self.handler.cancel_due_to_deadline();
+                    self.pump.cancel_due_to_deadline();
+                }
+                else
+                {
+                    self.handler.cancel();
+                    self.pump.cancel();
+                }
+                // Either child can resume the enclosing coroutine inline.
+                // Its join must wait until BOTH dispatches have completed.
+                self.dispatched_ = true;
+                const auto waiter = self.waiter_;
+                if (waiter)
+                    waiter.resume();
+            };
+            const auto notify = [](void* value) noexcept
+            {
+                auto& self = *static_cast<streaming_cancellation*>(value);
+                self.io_.post_node_raw(&self.node_);
+            };
+            if (!parent_.register_callback(this, notify))
+                notify(this);
+        }
+        auto await_ready() noexcept -> bool
+        {
+            return parent_.complete_callback(this) || dispatched_;
+        }
+        void await_suspend(std::coroutine_handle<> waiter) noexcept
+        {
+            waiter_ = waiter;
+        }
+        void await_resume() noexcept
+        {
+            parent_.finish_callback(this);
+        }
+        cancel_token handler;
+        cancel_token pump;
+    private:
+        io_context& io_;
+        cancel_token& parent_;
+        post_node node_;
+        std::coroutine_handle<> waiter_;
+        bool dispatched_{};
+    };
 
-    auto wait_for_qpack_progress(channel<std::monostate>& progress,
+    auto wait_for_qpack_progress(io_context& io,
+        std::shared_ptr<channel<std::monostate>> progress,
         cnetmod::cancel_token& token)
         -> task<std::expected<void, std::error_code>>
     {
         if (token.is_cancelled())
             co_return std::unexpected(cnetmod::make_error_code(cnetmod::errc::operation_aborted));
-        qpack_wait_cancel_state cancel_state{&progress};
-        token.ctx_ = &cancel_state;
-        token.cancel_fn_ = &cancel_qpack_wait;
-        token.pending_.store(true, std::memory_order_release);
-        if (token.is_cancelled())
-            cancel_qpack_wait(token);
-        const auto notification = co_await progress.receive();
-        token.pending_.store(false, std::memory_order_release);
-        token.cancel_fn_ = nullptr;
-        token.ctx_ = nullptr;
+        qpack_wait_cancellation cancellation{io, token, progress};
+        const auto notification = co_await progress->receive();
+        co_await cancellation;
         if (token.is_cancelled())
             co_return std::unexpected(cnetmod::make_error_code(cnetmod::errc::operation_aborted));
         if (!notification)
@@ -129,6 +230,7 @@ namespace {
     constexpr std::uint64_t qpack_encoder_stream_type = 0x02;
     constexpr std::uint64_t qpack_decoder_stream_type = 0x03;
     constexpr std::size_t stream_read_chunk_size = 2048;
+    constexpr std::size_t initial_request_read_size = 256;
 
     auto append_varint(std::uint64_t value, byte_buffer& out) -> void
     {
@@ -317,7 +419,19 @@ namespace {
         stream_id stream) -> void
     {
         if (const auto waiter = waiters.find(stream); waiter != waiters.end())
-            (void)waiter->second->try_send({});
+        {
+            auto progress = waiter->second;
+            (void)progress->try_send({});
+        }
+    }
+
+    auto close_qpack_waiters(cnetmod::flat_map<stream_id,
+        std::shared_ptr<channel<std::monostate>>>& waiters) -> void
+    {
+        auto pending = std::move(waiters);
+        waiters.clear();
+        for (const auto& [_, progress] : pending)
+            progress->close();
     }
 
     auto flush_qpack_decoder_instructions(quic_connection& connection, qpack_decoder& decoder,
@@ -332,6 +446,27 @@ namespace {
         if (!sent)
             co_return std::unexpected(sent.error());
         co_return {};
+    }
+
+    auto wait_for_peer_qpack_progress(quic_connection& connection,
+        qpack_decoder& decoder, const std::optional<stream_id>& decoder_stream,
+        stream_id id, std::shared_ptr<channel<std::monostate>> progress,
+        cnetmod::cancel_token* existing_token = nullptr)
+        -> task<std::expected<void, std::error_code>>
+    {
+        cnetmod::cancel_token local_token;
+        auto& token = existing_token ? *existing_token : local_token;
+        if (!existing_token)
+            connection.register_stream_cancellation(id, token);
+        scope_guard unregister{[&connection, id, existing_token]
+            {
+                if (!existing_token)
+                    connection.unregister_stream_cancellation(id);
+            }};
+        auto result = co_await wait_for_qpack_progress(connection.context(), progress, token);
+        if (!result && decoder.cancel_blocked_stream(id) && !connection.is_closed())
+            (void)co_await flush_qpack_decoder_instructions(connection, decoder, decoder_stream);
+        co_return result;
     }
 
     auto request_from_frames(qpack_decoder& decoder, byte_view wire,
@@ -553,28 +688,45 @@ namespace {
         bool suppress_body = false)
         -> std::expected<byte_buffer, std::error_code>
     {
-        std::vector<header_field> fields;
-        fields.reserve(response.headers.size() + 1U);
-        fields.push_back({":status", std::to_string(response.status)});
-        for (const auto& [name, value] : response.headers)
-            if (!name.starts_with(':') && !std::ranges::equal(name, "transfer-encoding", {}, [](unsigned char character)
-                                              {
-                                                  return static_cast<char>(std::tolower(character));
-                                              },
-                                              [](unsigned char character)
-                                              {
-                                                  return static_cast<char>(std::tolower(character));
-                                              }))
-                fields.push_back({name, value});
-        auto block = encoder.encode(fields, id);
-        if (!block)
-            return std::unexpected(block.error());
-        auto result = encode_http3_frame(headers_frame{*block});
-        if (!suppress_body && !response.body.empty())
+        byte_buffer block;
+        if (response.static_headers)
         {
-            auto data = encode_http3_frame(
-                data_frame{::utils::conv::to_bytes(response.body)});
-            result.insert(result.end(), data.begin(), data.end());
+            if (!response.headers.empty() ||
+                response.status != response.static_headers->status())
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            block.append(response.static_headers->encoded());
+        }
+        else
+        {
+            std::vector<header_field> fields;
+            fields.reserve(response.headers.size() + 1U);
+            fields.push_back({":status", std::to_string(response.status)});
+            for (const auto& [name, value] : response.headers)
+                if (!name.starts_with(':') && !std::ranges::equal(name, "transfer-encoding", {}, [](unsigned char character)
+                                                  {
+                                                      return static_cast<char>(std::tolower(character));
+                                                  },
+                                                  [](unsigned char character)
+                                                  {
+                                                      return static_cast<char>(std::tolower(character));
+                                                  }))
+                    fields.push_back({name, value});
+            auto encoded = encoder.encode(fields, id);
+            if (!encoded)
+                return std::unexpected(encoded.error());
+            block = std::move(*encoded);
+        }
+        auto result = encode_http3_frame(headers_frame{block});
+        const auto body = buffered_response_body(response);
+        if (!body)
+            return std::unexpected(body.error());
+        if (!suppress_body && !body->empty())
+        {
+            result.reserve(result.size() + body->size() + 16U);
+            append_varint(static_cast<std::uint64_t>(http3_frame_type::data), result);
+            append_varint(static_cast<std::uint64_t>(body->size()), result);
+            const auto bytes = ::utils::conv::to_bytes(*body);
+            result.insert(result.end(), bytes.begin(), bytes.end());
         }
         if (!response.trailers.empty())
         {
@@ -598,6 +750,13 @@ namespace {
     auto response_headers_frame(qpack_encoder& encoder, const http3_response& response,
         stream_id id) -> std::expected<byte_buffer, std::error_code>
     {
+        if (response.static_headers)
+        {
+            if (!response.headers.empty() || response.body_source ||
+                response.status != response.static_headers->status())
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            return encode_http3_frame(headers_frame{response.static_headers->encoded()});
+        }
         std::vector<header_field> fields;
         fields.reserve(response.headers.size() + 2U);
         fields.push_back({":status", std::to_string(response.status)});
@@ -1217,13 +1376,19 @@ auto http3_server_session::run() -> task<void>
         // invokes its scope guard.
         spawn(conn_.context(), service_peer_stream(*accepted));
     }
+    close_qpack_waiters(qpack_waiters_);
     co_await peer_streams_.wait();
+}
+
+auto http3_server_session::cancel_request(stream_id id) -> task<void>
+{
+    (void)co_await conn_.async_cancel_stream(id);
 }
 
 auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
 {
 
-    dynamic_buffer wire{stream_read_chunk_size};
+    dynamic_buffer wire{webtransport_handler_ ? stream_read_chunk_size : initial_request_read_size};
     // Explicit streaming handlers can start once the request HEADERS frame is
     // complete. Keep the remaining DATA/trailer frames in `wire` for the
     // concurrent body pump below; synchronous and legacy async handlers retain
@@ -1243,8 +1408,21 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
     bool stream_classified = !webtransport_handler_;
     if (!unidirectional)
         ++active_streams_;
-    scope_guard completion{[this, unidirectional]
+    scope_guard completion{[this, id, unidirectional]
         {
+            // operator[] during header decoding also inserts an empty queue
+            // for unblocked requests. Release it on every exit, including
+            // cancellation/error paths, rather than retaining one per request.
+            completed_headers_.erase(id);
+            if (qpack_waiters_.contains(id))
+                (void)decoder_.cancel_blocked_stream(id);
+            qpack_waiters_.erase(id);
+            (void)conn_.retire_stream(id);
+            if (unidirectional)
+            {
+                peer_unidirectional_stream_types_.erase(id);
+                peer_unidirectional_stream_bytes_.erase(id);
+            }
             if (!unidirectional)
             {
                 --active_streams_;
@@ -1265,13 +1443,24 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
     for (;;)
     {
 
+        // Most request HEADERS fit in the first small allocation. Reuse its
+        // unwritten tail when checking FIN instead of growing by a full 2 KiB
+        // before learning that no bytes remain. Larger/fragmented requests
+        // retain the normal read chunk and complete-body validation below.
+        const auto read_size = !webtransport_handler_ && wire.readable_bytes() < initial_request_read_size
+            ? initial_request_read_size - wire.readable_bytes()
+            : stream_read_chunk_size;
         auto received = co_await conn_.async_recv(
-            id, wire.prepare(stream_classified ? stream_read_chunk_size : 1U));
+            id, wire.prepare(stream_classified ? read_size : 1U));
         if (!received)
         {
 
             if (received.error() != std::make_error_code(std::errc::operation_would_block))
+            {
+                if (unidirectional)
+                    co_await finish_peer_unidirectional_stream(id);
                 co_return;
+            }
             auto ready = co_await conn_.async_wait_readable(id);
             if (!ready)
                 co_return;
@@ -1279,11 +1468,31 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
         }
         if (*received == 0U)
         {
-
+            if (unidirectional)
+            {
+                co_await finish_peer_unidirectional_stream(id);
+                co_return;
+            }
+            if (conn_.is_stream_cancelled(id))
+            {
+                (void)co_await conn_.async_cancel_stream(id);
+                co_return;
+            }
             break;
         }
 
         wire.commit(*received);
+        const auto header_allowance = local_settings_.max_header_list_size == 0U
+            ? 65536U : local_settings_.max_header_list_size;
+        const auto maximum_wire = request_body_options_.max_bytes >
+                std::numeric_limits<std::uint64_t>::max() - header_allowance
+            ? std::numeric_limits<std::uint64_t>::max()
+            : request_body_options_.max_bytes + header_allowance;
+        if (!unidirectional && wire.readable_bytes() > maximum_wire)
+        {
+            (void)co_await conn_.async_cancel_stream(id, 0x107U);
+            co_return;
+        }
 
         if (!stream_classified)
         {
@@ -1338,6 +1547,13 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                 id, wire.readable_view());
             if (validated)
             {
+                wire.consume(take_peer_unidirectional_consumed_bytes(id));
+                if (wire.readable_bytes() > 65536U)
+                {
+                    co_await conn_.async_close(std::make_error_code(std::errc::message_size),
+                        "HTTP/3 incomplete control frame exceeds buffer limit");
+                    co_return;
+                }
                 if (received_goaway_ && active_streams_ == 0U)
                 {
                     co_await conn_.async_close({}, "peer completed HTTP/3 shutdown");
@@ -1345,7 +1561,8 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                 }
                 continue;
             }
-            if (validated.error() == std::make_error_code(std::errc::message_size))
+            if (validated.error() == std::make_error_code(std::errc::message_size) &&
+                wire.readable_bytes() <= 65536U)
                 continue;
             co_await conn_.async_close(validated.error(), "invalid HTTP/3 unidirectional stream");
             co_return;
@@ -1396,12 +1613,10 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                     // stream while it is blocked: a later DATA frame cannot
                     // make HEADERS decodable, and retrying it as one combined
                     // buffer turns a valid request into a protocol error.
-                    const auto progress = co_await qpack_waiter->receive();
+                    const auto progress = co_await wait_for_peer_qpack_progress(conn_, decoder_, qpack_decoder_stream_, id, qpack_waiter);
                     if (!progress)
                     {
-                        co_await conn_.async_close(
-                            std::make_error_code(std::errc::not_connected),
-                            "HTTP/3 QPACK encoder stream closed");
+                        (void)co_await conn_.async_cancel_stream(id);
                         co_return;
                     }
                 }
@@ -1517,7 +1732,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                 else if (session.is_open())
                     (void)co_await session.close();
                 webtransport_sessions_.erase(id);
-                (void)conn_.retire_stream(id);
+
                 co_return;
             }
             if (parsed_request)
@@ -1572,17 +1787,20 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                     "invalid HTTP/3 request stream");
                 co_return;
             }
-            const auto progress = co_await qpack_waiter->receive();
+            const auto progress = co_await wait_for_peer_qpack_progress(conn_, decoder_, qpack_decoder_stream_, id, qpack_waiter);
             if (!progress)
             {
-                co_await conn_.async_close(
-                    std::make_error_code(std::errc::not_connected),
-                    "HTTP/3 QPACK encoder stream closed");
+                (void)co_await conn_.async_cancel_stream(id);
                 co_return;
             }
         }
     }
 
+    if (request->body.size() > request_body_options_.max_bytes)
+    {
+        (void)co_await conn_.async_cancel_stream(id, 0x107U);
+        co_return;
+    }
     http3_response response;
     if (request->body_stream)
     {
@@ -1591,6 +1809,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
         // QUIC receive loop stops reading and stream flow control takes over.
         auto body_stream = request->body_stream;
         cancel_token request_token;
+        cancel_token pump_token;
         conn_.register_stream_cancellation(id, request_token);
         scope_guard unregister{[this, id]
             {
@@ -1603,11 +1822,14 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
 
         auto consume_body = [&]() -> task<std::expected<void, std::error_code>>
         {
+            bool complete{};
             // Wake a handler waiting for the terminal nullopt once the peer
             // FIN (or any body-pump error/cancellation) ends this coroutine.
-            scope_guard body_done{[body_stream]
+            scope_guard body_done{[&]
                 {
                     body_stream->close();
+                    if (!complete && !pump_token.is_cancelled())
+                        request_token.cancel();
                 }};
             bool trailers_seen = false;
             std::shared_ptr<channel<std::monostate>> qpack_waiter;
@@ -1689,19 +1911,23 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
 
             for (;;)
             {
-                if (request_token.is_cancelled())
+                if (pump_token.is_cancelled())
                     co_return {};
                 auto processed = co_await process_available();
                 if (!processed)
                 {
+                    if (pump_token.is_cancelled())
+                        co_return {};
                     if (processed.error() == std::make_error_code(std::errc::resource_unavailable_try_again))
                     {
                         // The trailer HEADERS frame remains at the front of
                         // `wire`; wait for its QPACK inserts instead of
                         // consuming it and misclassifying a later DATA frame.
-                        const auto progress = co_await qpack_waiter->receive();
+                        const auto progress = co_await wait_for_peer_qpack_progress(conn_, decoder_, qpack_decoder_stream_, id, qpack_waiter, &pump_token);
                         if (progress)
                             continue;
+                        if (pump_token.is_cancelled())
+                            co_return {};
                         request_token.cancel();
                         co_return std::unexpected(
                             std::make_error_code(std::errc::not_connected));
@@ -1717,10 +1943,10 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                         std::make_error_code(std::errc::operation_would_block))
                     {
                         auto ready = co_await conn_.async_wait_readable(
-                            id, request_token);
+                            id, pump_token);
                         if (!ready)
                         {
-                            if (request_token.is_cancelled())
+                            if (pump_token.is_cancelled())
                                 co_return {};
                             co_return std::unexpected(ready.error());
                         }
@@ -1733,8 +1959,11 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                 wire.commit(*received);
             }
             auto processed = co_await process_available();
+            if (pump_token.is_cancelled())
+                co_return {};
             if (!processed)
                 co_return std::unexpected(processed.error());
+            complete = true;
             co_return {};
         };
 
@@ -1745,14 +1974,22 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                 *body_stream, request_token);
             // A handler that deliberately returns before draining the body
             // must not leave the receive coroutine parked forever.
-            if (!body_stream->is_closed())
-                request_token.cancel();
+            pump_token.cancel();
+            body_stream->close();
             co_return handled;
         };
 
         auto [handled, body_result] = co_await when_all(
             invoke_handler(), consume_body());
 
+        // invoke_handler cancels only its independent pump token
+        // after a normal early return. Only a peer/connection cancellation
+        // terminates the response; local pump shutdown preserves it.
+        if (conn_.is_stream_cancelled(id))
+        {
+            co_await cancel_request(id);
+            co_return;
+        }
         if (!handled || !body_result)
         {
             if (body_stream->error() ==
@@ -1761,6 +1998,8 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
             else if (!request_token.is_cancelled())
                 response.status = status::internal_server_error;
             response.body.clear();
+            response.shared_body.reset();
+            response.static_headers.reset();
         }
     }
     else if (async_handler_)
@@ -1778,17 +2017,21 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
         {
             if (request_token.is_cancelled())
             {
-                (void)conn_.retire_stream(id);
+                co_await cancel_request(id);
                 co_return;
             }
             response.status = status::internal_server_error;
             response.body.clear();
+            response.shared_body.reset();
+            response.static_headers.reset();
         }
     }
     else if (handler_(*request, response))
     {
         response.status = status::internal_server_error;
         response.body.clear();
+        response.shared_body.reset();
+        response.static_headers.reset();
     }
 
     // PUSH_PROMISE frames are part of the parent request stream and must
@@ -1825,8 +2068,14 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
         (void)co_await conn_.async_cancel_stream(id);
         co_return;
     }
+    const auto buffered_body = buffered_response_body(response);
+    if (!buffered_body || (response.body_source && response.shared_body))
+    {
+        (void)co_await conn_.async_cancel_stream(id);
+        co_return;
+    }
     if (!suppress_response_body && !response.body_source && declared_length &&
-        *declared_length && **declared_length != response.body.size())
+        *declared_length && **declared_length != buffered_body->size())
     {
         (void)co_await conn_.async_cancel_stream(id);
         co_return;
@@ -1834,7 +2083,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
 
     if (response.body_source)
     {
-        if (!response.body.empty())
+        if (!response.body.empty() || response.shared_body)
         {
             (void)co_await conn_.async_cancel_stream(id);
             co_return;
@@ -1886,7 +2135,10 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
             response_sent = co_await conn_.async_send(id, std::move(*encoded), false);
         }
         if (!response_sent)
+        {
+            co_await cancel_request(id);
             co_return;
+        }
 
         for (;;)
         {
@@ -1952,18 +2204,25 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
             response_sent = co_await conn_.async_send(id, std::span<const std::byte>{}, true);
         }
         if (!response_sent)
+        {
+            co_await cancel_request(id);
             co_return;
-        (void)conn_.retire_stream(id);
+        }
+
         co_return;
     }
 
     std::expected<void, std::error_code> response_sent;
-    std::optional<byte_buffer> static_response;
+    std::optional<byte_buffer> prepared_response;
+    std::shared_ptr<const std::string> prepared_shared_body;
     {
         co_await response_header_mutex_.lock();
         cnetmod::async_lock_guard header_guard{
             response_header_mutex_, std::adopt_lock};
-        auto encoded = response_frames(encoder_, response, id, suppress_response_body);
+        auto encoded = response.shared_body && !suppress_response_body &&
+                response.trailers.empty()
+            ? response_headers_frame(encoder_, response, id)
+            : response_frames(encoder_, response, id, suppress_response_body);
         if (!encoded)
         {
             co_await conn_.async_close(encoded.error(),
@@ -1971,18 +2230,12 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
             co_return;
         }
 
-        // The usual response is represented entirely by QPACK static-table
-        // entries.  Its bytes no longer touch encoder state after
-        // response_frames(), so do not serialize every handler behind the
-        // packet-owner acknowledgement.  A dynamic-table update still keeps
-        // the mutex across encoder-stream then request-stream submission: the
-        // two writes must retain their RFC 9204 ordering.
+        // Publish encoder instructions before exposing the referring HEADERS,
+        // but release encoder state before sending the response body. A large
+        // response can wait for flow credit while peer decoder instructions
+        // need this same mutex. QPACK retains referenced entries until ACK.
         auto instructions = encoder_.take_encoder_instructions();
-        if (instructions.empty())
-        {
-            static_response.emplace(std::move(*encoded));
-        }
-        else
+        if (!instructions.empty())
         {
             if (!qpack_encoder_stream_)
             {
@@ -1998,13 +2251,34 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                     "HTTP/3 QPACK encoder stream failed");
                 co_return;
             }
-            response_sent = co_await conn_.async_send(id, std::move(*encoded), true);
+        }
+        if (response.shared_body && !suppress_response_body &&
+            response.trailers.empty())
+        {
+            append_varint(static_cast<std::uint64_t>(http3_frame_type::data), *encoded);
+            append_varint(static_cast<std::uint64_t>(response.shared_body->size()), *encoded);
+            prepared_shared_body = response.shared_body;
+        }
+        prepared_response.emplace(std::move(*encoded));
+    }
+    if (prepared_response)
+    {
+        if (prepared_shared_body)
+        {
+            std::vector<std::byte> prefix(
+                std::make_move_iterator(prepared_response->begin()),
+                std::make_move_iterator(prepared_response->end()));
+            response_sent = co_await conn_.async_send_shared(id,
+                std::move(prefix), std::move(prepared_shared_body), true);
+        }
+        else
+        {
+            response_sent = co_await conn_.async_send(
+                id, std::move(*prepared_response), true);
         }
     }
-    if (static_response)
-        response_sent = co_await conn_.async_send(id, std::move(*static_response), true);
-    if (response_sent)
-        (void)conn_.retire_stream(id);
+    if (!response_sent)
+        co_await cancel_request(id);
 }
 
 auto read_varint(byte_view input, std::size_t& used)
@@ -2338,7 +2612,9 @@ auto http3_server_session::send_pushes(stream_id parent_stream,
     for (const auto& push : pushes)
     {
         if (!push.response ||
-            (!push.response->body.empty() && push.response->body_source))
+            ((!push.response->body.empty() || push.response->shared_body) &&
+                push.response->body_source) ||
+            !buffered_response_body(*push.response))
             co_return std::unexpected(std::make_error_code(std::errc::invalid_argument));
 
         std::uint64_t push_id{};
@@ -2784,7 +3060,7 @@ auto http3_client_session::send_request(const http3_request& request)
     auto response = co_await parse_response();
     while (!response && response.error() == std::make_error_code(std::errc::resource_unavailable_try_again))
     {
-        const auto progress = co_await qpack_waiter->receive();
+        const auto progress = co_await wait_for_peer_qpack_progress(conn_, decoder_, qpack_decoder_stream_, *stream, qpack_waiter);
         if (!progress)
             co_return std::unexpected(std::make_error_code(std::errc::not_connected));
         response = co_await parse_response();
@@ -2883,7 +3159,7 @@ auto http3_client_session::connect_webtransport(const http3_request& request)
                 continue;
             if (response.error() == std::make_error_code(std::errc::resource_unavailable_try_again))
             {
-                const auto progress = co_await qpack_waiter->receive();
+                const auto progress = co_await wait_for_peer_qpack_progress(conn_, decoder_, qpack_decoder_stream_, *stream, qpack_waiter);
                 if (progress)
                     continue;
                 co_return std::unexpected(std::make_error_code(std::errc::not_connected));
@@ -3067,6 +3343,16 @@ auto http3_client_session::send_request(const http3_request& request,
     auto stream = co_await conn_.async_open_stream(true);
     if (!stream)
         co_return std::unexpected(stream.error());
+    conn_.register_stream_cancellation(*stream, token);
+    scope_guard unregister_cancellation{[this, stream]
+        {
+            conn_.unregister_stream_cancellation(*stream);
+            if (qpack_waiters_.contains(*stream))
+                (void)decoder_.cancel_blocked_stream(*stream);
+            qpack_waiters_.erase(*stream);
+            completed_headers_.erase(*stream);
+        }};
+
     if (request.priority)
     {
         const auto updated = co_await update_priority(*stream, *request.priority);
@@ -3280,7 +3566,7 @@ auto http3_client_session::send_request(const http3_request& request,
     auto response = co_await parse_response();
     while (!response && response.error() == std::make_error_code(std::errc::resource_unavailable_try_again))
     {
-        const auto progress = co_await wait_for_qpack_progress(*qpack_waiter, token);
+        const auto progress = co_await wait_for_peer_qpack_progress(conn_, decoder_, qpack_decoder_stream_, *stream, qpack_waiter, &token);
         if (!progress)
         {
             if (token.is_cancelled())
@@ -3336,6 +3622,16 @@ auto http3_client_session::send_request_streaming(const http3_request& request,
     auto stream = co_await conn_.async_open_stream(true);
     if (!stream)
         co_return std::unexpected(stream.error());
+    conn_.register_stream_cancellation(*stream, token);
+    scope_guard unregister_cancellation{[this, stream]
+        {
+            conn_.unregister_stream_cancellation(*stream);
+            if (qpack_waiters_.contains(*stream))
+                (void)decoder_.cancel_blocked_stream(*stream);
+            qpack_waiters_.erase(*stream);
+            completed_headers_.erase(*stream);
+        }};
+
 
     if (request.priority)
     {
@@ -3482,15 +3778,30 @@ auto http3_client_session::send_request_streaming(const http3_request& request,
     request_guard.release();
     request_mutex_.unlock();
 
+    streaming_cancellation cancellation{conn_.context(), token};
     http3_response response;
     response.version = http_version::http_3;
     response.body_stream = std::make_shared<request_body_stream>();
     channel<std::expected<void, std::error_code>> handler_done{1};
+    bool handler_finished{};
+    bool handler_cancelled{};
     auto handler_task = [&]() -> task<void>
     {
-        auto result = co_await handler(response, *response.body_stream, token);
+        auto result = co_await handler(response, *response.body_stream,
+            cancellation.handler);
+        handler_cancelled = cancellation.handler.is_cancelled();
+        handler_finished = true;
+        cancellation.pump.cancel();
         response.body_stream->close();
+        // Completion can resume the enclosing coroutine inline. Do not touch
+        // its captured state after sending this final notification.
         (void)handler_done.try_send(std::move(result));
+    };
+    const auto internal_pump_stop = [&](std::error_code error)
+    {
+        return handler_finished && !token.is_cancelled() &&
+            cancellation.pump.is_cancelled() &&
+            error == cnetmod::make_error_code(cnetmod::errc::operation_aborted);
     };
 
     dynamic_buffer wire{stream_read_chunk_size};
@@ -3642,20 +3953,24 @@ auto http3_client_session::send_request_streaming(const http3_request& request,
 
     for (;;)
     {
+        if (handler_finished)
+            break;
         auto parsed = co_await parse_available();
         if (!parsed && parsed.error() == std::make_error_code(std::errc::resource_unavailable_try_again))
         {
-            auto progress = co_await wait_for_qpack_progress(*qpack_waiter, token);
+            auto progress = co_await wait_for_peer_qpack_progress(conn_, decoder_, qpack_decoder_stream_, *stream, qpack_waiter, &cancellation.pump);
             if (!progress)
             {
-                parse_error = progress.error();
+                if (!internal_pump_stop(progress.error()))
+                    parse_error = progress.error();
                 break;
             }
             continue;
         }
         if (!parsed)
         {
-            parse_error = parsed.error();
+            if (!internal_pump_stop(parsed.error()))
+                parse_error = parsed.error();
             break;
         }
         if (auto done = handler_done.try_receive(); done)
@@ -3671,10 +3986,11 @@ auto http3_client_session::send_request_streaming(const http3_request& request,
         {
             if (received.error() == std::make_error_code(std::errc::operation_would_block))
             {
-                auto ready = co_await conn_.async_wait_readable(*stream, token);
+                auto ready = co_await conn_.async_wait_readable(*stream, cancellation.pump);
                 if (ready)
                     continue;
-                parse_error = ready.error();
+                if (!internal_pump_stop(ready.error()))
+                    parse_error = ready.error();
                 break;
             }
             parse_error = received.error();
@@ -3710,23 +4026,31 @@ auto http3_client_session::send_request_streaming(const http3_request& request,
     }
     if (parse_error)
     {
-        co_await cancel_stream();
+        cancellation.handler.cancel();
         if (handler_started)
         {
             if (!handler_result)
                 handler_result = co_await handler_done.receive();
         }
-        co_return std::unexpected(parse_error);
     }
-    if (handler_started)
+    else if (handler_started)
     {
         if (!handler_result)
             handler_result = co_await handler_done.receive();
-        if (!handler_result)
-            co_return std::unexpected(std::make_error_code(std::errc::not_connected));
-        if (!*handler_result)
-            co_return std::unexpected(handler_result->error());
     }
+    // The parent callback can still be queued even after both children finish.
+    // Join it before destroying either token or returning to the caller.
+    co_await cancellation;
+    if (token.is_cancelled() || (!parse_error && handler_cancelled))
+        parse_error = cnetmod::make_error_code(cnetmod::errc::operation_aborted);
+    if (!parse_error && handler_started && !handler_result)
+        parse_error = std::make_error_code(std::errc::not_connected);
+    if (!parse_error && handler_result && !*handler_result)
+        parse_error = handler_result->error();
+    if (parse_error || !peer_fin)
+        co_await cancel_stream();
+    if (parse_error)
+        co_return std::unexpected(parse_error);
     auto decoder_flush = co_await flush_qpack_decoder_instructions(
         conn_, decoder_, qpack_decoder_stream_);
     if (!decoder_flush)
@@ -3734,6 +4058,50 @@ auto http3_client_session::send_request_streaming(const http3_request& request,
     completed_headers_.erase(*stream);
     (void)conn_.retire_stream(*stream);
     co_return response;
+}
+
+auto http3_server_session::take_peer_unidirectional_consumed_bytes(stream_id id) noexcept
+    -> std::size_t
+{
+    const auto cursor = peer_unidirectional_stream_bytes_.find(id);
+    return cursor == peer_unidirectional_stream_bytes_.end() ? 0U
+        : std::exchange(cursor->second, 0U);
+}
+
+auto http3_server_session::finish_peer_unidirectional_stream(stream_id id) -> task<void>
+{
+    const auto type = peer_unidirectional_stream_types_.find(id);
+    const bool critical = type != peer_unidirectional_stream_types_.end() &&
+        (type->second == control_stream_type || type->second == qpack_encoder_stream_type ||
+            type->second == qpack_decoder_stream_type);
+    if (critical && !conn_.is_closed())
+        co_await conn_.async_close(std::error_code{0x104, std::generic_category()},
+            "HTTP/3 critical stream closed", true);
+    peer_unidirectional_stream_types_.erase(id);
+    peer_unidirectional_stream_bytes_.erase(id);
+    (void)conn_.retire_stream(id);
+}
+
+auto http3_client_session::take_peer_unidirectional_consumed_bytes(stream_id id) noexcept
+    -> std::size_t
+{
+    const auto cursor = peer_unidirectional_stream_bytes_.find(id);
+    return cursor == peer_unidirectional_stream_bytes_.end() ? 0U
+        : std::exchange(cursor->second, 0U);
+}
+
+auto http3_client_session::finish_peer_unidirectional_stream(stream_id id) -> task<void>
+{
+    const auto type = peer_unidirectional_stream_types_.find(id);
+    const bool critical = type != peer_unidirectional_stream_types_.end() &&
+        (type->second == control_stream_type || type->second == qpack_encoder_stream_type ||
+            type->second == qpack_decoder_stream_type);
+    if (critical && !conn_.is_closed())
+        co_await conn_.async_close(std::error_code{0x104, std::generic_category()},
+            "HTTP/3 critical stream closed", true);
+    peer_unidirectional_stream_types_.erase(id);
+    peer_unidirectional_stream_bytes_.erase(id);
+    (void)conn_.retire_stream(id);
 }
 
 auto http3_server_session::process_peer_unidirectional_stream(stream_id id,
@@ -3759,6 +4127,7 @@ auto http3_server_session::process_peer_unidirectional_stream(stream_id id,
         if (!decoded)
             co_return std::unexpected(decoded.error());
         peer_stream_type = *decoded;
+        peer_unidirectional_stream_types_.try_emplace(id, peer_stream_type);
     }
 
     std::vector<std::uint64_t> cancelled_push_ids;
@@ -3774,6 +4143,7 @@ auto http3_server_session::process_peer_unidirectional_stream(stream_id id,
     };
 
     std::expected<void, std::error_code> result;
+    std::vector<stream_id> unblocked;
     if (peer_stream_type == qpack_encoder_stream_type)
     {
         co_await request_header_mutex_.lock();
@@ -3785,7 +4155,7 @@ auto http3_server_session::process_peer_unidirectional_stream(stream_id id,
             for (auto& block : completed)
             {
                 completed_headers_[block.stream_id].push_back(std::move(block.headers));
-                notify_qpack_waiter(qpack_waiters_, block.stream_id);
+                unblocked.push_back(block.stream_id);
             }
         }
     }
@@ -3799,6 +4169,10 @@ auto http3_server_session::process_peer_unidirectional_stream(stream_id id,
     {
         result = validate();
     }
+    for (const auto stream : unblocked)
+        notify_qpack_waiter(qpack_waiters_, stream);
+    if (result && peer_stream_type == qpack_encoder_stream_type)
+        result = co_await flush_qpack_decoder_instructions(conn_, decoder_, qpack_decoder_stream_);
     if (result)
     {
         co_await apply_push_cancellations(cancelled_push_ids);
@@ -3811,6 +4185,12 @@ auto http3_client_session::process_peer_unidirectional_stream(stream_id id,
 {
     co_await qpack_mutex_.lock();
     cnetmod::async_lock_guard qpack_guard{qpack_mutex_, std::adopt_lock};
+    if (!peer_unidirectional_stream_types_.contains(id))
+    {
+        const auto type = quic::decode_varint(bytes);
+        if (type)
+            peer_unidirectional_stream_types_.try_emplace(id, type->first);
+    }
     auto result = validate_peer_uni_stream(conn_, decoder_, encoder_, peer_control_stream_seen_, peer_settings_seen_,
         peer_qpack_encoder_stream_seen_, peer_qpack_decoder_stream_seen_, peer_datagram_enabled_,
         peer_connect_protocol_enabled_, peer_webtransport_enabled_, peer_max_push_id_, received_goaway_,
@@ -3822,9 +4202,12 @@ auto http3_client_session::process_peer_unidirectional_stream(stream_id id,
     for (auto& block : completed)
     {
         completed_headers_[block.stream_id].push_back(std::move(block.headers));
-        notify_qpack_waiter(qpack_waiters_, block.stream_id);
     }
-    co_return {};
+    qpack_guard.release();
+    qpack_mutex_.unlock();
+    for (const auto& block : completed)
+        notify_qpack_waiter(qpack_waiters_, block.stream_id);
+    co_return co_await flush_qpack_decoder_instructions(conn_, decoder_, qpack_decoder_stream_);
 }
 
 auto http3_client_session::consume_server_push_stream(stream_id id,
@@ -3918,7 +4301,7 @@ auto http3_client_session::consume_server_push_stream(stream_id id,
             co_return std::unexpected(parsed.error());
         // The peer encoder stream shares qpack_mutex_; wait outside the
         // critical section so its instruction consumer can make progress.
-        const auto progress = co_await qpack_waiter->receive();
+        const auto progress = co_await wait_for_peer_qpack_progress(conn_, decoder_, qpack_decoder_stream_, id, qpack_waiter);
         if (!progress)
             co_return std::unexpected(std::make_error_code(std::errc::not_connected));
     }

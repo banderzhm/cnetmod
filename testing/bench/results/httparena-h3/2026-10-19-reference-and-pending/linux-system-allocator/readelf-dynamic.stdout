@@ -1,0 +1,35 @@
+
+Dynamic section at offset 0x3849a0 contains 32 entries:
+  Tag        Type                         Name/Value
+ 0x0000000000000001 (NEEDED)             Shared library: [libz.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [liburing.so.2]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc++.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc++abi.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [libgcc_s.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [ld-linux-x86-64.so.2]
+ 0x0000000000000007 (RELA)               0x3eb0
+ 0x0000000000000008 (RELASZ)             139536 (bytes)
+ 0x0000000000000009 (RELAENT)            24 (bytes)
+ 0x0000000000000017 (JMPREL)             0x25fc0
+ 0x0000000000000002 (PLTRELSZ)           5064 (bytes)
+ 0x0000000000000014 (PLTREL)             RELA
+ 0x0000000000000003 (PLTGOT)             0x388248
+ 0x0000000000000006 (SYMTAB)             0x3f8
+ 0x000000000000000b (SYMENT)             24 (bytes)
+ 0x0000000000000005 (STRTAB)             0x1d18
+ 0x000000000000000a (STRSZ)              7791 (bytes)
+ 0x0000000000000019 (INIT_ARRAY)         0x386bf8
+ 0x000000000000001b (INIT_ARRAYSZ)       8 (bytes)
+ 0x000000000000001a (FINI_ARRAY)         0x386bf0
+ 0x000000000000001c (FINI_ARRAYSZ)       8 (bytes)
+ 0x000000006ffffff0 (VERSYM)             0x3b88
+ 0x000000006ffffffe (VERNEED)            0x3da0
+ 0x000000006fffffff (VERNEEDNUM)         5
+ 0x000000000000000c (INIT)               0xea1f8
+ 0x000000000000000d (FINI)               0xea1e8
+ 0x000000006ffffef5 (GNU_HASH)           0x3d8
+ 0x000000006ffffffb (FLAGS_1)            Flags: PIE
+ 0x0000000000000015 (DEBUG)              0x0
+ 0x0000000000000000 (NULL)               0x0

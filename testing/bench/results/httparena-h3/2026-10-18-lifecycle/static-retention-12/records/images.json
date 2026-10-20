@@ -1,0 +1,9 @@
+{
+  "cnetmod-official-static": {
+    "image": "sha256:10fd224591461a2a3d5ace7b28ac4fa446e3ef4a08f8d4e74775735cbedc10cc",
+    "language": "C++",
+    "tests": [
+      "static-h3"
+    ]
+  }
+}

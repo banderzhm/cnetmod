@@ -1,0 +1,30 @@
+[
+  {
+    "scenario": "interval",
+    "exit": 1,
+    "status": "failed",
+    "error": "AssertionError(\"probe ACK's200ms interval was overwritten by short-header arming\")",
+    "measurements": {
+      "ack_to_second_ms": 0.17765000006875198,
+      "first_after_connected_ms": 0.4694850000532824,
+      "first_after_traffic_start_ms": 0.46854800007167796,
+      "first_after_traffic_stop_ms": -660.3742559999546,
+      "actual_pings": 33,
+      "max_ping_gap_ms": 22.17202500003168
+    }
+  },
+  {
+    "scenario": "initial",
+    "exit": 1,
+    "status": "failed",
+    "error": "AssertionError('continuous short headers postponed the initial200ms probe')",
+    "measurements": {
+      "ack_to_second_ms": 200.24523899996893,
+      "first_after_connected_ms": 841.492355000014,
+      "first_after_traffic_start_ms": 841.4915910000218,
+      "first_after_traffic_stop_ms": 180.74367500003063,
+      "actual_pings": 33,
+      "max_ping_gap_ms": 21.045375999960925
+    }
+  }
+]

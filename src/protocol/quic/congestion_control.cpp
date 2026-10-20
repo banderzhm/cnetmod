@@ -10,8 +10,6 @@ namespace cnetmod::quic {
 
 namespace {
 
-    constexpr auto min_congestion_window = std::uint64_t{2} * 1472U;
-
     auto pacing_rate_for(std::uint64_t cwnd, std::chrono::steady_clock::duration rtt,
         double gain) -> double
     {
@@ -41,7 +39,7 @@ void new_reno_congestion_controller::on_packet_acked(std::uint64_t bytes)
     else if (current_state_ == state_type::slow_start)
         cwnd_ += bytes;
     else
-        cwnd_ += std::max<std::uint64_t>(1U, (mtu_ * bytes) / cwnd_);
+        cwnd_ += std::max<std::uint64_t>(1U, (max_datagram_size_ * bytes) / cwnd_);
     update_pacing_rate_estimator();
 }
 
@@ -53,10 +51,10 @@ void new_reno_congestion_controller::on_packets_discarded(std::uint64_t bytes)
 
 void new_reno_congestion_controller::on_congestion_event(std::uint64_t lost_bytes)
 {
+    bytes_in_flight_ -= std::min(lost_bytes, bytes_in_flight_);
     if (current_state_ == state_type::recovery)
         return;
-    bytes_in_flight_ -= std::min(lost_bytes, bytes_in_flight_);
-    ssthresh_ = std::max(cwnd_ / 2U, min_congestion_window);
+    ssthresh_ = std::max(cwnd_ / 2U, 2U * max_datagram_size_);
     cwnd_ = ssthresh_;
     current_state_ = state_type::recovery;
     update_pacing_rate_estimator();
@@ -67,6 +65,18 @@ void new_reno_congestion_controller::update_rtt(
 {
     if (smoothed_rtt > std::chrono::steady_clock::duration::zero())
         smoothed_rtt_ = smoothed_rtt;
+    update_pacing_rate_estimator();
+}
+
+void new_reno_congestion_controller::on_max_datagram_size_validated(std::uint64_t bytes) noexcept
+{
+    if (bytes < min_initial_pkt_size || bytes > max_udp_receive_payload ||
+        bytes == max_datagram_size_)
+        return;
+    max_datagram_size_ = bytes;
+    // The first probe can be below the legacy initial MSS. Preserve the
+    // current byte window; raise only the policy's two-datagram minimum.
+    cwnd_ = std::max(cwnd_, 2U * max_datagram_size_);
     update_pacing_rate_estimator();
 }
 
@@ -119,6 +129,12 @@ void cubic_congestion_controller::on_packet_sent(std::uint64_t bytes)
 void cubic_congestion_controller::on_packet_acked(std::uint64_t bytes)
 {
     bytes_in_flight_ -= std::min(bytes, bytes_in_flight_);
+    if (in_recovery_)
+    {
+        in_recovery_ = false;
+        update_pacing_rate_estimator();
+        return;
+    }
     if (cwnd_ < ssthresh_)
     {
         cwnd_ += bytes;
@@ -132,7 +148,7 @@ void cubic_congestion_controller::on_packet_acked(std::uint64_t bytes)
     const auto elapsed = std::chrono::duration<double>(now - *epoch_start_).count();
     const auto k = std::cbrt(static_cast<double>(w_max_) * (1.0 - beta_) / cubic_c_);
     const auto target = cubic_c_ * std::pow(elapsed - k, 3.0) + static_cast<double>(w_max_);
-    const auto reno_increment = std::max<std::uint64_t>(1U, (mtu_ * bytes) / cwnd_);
+    const auto reno_increment = std::max<std::uint64_t>(1U, (max_datagram_size_ * bytes) / cwnd_);
     if (target > static_cast<double>(cwnd_))
     {
         const auto delta = static_cast<std::uint64_t>(target - static_cast<double>(cwnd_));
@@ -152,10 +168,13 @@ void cubic_congestion_controller::on_packets_discarded(std::uint64_t bytes)
 void cubic_congestion_controller::on_congestion_event(std::uint64_t lost_bytes)
 {
     bytes_in_flight_ -= std::min(lost_bytes, bytes_in_flight_);
+    if (in_recovery_)
+        return;
     w_max_ = cwnd_;
     cwnd_ = std::max<std::uint64_t>(
-        static_cast<std::uint64_t>(static_cast<double>(cwnd_) * beta_), min_congestion_window);
+        static_cast<std::uint64_t>(static_cast<double>(cwnd_) * beta_), 2U * max_datagram_size_);
     ssthresh_ = cwnd_;
+    in_recovery_ = true;
     epoch_start_.reset();
     update_pacing_rate_estimator();
 }
@@ -164,6 +183,18 @@ void cubic_congestion_controller::update_rtt(std::chrono::steady_clock::duration
 {
     if (smoothed_rtt > std::chrono::steady_clock::duration::zero())
         smoothed_rtt_ = smoothed_rtt;
+    update_pacing_rate_estimator();
+}
+
+void cubic_congestion_controller::on_max_datagram_size_validated(std::uint64_t bytes) noexcept
+{
+    if (bytes < min_initial_pkt_size || bytes > max_udp_receive_payload ||
+        bytes == max_datagram_size_)
+        return;
+    max_datagram_size_ = bytes;
+    // The first probe can be below the legacy initial MSS. Preserve the
+    // current byte window; raise only the policy's two-datagram minimum.
+    cwnd_ = std::max(cwnd_, 2U * max_datagram_size_);
     update_pacing_rate_estimator();
 }
 
@@ -229,7 +260,7 @@ void bbr_congestion_controller::on_congestion_event(std::uint64_t lost_bytes)
     // BBR does not use loss as its bandwidth signal.  A modest safety clamp
     // prevents a burst after severe loss while preserving its model-driven
     // probing behaviour.
-    cwnd_ = std::max(min_window_, (cwnd_ * 7U) / 8U);
+    cwnd_ = std::max((2U * max_datagram_size_), (cwnd_ * 7U) / 8U);
     update_pacing_rate();
 }
 
@@ -240,6 +271,18 @@ void bbr_congestion_controller::update_rtt(
         return;
     smoothed_rtt_ = smoothed_rtt;
     min_rtt_ = std::min(min_rtt_, smoothed_rtt);
+    update_pacing_rate();
+}
+
+void bbr_congestion_controller::on_max_datagram_size_validated(std::uint64_t bytes) noexcept
+{
+    if (bytes < min_initial_pkt_size || bytes > max_udp_receive_payload ||
+        bytes == max_datagram_size_)
+        return;
+    max_datagram_size_ = bytes;
+    // The first probe can be below the legacy initial MSS. Preserve the
+    // current byte window; raise only the policy's two-datagram minimum.
+    cwnd_ = std::max(cwnd_, 2U * max_datagram_size_);
     update_pacing_rate();
 }
 
@@ -298,7 +341,7 @@ void bbr_congestion_controller::update_model(std::uint64_t acked_bytes,
     const auto bandwidth = bandwidth_bytes_per_second_ > 0.0
         ? bandwidth_bytes_per_second_
         : static_cast<double>(cwnd_) / std::chrono::duration<double>(min_rtt_).count();
-    const auto bdp = std::max<double>(static_cast<double>(min_window_),
+    const auto bdp = std::max<double>(static_cast<double>((2U * max_datagram_size_)),
         bandwidth * std::chrono::duration<double>(min_rtt_).count());
     const auto target = static_cast<std::uint64_t>(std::ceil(bdp * cwnd_gain_));
 
@@ -314,10 +357,10 @@ void bbr_congestion_controller::update_model(std::uint64_t acked_bytes,
     {
         if (bytes_in_flight_ <= target)
             mode_ = mode::probe_bandwidth;
-        cwnd_ = std::max(min_window_, target);
+        cwnd_ = std::max((2U * max_datagram_size_), target);
     }
     else
-        cwnd_ = std::max(min_window_, target);
+        cwnd_ = std::max((2U * max_datagram_size_), target);
     update_pacing_rate();
 }
 
@@ -383,6 +426,15 @@ void congestion_controller::update_rtt(std::chrono::steady_clock::duration smoot
     std::visit([smoothed_rtt](auto& controller)
         {
             controller.update_rtt(smoothed_rtt);
+        },
+        controller_);
+}
+
+void congestion_controller::on_max_datagram_size_validated(std::uint64_t bytes) noexcept
+{
+    std::visit([bytes](auto& controller)
+        {
+            controller.on_max_datagram_size_validated(bytes);
         },
         controller_);
 }

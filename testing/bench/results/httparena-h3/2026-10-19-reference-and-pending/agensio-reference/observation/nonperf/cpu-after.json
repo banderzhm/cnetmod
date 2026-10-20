@@ -1,0 +1,186 @@
+{
+  "cpu_seconds": 71.49,
+  "monotonic_ns": 33351779799,
+  "system_cpu_ticks": {
+    "user": 10125,
+    "nice": 0,
+    "system": 3938,
+    "idle": 91005,
+    "iowait": 121,
+    "irq": 0,
+    "softirq": 1444,
+    "steal": 0,
+    "guest": 0,
+    "guest_nice": 0
+  },
+  "clock_ticks_per_second": 100,
+  "cpus_allowed_list": "0-31",
+  "threads": {
+    "743": {
+      "comm": "agensio",
+      "cpu_seconds": 3.4,
+      "cpus_allowed_list": "0-31"
+    },
+    "895": {
+      "comm": "agensio",
+      "cpu_seconds": 4.7,
+      "cpus_allowed_list": "0-31"
+    },
+    "896": {
+      "comm": "agensio",
+      "cpu_seconds": 2.31,
+      "cpus_allowed_list": "0-31"
+    },
+    "897": {
+      "comm": "agensio",
+      "cpu_seconds": 4.04,
+      "cpus_allowed_list": "0-31"
+    },
+    "898": {
+      "comm": "agensio",
+      "cpu_seconds": 2.38,
+      "cpus_allowed_list": "0-31"
+    },
+    "899": {
+      "comm": "agensio",
+      "cpu_seconds": 4.03,
+      "cpus_allowed_list": "0-31"
+    },
+    "900": {
+      "comm": "agensio",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "901": {
+      "comm": "agensio",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "902": {
+      "comm": "agensio",
+      "cpu_seconds": 2.4,
+      "cpus_allowed_list": "0-31"
+    },
+    "903": {
+      "comm": "agensio",
+      "cpu_seconds": 3.24,
+      "cpus_allowed_list": "0-31"
+    },
+    "904": {
+      "comm": "agensio",
+      "cpu_seconds": 3.06,
+      "cpus_allowed_list": "0-31"
+    },
+    "905": {
+      "comm": "agensio",
+      "cpu_seconds": 1.46,
+      "cpus_allowed_list": "0-31"
+    },
+    "906": {
+      "comm": "agensio",
+      "cpu_seconds": 3.09,
+      "cpus_allowed_list": "0-31"
+    },
+    "907": {
+      "comm": "agensio",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "908": {
+      "comm": "agensio",
+      "cpu_seconds": 3.24,
+      "cpus_allowed_list": "0-31"
+    },
+    "909": {
+      "comm": "agensio",
+      "cpu_seconds": 1.42,
+      "cpus_allowed_list": "0-31"
+    },
+    "910": {
+      "comm": "agensio",
+      "cpu_seconds": 2.41,
+      "cpus_allowed_list": "0-31"
+    },
+    "911": {
+      "comm": "agensio",
+      "cpu_seconds": 2.31,
+      "cpus_allowed_list": "0-31"
+    },
+    "912": {
+      "comm": "agensio",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "913": {
+      "comm": "agensio",
+      "cpu_seconds": 3.23,
+      "cpus_allowed_list": "0-31"
+    },
+    "914": {
+      "comm": "agensio",
+      "cpu_seconds": 2.45,
+      "cpus_allowed_list": "0-31"
+    },
+    "915": {
+      "comm": "agensio",
+      "cpu_seconds": 2.34,
+      "cpus_allowed_list": "0-31"
+    },
+    "916": {
+      "comm": "agensio",
+      "cpu_seconds": 2.36,
+      "cpus_allowed_list": "0-31"
+    },
+    "917": {
+      "comm": "agensio",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    },
+    "918": {
+      "comm": "agensio",
+      "cpu_seconds": 3.18,
+      "cpus_allowed_list": "0-31"
+    },
+    "919": {
+      "comm": "agensio",
+      "cpu_seconds": 2.35,
+      "cpus_allowed_list": "0-31"
+    },
+    "920": {
+      "comm": "agensio",
+      "cpu_seconds": 2.46,
+      "cpus_allowed_list": "0-31"
+    },
+    "921": {
+      "comm": "agensio",
+      "cpu_seconds": 3.26,
+      "cpus_allowed_list": "0-31"
+    },
+    "922": {
+      "comm": "agensio",
+      "cpu_seconds": 2.38,
+      "cpus_allowed_list": "0-31"
+    },
+    "923": {
+      "comm": "agensio",
+      "cpu_seconds": 2.35,
+      "cpus_allowed_list": "0-31"
+    },
+    "924": {
+      "comm": "agensio",
+      "cpu_seconds": 1.38,
+      "cpus_allowed_list": "0-31"
+    },
+    "925": {
+      "comm": "agensio",
+      "cpu_seconds": 0.0,
+      "cpus_allowed_list": "0-31"
+    }
+  },
+  "memory_kib": {
+    "Rss": 105436,
+    "Pss": 104716,
+    "Private_Clean": 9932,
+    "Private_Dirty": 94072
+  }
+}

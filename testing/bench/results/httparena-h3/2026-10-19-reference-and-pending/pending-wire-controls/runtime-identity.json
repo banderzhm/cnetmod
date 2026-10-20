@@ -1,0 +1,15 @@
+{
+  "build_identity_sha256": "f07501bf375d144226b0c6f7e523bf37e5c5cd025de65a6956f249116e318e6f",
+  "build_fixture_files": {
+    "quic_pmtu_pending_server.cpp": "79b6f315cd257814c5a0b901f0294988c26c7dd462eacb4e053524367eedf0d5",
+    "quic_pmtu_pending.py": "6feaaa17a3795d8b7eff735b0b868b6017c12af2215bae6a513c1e65411c1fd9",
+    "deadline_frame_parser.py": "7341a99b0ee4cd459b996d4d300a60907e729f198a028a2180017e8a4e1c99f8"
+  },
+  "runtime_fixture_files": {
+    "quic_pmtu_pending_server.cpp": "79b6f315cd257814c5a0b901f0294988c26c7dd462eacb4e053524367eedf0d5",
+    "quic_pmtu_pending.py": "c01b8262be7df5c41b4aacb7f1aa72a74e3e83d4f36270333e7342ffc0765143",
+    "deadline_frame_parser.py": "7341a99b0ee4cd459b996d4d300a60907e729f198a028a2180017e8a4e1c99f8"
+  },
+  "controller_sha256": "42e830d0323d6871679e0e01b8dcb3ce8b7818c3a5eba41c55160fdffd273049",
+  "change": "ACK-only oracle ends after actual ordinary ACK; pure-ACK recovery remains independent wake scenario"
+}

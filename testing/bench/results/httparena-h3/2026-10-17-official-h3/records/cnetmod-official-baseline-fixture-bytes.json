@@ -1,0 +1,12 @@
+{
+  "status": "passed",
+  "checks": [
+    {
+      "path": "/baseline2?a=13&b=42",
+      "accept_encoding": "",
+      "bytes": 2,
+      "sha256": "02d20bbd7e394ad5999a4cebabac9619732c343a4cac99470c03e23ba2bdc2bc"
+    }
+  ],
+  "static_missing_status": null
+}

@@ -1,0 +1,2 @@
+PASS aliases/C++ array/aligned/DSO/realloc success,failure,zero restored baseline
+/var/tmp/cnetmod-h3-memory-counter

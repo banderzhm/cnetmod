@@ -1,0 +1,35 @@
+[
+  {
+    "round": 1,
+    "done": 200000,
+    "status_2xx": 200000,
+    "udp_sent": 87736,
+    "udp_received": 2405690,
+    "received_per_2xx": 12.02845,
+    "sent_per_2xx": 0.43868,
+    "body_bytes": 3253556570,
+    "body_bytes_per_2xx": 16267.78285
+  },
+  {
+    "round": 30,
+    "done": 200000,
+    "status_2xx": 200000,
+    "udp_sent": 89582,
+    "udp_received": 2407639,
+    "received_per_2xx": 12.038195,
+    "sent_per_2xx": 0.44791,
+    "body_bytes": 3252524146,
+    "body_bytes_per_2xx": 16262.62073
+  },
+  {
+    "round": 60,
+    "done": 200000,
+    "status_2xx": 200000,
+    "udp_sent": 85905,
+    "udp_received": 2405975,
+    "received_per_2xx": 12.029875,
+    "sent_per_2xx": 0.429525,
+    "body_bytes": 3253803479,
+    "body_bytes_per_2xx": 16269.017395
+  }
+]

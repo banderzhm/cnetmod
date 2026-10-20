@@ -1,0 +1,11 @@
+{
+  "src/protocol/quic/quic_connection.cpp": "a3015adadffaa7b39fe65715fce4df212c59249d63ebbd33a453bef83b41b8ac",
+  "src/protocol/quic/quic_recovery.cpp": "2355bf47d83df296e0bd31f71bf6c56deeb9f613854023120df5b002c7bfa0ea",
+  "src/protocol/quic/quic_recovery.cppm": "7c71492f32b633761033d313486c4be93f1a1d4b519f946c25eeca08c159ffb8",
+  "src/protocol/quic/loss_detection.cpp": "a425c6baa0c8ef5c40311d11d0b56de53126dfc80fdc7144e244388b9583b432",
+  "src/protocol/quic/loss_detection.cppm": "81b2090c49c28ed28dadca2685b63c299850527222adee0d5e0df65916a1898e",
+  "src/protocol/quic/quic_send_pipeline.cpp": "497ce762561a78851c54103e72ba0ed8f27c7449afb8dce11a01313a75487147",
+  "src/protocol/quic/quic_send_pipeline.cppm": "1efb760fa50c347462479307b7830b311b8fcf30450d2867cae07e7309f73900",
+  "src/protocol/http/v3/http3_server.cpp": "44e0144af9b8792e3be6b569f340992ca04fe0278a8d631c2d49f5f473c74d5b",
+  "src/executor/platform/io_uring_async_op.cpp": "9b823f9059d05ccd7f38072bc4177c1052d7f6763b196d802fa36c8f12c0f041"
+}

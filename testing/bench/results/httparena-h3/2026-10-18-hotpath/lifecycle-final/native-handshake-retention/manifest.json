@@ -1,0 +1,22 @@
+{
+  "scope": "HANDSHAKE_DONE repair native retention, not official ranking",
+  "external_binary": "\\\\wsl.localhost\\archlinux\\var\\tmp\\cnetmod-h3-handshake-retention-1792320533\\arena_h3_server",
+  "binary_sha256": "298bf8277e7b1edc32f7e1ab1ce64729a52e8884e97e9486a77a56a20f4cabc4",
+  "files": {
+    "cnetmod-h3-handshake-retention.py": "140e8484481a82001b1659adf72b68fc49df2aed3dc297e1921bbaa97ec29024",
+    "round-1-h2load.log": "9e0fabafdd4823fc0036f95e6d695518cdb8dcbaaaaf8c3bbded67f4014f5f32",
+    "round-10-h2load.log": "a28a474d945569ea7730371b77138694f58cea8cf78ad0ae903c1d17373583f5",
+    "round-11-h2load.log": "89b8c6bdaf2e3a6ec8aef06b6670e017f8f3cfbb815d642e5f1783d2e609a79e",
+    "round-12-h2load.log": "fa7d68b23d47dbec67790b04242101481fce13f0614b968e7b2dec4f1f2582c3",
+    "round-2-h2load.log": "087b7c3745b4f1ca403c445a7d26c0df1cfa878fb7a9373aeb6034fe1a417302",
+    "round-3-h2load.log": "e12d652858bcb6c5119330cb54904f7097bed542aadc0566445b85a258c642f4",
+    "round-4-h2load.log": "6df92794f75779e0d872fd4dc054a4cac59ebe60ab2f6bbcd8e91cc40c559acd",
+    "round-5-h2load.log": "1debd0360ddc1bd81a2ab5e48c6d253f169c3062a24813c43e72b014d28b21a5",
+    "round-6-h2load.log": "90b2c09b1621e6e538b6eca184bd6af2c35382d3a7569e8a941862749a39a5bc",
+    "round-7-h2load.log": "df2cb5f1aeb8663b1ad4b66feadd8818db8d970e217e98682120deebb21a30f2",
+    "round-8-h2load.log": "e2eefe082ae5f504955522bee577b207cc9c4b4aaedb4ca5966b21e976025824",
+    "round-9-h2load.log": "1763a867e6fa4bb758eee9f484db6f96d4c8a2a90f222090c4a62d8106ce13a1",
+    "server.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "summary.json": "fda67f44e89496c7b84fbe5443df183a389c3e0b9ff6afa423d318aaa031f0b0"
+  }
+}

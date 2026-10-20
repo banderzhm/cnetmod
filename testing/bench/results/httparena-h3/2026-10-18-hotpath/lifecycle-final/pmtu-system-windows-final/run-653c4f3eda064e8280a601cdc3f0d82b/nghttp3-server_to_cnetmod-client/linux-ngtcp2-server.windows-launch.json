@@ -1,0 +1,26 @@
+{
+  "pid": 57992,
+  "command": [
+    "C:/Windows/System32/wsl.exe",
+    "--distribution",
+    "archlinux",
+    "--user",
+    "root",
+    "--exec",
+    "/usr/sbin/python3",
+    "-c",
+    "\nimport json, os, sys\npidfile, nonce, executable, *arguments = sys.argv[1:]\nif os.getpgrp() == os.getpid() and os.getsid(0) != os.getpid():\n    child = os.fork()\n    if child:\n        _, status = os.waitpid(child, 0)\n        os._exit(os.waitstatus_to_exitcode(status))\nif os.getsid(0) != os.getpid():\n    os.setsid()\nrecord = dict(pid=os.getpid(), pgid=os.getpgrp(), sid=os.getsid(0), nonce=nonce,\n              executable=os.path.realpath(executable),\n              launch_executable=os.readlink('/proc/self/exe'))\nwith open(pidfile + '.new', 'x', encoding='utf-8') as output:\n    json.dump(record, output)\nos.replace(pidfile + '.new', pidfile)\nos.environ['CNETMOD_H3_PEER_RUN'] = nonce\nos.execv(executable, [executable, *arguments])\n",
+    "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-pmtu-final-system-windows-20261018-ffa91ab479f4422791aaeacc51dbe847/run-653c4f3eda064e8280a601cdc3f0d82b/nghttp3-server_to_cnetmod-client/linux-ngtcp2-server.linux-pid.json",
+    "8635be70a37e495889ed6bc5c21fc995",
+    "/var/tmp/cnetmod-h3-ngtcp2-peer-build/examples/osslserver",
+    "-q",
+    "--htdocs",
+    "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-pmtu-final-system-windows-20261018-ffa91ab479f4422791aaeacc51dbe847/run-653c4f3eda064e8280a601cdc3f0d82b/nghttp3-server_to_cnetmod-client",
+    "127.0.0.1",
+    "56456",
+    "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-pmtu-final-system-windows-20261018-ffa91ab479f4422791aaeacc51dbe847/run-653c4f3eda064e8280a601cdc3f0d82b/nghttp3-server_to_cnetmod-client/key.pem",
+    "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-pmtu-final-system-windows-20261018-ffa91ab479f4422791aaeacc51dbe847/run-653c4f3eda064e8280a601cdc3f0d82b/nghttp3-server_to_cnetmod-client/cert.pem"
+  ],
+  "cwd": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-pmtu-final-system-windows-20261018-ffa91ab479f4422791aaeacc51dbe847\\run-653c4f3eda064e8280a601cdc3f0d82b\\nghttp3-server_to_cnetmod-client",
+  "target_platform": "WSL/Linux"
+}

@@ -1,0 +1,16 @@
+_ZNSt3__16vectorISt4byteNS_9allocatorIS1_EEE6insertB9nqe220108INS_11__wrap_iterIPKS1_EETnNS_9enable_ifIXaasr31__has_forward_iterator_categoryIT_EE5valuesr16is_constructibleIS1_NS_15iterator_traitsISB_E9referenceEEE5valueEiE4typeELi0EEENS6_IPS1_EES9_SB_SB_
+/usr/include/c++/v1/__vector/vector.h:536
+cnetmod::quic::quic_send_frame@cnetmod.protocol.quic.send_pipeline::append_to(std::__1::vector<std::byte, std::__1::allocator<std::byte> >&) const
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_send_pipeline.cpp:?
+cnetmod::quic::quic_connection@cnetmod.protocol.quic::pack_one_rtt_packet(bool, std::__1::vector<std::byte, std::__1::allocator<std::byte> >, std::__1::vector<std::byte, std::__1::allocator<std::byte> >*)
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_connection.cpp:4341
+cnetmod::quic::quic_connection@cnetmod.protocol.quic::pack_one_rtt_packet(bool, std::__1::vector<std::byte, std::__1::allocator<std::byte> >, std::__1::vector<std::byte, std::__1::allocator<std::byte> >*)
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_connection.cpp:4436
+cnetmod::quic::quic_connection@cnetmod.protocol.quic::apply_stream_write(unsigned long, std::__1::vector<std::byte, std::__1::allocator<std::byte> > const&, std::__1::shared_ptr<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > const> const&, bool)
+/usr/include/c++/v1/__vector/vector.h:536
+_ZNSt3__16vectorISt4byteNS_9allocatorIS1_EEE6insertB9nqe220108INS_11__wrap_iterIPKS1_EETnNS_9enable_ifIXaasr31__has_forward_iterator_categoryIT_EE5valuesr16is_constructibleIS1_NS_15iterator_traitsISB_E9referenceEEE5valueEiE4typeELi0EEENS6_IPS1_EES9_SB_SB_
+/usr/include/c++/v1/__vector/vector.h:536
+cnetmod::quic::(anonymous namespace)::append_bytes(std::__1::vector<std::byte, std::__1::allocator<std::byte> >&, std::__1::span<std::byte const, 18446744073709551615ul>)
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_frame.cpp:28
+cnetmod::quic::encode_frame@cnetmod.protocol.quic(cnetmod::quic::stream_frame@cnetmod.protocol.quic const&)
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_frame.cpp:738

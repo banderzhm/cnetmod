@@ -1,0 +1,7 @@
+{
+  "binary": "/var/tmp/cnetmod-h3-deferred-bulk-candidate-29750984cd8945798f9f0832ef63cc9c/proof-build-root/testing/bench/arena_h3_server",
+  "binary_sha256": "729c62a8a3e54cbd619ccfd3d369dd9bbf5d752e14fc23d6de9256ec64332dd9",
+  "source_snapshot": "/var/tmp/cnetmod-h3-deferred-bulk-candidate-29750984cd8945798f9f0832ef63cc9c/source-snapshot",
+  "allocator_proof": "/var/tmp/cnetmod-h3-deferred-bulk-candidate-29750984cd8945798f9f0832ef63cc9c/system-allocator/allocator-proof.json",
+  "proof_build_root": "/var/tmp/cnetmod-h3-deferred-bulk-candidate-29750984cd8945798f9f0832ef63cc9c/proof-build-root"
+}

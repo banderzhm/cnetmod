@@ -1,0 +1,1 @@
+Interrupted after a two-worker restart timeout and an early-data client timeout; idle cleanup later passed at 30.86s. The subsequent public-client case was interrupted and is not a measured failure. No full-suite pass. New sendto_on unit, credit wakeup, one-worker PTO/restart, and cold cleanup passed. Follow-up fix/verification required.
