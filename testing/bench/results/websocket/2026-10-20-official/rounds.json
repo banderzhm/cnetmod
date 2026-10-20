@@ -1,0 +1,3362 @@
+[
+  {
+    "framework": "cnetmod-ws-baseline",
+    "profile": "echo-ws-limited",
+    "connections": 512,
+    "round": 1,
+    "frames_sent": 998295,
+    "frames_received": 998032,
+    "elapsed_seconds": 5.05,
+    "frames_per_second": 197630,
+    "latency_us": {
+      "mean": 1160.0,
+      "p50": 99.0,
+      "p90": 944.0,
+      "p99": 24900.0,
+      "p999": 56900.0
+    },
+    "cpu_percent": 1570.5,
+    "memory": "73MiB",
+    "errors": {
+      "connect": 0,
+      "read": 5,
+      "timeout": 0
+    },
+    "reconnects": 99746,
+    "send_receive_delta": 263,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-baseline\\echo-ws-limited.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   1.16ms     99us    944us   24.90ms   56.90ms\n\n  998295 frames sent in 5.05s, 998032 frames received\n  Throughput: 197.60K req/s\n  Bandwidth:  3.76MB/s\n  WS upgrades: 100319\n  WS frames:   998032\n  Latency samples: 998032 / 998032 responses (100.0%)\n  Reconnects: 99746\n  Errors: connect 0, read 5, timeout 0\n[info] CPU 1570.5% | Mem 73MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-baseline",
+    "profile": "echo-ws-limited",
+    "connections": 512,
+    "round": 2,
+    "frames_sent": 2691837,
+    "frames_received": 2691520,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 538304,
+    "latency_us": {
+      "mean": 670.0,
+      "p50": 127.0,
+      "p90": 1540.0,
+      "p99": 9080.0,
+      "p999": 21700.0
+    },
+    "cpu_percent": 1230.1,
+    "memory": "78MiB",
+    "errors": {
+      "connect": 0,
+      "read": 12,
+      "timeout": 0
+    },
+    "reconnects": 269019,
+    "send_receive_delta": 317,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-baseline\\echo-ws-limited.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    670us    127us   1.54ms   9.08ms   21.70ms\n\n  2691837 frames sent in 5.00s, 2691520 frames received\n  Throughput: 538.03K req/s\n  Bandwidth:  10.22MB/s\n  WS upgrades: 270670\n  WS frames:   2691520\n  Latency samples: 2691520 / 2691520 responses (100.0%)\n  Reconnects: 269019\n  Errors: connect 0, read 12, timeout 0\n[info] CPU 1230.1% | Mem 78MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-baseline",
+    "profile": "echo-ws-limited",
+    "connections": 512,
+    "round": 3,
+    "frames_sent": 3913113,
+    "frames_received": 3912851,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 782570,
+    "latency_us": {
+      "mean": 512.0,
+      "p50": 105.0,
+      "p90": 1270.0,
+      "p99": 6450.0,
+      "p999": 14200.0
+    },
+    "cpu_percent": 1201.2,
+    "memory": "78MiB",
+    "errors": {
+      "connect": 0,
+      "read": 16,
+      "timeout": 0
+    },
+    "reconnects": 391185,
+    "send_receive_delta": 262,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-baseline\\echo-ws-limited.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    512us    105us   1.27ms   6.45ms   14.20ms\n\n  3913113 frames sent in 5.00s, 3912851 frames received\n  Throughput: 782.39K req/s\n  Bandwidth:  14.85MB/s\n  WS upgrades: 393932\n  WS frames:   3912851\n  Latency samples: 3912851 / 3912851 responses (100.0%)\n  Reconnects: 391185\n  Errors: connect 0, read 16, timeout 0\n[info] CPU 1201.2% | Mem 78MiB\n\n=== Best: 782570 req/s (CPU: 1201.2%, Mem: 78MiB) ===\n[info] saved results/echo-ws-limited/512/cnetmod-ws-baseline.json\nhttparena-bench-cnetmod-ws-baseline\nhttparena-bench-cnetmod-ws-baseline\n\n=============================================="
+  },
+  {
+    "framework": "cnetmod-ws-baseline",
+    "profile": "echo-ws-limited",
+    "connections": 4096,
+    "round": 1,
+    "frames_sent": 4934291,
+    "frames_received": 4930685,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 986137,
+    "latency_us": {
+      "mean": 3470.0,
+      "p50": 219.0,
+      "p90": 11200.0,
+      "p99": 38100.0,
+      "p999": 71000.0
+    },
+    "cpu_percent": 1168.7,
+    "memory": "197MiB",
+    "errors": {
+      "connect": 0,
+      "read": 34,
+      "timeout": 0
+    },
+    "reconnects": 491682,
+    "send_receive_delta": 3606,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-baseline\\echo-ws-limited.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   3.47ms    219us   11.20ms   38.10ms   71.00ms\n\n  4934291 frames sent in 5.00s, 4930685 frames received\n  Throughput: 985.82K req/s\n  Bandwidth:  18.76MB/s\n  WS upgrades: 495256\n  WS frames:   4930685\n  Latency samples: 4930685 / 4930685 responses (100.0%)\n  Reconnects: 491682\n  Errors: connect 0, read 34, timeout 0\n[info] CPU 1168.7% | Mem 197MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-baseline",
+    "profile": "echo-ws-limited",
+    "connections": 4096,
+    "round": 2,
+    "frames_sent": 4742963,
+    "frames_received": 4739231,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 947846,
+    "latency_us": {
+      "mean": 3650.0,
+      "p50": 302.0,
+      "p90": 11900.0,
+      "p99": 36900.0,
+      "p999": 56600.0
+    },
+    "cpu_percent": 1317.3,
+    "memory": "200MiB",
+    "errors": {
+      "connect": 0,
+      "read": 50,
+      "timeout": 0
+    },
+    "reconnects": 472274,
+    "send_receive_delta": 3732,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-baseline\\echo-ws-limited.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   3.65ms    302us   11.90ms   36.90ms   56.60ms\n\n  4742963 frames sent in 5.00s, 4739231 frames received\n  Throughput: 947.54K req/s\n  Bandwidth:  18.03MB/s\n  WS upgrades: 475956\n  WS frames:   4739231\n  Latency samples: 4739231 / 4739231 responses (100.0%)\n  Reconnects: 472274\n  Errors: connect 0, read 50, timeout 0\n[info] CPU 1317.3% | Mem 200MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-baseline",
+    "profile": "echo-ws-limited",
+    "connections": 4096,
+    "round": 3,
+    "frames_sent": 4780429,
+    "frames_received": 4776871,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 955374,
+    "latency_us": {
+      "mean": 3690.0,
+      "p50": 258.0,
+      "p90": 11800.0,
+      "p99": 37600.0,
+      "p999": 67000.0
+    },
+    "cpu_percent": 1253.7,
+    "memory": "201MiB",
+    "errors": {
+      "connect": 0,
+      "read": 38,
+      "timeout": 0
+    },
+    "reconnects": 476379,
+    "send_receive_delta": 3558,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-baseline\\echo-ws-limited.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   3.69ms    258us   11.80ms   37.60ms   67.00ms\n\n  4780429 frames sent in 5.00s, 4776871 frames received\n  Throughput: 954.98K req/s\n  Bandwidth:  18.18MB/s\n  WS upgrades: 480155\n  WS frames:   4776871\n  Latency samples: 4776871 / 4776871 responses (100.0%)\n  Reconnects: 476379\n  Errors: connect 0, read 38, timeout 0\n[info] CPU 1253.7% | Mem 201MiB\n\n=== Best: 986137 req/s (CPU: 1168.7%, Mem: 197MiB) ===\n[info] saved results/echo-ws-limited/4096/cnetmod-ws-baseline.json\nhttparena-bench-cnetmod-ws-baseline\nhttparena-bench-cnetmod-ws-baseline\n[info] rebuilding site/data/*.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/frameworks.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-baseline.json - 8 new, 8 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/current.json\n[info] done"
+  },
+  {
+    "framework": "cnetmod-ws-baseline",
+    "profile": "echo-ws-pipeline",
+    "connections": 512,
+    "round": 1,
+    "frames_sent": 58947400,
+    "frames_received": 58943672,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 11765203,
+    "latency_us": {
+      "mean": 718.0,
+      "p50": 80.0,
+      "p90": 314.0,
+      "p99": 16200.0,
+      "p999": 37100.0
+    },
+    "cpu_percent": 1539.0,
+    "memory": "63MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 3728,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-baseline\\echo-ws-pipeline.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    718us     80us    314us   16.20ms   37.10ms\n\n  58947400 frames sent in 5.01s, 58943672 frames received\n  Throughput: 11.78M req/s\n  Bandwidth:  78.62MB/s\n  WS upgrades: 512\n  WS frames:   58943672\n  Latency samples: 58943672 / 58943672 responses (100.0%)\n[info] CPU 1539.0% | Mem 63MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-baseline",
+    "profile": "echo-ws-pipeline",
+    "connections": 512,
+    "round": 2,
+    "frames_sent": 52453859,
+    "frames_received": 52448611,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 10468784,
+    "latency_us": {
+      "mean": 802.0,
+      "p50": 81.0,
+      "p90": 584.0,
+      "p99": 16400.0,
+      "p999": 44100.0
+    },
+    "cpu_percent": 1556.4,
+    "memory": "66MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 5248,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-baseline\\echo-ws-pipeline.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    802us     81us    584us   16.40ms   44.10ms\n\n  52453859 frames sent in 5.01s, 52448611 frames received\n  Throughput: 10.47M req/s\n  Bandwidth:  69.92MB/s\n  WS upgrades: 512\n  WS frames:   52448611\n  Latency samples: 52448611 / 52448611 responses (100.0%)\n[info] CPU 1556.4% | Mem 66MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-baseline",
+    "profile": "echo-ws-pipeline",
+    "connections": 512,
+    "round": 3,
+    "frames_sent": 52795530,
+    "frames_received": 52790282,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 10536982,
+    "latency_us": {
+      "mean": 793.0,
+      "p50": 84.0,
+      "p90": 515.0,
+      "p99": 16500.0,
+      "p999": 43700.0
+    },
+    "cpu_percent": 1502.0,
+    "memory": "67MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 5248,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-baseline\\echo-ws-pipeline.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    793us     84us    515us   16.50ms   43.70ms\n\n  52795530 frames sent in 5.01s, 52790282 frames received\n  Throughput: 10.53M req/s\n  Bandwidth:  70.33MB/s\n  WS upgrades: 512\n  WS frames:   52790282\n  Latency samples: 52790282 / 52790282 responses (100.0%)\n[info] CPU 1502.0% | Mem 67MiB\n\n=== Best: 11765203 req/s (CPU: 1539.0%, Mem: 63MiB) ===\n[info] saved results/echo-ws-pipeline/512/cnetmod-ws-baseline.json\nhttparena-bench-cnetmod-ws-baseline\nhttparena-bench-cnetmod-ws-baseline\n\n=============================================="
+  },
+  {
+    "framework": "cnetmod-ws-baseline",
+    "profile": "echo-ws-pipeline",
+    "connections": 4096,
+    "round": 1,
+    "frames_sent": 34084820,
+    "frames_received": 34019284,
+    "elapsed_seconds": 5.02,
+    "frames_per_second": 6776749,
+    "latency_us": {
+      "mean": 9600.0,
+      "p50": 3410.0,
+      "p90": 25400.0,
+      "p99": 68900.0,
+      "p999": 134100.0
+    },
+    "cpu_percent": 1609.0,
+    "memory": "169MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 65536,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-baseline\\echo-ws-pipeline.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   9.60ms   3.41ms   25.40ms   68.90ms   134.10ms\n\n  34084820 frames sent in 5.02s, 34019284 frames received\n  Throughput: 6.78M req/s\n  Bandwidth:  45.37MB/s\n  WS upgrades: 4096\n  WS frames:   34019284\n  Latency samples: 34019284 / 34019284 responses (100.0%)\n[info] CPU 1609.0% | Mem 169MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-baseline",
+    "profile": "echo-ws-pipeline",
+    "connections": 4096,
+    "round": 2,
+    "frames_sent": 38901408,
+    "frames_received": 38835872,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 7751671,
+    "latency_us": {
+      "mean": 8520.0,
+      "p50": 7180.0,
+      "p90": 19200.0,
+      "p99": 35600.0,
+      "p999": 69300.0
+    },
+    "cpu_percent": 1625.8,
+    "memory": "177MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 65536,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-baseline\\echo-ws-pipeline.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   8.52ms   7.18ms   19.20ms   35.60ms   69.30ms\n\n  38901408 frames sent in 5.01s, 38835872 frames received\n  Throughput: 7.74M req/s\n  Bandwidth:  51.80MB/s\n  WS upgrades: 4096\n  WS frames:   38835872\n  Latency samples: 38835872 / 38835872 responses (100.0%)\n[info] CPU 1625.8% | Mem 177MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-baseline",
+    "profile": "echo-ws-pipeline",
+    "connections": 4096,
+    "round": 3,
+    "frames_sent": 64042221,
+    "frames_received": 63977709,
+    "elapsed_seconds": 5.02,
+    "frames_per_second": 12744563,
+    "latency_us": {
+      "mean": 5280.0,
+      "p50": 576.0,
+      "p90": 19000.0,
+      "p99": 32900.0,
+      "p999": 57900.0
+    },
+    "cpu_percent": 1611.5,
+    "memory": "178MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 64512,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-baseline\\echo-ws-pipeline.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   5.28ms    576us   19.00ms   32.90ms   57.90ms\n\n  64042221 frames sent in 5.02s, 63977709 frames received\n  Throughput: 12.75M req/s\n  Bandwidth:  85.23MB/s\n  WS upgrades: 4096\n  WS frames:   63977709\n  Latency samples: 63977709 / 63977709 responses (100.0%)\n[info] CPU 1611.5% | Mem 178MiB\n\n=== Best: 12744563 req/s (CPU: 1611.5%, Mem: 178MiB) ===\n[info] saved results/echo-ws-pipeline/4096/cnetmod-ws-baseline.json\nhttparena-bench-cnetmod-ws-baseline\nhttparena-bench-cnetmod-ws-baseline\n\n=============================================="
+  },
+  {
+    "framework": "cnetmod-ws-baseline",
+    "profile": "echo-ws-pipeline",
+    "connections": 16384,
+    "round": 1,
+    "frames_sent": 19053644,
+    "frames_received": 18791500,
+    "elapsed_seconds": 5.03,
+    "frames_per_second": 3735884,
+    "latency_us": {
+      "mean": 56740.0,
+      "p50": 32900.0,
+      "p90": 137300.0,
+      "p99": 258500.0,
+      "p999": 377700.0
+    },
+    "cpu_percent": 1560.3,
+    "memory": "555MiB",
+    "errors": {
+      "connect": 0,
+      "read": 2,
+      "timeout": 0
+    },
+    "reconnects": 2,
+    "send_receive_delta": 262144,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-baseline\\echo-ws-pipeline.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   56.74ms   32.90ms   137.30ms   258.50ms   377.70ms\n\n  19053644 frames sent in 5.03s, 18791500 frames received\n  Throughput: 3.73M req/s\n  Bandwidth:  25.33MB/s\n  WS upgrades: 16384\n  WS frames:   18791500\n  Latency samples: 18791500 / 18791500 responses (100.0%)\n  Reconnects: 2\n  Errors: connect 0, read 2, timeout 0\n[info] CPU 1560.3% | Mem 555MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-baseline",
+    "profile": "echo-ws-pipeline",
+    "connections": 16384,
+    "round": 2,
+    "frames_sent": 17732843,
+    "frames_received": 17470699,
+    "elapsed_seconds": 5.02,
+    "frames_per_second": 3480218,
+    "latency_us": {
+      "mean": 67120.0,
+      "p50": 61800.0,
+      "p90": 129000.0,
+      "p99": 230900.0,
+      "p999": 315200.0
+    },
+    "cpu_percent": 1663.8,
+    "memory": "585MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 262144,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-baseline\\echo-ws-pipeline.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   67.12ms   61.80ms   129.00ms   230.90ms   315.20ms\n\n  17732843 frames sent in 5.02s, 17470699 frames received\n  Throughput: 3.48M req/s\n  Bandwidth:  23.65MB/s\n  WS upgrades: 16384\n  WS frames:   17470699\n  Latency samples: 17470699 / 17470699 responses (100.0%)\n[info] CPU 1663.8% | Mem 585MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-baseline",
+    "profile": "echo-ws-pipeline",
+    "connections": 16384,
+    "round": 3,
+    "frames_sent": 15133090,
+    "frames_received": 14870954,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 2968254,
+    "latency_us": {
+      "mean": 84250.0,
+      "p50": 76300.0,
+      "p90": 170900.0,
+      "p99": 288000.0,
+      "p999": 376800.0
+    },
+    "cpu_percent": 1582.8,
+    "memory": "576MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 262136,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-baseline\\echo-ws-pipeline.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   84.25ms   76.30ms   170.90ms   288.00ms   376.80ms\n\n  15133090 frames sent in 5.01s, 14870954 frames received\n  Throughput: 2.97M req/s\n  Bandwidth:  20.20MB/s\n  WS upgrades: 16384\n  WS frames:   14870954\n  Latency samples: 14870954 / 14870954 responses (100.0%)\n[info] CPU 1582.8% | Mem 576MiB\n\n=== Best: 3735884 req/s (CPU: 1560.3%, Mem: 555MiB) ===\n[info] saved results/echo-ws-pipeline/16384/cnetmod-ws-baseline.json\nhttparena-bench-cnetmod-ws-baseline\nhttparena-bench-cnetmod-ws-baseline\n[info] rebuilding site/data/*.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/frameworks.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-baseline.json - 6 new, 6 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/current.json\n[info] done"
+  },
+  {
+    "framework": "cnetmod-ws-baseline",
+    "profile": "echo-ws",
+    "connections": 512,
+    "round": 1,
+    "frames_sent": 15591458,
+    "frames_received": 15591046,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 3118209,
+    "latency_us": {
+      "mean": 166.0,
+      "p50": 68.0,
+      "p90": 219.0,
+      "p99": 2170.0,
+      "p999": 6770.0
+    },
+    "cpu_percent": 1520.1,
+    "memory": "64MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 412,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-baseline\\echo-ws.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    166us     68us    219us   2.17ms   6.77ms\n\n  15591458 frames sent in 5.00s, 15591046 frames received\n  Throughput: 3.12M req/s\n  Bandwidth:  20.82MB/s\n  WS upgrades: 512\n  WS frames:   15591046\n  Latency samples: 15591046 / 15591046 responses (100.0%)\n[info] CPU 1520.1% | Mem 64MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-baseline",
+    "profile": "echo-ws",
+    "connections": 512,
+    "round": 2,
+    "frames_sent": 12933328,
+    "frames_received": 12932984,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 2586596,
+    "latency_us": {
+      "mean": 200.0,
+      "p50": 70.0,
+      "p90": 292.0,
+      "p99": 2570.0,
+      "p999": 9560.0
+    },
+    "cpu_percent": 1529.0,
+    "memory": "68MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 344,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-baseline\\echo-ws.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    200us     70us    292us   2.57ms   9.56ms\n\n  12933328 frames sent in 5.00s, 12932984 frames received\n  Throughput: 2.59M req/s\n  Bandwidth:  17.27MB/s\n  WS upgrades: 512\n  WS frames:   12932984\n  Latency samples: 12932984 / 12932984 responses (100.0%)\n[info] CPU 1529.0% | Mem 68MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-baseline",
+    "profile": "echo-ws",
+    "connections": 512,
+    "round": 3,
+    "frames_sent": 10976099,
+    "frames_received": 10975611,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 2195122,
+    "latency_us": {
+      "mean": 235.0,
+      "p50": 65.0,
+      "p90": 328.0,
+      "p99": 3650.0,
+      "p999": 12800.0
+    },
+    "cpu_percent": 1475.3,
+    "memory": "68MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 488,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-baseline\\echo-ws.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    235us     65us    328us   3.65ms   12.80ms\n\n  10976099 frames sent in 5.00s, 10975611 frames received\n  Throughput: 2.19M req/s\n  Bandwidth:  14.66MB/s\n  WS upgrades: 512\n  WS frames:   10975611\n  Latency samples: 10975611 / 10975611 responses (100.0%)\n[info] CPU 1475.3% | Mem 68MiB\n\n=== Best: 3118209 req/s (CPU: 1520.1%, Mem: 64MiB) ===\n[info] saved results/echo-ws/512/cnetmod-ws-baseline.json\nhttparena-bench-cnetmod-ws-baseline\nhttparena-bench-cnetmod-ws-baseline\n\n=============================================="
+  },
+  {
+    "framework": "cnetmod-ws-baseline",
+    "profile": "echo-ws",
+    "connections": 4096,
+    "round": 1,
+    "frames_sent": 9716707,
+    "frames_received": 9712611,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 1938644,
+    "latency_us": {
+      "mean": 2090.0,
+      "p50": 601.0,
+      "p90": 5970.0,
+      "p99": 16700.0,
+      "p999": 41500.0
+    },
+    "cpu_percent": 1562.2,
+    "memory": "165MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 4096,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-baseline\\echo-ws.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   2.09ms    601us   5.97ms   16.70ms   41.50ms\n\n  9716707 frames sent in 5.01s, 9712611 frames received\n  Throughput: 1.94M req/s\n  Bandwidth:  13.04MB/s\n  WS upgrades: 4096\n  WS frames:   9712611\n  Latency samples: 9712611 / 9712611 responses (100.0%)\n[info] CPU 1562.2% | Mem 165MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-baseline",
+    "profile": "echo-ws",
+    "connections": 4096,
+    "round": 2,
+    "frames_sent": 11138365,
+    "frames_received": 11134269,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 2226853,
+    "latency_us": {
+      "mean": 1860.0,
+      "p50": 534.0,
+      "p90": 5340.0,
+      "p99": 16100.000000000002,
+      "p999": 37500.0
+    },
+    "cpu_percent": 1608.6,
+    "memory": "175MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 4096,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-baseline\\echo-ws.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   1.86ms    534us   5.34ms   16.10ms   37.50ms\n\n  11138365 frames sent in 5.00s, 11134269 frames received\n  Throughput: 2.23M req/s\n  Bandwidth:  14.96MB/s\n  WS upgrades: 4096\n  WS frames:   11134269\n  Latency samples: 11134269 / 11134269 responses (100.0%)\n[info] CPU 1608.6% | Mem 175MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-baseline",
+    "profile": "echo-ws",
+    "connections": 4096,
+    "round": 3,
+    "frames_sent": 11995221,
+    "frames_received": 11991125,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 2393438,
+    "latency_us": {
+      "mean": 1730.0,
+      "p50": 582.0,
+      "p90": 4940.0,
+      "p99": 14100.0,
+      "p999": 47800.0
+    },
+    "cpu_percent": 1584.7,
+    "memory": "178MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 4096,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-baseline\\echo-ws.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   1.73ms    582us   4.94ms   14.10ms   47.80ms\n\n  11995221 frames sent in 5.01s, 11991125 frames received\n  Throughput: 2.39M req/s\n  Bandwidth:  16.08MB/s\n  WS upgrades: 4096\n  WS frames:   11991125\n  Latency samples: 11991125 / 11991125 responses (100.0%)\n[info] CPU 1584.7% | Mem 178MiB\n\n=== Best: 2393438 req/s (CPU: 1584.7%, Mem: 178MiB) ===\n[info] saved results/echo-ws/4096/cnetmod-ws-baseline.json\nhttparena-bench-cnetmod-ws-baseline\nhttparena-bench-cnetmod-ws-baseline\n\n=============================================="
+  },
+  {
+    "framework": "cnetmod-ws-baseline",
+    "profile": "echo-ws",
+    "connections": 16384,
+    "round": 1,
+    "frames_sent": 8228523,
+    "frames_received": 8212139,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 1642427,
+    "latency_us": {
+      "mean": 8090.0,
+      "p50": 6920.0,
+      "p90": 16200.0,
+      "p99": 28200.0,
+      "p999": 42800.0
+    },
+    "cpu_percent": 1579.2,
+    "memory": "519MiB",
+    "errors": {
+      "connect": 0,
+      "read": 4,
+      "timeout": 0
+    },
+    "reconnects": 5,
+    "send_receive_delta": 16384,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-baseline\\echo-ws.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   8.09ms   6.92ms   16.20ms   28.20ms   42.80ms\n\n  8228523 frames sent in 5.00s, 8212139 frames received\n  Throughput: 1.64M req/s\n  Bandwidth:  11.36MB/s\n  WS upgrades: 16384\n  WS frames:   8212139\n  Latency samples: 8212139 / 8212139 responses (100.0%)\n  Reconnects: 5\n  Errors: connect 0, read 4, timeout 0\n[info] CPU 1579.2% | Mem 519MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-baseline",
+    "profile": "echo-ws",
+    "connections": 16384,
+    "round": 2,
+    "frames_sent": 6738817,
+    "frames_received": 6722433,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 1341802,
+    "latency_us": {
+      "mean": 11700.0,
+      "p50": 10000.0,
+      "p90": 20200.0,
+      "p99": 32700.000000000004,
+      "p999": 51300.0
+    },
+    "cpu_percent": 1810.9,
+    "memory": "549MiB",
+    "errors": {
+      "connect": 0,
+      "read": 2,
+      "timeout": 0
+    },
+    "reconnects": 2,
+    "send_receive_delta": 16384,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-baseline\\echo-ws.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   11.70ms   10.00ms   20.20ms   32.70ms   51.30ms\n\n  6738817 frames sent in 5.01s, 6722433 frames received\n  Throughput: 1.34M req/s\n  Bandwidth:  9.36MB/s\n  WS upgrades: 16384\n  WS frames:   6722433\n  Latency samples: 6722433 / 6722433 responses (100.0%)\n  Reconnects: 2\n  Errors: connect 0, read 2, timeout 0\n[info] CPU 1810.9% | Mem 549MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-baseline",
+    "profile": "echo-ws",
+    "connections": 16384,
+    "round": 3,
+    "frames_sent": 7001907,
+    "frames_received": 6985523,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 1397104,
+    "latency_us": {
+      "mean": 11020.0,
+      "p50": 9540.0,
+      "p90": 19200.0,
+      "p99": 34300.0,
+      "p999": 54100.0
+    },
+    "cpu_percent": 1680.3,
+    "memory": "550MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 16384,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-baseline\\echo-ws.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   11.02ms   9.54ms   19.20ms   34.30ms   54.10ms\n\n  7001907 frames sent in 5.00s, 6985523 frames received\n  Throughput: 1.40M req/s\n  Bandwidth:  9.72MB/s\n  WS upgrades: 16384\n  WS frames:   6985523\n  Latency samples: 6985523 / 6985523 responses (100.0%)\n[info] CPU 1680.3% | Mem 550MiB\n\n=== Best: 1642427 req/s (CPU: 1579.2%, Mem: 519MiB) ===\n[info] saved results/echo-ws/16384/cnetmod-ws-baseline.json\nhttparena-bench-cnetmod-ws-baseline\nhttparena-bench-cnetmod-ws-baseline\n[info] rebuilding site/data/*.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/frameworks.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-baseline.json - 3 new, 3 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/current.json\n[info] done"
+  },
+  {
+    "framework": "cnetmod-ws-candidate",
+    "profile": "echo-ws-limited",
+    "connections": 512,
+    "round": 1,
+    "frames_sent": 3851573,
+    "frames_received": 3851112,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 770222,
+    "latency_us": {
+      "mean": 538.0,
+      "p50": 108.0,
+      "p90": 1150.0,
+      "p99": 7700.0,
+      "p999": 13200.0
+    },
+    "cpu_percent": 1178.0,
+    "memory": "77MiB",
+    "errors": {
+      "connect": 0,
+      "read": 20,
+      "timeout": 0
+    },
+    "reconnects": 384942,
+    "send_receive_delta": 461,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-candidate\\echo-ws-limited.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    538us    108us   1.15ms   7.70ms   13.20ms\n\n  3851573 frames sent in 5.00s, 3851112 frames received\n  Throughput: 769.83K req/s\n  Bandwidth:  14.62MB/s\n  WS upgrades: 386763\n  WS frames:   3851112\n  Latency samples: 3851112 / 3851112 responses (100.0%)\n  Reconnects: 384942\n  Errors: connect 0, read 20, timeout 0\n[info] CPU 1178.0% | Mem 77MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-candidate",
+    "profile": "echo-ws-limited",
+    "connections": 512,
+    "round": 2,
+    "frames_sent": 4153264,
+    "frames_received": 4153047,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 830609,
+    "latency_us": {
+      "mean": 516.0,
+      "p50": 101.0,
+      "p90": 1070.0,
+      "p99": 7760.0,
+      "p999": 14100.0
+    },
+    "cpu_percent": 1228.2,
+    "memory": "79MiB",
+    "errors": {
+      "connect": 0,
+      "read": 14,
+      "timeout": 0
+    },
+    "reconnects": 415232,
+    "send_receive_delta": 217,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-candidate\\echo-ws-limited.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    516us    101us   1.07ms   7.76ms   14.10ms\n\n  4153264 frames sent in 5.00s, 4153047 frames received\n  Throughput: 830.16K req/s\n  Bandwidth:  15.76MB/s\n  WS upgrades: 419008\n  WS frames:   4153047\n  Latency samples: 4153047 / 4153047 responses (100.0%)\n  Reconnects: 415232\n  Errors: connect 0, read 14, timeout 0\n[info] CPU 1228.2% | Mem 79MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-candidate",
+    "profile": "echo-ws-limited",
+    "connections": 512,
+    "round": 3,
+    "frames_sent": 4580957,
+    "frames_received": 4580566,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 916113,
+    "latency_us": {
+      "mean": 474.0,
+      "p50": 99.0,
+      "p90": 1040.0,
+      "p99": 6670.0,
+      "p999": 12300.0
+    },
+    "cpu_percent": 1215.4,
+    "memory": "79MiB",
+    "errors": {
+      "connect": 0,
+      "read": 18,
+      "timeout": 0
+    },
+    "reconnects": 457902,
+    "send_receive_delta": 391,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-candidate\\echo-ws-limited.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    474us     99us   1.04ms   6.67ms   12.30ms\n\n  4580957 frames sent in 5.00s, 4580566 frames received\n  Throughput: 915.89K req/s\n  Bandwidth:  17.39MB/s\n  WS upgrades: 460543\n  WS frames:   4580566\n  Latency samples: 4580566 / 4580566 responses (100.0%)\n  Reconnects: 457902\n  Errors: connect 0, read 18, timeout 0\n[info] CPU 1215.4% | Mem 79MiB\n\n=== Best: 916113 req/s (CPU: 1215.4%, Mem: 79MiB) ===\n[info] saved results/echo-ws-limited/512/cnetmod-ws-candidate.json\nhttparena-bench-cnetmod-ws-candidate\nhttparena-bench-cnetmod-ws-candidate\n\n=============================================="
+  },
+  {
+    "framework": "cnetmod-ws-candidate",
+    "profile": "echo-ws-limited",
+    "connections": 4096,
+    "round": 1,
+    "frames_sent": 4433419,
+    "frames_received": 4429905,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 885981,
+    "latency_us": {
+      "mean": 3900.0,
+      "p50": 216.0,
+      "p90": 12600.0,
+      "p99": 46700.0,
+      "p999": 74800.0
+    },
+    "cpu_percent": 1232.3,
+    "memory": "197MiB",
+    "errors": {
+      "connect": 0,
+      "read": 38,
+      "timeout": 0
+    },
+    "reconnects": 441622,
+    "send_receive_delta": 3514,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-candidate\\echo-ws-limited.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   3.90ms    216us   12.60ms   46.70ms   74.80ms\n\n  4433419 frames sent in 5.00s, 4429905 frames received\n  Throughput: 885.67K req/s\n  Bandwidth:  16.86MB/s\n  WS upgrades: 445098\n  WS frames:   4429905\n  Latency samples: 4429905 / 4429905 responses (100.0%)\n  Reconnects: 441622\n  Errors: connect 0, read 38, timeout 0\n[info] CPU 1232.3% | Mem 197MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-candidate",
+    "profile": "echo-ws-limited",
+    "connections": 4096,
+    "round": 2,
+    "frames_sent": 4533090,
+    "frames_received": 4529382,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 905876,
+    "latency_us": {
+      "mean": 3830.0,
+      "p50": 224.0,
+      "p90": 12200.0,
+      "p99": 40200.0,
+      "p999": 78200.0
+    },
+    "cpu_percent": 1298.8,
+    "memory": "200MiB",
+    "errors": {
+      "connect": 0,
+      "read": 42,
+      "timeout": 0
+    },
+    "reconnects": 451441,
+    "send_receive_delta": 3708,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-candidate\\echo-ws-limited.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   3.83ms    224us   12.20ms   40.20ms   78.20ms\n\n  4533090 frames sent in 5.00s, 4529382 frames received\n  Throughput: 905.56K req/s\n  Bandwidth:  17.24MB/s\n  WS upgrades: 455107\n  WS frames:   4529382\n  Latency samples: 4529382 / 4529382 responses (100.0%)\n  Reconnects: 451441\n  Errors: connect 0, read 42, timeout 0\n[info] CPU 1298.8% | Mem 200MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-candidate",
+    "profile": "echo-ws-limited",
+    "connections": 4096,
+    "round": 3,
+    "frames_sent": 4346885,
+    "frames_received": 4343270,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 868654,
+    "latency_us": {
+      "mean": 3960.0,
+      "p50": 277.0,
+      "p90": 12500.0,
+      "p99": 42600.0,
+      "p999": 72900.0
+    },
+    "cpu_percent": 1252.5,
+    "memory": "215MiB",
+    "errors": {
+      "connect": 0,
+      "read": 39,
+      "timeout": 0
+    },
+    "reconnects": 433048,
+    "send_receive_delta": 3615,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-candidate\\echo-ws-limited.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   3.96ms    277us   12.50ms   42.60ms   72.90ms\n\n  4346885 frames sent in 5.00s, 4343270 frames received\n  Throughput: 868.21K req/s\n  Bandwidth:  16.53MB/s\n  WS upgrades: 436624\n  WS frames:   4343270\n  Latency samples: 4343270 / 4343270 responses (100.0%)\n  Reconnects: 433048\n  Errors: connect 0, read 39, timeout 0\n[info] CPU 1252.5% | Mem 215MiB\n\n=== Best: 905876 req/s (CPU: 1298.8%, Mem: 200MiB) ===\n[info] saved results/echo-ws-limited/4096/cnetmod-ws-candidate.json\nhttparena-bench-cnetmod-ws-candidate\nhttparena-bench-cnetmod-ws-candidate\n[info] rebuilding site/data/*.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/frameworks.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-baseline.json - 8 new, 8 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-candidate.json - 8 new, 8 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/genhttp-ioxide.json - 8 new, 33 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/current.json\n[info] done"
+  },
+  {
+    "framework": "cnetmod-ws-candidate",
+    "profile": "echo-ws-pipeline",
+    "connections": 512,
+    "round": 1,
+    "frames_sent": 61820885,
+    "frames_received": 61813717,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 12362743,
+    "latency_us": {
+      "mean": 672.0,
+      "p50": 73.0,
+      "p90": 288.0,
+      "p99": 17300.0,
+      "p999": 36100.0
+    },
+    "cpu_percent": 1526.9,
+    "memory": "62MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 7168,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-candidate\\echo-ws-pipeline.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    672us     73us    288us   17.30ms   36.10ms\n\n  61820885 frames sent in 5.00s, 61813717 frames received\n  Throughput: 12.35M req/s\n  Bandwidth:  82.48MB/s\n  WS upgrades: 512\n  WS frames:   61813717\n  Latency samples: 61813717 / 61813717 responses (100.0%)\n[info] CPU 1526.9% | Mem 62MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-candidate",
+    "profile": "echo-ws-pipeline",
+    "connections": 512,
+    "round": 2,
+    "frames_sent": 66923103,
+    "frames_received": 66916063,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 13356499,
+    "latency_us": {
+      "mean": 624.0,
+      "p50": 72.0,
+      "p90": 252.0,
+      "p99": 16900.0,
+      "p999": 32900.0
+    },
+    "cpu_percent": 1634.7,
+    "memory": "66MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 7040,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-candidate\\echo-ws-pipeline.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    624us     72us    252us   16.90ms   32.90ms\n\n  66923103 frames sent in 5.01s, 66916063 frames received\n  Throughput: 13.37M req/s\n  Bandwidth:  89.24MB/s\n  WS upgrades: 512\n  WS frames:   66916063\n  Latency samples: 66916063 / 66916063 responses (100.0%)\n[info] CPU 1634.7% | Mem 66MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-candidate",
+    "profile": "echo-ws-pipeline",
+    "connections": 512,
+    "round": 3,
+    "frames_sent": 66754627,
+    "frames_received": 66752819,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 13323915,
+    "latency_us": {
+      "mean": 622.0,
+      "p50": 72.0,
+      "p90": 243.0,
+      "p99": 17300.0,
+      "p999": 32200.000000000004
+    },
+    "cpu_percent": 1584.8,
+    "memory": "66MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 1808,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-candidate\\echo-ws-pipeline.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    622us     72us    243us   17.30ms   32.20ms\n\n  66754627 frames sent in 5.01s, 66752819 frames received\n  Throughput: 13.33M req/s\n  Bandwidth:  88.99MB/s\n  WS upgrades: 512\n  WS frames:   66752819\n  Latency samples: 66752819 / 66752819 responses (100.0%)\n[info] CPU 1584.8% | Mem 66MiB\n\n=== Best: 13356499 req/s (CPU: 1634.7%, Mem: 66MiB) ===\n[info] saved results/echo-ws-pipeline/512/cnetmod-ws-candidate.json\nhttparena-bench-cnetmod-ws-candidate\nhttparena-bench-cnetmod-ws-candidate\n\n=============================================="
+  },
+  {
+    "framework": "cnetmod-ws-candidate",
+    "profile": "echo-ws-pipeline",
+    "connections": 4096,
+    "round": 1,
+    "frames_sent": 62086102,
+    "frames_received": 62020566,
+    "elapsed_seconds": 5.03,
+    "frames_per_second": 12330132,
+    "latency_us": {
+      "mean": 5140.0,
+      "p50": 678.0,
+      "p90": 19000.0,
+      "p99": 33300.0,
+      "p999": 62600.0
+    },
+    "cpu_percent": 1501.5,
+    "memory": "164MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 65536,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-candidate\\echo-ws-pipeline.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   5.14ms    678us   19.00ms   33.30ms   62.60ms\n\n  62086102 frames sent in 5.03s, 62020566 frames received\n  Throughput: 12.34M req/s\n  Bandwidth:  82.46MB/s\n  WS upgrades: 4096\n  WS frames:   62020566\n  Latency samples: 62020566 / 62020566 responses (100.0%)\n[info] CPU 1501.5% | Mem 164MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-candidate",
+    "profile": "echo-ws-pipeline",
+    "connections": 4096,
+    "round": 2,
+    "frames_sent": 19558123,
+    "frames_received": 19493939,
+    "elapsed_seconds": 5.17,
+    "frames_per_second": 3770587,
+    "latency_us": {
+      "mean": 19080.0,
+      "p50": 610.0,
+      "p90": 62600.0,
+      "p99": 186100.0,
+      "p999": 323100.0
+    },
+    "cpu_percent": 2060.8,
+    "memory": "166MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 64184,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-candidate\\echo-ws-pipeline.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   19.08ms    610us   62.60ms   186.10ms   323.10ms\n\n  19558123 frames sent in 5.17s, 19493939 frames received\n  Throughput: 3.77M req/s\n  Bandwidth:  25.29MB/s\n  WS upgrades: 4096\n  WS frames:   19493939\n  Latency samples: 19493939 / 19493939 responses (100.0%)\n[info] CPU 2060.8% | Mem 166MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-candidate",
+    "profile": "echo-ws-pipeline",
+    "connections": 4096,
+    "round": 3,
+    "frames_sent": 36742971,
+    "frames_received": 36677435,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 7320845,
+    "latency_us": {
+      "mean": 9160.0,
+      "p50": 632.0,
+      "p90": 29300.0,
+      "p99": 82200.0,
+      "p999": 164600.0
+    },
+    "cpu_percent": 1689.8,
+    "memory": "166MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 65536,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-candidate\\echo-ws-pipeline.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   9.16ms    632us   29.30ms   82.20ms   164.60ms\n\n  36742971 frames sent in 5.01s, 36677435 frames received\n  Throughput: 7.32M req/s\n  Bandwidth:  48.95MB/s\n  WS upgrades: 4096\n  WS frames:   36677435\n  Latency samples: 36677435 / 36677435 responses (100.0%)\n[info] CPU 1689.8% | Mem 166MiB\n\n=== Best: 12330132 req/s (CPU: 1501.5%, Mem: 164MiB) ===\n[info] saved results/echo-ws-pipeline/4096/cnetmod-ws-candidate.json\nhttparena-bench-cnetmod-ws-candidate\nhttparena-bench-cnetmod-ws-candidate\n\n=============================================="
+  },
+  {
+    "framework": "cnetmod-ws-candidate",
+    "profile": "echo-ws-pipeline",
+    "connections": 16384,
+    "round": 1,
+    "frames_sent": 22228059,
+    "frames_received": 21966048,
+    "elapsed_seconds": 5.03,
+    "frames_per_second": 4367007,
+    "latency_us": {
+      "mean": 47820.0,
+      "p50": 34400.0,
+      "p90": 119400.0,
+      "p99": 216800.0,
+      "p999": 309600.0
+    },
+    "cpu_percent": 1407.1,
+    "memory": "544MiB",
+    "errors": {
+      "connect": 0,
+      "read": 2,
+      "timeout": 0
+    },
+    "reconnects": 2,
+    "send_receive_delta": 262011,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-candidate\\echo-ws-pipeline.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   47.82ms   34.40ms   119.40ms   216.80ms   309.60ms\n\n  22228059 frames sent in 5.03s, 21966048 frames received\n  Throughput: 4.37M req/s\n  Bandwidth:  29.58MB/s\n  WS upgrades: 16384\n  WS frames:   21966048\n  Latency samples: 21966048 / 21966048 responses (100.0%)\n  Reconnects: 2\n  Errors: connect 0, read 2, timeout 0\n[info] CPU 1407.1% | Mem 544MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-candidate",
+    "profile": "echo-ws-pipeline",
+    "connections": 16384,
+    "round": 2,
+    "frames_sent": 13318660,
+    "frames_received": 13056516,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 2606091,
+    "latency_us": {
+      "mean": 96380.0,
+      "p50": 81200.0,
+      "p90": 203000.0,
+      "p99": 364000.0,
+      "p999": 481300.0
+    },
+    "cpu_percent": 1640.0,
+    "memory": "550MiB",
+    "errors": {
+      "connect": 0,
+      "read": 2,
+      "timeout": 0
+    },
+    "reconnects": 2,
+    "send_receive_delta": 262144,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-candidate\\echo-ws-pipeline.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   96.38ms   81.20ms   203.00ms   364.00ms   481.30ms\n\n  13318660 frames sent in 5.01s, 13056516 frames received\n  Throughput: 2.60M req/s\n  Bandwidth:  17.78MB/s\n  WS upgrades: 16384\n  WS frames:   13056516\n  Latency samples: 13056516 / 13056516 responses (100.0%)\n  Reconnects: 2\n  Errors: connect 0, read 2, timeout 0\n[info] CPU 1640.0% | Mem 550MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-candidate",
+    "profile": "echo-ws-pipeline",
+    "connections": 16384,
+    "round": 3,
+    "frames_sent": 12185734,
+    "frames_received": 11923752,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 2379990,
+    "latency_us": {
+      "mean": 104300.0,
+      "p50": 95000.0,
+      "p90": 218400.0,
+      "p99": 384100.0,
+      "p999": 499300.0
+    },
+    "cpu_percent": 1500.6,
+    "memory": "560MiB",
+    "errors": {
+      "connect": 0,
+      "read": 2,
+      "timeout": 0
+    },
+    "reconnects": 2,
+    "send_receive_delta": 261982,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-candidate\\echo-ws-pipeline.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   104.30ms   95.00ms   218.40ms   384.10ms   499.30ms\n\n  12185734 frames sent in 5.01s, 11923752 frames received\n  Throughput: 2.38M req/s\n  Bandwidth:  16.30MB/s\n  WS upgrades: 16384\n  WS frames:   11923752\n  Latency samples: 11923752 / 11923752 responses (100.0%)\n  Reconnects: 2\n  Errors: connect 0, read 2, timeout 0\n[info] CPU 1500.6% | Mem 560MiB\n\n=== Best: 4367007 req/s (CPU: 1407.1%, Mem: 544MiB) ===\n[info] saved results/echo-ws-pipeline/16384/cnetmod-ws-candidate.json\nhttparena-bench-cnetmod-ws-candidate\nhttparena-bench-cnetmod-ws-candidate\n[info] rebuilding site/data/*.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/frameworks.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-baseline.json - 8 new, 8 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-candidate.json - 6 new, 6 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/genhttp-ioxide.json - 8 new, 33 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/current.json\n[info] done"
+  },
+  {
+    "framework": "cnetmod-ws-candidate",
+    "profile": "echo-ws",
+    "connections": 512,
+    "round": 1,
+    "frames_sent": 13485889,
+    "frames_received": 13485449,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 2697089,
+    "latency_us": {
+      "mean": 192.0,
+      "p50": 70.0,
+      "p90": 283.0,
+      "p99": 2100.0,
+      "p999": 10100.0
+    },
+    "cpu_percent": 1473.0,
+    "memory": "60MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 440,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-candidate\\echo-ws.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    192us     70us    283us   2.10ms   10.10ms\n\n  13485889 frames sent in 5.00s, 13485449 frames received\n  Throughput: 2.70M req/s\n  Bandwidth:  18.01MB/s\n  WS upgrades: 512\n  WS frames:   13485449\n  Latency samples: 13485449 / 13485449 responses (100.0%)\n[info] CPU 1473.0% | Mem 60MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-candidate",
+    "profile": "echo-ws",
+    "connections": 512,
+    "round": 2,
+    "frames_sent": 13471024,
+    "frames_received": 13470808,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 2694161,
+    "latency_us": {
+      "mean": 193.0,
+      "p50": 70.0,
+      "p90": 296.0,
+      "p99": 2160.0,
+      "p999": 9750.0
+    },
+    "cpu_percent": 1493.2,
+    "memory": "66MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 216,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-candidate\\echo-ws.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    193us     70us    296us   2.16ms   9.75ms\n\n  13471024 frames sent in 5.00s, 13470808 frames received\n  Throughput: 2.69M req/s\n  Bandwidth:  17.99MB/s\n  WS upgrades: 512\n  WS frames:   13470808\n  Latency samples: 13470808 / 13470808 responses (100.0%)\n[info] CPU 1493.2% | Mem 66MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-candidate",
+    "profile": "echo-ws",
+    "connections": 512,
+    "round": 3,
+    "frames_sent": 13056938,
+    "frames_received": 13056610,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 2611322,
+    "latency_us": {
+      "mean": 198.0,
+      "p50": 69.0,
+      "p90": 305.0,
+      "p99": 2350.0,
+      "p999": 9670.0
+    },
+    "cpu_percent": 1477.9,
+    "memory": "66MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 328,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-candidate\\echo-ws.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    198us     69us    305us   2.35ms   9.67ms\n\n  13056938 frames sent in 5.00s, 13056610 frames received\n  Throughput: 2.61M req/s\n  Bandwidth:  17.43MB/s\n  WS upgrades: 512\n  WS frames:   13056610\n  Latency samples: 13056610 / 13056610 responses (100.0%)\n[info] CPU 1477.9% | Mem 66MiB\n\n=== Best: 2697089 req/s (CPU: 1473.0%, Mem: 60MiB) ===\n[info] saved results/echo-ws/512/cnetmod-ws-candidate.json\nhttparena-bench-cnetmod-ws-candidate\nhttparena-bench-cnetmod-ws-candidate\n\n=============================================="
+  },
+  {
+    "framework": "cnetmod-ws-candidate",
+    "profile": "echo-ws",
+    "connections": 4096,
+    "round": 1,
+    "frames_sent": 11556244,
+    "frames_received": 11552148,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 2305817,
+    "latency_us": {
+      "mean": 1740.0,
+      "p50": 577.0,
+      "p90": 5140.0,
+      "p99": 13000.0,
+      "p999": 40800.0
+    },
+    "cpu_percent": 1480.8,
+    "memory": "163MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 4096,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-candidate\\echo-ws.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   1.74ms    577us   5.14ms   13.00ms   40.80ms\n\n  11556244 frames sent in 5.01s, 11552148 frames received\n  Throughput: 2.31M req/s\n  Bandwidth:  15.50MB/s\n  WS upgrades: 4096\n  WS frames:   11552148\n  Latency samples: 11552148 / 11552148 responses (100.0%)\n[info] CPU 1480.8% | Mem 163MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-candidate",
+    "profile": "echo-ws",
+    "connections": 4096,
+    "round": 2,
+    "frames_sent": 11946590,
+    "frames_received": 11942494,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 2388498,
+    "latency_us": {
+      "mean": 1740.0,
+      "p50": 464.0,
+      "p90": 5110.0,
+      "p99": 15100.0,
+      "p999": 45300.0
+    },
+    "cpu_percent": 1634.1,
+    "memory": "162MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 4096,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-candidate\\echo-ws.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   1.74ms    464us   5.11ms   15.10ms   45.30ms\n\n  11946590 frames sent in 5.00s, 11942494 frames received\n  Throughput: 2.39M req/s\n  Bandwidth:  16.03MB/s\n  WS upgrades: 4096\n  WS frames:   11942494\n  Latency samples: 11942494 / 11942494 responses (100.0%)\n[info] CPU 1634.1% | Mem 162MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-candidate",
+    "profile": "echo-ws",
+    "connections": 4096,
+    "round": 3,
+    "frames_sent": 11486273,
+    "frames_received": 11482241,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 2296448,
+    "latency_us": {
+      "mean": 1810.0,
+      "p50": 589.0,
+      "p90": 5240.0,
+      "p99": 13700.0,
+      "p999": 38800.0
+    },
+    "cpu_percent": 1507.2,
+    "memory": "169MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 4032,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-candidate\\echo-ws.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   1.81ms    589us   5.24ms   13.70ms   38.80ms\n\n  11486273 frames sent in 5.00s, 11482241 frames received\n  Throughput: 2.29M req/s\n  Bandwidth:  15.42MB/s\n  WS upgrades: 4096\n  WS frames:   11482241\n  Latency samples: 11482241 / 11482241 responses (100.0%)\n[info] CPU 1507.2% | Mem 169MiB\n\n=== Best: 2388498 req/s (CPU: 1634.1%, Mem: 162MiB) ===\n[info] saved results/echo-ws/4096/cnetmod-ws-candidate.json\nhttparena-bench-cnetmod-ws-candidate\nhttparena-bench-cnetmod-ws-candidate\n\n=============================================="
+  },
+  {
+    "framework": "cnetmod-ws-candidate",
+    "profile": "echo-ws",
+    "connections": 16384,
+    "round": 1,
+    "frames_sent": 5995391,
+    "frames_received": 5979007,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 1193414,
+    "latency_us": {
+      "mean": 11340.0,
+      "p50": 9320.0,
+      "p90": 23000.0,
+      "p99": 39900.0,
+      "p999": 62300.0
+    },
+    "cpu_percent": 1553.5,
+    "memory": "510MiB",
+    "errors": {
+      "connect": 0,
+      "read": 1,
+      "timeout": 0
+    },
+    "reconnects": 1,
+    "send_receive_delta": 16384,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-candidate\\echo-ws.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   11.34ms   9.32ms   23.00ms   39.90ms   62.30ms\n\n  5995391 frames sent in 5.01s, 5979007 frames received\n  Throughput: 1.19M req/s\n  Bandwidth:  8.37MB/s\n  WS upgrades: 16384\n  WS frames:   5979007\n  Latency samples: 5979007 / 5979007 responses (100.0%)\n  Reconnects: 1\n  Errors: connect 0, read 1, timeout 0\n[info] CPU 1553.5% | Mem 510MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-candidate",
+    "profile": "echo-ws",
+    "connections": 16384,
+    "round": 2,
+    "frames_sent": 5316043,
+    "frames_received": 5299659,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 1057816,
+    "latency_us": {
+      "mean": 14900.0,
+      "p50": 14300.0,
+      "p90": 24900.0,
+      "p99": 48500.0,
+      "p999": 98900.0
+    },
+    "cpu_percent": 1785.9,
+    "memory": "536MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 16384,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-candidate\\echo-ws.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   14.90ms   14.30ms   24.90ms   48.50ms   98.90ms\n\n  5316043 frames sent in 5.01s, 5299659 frames received\n  Throughput: 1.06M req/s\n  Bandwidth:  7.46MB/s\n  WS upgrades: 16384\n  WS frames:   5299659\n  Latency samples: 5299659 / 5299659 responses (100.0%)\n[info] CPU 1785.9% | Mem 536MiB\n"
+  },
+  {
+    "framework": "cnetmod-ws-candidate",
+    "profile": "echo-ws",
+    "connections": 16384,
+    "round": 3,
+    "frames_sent": 5502517,
+    "frames_received": 5486133,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 1097226,
+    "latency_us": {
+      "mean": 14100.0,
+      "p50": 13700.0,
+      "p90": 23600.0,
+      "p99": 39800.0,
+      "p999": 68500.0
+    },
+    "cpu_percent": 1634.7,
+    "memory": "526MiB",
+    "errors": {
+      "connect": 0,
+      "read": 1,
+      "timeout": 0
+    },
+    "reconnects": 1,
+    "send_receive_delta": 16384,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\cnetmod-ws-candidate\\echo-ws.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   14.10ms   13.70ms   23.60ms   39.80ms   68.50ms\n\n  5502517 frames sent in 5.00s, 5486133 frames received\n  Throughput: 1.10M req/s\n  Bandwidth:  7.72MB/s\n  WS upgrades: 16384\n  WS frames:   5486133\n  Latency samples: 5486133 / 5486133 responses (100.0%)\n  Reconnects: 1\n  Errors: connect 0, read 1, timeout 0\n[info] CPU 1634.7% | Mem 526MiB\n\n=== Best: 1193414 req/s (CPU: 1553.5%, Mem: 510MiB) ===\n[info] saved results/echo-ws/16384/cnetmod-ws-candidate.json\nhttparena-bench-cnetmod-ws-candidate\nhttparena-bench-cnetmod-ws-candidate\n[info] rebuilding site/data/*.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/frameworks.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-baseline.json - 8 new, 8 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-candidate.json - 3 new, 3 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/genhttp-ioxide.json - 8 new, 33 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/current.json\n[info] done"
+  },
+  {
+    "framework": "fulmine",
+    "profile": "echo-ws-limited",
+    "connections": 512,
+    "round": 1,
+    "frames_sent": 4055405,
+    "frames_received": 4055011,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 811002,
+    "latency_us": {
+      "mean": 469.0,
+      "p50": 107.0,
+      "p90": 1210.0,
+      "p99": 4750.0,
+      "p999": 12200.0
+    },
+    "cpu_percent": 1192.8,
+    "memory": "1.1GiB",
+    "errors": {
+      "connect": 0,
+      "read": 14,
+      "timeout": 0
+    },
+    "reconnects": 405328,
+    "send_receive_delta": 394,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\fulmine\\echo-ws-limited.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    469us    107us   1.21ms   4.75ms   12.20ms\n\n  4055405 frames sent in 5.00s, 4055011 frames received\n  Throughput: 810.58K req/s\n  Bandwidth:  18.25MB/s\n  WS upgrades: 407522\n  WS frames:   4055011\n  Latency samples: 4055011 / 4055011 responses (100.0%)\n  Reconnects: 405328\n  Errors: connect 0, read 14, timeout 0\n[info] CPU 1192.8% | Mem 1.1GiB\n"
+  },
+  {
+    "framework": "fulmine",
+    "profile": "echo-ws-limited",
+    "connections": 512,
+    "round": 2,
+    "frames_sent": 4395788,
+    "frames_received": 4395650,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 879130,
+    "latency_us": {
+      "mean": 456.0,
+      "p50": 107.0,
+      "p90": 1190.0,
+      "p99": 4900.0,
+      "p999": 9740.0
+    },
+    "cpu_percent": 1286.0,
+    "memory": "1.1GiB",
+    "errors": {
+      "connect": 0,
+      "read": 15,
+      "timeout": 0
+    },
+    "reconnects": 439493,
+    "send_receive_delta": 138,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\fulmine\\echo-ws-limited.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    456us    107us   1.19ms   4.90ms   9.74ms\n\n  4395788 frames sent in 5.00s, 4395650 frames received\n  Throughput: 878.82K req/s\n  Bandwidth:  19.78MB/s\n  WS upgrades: 445411\n  WS frames:   4395650\n  Latency samples: 4395650 / 4395650 responses (100.0%)\n  Reconnects: 439493\n  Errors: connect 0, read 15, timeout 0\n[info] CPU 1286.0% | Mem 1.1GiB\n"
+  },
+  {
+    "framework": "fulmine",
+    "profile": "echo-ws-limited",
+    "connections": 512,
+    "round": 3,
+    "frames_sent": 3962619,
+    "frames_received": 3962458,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 792491,
+    "latency_us": {
+      "mean": 505.0,
+      "p50": 119.0,
+      "p90": 1340.0,
+      "p99": 5410.0,
+      "p999": 10500.0
+    },
+    "cpu_percent": 1237.3,
+    "memory": "1.0GiB",
+    "errors": {
+      "connect": 0,
+      "read": 8,
+      "timeout": 0
+    },
+    "reconnects": 396185,
+    "send_receive_delta": 161,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\fulmine\\echo-ws-limited.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    505us    119us   1.34ms   5.41ms   10.50ms\n\n  3962619 frames sent in 5.00s, 3962458 frames received\n  Throughput: 792.19K req/s\n  Bandwidth:  17.83MB/s\n  WS upgrades: 401930\n  WS frames:   3962458\n  Latency samples: 3962458 / 3962458 responses (100.0%)\n  Reconnects: 396185\n  Errors: connect 0, read 8, timeout 0\n[info] CPU 1237.3% | Mem 1.0GiB\n\n=== Best: 879130 req/s (CPU: 1286.0%, Mem: 1.1GiB) ===\n[info] saved results/echo-ws-limited/512/fulmine.json\nhttparena-bench-fulmine\nhttparena-bench-fulmine\n\n=============================================="
+  },
+  {
+    "framework": "fulmine",
+    "profile": "echo-ws-limited",
+    "connections": 4096,
+    "round": 1,
+    "frames_sent": 4713586,
+    "frames_received": 4710420,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 942084,
+    "latency_us": {
+      "mean": 3250.0,
+      "p50": 384.0,
+      "p90": 10400.0,
+      "p99": 29500.0,
+      "p999": 56200.0
+    },
+    "cpu_percent": 1219.3,
+    "memory": "1.2GiB",
+    "errors": {
+      "connect": 0,
+      "read": 38,
+      "timeout": 0
+    },
+    "reconnects": 469728,
+    "send_receive_delta": 3166,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\fulmine\\echo-ws-limited.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   3.25ms    384us   10.40ms   29.50ms   56.20ms\n\n  4713586 frames sent in 5.00s, 4710420 frames received\n  Throughput: 941.57K req/s\n  Bandwidth:  21.25MB/s\n  WS upgrades: 472856\n  WS frames:   4710420\n  Latency samples: 4710420 / 4710420 responses (100.0%)\n  Reconnects: 469728\n  Errors: connect 0, read 38, timeout 0\n[info] CPU 1219.3% | Mem 1.2GiB\n"
+  },
+  {
+    "framework": "fulmine",
+    "profile": "echo-ws-limited",
+    "connections": 4096,
+    "round": 2,
+    "frames_sent": 4819606,
+    "frames_received": 4816501,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 963300,
+    "latency_us": {
+      "mean": 3280.0,
+      "p50": 343.0,
+      "p90": 10800.0,
+      "p99": 30300.0,
+      "p999": 51000.0
+    },
+    "cpu_percent": 1384.1,
+    "memory": "1.2GiB",
+    "errors": {
+      "connect": 0,
+      "read": 54,
+      "timeout": 0
+    },
+    "reconnects": 480275,
+    "send_receive_delta": 3105,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\fulmine\\echo-ws-limited.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   3.28ms    343us   10.80ms   30.30ms   51.00ms\n\n  4819606 frames sent in 5.00s, 4816501 frames received\n  Throughput: 962.99K req/s\n  Bandwidth:  21.73MB/s\n  WS upgrades: 483390\n  WS frames:   4816501\n  Latency samples: 4816501 / 4816501 responses (100.0%)\n  Reconnects: 480275\n  Errors: connect 0, read 54, timeout 0\n[info] CPU 1384.1% | Mem 1.2GiB\n"
+  },
+  {
+    "framework": "fulmine",
+    "profile": "echo-ws-limited",
+    "connections": 4096,
+    "round": 3,
+    "frames_sent": 5166934,
+    "frames_received": 5163921,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 1032784,
+    "latency_us": {
+      "mean": 3070.0,
+      "p50": 266.0,
+      "p90": 10600.0,
+      "p99": 28200.0,
+      "p999": 44300.0
+    },
+    "cpu_percent": 1299.0,
+    "memory": "1.1GiB",
+    "errors": {
+      "connect": 0,
+      "read": 43,
+      "timeout": 0
+    },
+    "reconnects": 515285,
+    "send_receive_delta": 3013,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\fulmine\\echo-ws-limited.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   3.07ms    266us   10.60ms   28.20ms   44.30ms\n\n  5166934 frames sent in 5.00s, 5163921 frames received\n  Throughput: 1.03M req/s\n  Bandwidth:  23.30MB/s\n  WS upgrades: 518386\n  WS frames:   5163921\n  Latency samples: 5163921 / 5163921 responses (100.0%)\n  Reconnects: 515285\n  Errors: connect 0, read 43, timeout 0\n[info] CPU 1299.0% | Mem 1.1GiB\n\n=== Best: 1032784 req/s (CPU: 1299.0%, Mem: 1.1GiB) ===\n[info] saved results/echo-ws-limited/4096/fulmine.json\nhttparena-bench-fulmine\nhttparena-bench-fulmine\n[info] rebuilding site/data/*.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/frameworks.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-baseline.json - 8 new, 8 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-candidate.json - 8 new, 8 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/fulmine.js.json - 8 new, 28 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/genhttp-ioxide.json - 8 new, 33 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/current.json\n[info] done\nhttparena-postgres"
+  },
+  {
+    "framework": "fulmine",
+    "profile": "echo-ws-pipeline",
+    "connections": 512,
+    "round": 1,
+    "frames_sent": 42498384,
+    "frames_received": 42492640,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 8498528,
+    "latency_us": {
+      "mean": 968.0,
+      "p50": 1020.0,
+      "p90": 1740.0,
+      "p99": 2980.0,
+      "p999": 3840.0
+    },
+    "cpu_percent": 1024.3,
+    "memory": "1.0GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 5744,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\fulmine\\echo-ws-pipeline.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    968us   1.02ms   1.74ms   2.98ms   3.84ms\n\n  42498384 frames sent in 5.00s, 42492640 frames received\n  Throughput: 8.50M req/s\n  Bandwidth:  56.73MB/s\n  WS upgrades: 512\n  WS frames:   42492640\n  Latency samples: 42492640 / 42492640 responses (100.0%)\n[info] CPU 1024.3% | Mem 1.0GiB\n"
+  },
+  {
+    "framework": "fulmine",
+    "profile": "echo-ws-pipeline",
+    "connections": 512,
+    "round": 2,
+    "frames_sent": 78468416,
+    "frames_received": 78466832,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 15693366,
+    "latency_us": {
+      "mean": 525.0,
+      "p50": 318.0,
+      "p90": 846.0,
+      "p99": 4540.0,
+      "p999": 8440.0
+    },
+    "cpu_percent": 2019.7,
+    "memory": "1.1GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 1584,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\fulmine\\echo-ws-pipeline.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    525us    318us    846us   4.54ms   8.44ms\n\n  78468416 frames sent in 5.00s, 78466832 frames received\n  Throughput: 15.69M req/s\n  Bandwidth:  104.74MB/s\n  WS upgrades: 512\n  WS frames:   78466832\n  Latency samples: 78466832 / 78466832 responses (100.0%)\n[info] CPU 2019.7% | Mem 1.1GiB\n"
+  },
+  {
+    "framework": "fulmine",
+    "profile": "echo-ws-pipeline",
+    "connections": 512,
+    "round": 3,
+    "frames_sent": 78390160,
+    "frames_received": 78384912,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 15676982,
+    "latency_us": {
+      "mean": 532.0,
+      "p50": 305.0,
+      "p90": 922.0,
+      "p99": 4670.0,
+      "p999": 8810.0
+    },
+    "cpu_percent": 2012.8,
+    "memory": "1.0GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 5248,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\fulmine\\echo-ws-pipeline.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    532us    305us    922us   4.67ms   8.81ms\n\n  78390160 frames sent in 5.00s, 78384912 frames received\n  Throughput: 15.67M req/s\n  Bandwidth:  104.64MB/s\n  WS upgrades: 512\n  WS frames:   78384912\n  Latency samples: 78384912 / 78384912 responses (100.0%)\n[info] CPU 2012.8% | Mem 1.0GiB\n\n=== Best: 15693366 req/s (CPU: 2019.7%, Mem: 1.1GiB) ===\n[info] saved results/echo-ws-pipeline/512/fulmine.json\nhttparena-bench-fulmine\nhttparena-bench-fulmine\n\n=============================================="
+  },
+  {
+    "framework": "fulmine",
+    "profile": "echo-ws-pipeline",
+    "connections": 4096,
+    "round": 1,
+    "frames_sent": 69042368,
+    "frames_received": 68976832,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 13795366,
+    "latency_us": {
+      "mean": 4730.0,
+      "p50": 4650.0,
+      "p90": 7650.0,
+      "p99": 11500.0,
+      "p999": 17100.0
+    },
+    "cpu_percent": 1812.4,
+    "memory": "1.1GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 65536,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\fulmine\\echo-ws-pipeline.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   4.73ms   4.65ms   7.65ms   11.50ms   17.10ms\n\n  69042368 frames sent in 5.00s, 68976832 frames received\n  Throughput: 13.79M req/s\n  Bandwidth:  92.18MB/s\n  WS upgrades: 4096\n  WS frames:   68976832\n  Latency samples: 68976832 / 68976832 responses (100.0%)\n[info] CPU 1812.4% | Mem 1.1GiB\n"
+  },
+  {
+    "framework": "fulmine",
+    "profile": "echo-ws-pipeline",
+    "connections": 4096,
+    "round": 2,
+    "frames_sent": 69915600,
+    "frames_received": 69850064,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 13970012,
+    "latency_us": {
+      "mean": 4730.0,
+      "p50": 3670.0,
+      "p90": 8340.0,
+      "p99": 14100.0,
+      "p999": 20500.0
+    },
+    "cpu_percent": 2040.0,
+    "memory": "1.2GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 65536,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\fulmine\\echo-ws-pipeline.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   4.73ms   3.67ms   8.34ms   14.10ms   20.50ms\n\n  69915600 frames sent in 5.00s, 69850064 frames received\n  Throughput: 13.96M req/s\n  Bandwidth:  93.33MB/s\n  WS upgrades: 4096\n  WS frames:   69850064\n  Latency samples: 69850064 / 69850064 responses (100.0%)\n[info] CPU 2040.0% | Mem 1.2GiB\n"
+  },
+  {
+    "framework": "fulmine",
+    "profile": "echo-ws-pipeline",
+    "connections": 4096,
+    "round": 3,
+    "frames_sent": 62237184,
+    "frames_received": 62171648,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 12434329,
+    "latency_us": {
+      "mean": 5340.0,
+      "p50": 4250.0,
+      "p90": 9790.0,
+      "p99": 18400.0,
+      "p999": 31800.0
+    },
+    "cpu_percent": 1882.0,
+    "memory": "1.1GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 65536,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\fulmine\\echo-ws-pipeline.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   5.34ms   4.25ms   9.79ms   18.40ms   31.80ms\n\n  62237184 frames sent in 5.00s, 62171648 frames received\n  Throughput: 12.43M req/s\n  Bandwidth:  83.11MB/s\n  WS upgrades: 4096\n  WS frames:   62171648\n  Latency samples: 62171648 / 62171648 responses (100.0%)\n[info] CPU 1882.0% | Mem 1.1GiB\n\n=== Best: 13970012 req/s (CPU: 2040.0%, Mem: 1.2GiB) ===\n[info] saved results/echo-ws-pipeline/4096/fulmine.json\nhttparena-bench-fulmine\nhttparena-bench-fulmine\n\n=============================================="
+  },
+  {
+    "framework": "fulmine",
+    "profile": "echo-ws-pipeline",
+    "connections": 16384,
+    "round": 1,
+    "frames_sent": 69806304,
+    "frames_received": 69544160,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 13908832,
+    "latency_us": {
+      "mean": 18770.0,
+      "p50": 16400.0,
+      "p90": 33000.0,
+      "p99": 55400.0,
+      "p999": 84200.0
+    },
+    "cpu_percent": 1797.4,
+    "memory": "1.3GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 262144,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\fulmine\\echo-ws-pipeline.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   18.77ms   16.40ms   33.00ms   55.40ms   84.20ms\n\n  69806304 frames sent in 5.00s, 69544160 frames received\n  Throughput: 13.90M req/s\n  Bandwidth:  93.32MB/s\n  WS upgrades: 16384\n  WS frames:   69544160\n  Latency samples: 69544160 / 69544160 responses (100.0%)\n[info] CPU 1797.4% | Mem 1.3GiB\n"
+  },
+  {
+    "framework": "fulmine",
+    "profile": "echo-ws-pipeline",
+    "connections": 16384,
+    "round": 2,
+    "frames_sent": 72572160,
+    "frames_received": 72310016,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 14462003,
+    "latency_us": {
+      "mean": 18250.0,
+      "p50": 16500.0,
+      "p90": 30200.0,
+      "p99": 47200.0,
+      "p999": 67300.0
+    },
+    "cpu_percent": 2058.5,
+    "memory": "1.3GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 262144,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\fulmine\\echo-ws-pipeline.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   18.25ms   16.50ms   30.20ms   47.20ms   67.30ms\n\n  72572160 frames sent in 5.00s, 72310016 frames received\n  Throughput: 14.45M req/s\n  Bandwidth:  97.00MB/s\n  WS upgrades: 16384\n  WS frames:   72310016\n  Latency samples: 72310016 / 72310016 responses (100.0%)\n[info] CPU 2058.5% | Mem 1.3GiB\n"
+  },
+  {
+    "framework": "fulmine",
+    "profile": "echo-ws-pipeline",
+    "connections": 16384,
+    "round": 3,
+    "frames_sent": 73593648,
+    "frames_received": 73331504,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 14637026,
+    "latency_us": {
+      "mean": 18030.0,
+      "p50": 15800.0,
+      "p90": 30500.0,
+      "p99": 50200.0,
+      "p999": 73500.0
+    },
+    "cpu_percent": 1996.0,
+    "memory": "1.3GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 262144,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\fulmine\\echo-ws-pipeline.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   18.03ms   15.80ms   30.50ms   50.20ms   73.50ms\n\n  73593648 frames sent in 5.01s, 73331504 frames received\n  Throughput: 14.64M req/s\n  Bandwidth:  98.23MB/s\n  WS upgrades: 16384\n  WS frames:   73331504\n  Latency samples: 73331504 / 73331504 responses (100.0%)\n[info] CPU 1996.0% | Mem 1.3GiB\n\n=== Best: 14637026 req/s (CPU: 1996.0%, Mem: 1.3GiB) ===\n[info] saved results/echo-ws-pipeline/16384/fulmine.json\nhttparena-bench-fulmine\nhttparena-bench-fulmine\n[info] rebuilding site/data/*.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/frameworks.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-baseline.json - 8 new, 8 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-candidate.json - 8 new, 8 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/fulmine.js.json - 6 new, 28 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/genhttp-ioxide.json - 8 new, 33 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/current.json\n[info] done\nhttparena-postgres"
+  },
+  {
+    "framework": "fulmine",
+    "profile": "echo-ws",
+    "connections": 512,
+    "round": 1,
+    "frames_sent": 12097159,
+    "frames_received": 12096815,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 2419363,
+    "latency_us": {
+      "mean": 214.0,
+      "p50": 169.0,
+      "p90": 401.0,
+      "p99": 906.0,
+      "p999": 2230.0
+    },
+    "cpu_percent": 1503.9,
+    "memory": "1.1GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 344,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\fulmine\\echo-ws.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    214us    169us    401us    906us   2.23ms\n\n  12097159 frames sent in 5.00s, 12096815 frames received\n  Throughput: 2.42M req/s\n  Bandwidth:  16.16MB/s\n  WS upgrades: 512\n  WS frames:   12096815\n  Latency samples: 12096815 / 12096815 responses (100.0%)\n[info] CPU 1503.9% | Mem 1.1GiB\n"
+  },
+  {
+    "framework": "fulmine",
+    "profile": "echo-ws",
+    "connections": 512,
+    "round": 2,
+    "frames_sent": 12777965,
+    "frames_received": 12777854,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 2555570,
+    "latency_us": {
+      "mean": 202.0,
+      "p50": 81.0,
+      "p90": 235.0,
+      "p99": 3520.0,
+      "p999": 8580.0
+    },
+    "cpu_percent": 1655.0,
+    "memory": "1.1GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 111,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\fulmine\\echo-ws.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    202us     81us    235us   3.52ms   8.58ms\n\n  12777965 frames sent in 5.00s, 12777854 frames received\n  Throughput: 2.55M req/s\n  Bandwidth:  17.06MB/s\n  WS upgrades: 512\n  WS frames:   12777854\n  Latency samples: 12777854 / 12777854 responses (100.0%)\n[info] CPU 1655.0% | Mem 1.1GiB\n"
+  },
+  {
+    "framework": "fulmine",
+    "profile": "echo-ws",
+    "connections": 512,
+    "round": 3,
+    "frames_sent": 12260417,
+    "frames_received": 12260212,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 2452042,
+    "latency_us": {
+      "mean": 210.0,
+      "p50": 85.0,
+      "p90": 244.0,
+      "p99": 3690.0,
+      "p999": 8860.0
+    },
+    "cpu_percent": 1605.9,
+    "memory": "1.1GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 205,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\fulmine\\echo-ws.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    210us     85us    244us   3.69ms   8.86ms\n\n  12260417 frames sent in 5.00s, 12260212 frames received\n  Throughput: 2.45M req/s\n  Bandwidth:  16.37MB/s\n  WS upgrades: 512\n  WS frames:   12260212\n  Latency samples: 12260212 / 12260212 responses (100.0%)\n[info] CPU 1605.9% | Mem 1.1GiB\n\n=== Best: 2555570 req/s (CPU: 1655.0%, Mem: 1.1GiB) ===\n[info] saved results/echo-ws/512/fulmine.json\nhttparena-bench-fulmine\nhttparena-bench-fulmine\n\n=============================================="
+  },
+  {
+    "framework": "fulmine",
+    "profile": "echo-ws",
+    "connections": 4096,
+    "round": 1,
+    "frames_sent": 8470575,
+    "frames_received": 8466479,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 1693295,
+    "latency_us": {
+      "mean": 2400.0,
+      "p50": 2540.0,
+      "p90": 4200.0,
+      "p99": 5940.0,
+      "p999": 7530.0
+    },
+    "cpu_percent": 1238.1,
+    "memory": "1.1GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 4096,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\fulmine\\echo-ws.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   2.40ms   2.54ms   4.20ms   5.94ms   7.53ms\n\n  8470575 frames sent in 5.00s, 8466479 frames received\n  Throughput: 1.69M req/s\n  Bandwidth:  11.43MB/s\n  WS upgrades: 4096\n  WS frames:   8466479\n  Latency samples: 8466479 / 8466479 responses (100.0%)\n[info] CPU 1238.1% | Mem 1.1GiB\n"
+  },
+  {
+    "framework": "fulmine",
+    "profile": "echo-ws",
+    "connections": 4096,
+    "round": 2,
+    "frames_sent": 12171913,
+    "frames_received": 12167817,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 2433563,
+    "latency_us": {
+      "mean": 1700.0,
+      "p50": 621.0,
+      "p90": 4980.0,
+      "p99": 12900.0,
+      "p999": 32600.0
+    },
+    "cpu_percent": 1622.5,
+    "memory": "1.1GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 4096,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\fulmine\\echo-ws.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   1.70ms    621us   4.98ms   12.90ms   32.60ms\n\n  12171913 frames sent in 5.00s, 12167817 frames received\n  Throughput: 2.43M req/s\n  Bandwidth:  16.37MB/s\n  WS upgrades: 4096\n  WS frames:   12167817\n  Latency samples: 12167817 / 12167817 responses (100.0%)\n[info] CPU 1622.5% | Mem 1.1GiB\n"
+  },
+  {
+    "framework": "fulmine",
+    "profile": "echo-ws",
+    "connections": 4096,
+    "round": 3,
+    "frames_sent": 12454341,
+    "frames_received": 12450373,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 2490074,
+    "latency_us": {
+      "mean": 1670.0,
+      "p50": 695.0,
+      "p90": 5000.0,
+      "p99": 10200.0,
+      "p999": 26700.0
+    },
+    "cpu_percent": 1568.8,
+    "memory": "1.1GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 3968,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\fulmine\\echo-ws.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   1.67ms    695us   5.00ms   10.20ms   26.70ms\n\n  12454341 frames sent in 5.00s, 12450373 frames received\n  Throughput: 2.49M req/s\n  Bandwidth:  16.74MB/s\n  WS upgrades: 4096\n  WS frames:   12450373\n  Latency samples: 12450373 / 12450373 responses (100.0%)\n[info] CPU 1568.8% | Mem 1.1GiB\n\n=== Best: 2490074 req/s (CPU: 1568.8%, Mem: 1.1GiB) ===\n[info] saved results/echo-ws/4096/fulmine.json\nhttparena-bench-fulmine\nhttparena-bench-fulmine\n\n=============================================="
+  },
+  {
+    "framework": "fulmine",
+    "profile": "echo-ws",
+    "connections": 16384,
+    "round": 1,
+    "frames_sent": 8268056,
+    "frames_received": 8251672,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 1647040,
+    "latency_us": {
+      "mean": 9550.0,
+      "p50": 8280.0,
+      "p90": 16900.0,
+      "p99": 34400.0,
+      "p999": 61200.0
+    },
+    "cpu_percent": 1526.2,
+    "memory": "1.2GiB",
+    "errors": {
+      "connect": 0,
+      "read": 1,
+      "timeout": 0
+    },
+    "reconnects": 1,
+    "send_receive_delta": 16384,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\fulmine\\echo-ws.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   9.55ms   8.28ms   16.90ms   34.40ms   61.20ms\n\n  8268056 frames sent in 5.01s, 8251672 frames received\n  Throughput: 1.65M req/s\n  Bandwidth:  11.51MB/s\n  WS upgrades: 16384\n  WS frames:   8251672\n  Latency samples: 8251672 / 8251672 responses (100.0%)\n  Reconnects: 1\n  Errors: connect 0, read 1, timeout 0\n[info] CPU 1526.2% | Mem 1.2GiB\n"
+  },
+  {
+    "framework": "fulmine",
+    "profile": "echo-ws",
+    "connections": 16384,
+    "round": 2,
+    "frames_sent": 7683324,
+    "frames_received": 7666940,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 1530327,
+    "latency_us": {
+      "mean": 10840.0,
+      "p50": 8240.0,
+      "p90": 21900.0,
+      "p99": 50600.0,
+      "p999": 86000.0
+    },
+    "cpu_percent": 1690.1,
+    "memory": "1.2GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 16384,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\fulmine\\echo-ws.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   10.84ms   8.24ms   21.90ms   50.60ms   86.00ms\n\n  7683324 frames sent in 5.01s, 7666940 frames received\n  Throughput: 1.53M req/s\n  Bandwidth:  10.73MB/s\n  WS upgrades: 16384\n  WS frames:   7666940\n  Latency samples: 7666940 / 7666940 responses (100.0%)\n[info] CPU 1690.1% | Mem 1.2GiB\n"
+  },
+  {
+    "framework": "fulmine",
+    "profile": "echo-ws",
+    "connections": 16384,
+    "round": 3,
+    "frames_sent": 6107020,
+    "frames_received": 6090636,
+    "elapsed_seconds": 5.02,
+    "frames_per_second": 1213274,
+    "latency_us": {
+      "mean": 13650.0,
+      "p50": 9640.0,
+      "p90": 29600.0,
+      "p99": 72800.0,
+      "p999": 124600.0
+    },
+    "cpu_percent": 1658.1,
+    "memory": "1.2GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 16384,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\fulmine\\echo-ws.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   13.65ms   9.64ms   29.60ms   72.80ms   124.60ms\n\n  6107020 frames sent in 5.02s, 6090636 frames received\n  Throughput: 1.21M req/s\n  Bandwidth:  8.62MB/s\n  WS upgrades: 16384\n  WS frames:   6090636\n  Latency samples: 6090636 / 6090636 responses (100.0%)\n[info] CPU 1658.1% | Mem 1.2GiB\n\n=== Best: 1647040 req/s (CPU: 1526.2%, Mem: 1.2GiB) ===\n[info] saved results/echo-ws/16384/fulmine.json\nhttparena-bench-fulmine\nhttparena-bench-fulmine\n[info] rebuilding site/data/*.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/frameworks.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-baseline.json - 8 new, 8 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-candidate.json - 8 new, 8 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/fulmine.js.json - 3 new, 28 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/genhttp-ioxide.json - 8 new, 33 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/current.json\n[info] done\nhttparena-postgres"
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "profile": "echo-ws-limited",
+    "connections": 512,
+    "round": 1,
+    "frames_sent": 4123190,
+    "frames_received": 4123101,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 824620,
+    "latency_us": {
+      "mean": 508.0,
+      "p50": 122.0,
+      "p90": 1250.0,
+      "p99": 5860.0,
+      "p999": 12300.0
+    },
+    "cpu_percent": 1116.3,
+    "memory": "1.5GiB",
+    "errors": {
+      "connect": 0,
+      "read": 13,
+      "timeout": 0
+    },
+    "reconnects": 412148,
+    "send_receive_delta": 89,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\genhttp-ioxide\\echo-ws-limited.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    508us    122us   1.25ms   5.86ms   12.30ms\n\n  4123190 frames sent in 5.00s, 4123101 frames received\n  Throughput: 824.32K req/s\n  Bandwidth:  20.44MB/s\n  WS upgrades: 413408\n  WS frames:   4123101\n  Latency samples: 4123101 / 4123101 responses (100.0%)\n  Reconnects: 412148\n  Errors: connect 0, read 13, timeout 0\n[info] CPU 1116.3% | Mem 1.5GiB\n"
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "profile": "echo-ws-limited",
+    "connections": 512,
+    "round": 2,
+    "frames_sent": 4649677,
+    "frames_received": 4649584,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 929916,
+    "latency_us": {
+      "mean": 449.0,
+      "p50": 120.0,
+      "p90": 1110.0,
+      "p99": 4980.0,
+      "p999": 10300.0
+    },
+    "cpu_percent": 1250.0,
+    "memory": "1.5GiB",
+    "errors": {
+      "connect": 0,
+      "read": 15,
+      "timeout": 0
+    },
+    "reconnects": 464922,
+    "send_receive_delta": 93,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\genhttp-ioxide\\echo-ws-limited.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    449us    120us   1.11ms   4.98ms   10.30ms\n\n  4649677 frames sent in 5.00s, 4649584 frames received\n  Throughput: 929.64K req/s\n  Bandwidth:  23.05MB/s\n  WS upgrades: 471794\n  WS frames:   4649584\n  Latency samples: 4649584 / 4649584 responses (100.0%)\n  Reconnects: 464922\n  Errors: connect 0, read 15, timeout 0\n[info] CPU 1250.0% | Mem 1.5GiB\n"
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "profile": "echo-ws-limited",
+    "connections": 512,
+    "round": 3,
+    "frames_sent": 4254259,
+    "frames_received": 4254090,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 850818,
+    "latency_us": {
+      "mean": 493.0,
+      "p50": 126.0,
+      "p90": 1160.0,
+      "p99": 5780.0,
+      "p999": 13600.0
+    },
+    "cpu_percent": 1252.6,
+    "memory": "1.5GiB",
+    "errors": {
+      "connect": 0,
+      "read": 18,
+      "timeout": 0
+    },
+    "reconnects": 425330,
+    "send_receive_delta": 169,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\genhttp-ioxide\\echo-ws-limited.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    493us    126us   1.16ms   5.78ms   13.60ms\n\n  4254259 frames sent in 5.00s, 4254090 frames received\n  Throughput: 850.51K req/s\n  Bandwidth:  21.09MB/s\n  WS upgrades: 431923\n  WS frames:   4254090\n  Latency samples: 4254090 / 4254090 responses (100.0%)\n  Reconnects: 425330\n  Errors: connect 0, read 18, timeout 0\n[info] CPU 1252.6% | Mem 1.5GiB\n\n=== Best: 929916 req/s (CPU: 1250.0%, Mem: 1.5GiB) ===\n[info] saved results/echo-ws-limited/512/genhttp-ioxide.json\nhttparena-bench-genhttp-ioxide\nhttparena-bench-genhttp-ioxide\n\n=============================================="
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "profile": "echo-ws-limited",
+    "connections": 4096,
+    "round": 1,
+    "frames_sent": 3905835,
+    "frames_received": 3902102,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 780420,
+    "latency_us": {
+      "mean": 4470.0,
+      "p50": 643.0,
+      "p90": 12500.0,
+      "p99": 42300.0,
+      "p999": 84200.0
+    },
+    "cpu_percent": 1144.4,
+    "memory": "3.5GiB",
+    "errors": {
+      "connect": 0,
+      "read": 57,
+      "timeout": 0
+    },
+    "reconnects": 388567,
+    "send_receive_delta": 3733,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\genhttp-ioxide\\echo-ws-limited.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   4.47ms    643us   12.50ms   42.30ms   84.20ms\n\n  3905835 frames sent in 5.00s, 3902102 frames received\n  Throughput: 780.12K req/s\n  Bandwidth:  19.42MB/s\n  WS upgrades: 392243\n  WS frames:   3902102\n  Latency samples: 3902102 / 3902102 responses (100.0%)\n  Reconnects: 388567\n  Errors: connect 0, read 57, timeout 0\n[info] CPU 1144.4% | Mem 3.5GiB\n"
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "profile": "echo-ws-limited",
+    "connections": 4096,
+    "round": 2,
+    "frames_sent": 4901795,
+    "frames_received": 4898399,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 979679,
+    "latency_us": {
+      "mean": 3670.0,
+      "p50": 384.0,
+      "p90": 10800.0,
+      "p99": 38500.0,
+      "p999": 71900.0
+    },
+    "cpu_percent": 1438.1,
+    "memory": "3.9GiB",
+    "errors": {
+      "connect": 0,
+      "read": 89,
+      "timeout": 0
+    },
+    "reconnects": 488481,
+    "send_receive_delta": 3396,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\genhttp-ioxide\\echo-ws-limited.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   3.67ms    384us   10.80ms   38.50ms   71.90ms\n\n  4901795 frames sent in 5.00s, 4898399 frames received\n  Throughput: 979.36K req/s\n  Bandwidth:  24.36MB/s\n  WS upgrades: 491916\n  WS frames:   4898399\n  Latency samples: 4898399 / 4898399 responses (100.0%)\n  Reconnects: 488481\n  Errors: connect 0, read 89, timeout 0\n[info] CPU 1438.1% | Mem 3.9GiB\n"
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "profile": "echo-ws-limited",
+    "connections": 4096,
+    "round": 3,
+    "frames_sent": 5655915,
+    "frames_received": 5652095,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 1130419,
+    "latency_us": {
+      "mean": 3210.0,
+      "p50": 234.0,
+      "p90": 9780.0,
+      "p99": 36000.0,
+      "p999": 62200.0
+    },
+    "cpu_percent": 1392.1,
+    "memory": "3.3GiB",
+    "errors": {
+      "connect": 0,
+      "read": 79,
+      "timeout": 0
+    },
+    "reconnects": 563688,
+    "send_receive_delta": 3820,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\genhttp-ioxide\\echo-ws-limited.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   3.21ms    234us   9.78ms   36.00ms   62.20ms\n\n  5655915 frames sent in 5.00s, 5652095 frames received\n  Throughput: 1.13M req/s\n  Bandwidth:  28.10MB/s\n  WS upgrades: 567429\n  WS frames:   5652095\n  Latency samples: 5652095 / 5652095 responses (100.0%)\n  Reconnects: 563688\n  Errors: connect 0, read 79, timeout 0\n[info] CPU 1392.1% | Mem 3.3GiB\n\n=== Best: 1130419 req/s (CPU: 1392.1%, Mem: 3.3GiB) ===\n[info] saved results/echo-ws-limited/4096/genhttp-ioxide.json\nhttparena-bench-genhttp-ioxide\nhttparena-bench-genhttp-ioxide\n[info] rebuilding site/data/*.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/frameworks.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-baseline.json - 8 new, 8 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/genhttp-ioxide.json - 8 new, 33 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/current.json\n[info] done\nhttparena-postgres"
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "profile": "echo-ws-pipeline",
+    "connections": 512,
+    "round": 1,
+    "frames_sent": 129756224,
+    "frames_received": 129750160,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 25950032,
+    "latency_us": {
+      "mean": 317.0,
+      "p50": 106.0,
+      "p90": 417.0,
+      "p99": 4920.0,
+      "p999": 11800.0
+    },
+    "cpu_percent": 1388.7,
+    "memory": "1.4GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 6064,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\genhttp-ioxide\\echo-ws-pipeline.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    317us    106us    417us   4.92ms   11.80ms\n\n  129756224 frames sent in 5.00s, 129750160 frames received\n  Throughput: 25.94M req/s\n  Bandwidth:  173.19MB/s\n  WS upgrades: 512\n  WS frames:   129750160\n  Latency samples: 129750160 / 129750160 responses (100.0%)\n[info] CPU 1388.7% | Mem 1.4GiB\n"
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "profile": "echo-ws-pipeline",
+    "connections": 512,
+    "round": 2,
+    "frames_sent": 154983264,
+    "frames_received": 154978016,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 30995603,
+    "latency_us": {
+      "mean": 265.0,
+      "p50": 110.0,
+      "p90": 334.0,
+      "p99": 4220.0,
+      "p999": 9900.0
+    },
+    "cpu_percent": 1725.2,
+    "memory": "1.4GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 5248,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\genhttp-ioxide\\echo-ws-pipeline.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    265us    110us    334us   4.22ms   9.90ms\n\n  154983264 frames sent in 5.00s, 154978016 frames received\n  Throughput: 30.99M req/s\n  Bandwidth:  206.88MB/s\n  WS upgrades: 512\n  WS frames:   154978016\n  Latency samples: 154978016 / 154978016 responses (100.0%)\n[info] CPU 1725.2% | Mem 1.4GiB\n"
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "profile": "echo-ws-pipeline",
+    "connections": 512,
+    "round": 3,
+    "frames_sent": 143860752,
+    "frames_received": 143858192,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 28714209,
+    "latency_us": {
+      "mean": 285.0,
+      "p50": 111.0,
+      "p90": 383.0,
+      "p99": 4230.0,
+      "p999": 12600.0
+    },
+    "cpu_percent": 1698.5,
+    "memory": "1.4GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 2560,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\genhttp-ioxide\\echo-ws-pipeline.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    285us    111us    383us   4.23ms   12.60ms\n\n  143860752 frames sent in 5.01s, 143858192 frames received\n  Throughput: 28.70M req/s\n  Bandwidth:  191.62MB/s\n  WS upgrades: 512\n  WS frames:   143858192\n  Latency samples: 143858192 / 143858192 responses (100.0%)\n[info] CPU 1698.5% | Mem 1.4GiB\n\n=== Best: 30995603 req/s (CPU: 1725.2%, Mem: 1.4GiB) ===\n[info] saved results/echo-ws-pipeline/512/genhttp-ioxide.json\nhttparena-bench-genhttp-ioxide\nhttparena-bench-genhttp-ioxide\n\n=============================================="
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "profile": "echo-ws-pipeline",
+    "connections": 4096,
+    "round": 1,
+    "frames_sent": 81776160,
+    "frames_received": 81710624,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 16342124,
+    "latency_us": {
+      "mean": 3980.0,
+      "p50": 1810.0,
+      "p90": 8730.0,
+      "p99": 31500.0,
+      "p999": 91300.0
+    },
+    "cpu_percent": 1373.1,
+    "memory": "2.1GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 65536,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\genhttp-ioxide\\echo-ws-pipeline.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   3.98ms   1.81ms   8.73ms   31.50ms   91.30ms\n\n  81776160 frames sent in 5.00s, 81710624 frames received\n  Throughput: 16.33M req/s\n  Bandwidth:  109.18MB/s\n  WS upgrades: 4096\n  WS frames:   81710624\n  Latency samples: 81710624 / 81710624 responses (100.0%)\n[info] CPU 1373.1% | Mem 2.1GiB\n"
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "profile": "echo-ws-pipeline",
+    "connections": 4096,
+    "round": 2,
+    "frames_sent": 103921376,
+    "frames_received": 103856864,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 20771372,
+    "latency_us": {
+      "mean": 3200.0,
+      "p50": 1430.0,
+      "p90": 7880.0,
+      "p99": 21100.0,
+      "p999": 51100.0
+    },
+    "cpu_percent": 1692.7,
+    "memory": "1.7GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 64512,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\genhttp-ioxide\\echo-ws-pipeline.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   3.20ms   1.43ms   7.88ms   21.10ms   51.10ms\n\n  103921376 frames sent in 5.00s, 103856864 frames received\n  Throughput: 20.75M req/s\n  Bandwidth:  138.69MB/s\n  WS upgrades: 4096\n  WS frames:   103856864\n  Latency samples: 103856864 / 103856864 responses (100.0%)\n[info] CPU 1692.7% | Mem 1.7GiB\n"
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "profile": "echo-ws-pipeline",
+    "connections": 4096,
+    "round": 3,
+    "frames_sent": 71008528,
+    "frames_received": 70942992,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 14188598,
+    "latency_us": {
+      "mean": 4740.0,
+      "p50": 777.0,
+      "p90": 14000.0,
+      "p99": 50100.0,
+      "p999": 102100.0
+    },
+    "cpu_percent": 1958.5,
+    "memory": "1.6GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 65536,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\genhttp-ioxide\\echo-ws-pipeline.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   4.74ms    777us   14.00ms   50.10ms   102.10ms\n\n  71008528 frames sent in 5.00s, 70942992 frames received\n  Throughput: 14.18M req/s\n  Bandwidth:  94.80MB/s\n  WS upgrades: 4096\n  WS frames:   70942992\n  Latency samples: 70942992 / 70942992 responses (100.0%)\n[info] CPU 1958.5% | Mem 1.6GiB\n\n=== Best: 20771372 req/s (CPU: 1692.7%, Mem: 1.7GiB) ===\n[info] saved results/echo-ws-pipeline/4096/genhttp-ioxide.json\nhttparena-bench-genhttp-ioxide\nhttparena-bench-genhttp-ioxide\n\n=============================================="
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "profile": "echo-ws-pipeline",
+    "connections": 16384,
+    "round": 1,
+    "frames_sent": 53358480,
+    "frames_received": 53096336,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 10619267,
+    "latency_us": {
+      "mean": 23580.0,
+      "p50": 17000.0,
+      "p90": 41600.0,
+      "p99": 116500.0,
+      "p999": 175500.0
+    },
+    "cpu_percent": 1439.1,
+    "memory": "6.0GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 262144,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\genhttp-ioxide\\echo-ws-pipeline.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   23.58ms   17.00ms   41.60ms   116.50ms   175.50ms\n\n  53358480 frames sent in 5.00s, 53096336 frames received\n  Throughput: 10.61M req/s\n  Bandwidth:  71.41MB/s\n  WS upgrades: 16384\n  WS frames:   53096336\n  Latency samples: 53096336 / 53096336 responses (100.0%)\n[info] CPU 1439.1% | Mem 6.0GiB\n"
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "profile": "echo-ws-pipeline",
+    "connections": 16384,
+    "round": 2,
+    "frames_sent": 82025664,
+    "frames_received": 81763520,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 16320063,
+    "latency_us": {
+      "mean": 16160.0,
+      "p50": 12200.0,
+      "p90": 30900.0,
+      "p99": 56800.0,
+      "p999": 85100.0
+    },
+    "cpu_percent": 1880.6,
+    "memory": "5.4GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 262144,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\genhttp-ioxide\\echo-ws-pipeline.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   16.16ms   12.20ms   30.90ms   56.80ms   85.10ms\n\n  82025664 frames sent in 5.01s, 81763520 frames received\n  Throughput: 16.33M req/s\n  Bandwidth:  109.59MB/s\n  WS upgrades: 16384\n  WS frames:   81763520\n  Latency samples: 81763520 / 81763520 responses (100.0%)\n[info] CPU 1880.6% | Mem 5.4GiB\n"
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "profile": "echo-ws-pipeline",
+    "connections": 16384,
+    "round": 3,
+    "frames_sent": 70837632,
+    "frames_received": 70575488,
+    "elapsed_seconds": 5.03,
+    "frames_per_second": 14030912,
+    "latency_us": {
+      "mean": 18650.0,
+      "p50": 14800.0,
+      "p90": 36300.0,
+      "p99": 70800.0,
+      "p999": 107400.0
+    },
+    "cpu_percent": 1719.4,
+    "memory": "4.3GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 262144,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\genhttp-ioxide\\echo-ws-pipeline.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   18.65ms   14.80ms   36.30ms   70.80ms   107.40ms\n\n  70837632 frames sent in 5.03s, 70575488 frames received\n  Throughput: 14.04M req/s\n  Bandwidth:  94.32MB/s\n  WS upgrades: 16384\n  WS frames:   70575488\n  Latency samples: 70575488 / 70575488 responses (100.0%)\n[info] CPU 1719.4% | Mem 4.3GiB\n\n=== Best: 16320063 req/s (CPU: 1880.6%, Mem: 5.4GiB) ===\n[info] saved results/echo-ws-pipeline/16384/genhttp-ioxide.json\nhttparena-bench-genhttp-ioxide\nhttparena-bench-genhttp-ioxide\n[info] rebuilding site/data/*.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/frameworks.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-baseline.json - 8 new, 8 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/genhttp-ioxide.json - 6 new, 33 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/current.json\n[info] done\nhttparena-postgres"
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "profile": "echo-ws",
+    "connections": 512,
+    "round": 1,
+    "frames_sent": 10564890,
+    "frames_received": 10564568,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 2112913,
+    "latency_us": {
+      "mean": 244.0,
+      "p50": 84.0,
+      "p90": 312.0,
+      "p99": 3590.0,
+      "p999": 11900.0
+    },
+    "cpu_percent": 1295.1,
+    "memory": "1.4GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 322,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\genhttp-ioxide\\echo-ws.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    244us     84us    312us   3.59ms   11.90ms\n\n  10564890 frames sent in 5.00s, 10564568 frames received\n  Throughput: 2.11M req/s\n  Bandwidth:  14.11MB/s\n  WS upgrades: 512\n  WS frames:   10564568\n  Latency samples: 10564568 / 10564568 responses (100.0%)\n[info] CPU 1295.1% | Mem 1.4GiB\n"
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "profile": "echo-ws",
+    "connections": 512,
+    "round": 2,
+    "frames_sent": 13386895,
+    "frames_received": 13386666,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 2677333,
+    "latency_us": {
+      "mean": 194.0,
+      "p50": 78.0,
+      "p90": 234.0,
+      "p99": 2750.0,
+      "p999": 9060.0
+    },
+    "cpu_percent": 1565.4,
+    "memory": "1.4GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 229,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\genhttp-ioxide\\echo-ws.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    194us     78us    234us   2.75ms   9.06ms\n\n  13386895 frames sent in 5.00s, 13386666 frames received\n  Throughput: 2.68M req/s\n  Bandwidth:  17.87MB/s\n  WS upgrades: 512\n  WS frames:   13386666\n  Latency samples: 13386666 / 13386666 responses (100.0%)\n[info] CPU 1565.4% | Mem 1.4GiB\n"
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "profile": "echo-ws",
+    "connections": 512,
+    "round": 3,
+    "frames_sent": 14803850,
+    "frames_received": 14803522,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 2960704,
+    "latency_us": {
+      "mean": 176.0,
+      "p50": 74.0,
+      "p90": 206.0,
+      "p99": 2430.0,
+      "p999": 8200.0
+    },
+    "cpu_percent": 1548.5,
+    "memory": "1.5GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 328,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\genhttp-ioxide\\echo-ws.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    176us     74us    206us   2.43ms   8.20ms\n\n  14803850 frames sent in 5.00s, 14803522 frames received\n  Throughput: 2.96M req/s\n  Bandwidth:  19.77MB/s\n  WS upgrades: 512\n  WS frames:   14803522\n  Latency samples: 14803522 / 14803522 responses (100.0%)\n[info] CPU 1548.5% | Mem 1.5GiB\n\n=== Best: 2960704 req/s (CPU: 1548.5%, Mem: 1.5GiB) ===\n[info] saved results/echo-ws/512/genhttp-ioxide.json\nhttparena-bench-genhttp-ioxide\nhttparena-bench-genhttp-ioxide\n\n=============================================="
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "profile": "echo-ws",
+    "connections": 4096,
+    "round": 1,
+    "frames_sent": 10049857,
+    "frames_received": 10045761,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 2009152,
+    "latency_us": {
+      "mean": 2029.9999999999998,
+      "p50": 688.0,
+      "p90": 5060.0,
+      "p99": 17900.0,
+      "p999": 57900.0
+    },
+    "cpu_percent": 1321.2,
+    "memory": "2.2GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 4096,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\genhttp-ioxide\\echo-ws.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   2.03ms    688us   5.06ms   17.90ms   57.90ms\n\n  10049857 frames sent in 5.00s, 10045761 frames received\n  Throughput: 2.01M req/s\n  Bandwidth:  13.56MB/s\n  WS upgrades: 4096\n  WS frames:   10045761\n  Latency samples: 10045761 / 10045761 responses (100.0%)\n[info] CPU 1321.2% | Mem 2.2GiB\n"
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "profile": "echo-ws",
+    "connections": 4096,
+    "round": 2,
+    "frames_sent": 13763991,
+    "frames_received": 13759895,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 2751979,
+    "latency_us": {
+      "mean": 1500.0,
+      "p50": 602.0,
+      "p90": 4630.0,
+      "p99": 11800.0,
+      "p999": 44700.0
+    },
+    "cpu_percent": 1628.0,
+    "memory": "1.8GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 4096,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\genhttp-ioxide\\echo-ws.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   1.50ms    602us   4.63ms   11.80ms   44.70ms\n\n  13763991 frames sent in 5.00s, 13759895 frames received\n  Throughput: 2.75M req/s\n  Bandwidth:  18.51MB/s\n  WS upgrades: 4096\n  WS frames:   13759895\n  Latency samples: 13759895 / 13759895 responses (100.0%)\n[info] CPU 1628.0% | Mem 1.8GiB\n"
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "profile": "echo-ws",
+    "connections": 4096,
+    "round": 3,
+    "frames_sent": 13634607,
+    "frames_received": 13630511,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 2726102,
+    "latency_us": {
+      "mean": 1530.0,
+      "p50": 581.0,
+      "p90": 4610.0,
+      "p99": 13100.0,
+      "p999": 37700.0
+    },
+    "cpu_percent": 1553.7,
+    "memory": "1.7GiB",
+    "errors": {
+      "connect": 0,
+      "read": 1,
+      "timeout": 0
+    },
+    "reconnects": 1,
+    "send_receive_delta": 4096,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\genhttp-ioxide\\echo-ws.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   1.53ms    581us   4.61ms   13.10ms   37.70ms\n\n  13634607 frames sent in 5.00s, 13630511 frames received\n  Throughput: 2.72M req/s\n  Bandwidth:  18.34MB/s\n  WS upgrades: 4096\n  WS frames:   13630511\n  Latency samples: 13630511 / 13630511 responses (100.0%)\n  Reconnects: 1\n  Errors: connect 0, read 1, timeout 0\n[info] CPU 1553.7% | Mem 1.7GiB\n\n=== Best: 2751979 req/s (CPU: 1628.0%, Mem: 1.8GiB) ===\n[info] saved results/echo-ws/4096/genhttp-ioxide.json\nhttparena-bench-genhttp-ioxide\nhttparena-bench-genhttp-ioxide\n\n=============================================="
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "profile": "echo-ws",
+    "connections": 16384,
+    "round": 1,
+    "frames_sent": 5842975,
+    "frames_received": 5826591,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 1162992,
+    "latency_us": {
+      "mean": 13500.0,
+      "p50": 10400.0,
+      "p90": 24100.0,
+      "p99": 61600.0,
+      "p999": 136600.0
+    },
+    "cpu_percent": 1367.1,
+    "memory": "3.2GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 16384,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\genhttp-ioxide\\echo-ws.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   13.50ms   10.40ms   24.10ms   61.60ms   136.60ms\n\n  5842975 frames sent in 5.01s, 5826591 frames received\n  Throughput: 1.16M req/s\n  Bandwidth:  8.35MB/s\n  WS upgrades: 16384\n  WS frames:   5826591\n  Latency samples: 5826591 / 5826591 responses (100.0%)\n[info] CPU 1367.1% | Mem 3.2GiB\n"
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "profile": "echo-ws",
+    "connections": 16384,
+    "round": 2,
+    "frames_sent": 5784270,
+    "frames_received": 5767886,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 1153577,
+    "latency_us": {
+      "mean": 14380.0,
+      "p50": 12300.0,
+      "p90": 24800.0,
+      "p99": 52600.0,
+      "p999": 106700.0
+    },
+    "cpu_percent": 1788.6,
+    "memory": "5.3GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 16384,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\genhttp-ioxide\\echo-ws.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   14.38ms   12.30ms   24.80ms   52.60ms   106.70ms\n\n  5784270 frames sent in 5.00s, 5767886 frames received\n  Throughput: 1.15M req/s\n  Bandwidth:  8.29MB/s\n  WS upgrades: 16384\n  WS frames:   5767886\n  Latency samples: 5767886 / 5767886 responses (100.0%)\n[info] CPU 1788.6% | Mem 5.3GiB\n"
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "profile": "echo-ws",
+    "connections": 16384,
+    "round": 3,
+    "frames_sent": 7181059,
+    "frames_received": 7164675,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 1430074,
+    "latency_us": {
+      "mean": 11640.0,
+      "p50": 9690.0,
+      "p90": 21200.0,
+      "p99": 39300.0,
+      "p999": 64200.0
+    },
+    "cpu_percent": 1685.3,
+    "memory": "5.5GiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 16384,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\genhttp-ioxide\\echo-ws.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   11.64ms   9.69ms   21.20ms   39.30ms   64.20ms\n\n  7181059 frames sent in 5.01s, 7164675 frames received\n  Throughput: 1.43M req/s\n  Bandwidth:  10.14MB/s\n  WS upgrades: 16384\n  WS frames:   7164675\n  Latency samples: 7164675 / 7164675 responses (100.0%)\n[info] CPU 1685.3% | Mem 5.5GiB\n\n=== Best: 1430074 req/s (CPU: 1685.3%, Mem: 5.5GiB) ===\n[info] saved results/echo-ws/16384/genhttp-ioxide.json\nhttparena-bench-genhttp-ioxide\nhttparena-bench-genhttp-ioxide\n[info] rebuilding site/data/*.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/frameworks.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-baseline.json - 8 new, 8 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/genhttp-ioxide.json - 3 new, 33 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/current.json\n[info] done\nhttparena-postgres"
+  },
+  {
+    "framework": "vanilla-epoll",
+    "profile": "echo-ws-limited",
+    "connections": 512,
+    "round": 1,
+    "frames_sent": 4433826,
+    "frames_received": 4433528,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 886705,
+    "latency_us": {
+      "mean": 452.0,
+      "p50": 91.0,
+      "p90": 1070.0,
+      "p99": 6070.0,
+      "p999": 11300.0
+    },
+    "cpu_percent": 1028.3,
+    "memory": "75MiB",
+    "errors": {
+      "connect": 0,
+      "read": 14,
+      "timeout": 0
+    },
+    "reconnects": 443222,
+    "send_receive_delta": 298,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\vanilla-epoll\\echo-ws-limited.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    452us     91us   1.07ms   6.07ms   11.30ms\n\n  4433826 frames sent in 5.00s, 4433528 frames received\n  Throughput: 886.50K req/s\n  Bandwidth:  16.83MB/s\n  WS upgrades: 444657\n  WS frames:   4433528\n  Latency samples: 4433528 / 4433528 responses (100.0%)\n  Reconnects: 443222\n  Errors: connect 0, read 14, timeout 0\n[info] CPU 1028.3% | Mem 75MiB\n"
+  },
+  {
+    "framework": "vanilla-epoll",
+    "profile": "echo-ws-limited",
+    "connections": 512,
+    "round": 2,
+    "frames_sent": 5236234,
+    "frames_received": 5235967,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 1047193,
+    "latency_us": {
+      "mean": 380.0,
+      "p50": 81.0,
+      "p90": 928.0,
+      "p99": 4900.0,
+      "p999": 10000.0
+    },
+    "cpu_percent": 1081.3,
+    "memory": "81MiB",
+    "errors": {
+      "connect": 0,
+      "read": 18,
+      "timeout": 0
+    },
+    "reconnects": 523506,
+    "send_receive_delta": 267,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\vanilla-epoll\\echo-ws-limited.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    380us     81us    928us   4.90ms   10.00ms\n\n  5236234 frames sent in 5.00s, 5235967 frames received\n  Throughput: 1.05M req/s\n  Bandwidth:  19.87MB/s\n  WS upgrades: 528679\n  WS frames:   5235967\n  Latency samples: 5235967 / 5235967 responses (100.0%)\n  Reconnects: 523506\n  Errors: connect 0, read 18, timeout 0\n[info] CPU 1081.3% | Mem 81MiB\n"
+  },
+  {
+    "framework": "vanilla-epoll",
+    "profile": "echo-ws-limited",
+    "connections": 512,
+    "round": 3,
+    "frames_sent": 5312122,
+    "frames_received": 5311888,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 1062377,
+    "latency_us": {
+      "mean": 366.0,
+      "p50": 80.0,
+      "p90": 897.0,
+      "p99": 4690.0,
+      "p999": 9300.0
+    },
+    "cpu_percent": 1040.1,
+    "memory": "86MiB",
+    "errors": {
+      "connect": 0,
+      "read": 34,
+      "timeout": 0
+    },
+    "reconnects": 531132,
+    "send_receive_delta": 234,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\vanilla-epoll\\echo-ws-limited.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    366us     80us    897us   4.69ms   9.30ms\n\n  5312122 frames sent in 5.00s, 5311888 frames received\n  Throughput: 1.06M req/s\n  Bandwidth:  20.16MB/s\n  WS upgrades: 536286\n  WS frames:   5311888\n  Latency samples: 5311888 / 5311888 responses (100.0%)\n  Reconnects: 531132\n  Errors: connect 0, read 34, timeout 0\n[info] CPU 1040.1% | Mem 86MiB\n\n=== Best: 1062377 req/s (CPU: 1040.1%, Mem: 86MiB) ===\n[info] saved results/echo-ws-limited/512/vanilla-epoll.json\nhttparena-bench-vanilla-epoll\nhttparena-bench-vanilla-epoll\n\n=============================================="
+  },
+  {
+    "framework": "vanilla-epoll",
+    "profile": "echo-ws-limited",
+    "connections": 4096,
+    "round": 1,
+    "frames_sent": 6971079,
+    "frames_received": 6967973,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 1390812,
+    "latency_us": {
+      "mean": 1330.0,
+      "p50": 293.0,
+      "p90": 2940.0,
+      "p99": 19100.0,
+      "p999": 30800.0
+    },
+    "cpu_percent": 1325.1,
+    "memory": "143MiB",
+    "errors": {
+      "connect": 0,
+      "read": 170,
+      "timeout": 0
+    },
+    "reconnects": 695656,
+    "send_receive_delta": 3106,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\vanilla-epoll\\echo-ws-limited.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   1.33ms    293us   2.94ms   19.10ms   30.80ms\n\n  6971079 frames sent in 5.01s, 6967973 frames received\n  Throughput: 1.39M req/s\n  Bandwidth:  26.45MB/s\n  WS upgrades: 698592\n  WS frames:   6967973\n  Latency samples: 6967973 / 6967973 responses (100.0%)\n  Reconnects: 695656\n  Errors: connect 0, read 170, timeout 0\n[info] CPU 1325.1% | Mem 143MiB\n"
+  },
+  {
+    "framework": "vanilla-epoll",
+    "profile": "echo-ws-limited",
+    "connections": 4096,
+    "round": 2,
+    "frames_sent": 8680263,
+    "frames_received": 8676955,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 1731927,
+    "latency_us": {
+      "mean": 1320.0,
+      "p50": 301.0,
+      "p90": 2590.0,
+      "p99": 20100.0,
+      "p999": 32400.0
+    },
+    "cpu_percent": 1427.4,
+    "memory": "185MiB",
+    "errors": {
+      "connect": 0,
+      "read": 323,
+      "timeout": 0
+    },
+    "reconnects": 866542,
+    "send_receive_delta": 3308,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\vanilla-epoll\\echo-ws-limited.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   1.32ms    301us   2.59ms   20.10ms   32.40ms\n\n  8680263 frames sent in 5.01s, 8676955 frames received\n  Throughput: 1.73M req/s\n  Bandwidth:  32.90MB/s\n  WS upgrades: 869527\n  WS frames:   8676955\n  Latency samples: 8676955 / 8676955 responses (100.0%)\n  Reconnects: 866542\n  Errors: connect 0, read 323, timeout 0\n[info] CPU 1427.4% | Mem 185MiB\n"
+  },
+  {
+    "framework": "vanilla-epoll",
+    "profile": "echo-ws-limited",
+    "connections": 4096,
+    "round": 3,
+    "frames_sent": 7580365,
+    "frames_received": 7577088,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 1515417,
+    "latency_us": {
+      "mean": 1580.0,
+      "p50": 349.0,
+      "p90": 3890.0,
+      "p99": 20700.0,
+      "p999": 31700.0
+    },
+    "cpu_percent": 1366.1,
+    "memory": "188MiB",
+    "errors": {
+      "connect": 0,
+      "read": 309,
+      "timeout": 0
+    },
+    "reconnects": 756570,
+    "send_receive_delta": 3277,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\vanilla-epoll\\echo-ws-limited.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  10\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   1.58ms    349us   3.89ms   20.70ms   31.70ms\n\n  7580365 frames sent in 5.00s, 7577088 frames received\n  Throughput: 1.51M req/s\n  Bandwidth:  28.79MB/s\n  WS upgrades: 759538\n  WS frames:   7577088\n  Latency samples: 7577088 / 7577088 responses (100.0%)\n  Reconnects: 756570\n  Errors: connect 0, read 309, timeout 0\n[info] CPU 1366.1% | Mem 188MiB\n\n=== Best: 1731927 req/s (CPU: 1427.4%, Mem: 185MiB) ===\n[info] saved results/echo-ws-limited/4096/vanilla-epoll.json\nhttparena-bench-vanilla-epoll\nhttparena-bench-vanilla-epoll\n[info] rebuilding site/data/*.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/frameworks.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-baseline.json - 8 new, 8 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-candidate.json - 8 new, 8 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/fulmine.js.json - 8 new, 28 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/genhttp-ioxide.json - 8 new, 33 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/vanilla-epoll.json - 8 new, 35 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/current.json\n[info] done\nhttparena-postgres"
+  },
+  {
+    "framework": "vanilla-epoll",
+    "profile": "echo-ws-pipeline",
+    "connections": 512,
+    "round": 1,
+    "frames_sent": 205118960,
+    "frames_received": 205115936,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 41023187,
+    "latency_us": {
+      "mean": 201.0,
+      "p50": 68.0,
+      "p90": 260.0,
+      "p99": 2610.0,
+      "p999": 12900.0
+    },
+    "cpu_percent": 1427.4,
+    "memory": "34MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 3024,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\vanilla-epoll\\echo-ws-pipeline.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    201us     68us    260us   2.61ms   12.90ms\n\n  205118960 frames sent in 5.00s, 205115936 frames received\n  Throughput: 41.01M req/s\n  Bandwidth:  273.80MB/s\n  WS upgrades: 512\n  WS frames:   205115936\n  Latency samples: 205115936 / 205115936 responses (100.0%)\n[info] CPU 1427.4% | Mem 34MiB\n"
+  },
+  {
+    "framework": "vanilla-epoll",
+    "profile": "echo-ws-pipeline",
+    "connections": 512,
+    "round": 2,
+    "frames_sent": 214091520,
+    "frames_received": 214086400,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 42817280,
+    "latency_us": {
+      "mean": 195.0,
+      "p50": 70.0,
+      "p90": 247.0,
+      "p99": 2090.0,
+      "p999": 16000.0
+    },
+    "cpu_percent": 1476.9,
+    "memory": "34MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 5120,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\vanilla-epoll\\echo-ws-pipeline.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    195us     70us    247us   2.09ms   16.00ms\n\n  214091520 frames sent in 5.00s, 214086400 frames received\n  Throughput: 42.81M req/s\n  Bandwidth:  285.77MB/s\n  WS upgrades: 512\n  WS frames:   214086400\n  Latency samples: 214086400 / 214086400 responses (100.0%)\n[info] CPU 1476.9% | Mem 34MiB\n"
+  },
+  {
+    "framework": "vanilla-epoll",
+    "profile": "echo-ws-pipeline",
+    "connections": 512,
+    "round": 3,
+    "frames_sent": 199330592,
+    "frames_received": 199323168,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 39864633,
+    "latency_us": {
+      "mean": 209.0,
+      "p50": 77.0,
+      "p90": 236.0,
+      "p99": 2040.0,
+      "p999": 20400.0
+    },
+    "cpu_percent": 1447.4,
+    "memory": "35MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 7424,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\vanilla-epoll\\echo-ws-pipeline.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    209us     77us    236us   2.04ms   20.40ms\n\n  199330592 frames sent in 5.00s, 199323168 frames received\n  Throughput: 39.85M req/s\n  Bandwidth:  266.07MB/s\n  WS upgrades: 512\n  WS frames:   199323168\n  Latency samples: 199323168 / 199323168 responses (100.0%)\n[info] CPU 1447.4% | Mem 35MiB\n\n=== Best: 42817280 req/s (CPU: 1476.9%, Mem: 34MiB) ===\n[info] saved results/echo-ws-pipeline/512/vanilla-epoll.json\nhttparena-bench-vanilla-epoll\nhttparena-bench-vanilla-epoll\n\n=============================================="
+  },
+  {
+    "framework": "vanilla-epoll",
+    "profile": "echo-ws-pipeline",
+    "connections": 4096,
+    "round": 1,
+    "frames_sent": 230046912,
+    "frames_received": 229981376,
+    "elapsed_seconds": 5.02,
+    "frames_per_second": 45813023,
+    "latency_us": {
+      "mean": 1420.0,
+      "p50": 300.0,
+      "p90": 2760.0,
+      "p99": 20400.0,
+      "p999": 63400.0
+    },
+    "cpu_percent": 1505.3,
+    "memory": "95MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 65536,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\vanilla-epoll\\echo-ws-pipeline.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   1.42ms    300us   2.76ms   20.40ms   63.40ms\n\n  230046912 frames sent in 5.02s, 229981376 frames received\n  Throughput: 45.84M req/s\n  Bandwidth:  306.12MB/s\n  WS upgrades: 4096\n  WS frames:   229981376\n  Latency samples: 229981376 / 229981376 responses (100.0%)\n[info] CPU 1505.3% | Mem 95MiB\n"
+  },
+  {
+    "framework": "vanilla-epoll",
+    "profile": "echo-ws-pipeline",
+    "connections": 4096,
+    "round": 2,
+    "frames_sent": 209999744,
+    "frames_received": 209934208,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 41903035,
+    "latency_us": {
+      "mean": 1600.0,
+      "p50": 295.0,
+      "p90": 4150.0,
+      "p99": 23400.0,
+      "p999": 47600.0
+    },
+    "cpu_percent": 1617.5,
+    "memory": "96MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 65536,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\vanilla-epoll\\echo-ws-pipeline.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   1.60ms    295us   4.15ms   23.40ms   47.60ms\n\n  209999744 frames sent in 5.01s, 209934208 frames received\n  Throughput: 41.93M req/s\n  Bandwidth:  279.99MB/s\n  WS upgrades: 4096\n  WS frames:   209934208\n  Latency samples: 209934208 / 209934208 responses (100.0%)\n[info] CPU 1617.5% | Mem 96MiB\n"
+  },
+  {
+    "framework": "vanilla-epoll",
+    "profile": "echo-ws-pipeline",
+    "connections": 4096,
+    "round": 3,
+    "frames_sent": 227937120,
+    "frames_received": 227872608,
+    "elapsed_seconds": 5.02,
+    "frames_per_second": 45392949,
+    "latency_us": {
+      "mean": 1460.0,
+      "p50": 295.0,
+      "p90": 3590.0,
+      "p99": 20500.0,
+      "p999": 53300.0
+    },
+    "cpu_percent": 1546.2,
+    "memory": "97MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 64512,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\vanilla-epoll\\echo-ws-pipeline.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   1.46ms    295us   3.59ms   20.50ms   53.30ms\n\n  227937120 frames sent in 5.02s, 227872608 frames received\n  Throughput: 45.39M req/s\n  Bandwidth:  303.12MB/s\n  WS upgrades: 4096\n  WS frames:   227872608\n  Latency samples: 227872608 / 227872608 responses (100.0%)\n[info] CPU 1546.2% | Mem 97MiB\n\n=== Best: 45813023 req/s (CPU: 1505.3%, Mem: 95MiB) ===\n[info] saved results/echo-ws-pipeline/4096/vanilla-epoll.json\nhttparena-bench-vanilla-epoll\nhttparena-bench-vanilla-epoll\n\n=============================================="
+  },
+  {
+    "framework": "vanilla-epoll",
+    "profile": "echo-ws-pipeline",
+    "connections": 16384,
+    "round": 1,
+    "frames_sent": 160551939,
+    "frames_received": 160289795,
+    "elapsed_seconds": 5.02,
+    "frames_per_second": 31930238,
+    "latency_us": {
+      "mean": 8090.0,
+      "p50": 4760.0,
+      "p90": 20600.0,
+      "p99": 33300.0,
+      "p999": 51800.0
+    },
+    "cpu_percent": 1339.0,
+    "memory": "304MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 262144,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\vanilla-epoll\\echo-ws-pipeline.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   8.09ms   4.76ms   20.60ms   33.30ms   51.80ms\n\n  160551939 frames sent in 5.02s, 160289795 frames received\n  Throughput: 31.96M req/s\n  Bandwidth:  213.74MB/s\n  WS upgrades: 16384\n  WS frames:   160289795\n  Latency samples: 160289795 / 160289795 responses (100.0%)\n[info] CPU 1339.0% | Mem 304MiB\n"
+  },
+  {
+    "framework": "vanilla-epoll",
+    "profile": "echo-ws-pipeline",
+    "connections": 16384,
+    "round": 2,
+    "frames_sent": 153111936,
+    "frames_received": 152849792,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 30508940,
+    "latency_us": {
+      "mean": 8690.0,
+      "p50": 7980.0,
+      "p90": 16400.0,
+      "p99": 31800.0,
+      "p999": 53800.0
+    },
+    "cpu_percent": 1663.3,
+    "memory": "315MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 262144,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\vanilla-epoll\\echo-ws-pipeline.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   8.69ms   7.98ms   16.40ms   31.80ms   53.80ms\n\n  153111936 frames sent in 5.01s, 152849792 frames received\n  Throughput: 30.51M req/s\n  Bandwidth:  204.11MB/s\n  WS upgrades: 16384\n  WS frames:   152849792\n  Latency samples: 152849792 / 152849792 responses (100.0%)\n[info] CPU 1663.3% | Mem 315MiB\n"
+  },
+  {
+    "framework": "vanilla-epoll",
+    "profile": "echo-ws-pipeline",
+    "connections": 16384,
+    "round": 3,
+    "frames_sent": 136273888,
+    "frames_received": 136011744,
+    "elapsed_seconds": 5.02,
+    "frames_per_second": 27093972,
+    "latency_us": {
+      "mean": 9710.0,
+      "p50": 8039.999999999999,
+      "p90": 21200.0,
+      "p99": 34700.0,
+      "p999": 53900.0
+    },
+    "cpu_percent": 1385.2,
+    "memory": "316MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 262144,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\vanilla-epoll\\echo-ws-pipeline.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  16\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   9.71ms   8.04ms   21.20ms   34.70ms   53.90ms\n\n  136273888 frames sent in 5.02s, 136011744 frames received\n  Throughput: 27.08M req/s\n  Bandwidth:  181.17MB/s\n  WS upgrades: 16384\n  WS frames:   136011744\n  Latency samples: 136011744 / 136011744 responses (100.0%)\n[info] CPU 1385.2% | Mem 316MiB\n\n=== Best: 31930238 req/s (CPU: 1339.0%, Mem: 304MiB) ===\n[info] saved results/echo-ws-pipeline/16384/vanilla-epoll.json\nhttparena-bench-vanilla-epoll\nhttparena-bench-vanilla-epoll\n[info] rebuilding site/data/*.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/frameworks.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-baseline.json - 8 new, 8 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-candidate.json - 8 new, 8 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/fulmine.js.json - 8 new, 28 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/genhttp-ioxide.json - 8 new, 33 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/vanilla-epoll.json - 6 new, 35 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/current.json\n[info] done\nhttparena-postgres"
+  },
+  {
+    "framework": "vanilla-epoll",
+    "profile": "echo-ws",
+    "connections": 512,
+    "round": 1,
+    "frames_sent": 12698978,
+    "frames_received": 12698533,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 2539706,
+    "latency_us": {
+      "mean": 202.0,
+      "p50": 65.0,
+      "p90": 285.0,
+      "p99": 2480.0,
+      "p999": 14500.0
+    },
+    "cpu_percent": 1322.0,
+    "memory": "33MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 445,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\vanilla-epoll\\echo-ws.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    202us     65us    285us   2.48ms   14.50ms\n\n  12698978 frames sent in 5.00s, 12698533 frames received\n  Throughput: 2.54M req/s\n  Bandwidth:  16.96MB/s\n  WS upgrades: 512\n  WS frames:   12698533\n  Latency samples: 12698533 / 12698533 responses (100.0%)\n[info] CPU 1322.0% | Mem 33MiB\n"
+  },
+  {
+    "framework": "vanilla-epoll",
+    "profile": "echo-ws",
+    "connections": 512,
+    "round": 2,
+    "frames_sent": 13840891,
+    "frames_received": 13840443,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 2762563,
+    "latency_us": {
+      "mean": 187.0,
+      "p50": 65.0,
+      "p90": 241.0,
+      "p99": 1970.0,
+      "p999": 16500.0
+    },
+    "cpu_percent": 1420.1,
+    "memory": "35MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 448,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\vanilla-epoll\\echo-ws.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    187us     65us    241us   1.97ms   16.50ms\n\n  13840891 frames sent in 5.01s, 13840443 frames received\n  Throughput: 2.76M req/s\n  Bandwidth:  18.46MB/s\n  WS upgrades: 512\n  WS frames:   13840443\n  Latency samples: 13840443 / 13840443 responses (100.0%)\n[info] CPU 1420.1% | Mem 35MiB\n"
+  },
+  {
+    "framework": "vanilla-epoll",
+    "profile": "echo-ws",
+    "connections": 512,
+    "round": 3,
+    "frames_sent": 14665947,
+    "frames_received": 14665667,
+    "elapsed_seconds": 5.0,
+    "frames_per_second": 2933133,
+    "latency_us": {
+      "mean": 176.0,
+      "p50": 63.0,
+      "p90": 213.0,
+      "p99": 1780.0,
+      "p999": 15800.0
+    },
+    "cpu_percent": 1416.3,
+    "memory": "34MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 280,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\vanilla-epoll\\echo-ws.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     512 (8/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency    176us     63us    213us   1.78ms   15.80ms\n\n  14665947 frames sent in 5.00s, 14665667 frames received\n  Throughput: 2.93M req/s\n  Bandwidth:  19.58MB/s\n  WS upgrades: 512\n  WS frames:   14665667\n  Latency samples: 14665667 / 14665667 responses (100.0%)\n[info] CPU 1416.3% | Mem 34MiB\n\n=== Best: 2933133 req/s (CPU: 1416.3%, Mem: 34MiB) ===\n[info] saved results/echo-ws/512/vanilla-epoll.json\nhttparena-bench-vanilla-epoll\nhttparena-bench-vanilla-epoll\n\n=============================================="
+  },
+  {
+    "framework": "vanilla-epoll",
+    "profile": "echo-ws",
+    "connections": 4096,
+    "round": 1,
+    "frames_sent": 15466883,
+    "frames_received": 15462787,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 3086384,
+    "latency_us": {
+      "mean": 1320.0,
+      "p50": 280.0,
+      "p90": 2610.0,
+      "p99": 20400.0,
+      "p999": 49100.0
+    },
+    "cpu_percent": 1505.1,
+    "memory": "95MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 4096,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\vanilla-epoll\\echo-ws.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   1.32ms    280us   2.61ms   20.40ms   49.10ms\n\n  15466883 frames sent in 5.01s, 15462787 frames received\n  Throughput: 3.09M req/s\n  Bandwidth:  20.71MB/s\n  WS upgrades: 4096\n  WS frames:   15462787\n  Latency samples: 15462787 / 15462787 responses (100.0%)\n[info] CPU 1505.1% | Mem 95MiB\n"
+  },
+  {
+    "framework": "vanilla-epoll",
+    "profile": "echo-ws",
+    "connections": 4096,
+    "round": 2,
+    "frames_sent": 13730407,
+    "frames_received": 13726311,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 2739782,
+    "latency_us": {
+      "mean": 1530.0,
+      "p50": 235.0,
+      "p90": 3580.0,
+      "p99": 23300.0,
+      "p999": 41000.0
+    },
+    "cpu_percent": 1592.6,
+    "memory": "97MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 4096,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\vanilla-epoll\\echo-ws.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   1.53ms    235us   3.58ms   23.30ms   41.00ms\n\n  13730407 frames sent in 5.01s, 13726311 frames received\n  Throughput: 2.74M req/s\n  Bandwidth:  18.37MB/s\n  WS upgrades: 4096\n  WS frames:   13726311\n  Latency samples: 13726311 / 13726311 responses (100.0%)\n[info] CPU 1592.6% | Mem 97MiB\n"
+  },
+  {
+    "framework": "vanilla-epoll",
+    "profile": "echo-ws",
+    "connections": 4096,
+    "round": 3,
+    "frames_sent": 13229985,
+    "frames_received": 13225889,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 2639898,
+    "latency_us": {
+      "mean": 1570.0,
+      "p50": 265.0,
+      "p90": 3980.0,
+      "p99": 22900.0,
+      "p999": 45200.0
+    },
+    "cpu_percent": 1521.4,
+    "memory": "98MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 4096,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\vanilla-epoll\\echo-ws.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     4096 (64/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   1.57ms    265us   3.98ms   22.90ms   45.20ms\n\n  13229985 frames sent in 5.01s, 13225889 frames received\n  Throughput: 2.64M req/s\n  Bandwidth:  17.74MB/s\n  WS upgrades: 4096\n  WS frames:   13225889\n  Latency samples: 13225889 / 13225889 responses (100.0%)\n[info] CPU 1521.4% | Mem 98MiB\n\n=== Best: 3086384 req/s (CPU: 1505.1%, Mem: 95MiB) ===\n[info] saved results/echo-ws/4096/vanilla-epoll.json\nhttparena-bench-vanilla-epoll\nhttparena-bench-vanilla-epoll\n\n=============================================="
+  },
+  {
+    "framework": "vanilla-epoll",
+    "profile": "echo-ws",
+    "connections": 16384,
+    "round": 1,
+    "frames_sent": 8268651,
+    "frames_received": 8252267,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 1647159,
+    "latency_us": {
+      "mean": 9760.0,
+      "p50": 8380.0,
+      "p90": 19800.0,
+      "p99": 37200.0,
+      "p999": 62300.0
+    },
+    "cpu_percent": 1450.5,
+    "memory": "303MiB",
+    "errors": {
+      "connect": 0,
+      "read": 1,
+      "timeout": 0
+    },
+    "reconnects": 1,
+    "send_receive_delta": 16384,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\vanilla-epoll\\echo-ws.log",
+    "raw_round": "[run 1/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   9.76ms   8.38ms   19.80ms   37.20ms   62.30ms\n\n  8268651 frames sent in 5.01s, 8252267 frames received\n  Throughput: 1.65M req/s\n  Bandwidth:  11.39MB/s\n  WS upgrades: 16384\n  WS frames:   8252267\n  Latency samples: 8252267 / 8252267 responses (100.0%)\n  Reconnects: 1\n  Errors: connect 0, read 1, timeout 0\n[info] CPU 1450.5% | Mem 303MiB\n"
+  },
+  {
+    "framework": "vanilla-epoll",
+    "profile": "echo-ws",
+    "connections": 16384,
+    "round": 2,
+    "frames_sent": 8499445,
+    "frames_received": 8483061,
+    "elapsed_seconds": 5.02,
+    "frames_per_second": 1689852,
+    "latency_us": {
+      "mean": 9960.0,
+      "p50": 6530.0,
+      "p90": 23000.0,
+      "p99": 35600.0,
+      "p999": 50200.0
+    },
+    "cpu_percent": 1283.9,
+    "memory": "314MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 16384,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\vanilla-epoll\\echo-ws.log",
+    "raw_round": "[run 2/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   9.96ms   6.53ms   23.00ms   35.60ms   50.20ms\n\n  8499445 frames sent in 5.02s, 8483061 frames received\n  Throughput: 1.69M req/s\n  Bandwidth:  11.69MB/s\n  WS upgrades: 16384\n  WS frames:   8483061\n  Latency samples: 8483061 / 8483061 responses (100.0%)\n[info] CPU 1283.9% | Mem 314MiB\n"
+  },
+  {
+    "framework": "vanilla-epoll",
+    "profile": "echo-ws",
+    "connections": 16384,
+    "round": 3,
+    "frames_sent": 10217269,
+    "frames_received": 10200885,
+    "elapsed_seconds": 5.01,
+    "frames_per_second": 2036104,
+    "latency_us": {
+      "mean": 8160.0,
+      "p50": 6060.0,
+      "p90": 19900.0,
+      "p99": 36300.0,
+      "p999": 62900.0
+    },
+    "cpu_percent": 1410.4,
+    "memory": "314MiB",
+    "errors": {
+      "connect": 0,
+      "read": 0,
+      "timeout": 0
+    },
+    "reconnects": 0,
+    "send_receive_delta": 16384,
+    "source_log": "testing\\bench\\results\\websocket\\2026-10-20-official\\raw\\vanilla-epoll\\echo-ws.log",
+    "raw_round": "[run 3/3]\ngcannon v0.6.1 [WS]\n  Target:    localhost:8080/ws\n  Threads:   64\n  Conns:     16384 (256/thread)\n  Pipeline:  1\n  Req/conn:  unlimited (keep-alive)\n  Expected:  200\n  Duration:  5s\n\n\n  Thread Stats   Avg      p50      p90      p99    p99.9\n    Latency   8.16ms   6.06ms   19.90ms   36.30ms   62.90ms\n\n  10217269 frames sent in 5.01s, 10200885 frames received\n  Throughput: 2.04M req/s\n  Bandwidth:  13.99MB/s\n  WS upgrades: 16384\n  WS frames:   10200885\n  Latency samples: 10200885 / 10200885 responses (100.0%)\n[info] CPU 1410.4% | Mem 314MiB\n\n=== Best: 2036104 req/s (CPU: 1410.4%, Mem: 314MiB) ===\n[info] saved results/echo-ws/16384/vanilla-epoll.json\nhttparena-bench-vanilla-epoll\nhttparena-bench-vanilla-epoll\n[info] rebuilding site/data/*.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/frameworks.json\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-baseline.json - 8 new, 8 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-candidate.json - 8 new, 8 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/fulmine.js.json - 8 new, 28 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/genhttp-ioxide.json - 8 new, 33 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/vanilla-epoll.json - 3 new, 35 total\n[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/current.json\n[info] done\nhttparena-postgres"
+  }
+]

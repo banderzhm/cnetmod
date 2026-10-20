@@ -1,0 +1,18 @@
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+Sending build context to Docker daemon  19.97kB
+Step 1/11 : FROM rust:1.95 AS build
+1.95: Pulling from library/rust
+f32f49ce655a: Pulling fs layer
+8d6d44b254da: Pulling fs layer
+8a7504cd2818: Pulling fs layer
+b53089dca505: Pulling fs layer
+2a75a7988865: Pulling fs layer
+97121bcf5fa8: Download complete
+9d02b83d82d7: Download complete
+f32f49ce655a: Download complete
+f32f49ce655a: Pull complete
+8a7504cd2818: Download complete
+8a7504cd2818: Pull complete

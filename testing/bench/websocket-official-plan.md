@@ -1,16 +1,17 @@
-# Official WebSocket test plan — prepared, not executed
+# Official WebSocket test plan
 
-This plan supersedes the diagnostic runner for performance conclusions. No
-benchmark is authorized until the shared host's explicit test token arrives.
+This plan supersedes the diagnostic runner for performance conclusions. The
+authorized local execution and all three rounds are recorded in
+[the 2026-10-20 report](results/websocket/2026-10-20-official/README.md).
 Only one framework/profile may generate load at a time; Release compilation
-is limited to `-j4`. No measured result or optimization claim exists yet.
+is limited to `-j4`. See that report for host limitations and unavailable peers.
 
 ## Frozen upstream inputs
 
 HttpArena snapshot:
 [`8977be2721a5aba7b320345cddfcd6f6b654e698`](https://github.com/MDA2AV/HttpArena/tree/8977be2721a5aba7b320345cddfcd6f6b654e698).
 The initial checkout is the sibling `HttpArena` directory; the prepared native
-Linux clone is `/tmp/cnetmod-ws-HttpArena-official`. Use a native Linux checkout
+Linux clone used for execution is `/root/cnetmod-ws-20261020/HttpArena`. Use a native Linux checkout
 for execution so Windows CRLF conversion cannot affect scripts or hashes. Preserve its tracked
 files unchanged. `prepare_ws_official.py` verifies its revision and clean
 tracked state of the relevant inputs, hashes the official driver, validation, configuration,
@@ -71,7 +72,7 @@ client warmup or server restart per round is part of the official profile.
 Alternatively, use the same pinned upstream gcannon native binary through the
 official driver's `GCANNON` override with `LOADGEN_DOCKER=false`; this preserves
 the official client and all its default workload flags. The prepared binary is
-`/tmp/cnetmod-ws-gcannon-src/gcannon` (SHA-256
+`/root/cnetmod-ws-20261020/gcannon-src/gcannon` (SHA-256
 `48d5fa257ca5559f2da88138ff2016adb3191914e3a685ca7e9be0a355eddf2e`).
 
 ## Framework adapter and peers

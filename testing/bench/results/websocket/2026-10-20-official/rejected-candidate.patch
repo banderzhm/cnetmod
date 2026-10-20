@@ -1,0 +1,94 @@
+diff --git a/src/protocol/websocket/client/websocket_client_connection_impl.cpp b/src/protocol/websocket/client/websocket_client_connection_impl.cpp
+index 09895475..ae5bb9ae 100644
+--- a/src/protocol/websocket/client/websocket_client_connection_impl.cpp
++++ b/src/protocol/websocket/client/websocket_client_connection_impl.cpp
+@@ -1,5 +1,6 @@
+ module cnetmod.protocol.websocket;
+ 
++import std;
+ import cnetmod.core.buffer;
+ import cnetmod.core.dns;
+ import cnetmod.coro.cancel;
+@@ -268,7 +269,9 @@ auto connection::async_accept_tls(socket client_sock, ssl_context& ssl_ctx)
+ auto connection::async_send_text(std::string_view text)
+     -> task<std::expected<void, std::error_code>>
+ {
+-    co_return co_await async_send(
++    // Preserve the underlying lazy task instead of allocating a forwarding
++    // coroutine frame for each message.
++    return async_send(
+         opcode::text,
+         std::span{reinterpret_cast<const std::byte*>(text.data()), text.size()});
+ }
+@@ -276,7 +279,7 @@ auto connection::async_send_text(std::string_view text)
+ auto connection::async_send_binary(std::span<const std::byte> data)
+     -> task<std::expected<void, std::error_code>>
+ {
+-    co_return co_await async_send(opcode::binary, data);
++    return async_send(opcode::binary, data);
+ }
+ 
+ auto connection::async_ping(std::span<const std::byte> payload)
+@@ -498,13 +501,13 @@ auto connection::async_read_some(char* buf, std::size_t len)
+ #ifdef CNETMOD_HAS_SSL
+     if (secure_ && ssl_)
+     {
+-        co_return co_await ssl_->async_read(mutable_buffer{buf, len});
++        return ssl_->async_read(mutable_buffer{buf, len});
+     }
+ #endif
+     if (cancel_token_)
+-        co_return co_await cnetmod::async_read(
++        return cnetmod::async_read(
+             ctx_, sock_, mutable_buffer{buf, len}, *cancel_token_);
+-    co_return co_await cnetmod::async_read(ctx_, sock_, mutable_buffer{buf, len});
++    return cnetmod::async_read(ctx_, sock_, mutable_buffer{buf, len});
+ }
+ 
+ auto connection::async_write_all(const char* data, std::size_t len)
+@@ -513,15 +516,15 @@ auto connection::async_write_all(const char* data, std::size_t len)
+ #ifdef CNETMOD_HAS_SSL
+     if (secure_ && ssl_)
+     {
+-        co_return co_await ssl_->async_write_all(const_buffer{data, len});
++        return ssl_->async_write_all(const_buffer{data, len});
+     }
+ #endif
+     if (cancel_token_)
+     {
+-        co_return co_await cnetmod::async_write_all(
++        return cnetmod::async_write_all(
+             ctx_, sock_, const_buffer{data, len}, *cancel_token_);
+     }
+-    co_return co_await cnetmod::async_write_all(ctx_, sock_,
++    return cnetmod::async_write_all(ctx_, sock_,
+         const_buffer{data, len});
+ }
+ 
+diff --git a/src/protocol/websocket/server/websocket_server_impl.cpp b/src/protocol/websocket/server/websocket_server_impl.cpp
+index ffb0dce4..bd35fc6b 100644
+--- a/src/protocol/websocket/server/websocket_server_impl.cpp
++++ b/src/protocol/websocket/server/websocket_server_impl.cpp
+@@ -130,18 +130,19 @@ auto ws_context::param(std::string_view name) const noexcept
+ auto ws_context::send_text(std::string_view text)
+     -> task<std::expected<void, std::error_code>>
+ {
+-    co_return co_await conn_.async_send_text(text);
++    // The connection owns the operation and its coroutine lifetime.
++    return conn_.async_send_text(text);
+ }
+ 
+ auto ws_context::send_binary(std::span<const std::byte> data)
+     -> task<std::expected<void, std::error_code>>
+ {
+-    co_return co_await conn_.async_send_binary(data);
++    return conn_.async_send_binary(data);
+ }
+ 
+ auto ws_context::recv() -> task<std::expected<ws_message, std::error_code>>
+ {
+-    co_return co_await conn_.async_recv();
++    return conn_.async_recv();
+ }
+ 
+ auto ws_context::close(std::uint16_t code, std::string_view reason)

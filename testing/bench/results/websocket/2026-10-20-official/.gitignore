@@ -1,0 +1,2 @@
+# Keep captured build provenance despite the repository-wide build* ignore.
+!build*

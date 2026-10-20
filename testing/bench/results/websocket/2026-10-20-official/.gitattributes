@@ -1,0 +1,3 @@
+# Preserve captured bytes, including terminal whitespace and CR progress output.
+# SHA256 must stay valid on Windows checkouts.
+* -text -whitespace

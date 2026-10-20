@@ -1,0 +1,2 @@
+[ perf record: Woken up 91 times to write data ]
+[ perf record: Captured and wrote 27.480 MB /root/cnetmod-ws-20261020/baseline-perf.data (158370 samples) ]

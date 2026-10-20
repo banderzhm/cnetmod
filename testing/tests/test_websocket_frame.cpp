@@ -1,6 +1,8 @@
 import std;
 import cnetmod.core.net_init;
 import cnetmod.core.log;
+import cnetmod.coro.task;
+import cnetmod.io.io_context;
 import cnetmod.protocol.websocket;
 
 namespace ws = cnetmod::ws;
@@ -86,6 +88,27 @@ void check_reused_frames()
         require(!ws::parse_frame_header(ws::build_frame(op, {}, false, false)), "fragmented control frame");
     }
 }
+
+void check_disconnected_operations()
+{
+    auto io = cnetmod::make_io_context();
+    ws::connection connection(*io);
+    ws::ws_context context(connection, "/ws", {}, {}, {});
+    const auto run = [&]() -> cnetmod::task<void>
+    {
+        auto text = co_await context.send_text("hello");
+        require(!text && text.error() == ws::make_error_code(ws::ws_errc::not_connected),
+            "disconnected text send preserves connection errors");
+        std::array<std::byte, 2> payload{std::byte{0x00}, std::byte{0xff}};
+        auto binary = co_await context.send_binary(payload);
+        require(!binary && binary.error() == ws::make_error_code(ws::ws_errc::not_connected),
+            "disconnected binary send preserves connection errors");
+        auto received = co_await context.recv();
+        require(!received && received.error() == ws::make_error_code(ws::ws_errc::not_connected),
+            "disconnected receive preserves connection errors");
+    };
+    cnetmod::sync_wait(run());
+}
 } // namespace
 
 auto main() -> int
@@ -96,6 +119,7 @@ auto main() -> int
     {
         check_mask();
         check_reused_frames();
+        check_disconnected_operations();
         logger::info{"WebSocket mask, frame reuse, boundaries and control regressions passed"};
     }
     catch (const std::exception& error)
