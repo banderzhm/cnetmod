@@ -1,0 +1,8 @@
+{
+  "cnetmod-grpc-control-native": {
+    "image": "sha256:5041c73cf0255b81285c0764695a871b63da36150a72aade9b970cbd60b092bc",
+    "source_sha": "036f369f387272f3689bda72468ccc454b6b3e2d",
+    "binary_sha256": "a8173b1936057a14f6892f884a6994f33a10a9b942e6729107213aabc77d1a72",
+    "runtime": "16 individually pinned workers; CPUs0-15; native ThinLTO FP; default batch8 CQ256; compile jobs4, link pool1 and backend threads4"
+  }
+}

@@ -1,10 +1,10 @@
 # Official HttpArena gRPC / HTTP2 preparation
 
-Acceptance clarification (2026-10-20): the user requires +10% over the published
-HttpArena gRPC leader. Local peer acceptance does not establish that target.
-Default framework leader WTX and the faster separate Engine league are audited
-in [the leaderboard target audit](results/grpc-official-2026-10-20/leaderboard-audit/README.md).
-Category scope and comparable leaderboard validation remain unresolved.
+Acceptance clarification resolved (2026-10-20): the user selected the default
+framework leader WTX. A fresh complete candidate/control matrix passes all four
+published WTX RPS +10% thresholds. This is a cross-host published-number threshold
+comparison; no official ranking or same-host WTX win is claimed. The exclusive
+test token has been released again. See [the final WTX report](results/grpc-official-2026-10-20/wtx-target/README.md).
 
 Status updated 2026-10-20: execution completed and the exclusive performance
 token was released. The official gRPC profiles were run using the same documented
