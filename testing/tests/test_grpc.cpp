@@ -277,6 +277,77 @@ TEST(grpc_router_options_are_configurable)
     ASSERT_FALSE(router.options().accept_gzip);
 }
 
+TEST(grpc_sync_adapter_preserves_protocol_validation_and_compression)
+{
+    auto io = cnetmod::make_io_context();
+    cnetmod::socket socket;
+    std::size_t calls{}, intercepted{};
+    service_router router{server_options{.max_receive_message_bytes = 64,
+        .max_send_message_bytes = 64,
+        .interceptors = {[&](const call_context& call) -> std::expected<void, status>
+            {
+                ++intercepted;
+                ASSERT_EQ(call.service, std::string{"demo.Echo"});
+                return {};
+            }}}};
+    router.add_unary_sync("demo.Echo", "Say", [&](std::span<const std::byte> input,
+        const call_context&) -> std::expected<byte_buffer, status>
+        {
+            ++calls;
+            return byte_buffer{input.begin(), input.end()};
+        });
+    auto handler = router.make_http_sync_handler();
+    const byte_buffer payload{std::byte{1}, std::byte{2}, std::byte{3}};
+    const auto invoke = [&](std::string_view body, cnetmod::http::header_map headers)
+    {
+        cnetmod::http::response output;
+        cnetmod::http::request_context context{*io, socket, "POST", "/demo.Echo/Say",
+            headers, body, output, {}};
+        handler(context);
+        return output;
+    };
+    auto encoded = encode_frame(payload);
+    ASSERT_TRUE(encoded.has_value());
+    auto wire = std::string_view{reinterpret_cast<const char*>(encoded->data()), encoded->size()};
+    auto response = invoke(wire, {{"content-type", "application/grpc"}});
+    ASSERT_EQ(response.trailers().at("grpc-status"), std::string{"0"});
+    auto decoded = decode_frames(std::span<const std::byte>{
+        reinterpret_cast<const std::byte*>(response.body().data()), response.body().size()});
+    ASSERT_TRUE(decoded.has_value());
+    ASSERT_TRUE(std::ranges::equal(decoded->front().payload, payload));
+    ASSERT_EQ(calls, std::size_t{1});
+    ASSERT_EQ(intercepted, std::size_t{1});
+    response = invoke(wire, {{"content-type", "text/plain"}});
+    ASSERT_EQ(response.trailers().at("grpc-status"), std::string{"3"});
+    response = invoke(wire.substr(0, wire.size() - 1), {{"content-type", "application/grpc"}});
+    ASSERT_EQ(response.trailers().at("grpc-status"), std::string{"3"});
+    response = invoke(wire, {{"content-type", "application/grpc"}, {"grpc-encoding", "unsupported"}});
+    ASSERT_EQ(response.trailers().at("grpc-status"), std::string{"12"});
+    ASSERT_EQ(calls, std::size_t{1});
+#ifdef CNETMOD_HAS_ZLIB
+    auto compressed = encode_frames(std::vector<byte_buffer>{payload}, compression_algorithm::gzip);
+    ASSERT_TRUE(compressed.has_value());
+    response = invoke(std::string_view{reinterpret_cast<const char*>(compressed->data()), compressed->size()},
+        {{"content-type", "application/grpc"}, {"grpc-encoding", "gzip"}});
+    ASSERT_EQ(response.trailers().at("grpc-status"), std::string{"0"});
+    ASSERT_EQ(calls, std::size_t{2});
+#endif
+    router.add_unary("demo.Echo", "Async", [&](std::span<const std::byte>, const call_context&)
+        -> cnetmod::task<std::expected<byte_buffer, status>>
+        {
+            ++calls;
+            co_return byte_buffer{};
+        });
+    cnetmod::http::response asynchronous;
+    cnetmod::http::header_map headers{{"content-type", "application/grpc"}};
+    cnetmod::http::request_context async_context{*io, socket, "POST", "/demo.Echo/Async",
+        headers, wire, asynchronous, {}};
+    const auto calls_before = calls;
+    handler(async_context);
+    ASSERT_EQ(asynchronous.trailers().at("grpc-status"), std::string{"12"});
+    ASSERT_EQ(calls, calls_before);
+}
+
 TEST(disabled_grpc_server_observation_returns_the_original_handler)
 {
     cnetmod::http::handler_fn raw{no_op_grpc_handler};

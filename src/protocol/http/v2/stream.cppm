@@ -35,6 +35,7 @@ public:
     [[nodiscard]] auto take_headers() noexcept
         -> std::vector<header_field>;
     [[nodiscard]] auto body() const noexcept -> std::span<const std::byte>;
+    [[nodiscard]] auto take_body() noexcept -> std::vector<std::byte>;
     void attach_body_stream(
         std::shared_ptr<cnetmod::http::request_body_stream> body_stream);
     [[nodiscard]] auto body_stream() const noexcept

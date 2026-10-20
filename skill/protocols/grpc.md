@@ -113,21 +113,48 @@ class message_stream_decoder {
 ```cpp
 explicit service_router(server_options options);
 void add_unary(std::string service, std::string method, unary_handler handler);
+void add_unary_sync(std::string service, std::string method, sync_unary_handler handler);
 void add_client_streaming(std::string service, std::string method, streaming_handler handler);
 void add_server_streaming(std::string service, std::string method, server_streaming_handler handler);
 void add_bidi_streaming(std::string service, std::string method, streaming_handler handler);
 auto make_http_handler() const -> http::handler_fn;
+auto make_http_sync_handler() const -> http::sync_handler_fn;
 ```
 
 **handler 签名**:
 ```cpp
 using unary_handler = std::function<task<std::expected<byte_buffer, status>>(std::span<const std::byte>, const call_context&)>;
+using sync_unary_handler = std::function<std::expected<byte_buffer, status>(std::span<const std::byte>, const call_context&)>;
 using streaming_handler = std::function<task<std::expected<std::vector<byte_buffer>, status>>(std::span<const byte_buffer>, const call_context&)>;
 using server_streaming_handler = std::function<task<std::expected<std::vector<byte_buffer>, status>>(std::span<const std::byte>, const call_context&)>;
 using server_interceptor = std::function<std::expected<void, status>(const call_context&)>;
 ```
 
 **`server_options`**: `max_receive_message_bytes`、`max_send_message_bytes`、`accept_gzip`、`interceptors`、`governance`
+
+### 同步 unary 计算与批量 HTTP/2 响应
+
+短小、无需等待 I/O 的业务计算可以用 `add_unary_sync()` 注册，再将
+`make_http_sync_handler()` 接到 HTTP router 的 `post_sync()` / `any_sync()`。
+同步适配器复用异步入口的完整协议处理，包括消息大小、压缩、metadata、拦截器、
+deadline、governance 和 trailers；每次请求仍调用业务函数，不能缓存固定响应冒充计算。
+
+```cpp
+service.add_unary_sync("demo.Echo", "Say",
+    [](std::span<const std::byte> input, const cnetmod::grpc::call_context&)
+        -> std::expected<cnetmod::grpc::byte_buffer, cnetmod::grpc::status>
+    {
+        return cnetmod::grpc::byte_buffer{input.begin(), input.end()};
+    });
+router.post_sync("/demo.Echo/Say", service.make_http_sync_handler());
+```
+
+HTTP/2 在同步、无 middleware、非 request-stream 路由上最多缓冲 16 KiB 请求体，
+可跨读取收齐后批量排队响应。超过阈值立即转回有背压的流式接收，保留先前收到的数据；
+批量输出受 64 KiB / 250 微秒上限约束，不设置等待凑批的计时器。
+同步回调不得阻塞或等待 I/O；耗时计算使用 executor 与异步 `add_unary()`。
+需要异步等待、客户端流或双向流时继续使用 `make_http_handler()`。同步入口遇到异步方法
+或流式 HTTP 请求上下文返回 `unimplemented`，不会尝试运行可能挂起的回调。
 
 ### `grpc::client` — 客户端
 

@@ -219,6 +219,14 @@ void service_router::add_unary(std::string service, std::string method, unary_ha
     };
 }
 
+void service_router::add_unary_sync(std::string service, std::string method, sync_unary_handler handler)
+{
+    methods_[key(service, method)] = method_entry{
+        .kind = call_kind::unary,
+        .sync_unary = std::move(handler),
+    };
+}
+
 service_router::service_router(server_options options)
     : options_(std::move(options))
 {
@@ -360,7 +368,9 @@ auto service_router::make_http_handler() const -> http::handler_fn
                     co_return;
                 }
 
-                auto r = co_await method->unary(*payload, call);
+                auto r = method->sync_unary
+                    ? method->sync_unary(*payload, call)
+                    : co_await method->unary(*payload, call);
                 if (!r)
                 {
                     ctx.resp() = make_status_response(status_or_deadline(r.error(), call));
@@ -412,7 +422,9 @@ auto service_router::make_http_handler() const -> http::handler_fn
                 st = grpc_error(status_code::invalid_argument, "unary grpc call requires exactly one message");
                 break;
             }
-            auto r = co_await method->unary(messages->front(), call);
+            auto r = method->sync_unary
+                ? method->sync_unary(messages->front(), call)
+                : co_await method->unary(messages->front(), call);
             if (!r)
             {
                 st = r.error();
@@ -492,6 +504,29 @@ auto service_router::make_http_handler() const -> http::handler_fn
         {
             ctx.resp().set_header("grpc-encoding", std::string(compression_name(response_compression)));
         }
+    };
+}
+
+auto service_router::make_http_sync_handler() const -> http::sync_handler_fn
+{
+    return [this, handler = make_http_handler()](http::request_context& ctx)
+    {
+        const auto* method = find(ctx.path());
+        if (ctx.has_body_stream() || (method && !method->sync_unary))
+        {
+            ctx.resp() = make_status_response(grpc_error(status_code::unimplemented,
+                "synchronous grpc routes require buffered bodies and synchronous unary handlers"));
+            return;
+        }
+        // Adapter pattern: execute the shared protocol pipeline inline. With
+        // an owned body and a synchronous method, every nested task completes
+        // inline, including compressed-message decoding. No duplicated codec or
+        // security path can drift from make_http_handler().
+        auto operation = handler(ctx);
+        operation.handle().resume();
+        if (!operation.handle().done())
+            throw std::logic_error("synchronous grpc pipeline suspended");
+        operation.handle().promise().result();
     };
 }
 

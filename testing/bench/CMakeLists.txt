@@ -114,6 +114,9 @@ if(CNETMOD_BUILD_TESTS AND TARGET grpc_arena_server)
         add_test(NAME test_grpc_arena_harness
             COMMAND "${Python3_EXECUTABLE}" -m unittest discover
                 -s "${CMAKE_CURRENT_SOURCE_DIR}" -p test_grpc_arena_bench.py)
+        add_test(NAME test_grpc_official_analysis
+            COMMAND "${Python3_EXECUTABLE}" -m unittest discover
+                -s "${CMAKE_CURRENT_SOURCE_DIR}" -p test_analyze_official_grpc.py)
         set(_grpc_arena_tls_args)
         if(CNETMOD_HAS_SSL AND CNETMOD_TEST_OPENSSL_EXECUTABLE)
             list(APPEND _grpc_arena_tls_args --openssl "${CNETMOD_TEST_OPENSSL_EXECUTABLE}")

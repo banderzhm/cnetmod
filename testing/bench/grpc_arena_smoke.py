@@ -14,8 +14,8 @@ def main() -> int:
     parser.add_argument("server", type=Path)
     parser.add_argument("--openssl")
     args = parser.parse_args()
-    if importlib.util.find_spec("grpc") is None:
-        print("SKIP: grpcio is required for the independent wire oracle")
+    if any(importlib.util.find_spec(name) is None for name in ("grpc", "h2")):
+        print("SKIP: grpcio and h2 are required for the independent wire oracles")
         return 77
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
@@ -41,6 +41,11 @@ def main() -> int:
                     if tls:
                         check += ["--cert", str(cert)]
                     subprocess.run(check, check=True, timeout=20)
+                    multiplex = [sys.executable, str(Path(__file__).with_name("grpc_arena_h2_check.py")),
+                                 "127.0.0.1", str(port)]
+                    if tls:
+                        multiplex += ["--cert", str(cert)]
+                    subprocess.run(multiplex, check=True, timeout=20)
                     if server.poll() is not None:
                         raise RuntimeError(f"server exited: {server.returncode}")
                 except Exception:

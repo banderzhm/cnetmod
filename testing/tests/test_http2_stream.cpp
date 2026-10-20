@@ -426,6 +426,160 @@ TEST(http2_borrowed_handler_is_not_dispatched_twice_after_streamed_body)
     ASSERT_EQ(body, std::string{"payload"});
 }
 
+TEST(http2_complete_body_batch_and_split_body_return_exact_consumed_credit)
+{
+    for (const unsigned mode : {0U, 1U, 2U, 3U})
+    {
+        const bool split_reads = mode != 0;
+        const bool filtered = mode >= 2;
+        const std::string expected = mode == 3 ? std::string(24'000, 'x') : "abc";
+        cnetmod::net_init network;
+        auto io = cnetmod::make_io_context();
+        cnetmod::socket unused;
+        header_compression encoder;
+        const std::array headers{header_field{":method", "POST"},
+            header_field{":scheme", "http"}, header_field{":path", "/rpc"}};
+        auto encoded = encoder.encode(headers);
+        ASSERT_TRUE(encoded.has_value());
+        std::vector<std::vector<std::byte>> reads;
+        reads.emplace_back(reinterpret_cast<const std::byte*>(preface.data()),
+            reinterpret_cast<const std::byte*>(preface.data()) + preface.size());
+        auto settings = framed({.type = frame_type::settings}, {});
+        reads.back().insert(reads.back().end(), settings.begin(), settings.end());
+        for (const auto id : {1U, 3U})
+        {
+            auto head = framed({.type = frame_type::headers, .flags = 0x4,
+                                   .stream_id = id}, *encoded);
+            auto data = framed({.type = frame_type::data, .flags = 0x1,
+                                   .stream_id = id}, bytes(expected));
+            if (split_reads)
+            {
+                reads.push_back(std::move(head));
+                if (mode == 3)
+                {
+                    reads.push_back(framed({.type = frame_type::data, .stream_id = id},
+                        bytes(std::string_view{expected}.substr(0, 12'000))));
+                    reads.push_back(framed({.type = frame_type::data, .flags = 0x1, .stream_id = id},
+                        bytes(std::string_view{expected}.substr(12'000))));
+                }
+                else
+                    reads.push_back(std::move(data));
+            }
+            else
+            {
+                reads.back().insert(reads.back().end(), head.begin(), head.end());
+                reads.back().insert(reads.back().end(), data.begin(), data.end());
+            }
+        }
+        std::size_t next{}, calls{}, buffered_calls{}, sync_calls{};
+        bool second_started{};
+        std::vector<std::byte> output;
+        auto reader = [&](cnetmod::mutable_buffer destination)
+            -> cnetmod::task<std::expected<std::size_t, std::error_code>>
+        {
+            co_await cnetmod::post_awaitable{*io};
+            if (next == reads.size())
+            {
+                for (unsigned turn{}; turn < 8; ++turn)
+                    co_await cnetmod::post_awaitable{*io};
+                co_return std::size_t{};
+            }
+            const auto& input = reads[next++];
+            std::memcpy(destination.data, input.data(), input.size());
+            co_return input.size();
+        };
+        auto writer = [&](cnetmod::const_buffer source)
+            -> cnetmod::task<std::expected<void, std::error_code>>
+        {
+            const auto* first = static_cast<const std::byte*>(source.data);
+            output.insert(output.end(), first, first + source.size);
+            co_return std::expected<void, std::error_code>{};
+        };
+        borrowed_streaming_server_handler handler =
+            [&](server_request& request, cnetmod::cancel_token&)
+            -> cnetmod::task<server_response>
+        {
+            ASSERT_TRUE(mode != 2);
+            ++calls;
+            std::string body;
+            if (request.body_stream)
+            {
+                while (auto chunk = co_await request.body_stream->receive())
+                    body.append(reinterpret_cast<const char*>(chunk->data()), chunk->size());
+            }
+            else
+            {
+                ++buffered_calls;
+                body.assign(reinterpret_cast<const char*>(request.body.data()), request.body.size());
+                request.body.clear(); // Credit must survive a handler taking ownership.
+            }
+            ASSERT_EQ(body, expected);
+            if (request.stream_id == 1)
+            {
+                for (unsigned turn{}; turn < 64 && !second_started; ++turn)
+                    co_await cnetmod::post_awaitable{*io};
+                ASSERT_TRUE(second_started);
+            }
+            else
+                second_started = true;
+            co_return server_response{.status = 204};
+        };
+        buffered_request_filter filter;
+        if (filtered)
+            filter = [](std::span<const header_field>) { return true; };
+        sync_server_handler synchronous;
+        if (mode == 2)
+            synchronous = [&](server_request& request, cnetmod::cancel_token&)
+                -> std::optional<server_response>
+            {
+                ++calls;
+                ++buffered_calls;
+                ++sync_calls;
+                ASSERT_EQ(request.body.size(), expected.size());
+                ASSERT_TRUE(std::ranges::equal(request.body, bytes(expected)));
+                return server_response{.status = 204};
+            };
+        session connection{*io, unused, std::move(handler),
+            {.max_bytes = 64 * 1024, .chunk_capacity = 4}, std::move(reader),
+            std::move(writer), std::move(synchronous), true, std::move(filter)};
+        auto execute = [&]() -> cnetmod::task<void>
+        {
+            co_await connection.run();
+            io->stop();
+        };
+        auto operation = execute();
+        operation.handle().resume();
+        io->run();
+        ASSERT_TRUE(operation.handle().done());
+        operation.handle().promise().result();
+        ASSERT_EQ(calls, std::size_t{2});
+        ASSERT_EQ(sync_calls, mode == 2 ? std::size_t{2} : std::size_t{0});
+        ASSERT_EQ(buffered_calls, mode == 0 || mode == 2 ? std::size_t{2} : std::size_t{0});
+        std::uint32_t credit{};
+        std::size_t updates{};
+        for (std::size_t offset{}; offset + frame_header_size <= output.size();)
+        {
+            auto header = decode_frame_header(std::span{output}.subspan(offset, frame_header_size));
+            ASSERT_TRUE(header.has_value());
+            if (!header || offset + frame_header_size + header->length > output.size())
+                break;
+            if (header->type == frame_type::window_update && header->stream_id == 0)
+            {
+                ++updates;
+                std::uint32_t increment{};
+                for (std::size_t index{}; index < 4; ++index)
+                    increment = (increment << 8) | std::to_integer<std::uint32_t>(
+                        output[offset + frame_header_size + index]);
+                credit += increment;
+            }
+            offset += frame_header_size + header->length;
+        }
+        ASSERT_EQ(credit, static_cast<std::uint32_t>(expected.size() * 2));
+        if (!split_reads)
+            ASSERT_EQ(updates, std::size_t{1});
+    }
+}
+
 TEST(http2_streaming_response_source_is_framed_without_buffering_the_body)
 {
     cnetmod::net_init network;

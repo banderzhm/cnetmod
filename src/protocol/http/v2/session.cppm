@@ -45,6 +45,7 @@ using borrowed_streaming_server_handler =
         server_request&, cnetmod::cancel_token&)>;
 using sync_server_handler = std::function<std::optional<server_response>(
     server_request&, cnetmod::cancel_token&)>;
+using buffered_request_filter = std::function<bool(std::span<const header_field>)>;
 using transport_reader =
     std::function<cnetmod::task<std::expected<std::size_t, std::error_code>>(
         cnetmod::mutable_buffer)>;
@@ -68,7 +69,9 @@ public:
         borrowed_streaming_server_handler handler,
         cnetmod::http::request_body_stream_options body_options = {},
         transport_reader reader = {}, transport_writer writer = {},
-        sync_server_handler sync_handler = {});
+        sync_server_handler sync_handler = {},
+        bool buffer_complete_requests = false,
+        buffered_request_filter buffer_filter = {});
 
     [[nodiscard]] auto run(std::span<const std::byte> initial = {})
         -> cnetmod::task<void>;
@@ -87,7 +90,7 @@ private:
     };
 
     [[nodiscard]] auto process_frame(frame_header header,
-        std::span<const std::byte> payload)
+        std::span<const std::byte> payload, bool complete_body_follows = false)
         -> std::expected<void, std::error_code>;
     [[nodiscard]] auto
     validate_headers(std::span<const header_field> fields) const
@@ -129,6 +132,8 @@ private:
     streaming_server_handler streaming_handler_;
     borrowed_streaming_server_handler borrowed_streaming_handler_;
     sync_server_handler sync_handler_;
+    bool buffer_complete_requests_ = false;
+    buffered_request_filter buffer_filter_;
     cnetmod::http::request_body_stream_options body_options_{};
     std::unique_ptr<cnetmod::task_group> background_;
     cnetmod::async_mutex writer_mutex_;

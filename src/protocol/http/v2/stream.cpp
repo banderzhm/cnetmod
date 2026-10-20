@@ -36,6 +36,11 @@ auto stream::body() const noexcept -> std::span<const std::byte>
     return body_;
 }
 
+auto stream::take_body() noexcept -> std::vector<std::byte>
+{
+    return std::move(body_);
+}
+
 void stream::attach_body_stream(
     std::shared_ptr<cnetmod::http::request_body_stream> body_stream)
 {

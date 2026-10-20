@@ -1326,22 +1326,47 @@ auto server::make_h2_sync_handler(io_context& io, socket& client)
     };
 }
 
+auto server::make_h2_buffered_request_filter() -> v2::buffered_request_filter
+{
+    if (!middlewares_.empty() || !std::ranges::any_of(router_.entries_,
+            [](const auto& route) { return static_cast<bool>(route.sync_handler); }))
+        return {};
+    return [this](std::span<const v2::header_field> headers)
+    {
+        std::string_view method = "GET", uri = "/";
+        for (const auto& field : headers)
+        {
+            if (field.name == ":method") method = field.value;
+            else if (field.name == ":path") uri = field.value;
+        }
+        const auto path = uri.substr(0, uri.find('?'));
+        auto match = router_.match_borrowed(method, path);
+        return match && match->route->sync_handler && !match->route->request_stream;
+    };
+}
+
 auto server::handle_h2(socket& client, io_context& io,
     std::span<const std::byte> initial, cancel_token& cancellation) -> task<void>
 {
+    // Reads and writes overlap on multiplexed connections. A cancel_token
+    // owns one pending operation; sharing it loses the reader's completion.
+    // abort_connections() also shuts down the socket, waking both directions.
+    cancel_token write_cancellation;
     auto reader = [&io, &client, &cancellation](mutable_buffer buffer)
         -> task<std::expected<std::size_t, std::error_code>>
     {
         co_return co_await async_read(io, client, buffer, cancellation);
     };
-    auto writer = [&io, &client, &cancellation](const_buffer buffer)
+    auto writer = [&io, &client, &write_cancellation](const_buffer buffer)
         -> task<std::expected<void, std::error_code>>
     {
-        co_return co_await async_write_all(io, client, buffer, cancellation);
+        co_return co_await async_write_all(io, client, buffer, write_cancellation);
     };
+    auto filter = make_h2_buffered_request_filter();
+    const bool buffer_complete = static_cast<bool>(filter);
     v2::session session(io, client, make_h2_streaming_handler(io, client), {},
         std::move(reader), std::move(writer),
-        make_h2_sync_handler(io, client));
+        make_h2_sync_handler(io, client), buffer_complete, std::move(filter));
     co_await session.run(initial);
 }
 
@@ -1780,20 +1805,23 @@ auto server::handle_h1_clear(socket& client, io_context& io,
 auto server::handle_h2_tls(socket& client, io_context& io, ssl_stream& ssl,
     cancel_token& cancellation) -> task<void>
 {
+    cancel_token write_cancellation;
     auto reader = [&ssl, &cancellation](mutable_buffer buffer)
         -> task<std::expected<std::size_t, std::error_code>>
     {
         co_return co_await ssl.async_read(buffer, cancellation);
     };
     auto writer =
-        [&ssl, &cancellation](
+        [&ssl, &write_cancellation](
             const_buffer buffer) -> task<std::expected<void, std::error_code>>
     {
-        co_return co_await ssl.async_write_all(buffer, cancellation);
+        co_return co_await ssl.async_write_all(buffer, write_cancellation);
     };
+    auto filter = make_h2_buffered_request_filter();
+    const bool buffer_complete = static_cast<bool>(filter);
     v2::session session(io, client, make_h2_streaming_handler(io, client), {},
         std::move(reader), std::move(writer),
-        make_h2_sync_handler(io, client));
+        make_h2_sync_handler(io, client), buffer_complete, std::move(filter));
     co_await session.run();
 }
 

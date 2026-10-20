@@ -197,6 +197,7 @@ private:
         -> v2::borrowed_streaming_server_handler;
     auto make_h2_sync_handler(io_context& io, socket& client)
         -> v2::sync_server_handler;
+    auto make_h2_buffered_request_filter() -> v2::buffered_request_filter;
 
 #ifdef CNETMOD_HAS_SSL
     auto handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,

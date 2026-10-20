@@ -17,6 +17,10 @@ export using unary_handler =
     std::function<task<std::expected<byte_buffer, status>>(
         std::span<const std::byte>, const call_context&)>;
 
+export using sync_unary_handler =
+    std::function<std::expected<byte_buffer, status>(
+        std::span<const std::byte>, const call_context&)>;
+
 export using streaming_handler =
     std::function<task<std::expected<std::vector<byte_buffer>, status>>(
         std::span<const byte_buffer>, const call_context&)>;
@@ -51,17 +55,22 @@ public:
     [[nodiscard]] auto options() const noexcept -> const server_options&;
 
     void add_unary(std::string service, std::string method, unary_handler handler);
+    void add_unary_sync(std::string service, std::string method, sync_unary_handler handler);
     void add_client_streaming(std::string service, std::string method, streaming_handler handler);
     void add_server_streaming(std::string service, std::string method, server_streaming_handler handler);
     void add_bidi_streaming(std::string service, std::string method, streaming_handler handler);
 
     [[nodiscard]] auto make_http_handler() const -> http::handler_fn;
+    /// Adapter for buffered HTTP routes containing synchronous unary methods.
+    /// The same validation, codecs, interceptors and governance remain active.
+    [[nodiscard]] auto make_http_sync_handler() const -> http::sync_handler_fn;
 
 private:
     struct method_entry
     {
         call_kind kind = call_kind::unary;
         unary_handler unary;
+        sync_unary_handler sync_unary;
         streaming_handler streaming;
         server_streaming_handler server_streaming;
     };

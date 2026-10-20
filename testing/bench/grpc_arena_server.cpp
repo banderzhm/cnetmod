@@ -19,12 +19,12 @@ namespace grpc = cnetmod::grpc;
 namespace {
 
 auto get_sum(std::span<const std::byte> payload, const grpc::call_context&)
-    -> cn::task<std::expected<grpc::byte_buffer, grpc::status>>
+    -> std::expected<grpc::byte_buffer, grpc::status>
 {
     auto fields = grpc::proto::decode_message(payload);
     if (!fields)
     {
-        co_return std::unexpected(grpc::make_status(
+        return std::unexpected(grpc::make_status(
             grpc::status_code::invalid_argument, "invalid SumRequest"));
     }
     // Proto3 scalar defaults and last-value-wins semantics. Use the framework
@@ -44,7 +44,7 @@ auto get_sum(std::span<const std::byte> payload, const grpc::call_context&)
     grpc::byte_buffer response;
     if (result != 0)
         grpc::proto::append_int64(response, 1, result);
-    co_return response;
+    return response;
 }
 
 template <class T>
@@ -71,9 +71,9 @@ auto main(int argc, char** argv) -> int
     }
     cn::server_context context{workers, workers};
     grpc::service_router service;
-    service.add_unary("benchmark.BenchmarkService", "GetSum", get_sum);
+    service.add_unary_sync("benchmark.BenchmarkService", "GetSum", get_sum);
     cn::http::router router;
-    router.any("/*path", service.make_http_handler());
+    router.any_sync("/*path", service.make_http_sync_handler());
 #ifdef CNETMOD_HAS_SSL
     std::optional<cn::ssl_context> tls;
 #endif
@@ -107,7 +107,7 @@ auto main(int argc, char** argv) -> int
         return 3;
     }
 #endif
-    auto listening = server.listen("127.0.0.1", port);
+    auto listening = server.listen("::", port);
     if (!listening)
     {
         logger::error{"listen failed: {}", listening.error().message()};
