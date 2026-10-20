@@ -135,6 +135,7 @@ export auto compression_supported(compression_algorithm algorithm) noexcept -> b
 export auto parse_service_path(std::string_view path)
     -> std::optional<std::pair<std::string, std::string>>;
 export auto metadata_from_headers(const http::header_map& headers) -> metadata;
+export auto metadata_from_headers(std::span<const http::request_header_view> headers) -> metadata;
 export auto header_value(const http::header_map& headers, std::string_view name)
     -> std::string_view;
 export auto metadata_value(const metadata& md, std::string_view name)
@@ -146,6 +147,8 @@ export void append_metadata_trailers(http::response& resp, const metadata& md);
 export auto status_from_headers(const http::header_map& headers) -> status;
 export auto status_from_response(const http::response& resp) -> status;
 export auto timeout_from_headers(const http::header_map& headers)
+    -> std::chrono::milliseconds;
+export auto timeout_from_headers(std::span<const http::request_header_view> headers)
     -> std::chrono::milliseconds;
 export auto format_timeout(std::chrono::milliseconds timeout) -> std::string;
 export void add_binary_metadata(metadata& md, std::string key,

@@ -9,7 +9,8 @@ namespace {
         std::string out(text);
         std::ranges::transform(out, out.begin(), [](unsigned char c)
             {
-                return static_cast<char>(std::tolower(c));
+                return static_cast<char>(c >= 'A' && c <= 'Z' ? c + 32
+                    : c < 128 ? c : std::tolower(c));
             });
         return out;
     }
@@ -41,14 +42,9 @@ namespace {
     auto header_find(const http::header_map& headers, std::string_view name)
         -> std::string_view
     {
-        if (auto it = headers.find(std::string(name)); it != headers.end())
+        // header_map already has a transparent ASCII-insensitive comparator.
+        if (auto it = headers.find(name); it != headers.end())
             return it->second;
-        const auto lname = lower(name);
-        if (auto it = headers.find(lname); it != headers.end())
-            return it->second;
-        for (const auto& [key, value] : headers)
-            if (lower(key) == lname)
-                return value;
         return {};
     }
 
@@ -311,6 +307,26 @@ auto header_value(const http::header_map& headers, std::string_view name)
     return header_find(headers, name);
 }
 
+auto metadata_from_headers(std::span<const http::request_header_view> headers) -> metadata
+{
+    metadata out;
+    for (const auto& header : headers)
+    {
+        auto name = lower(header.name);
+        if (name.starts_with(":") || name == "content-type" ||
+            name == "content-length" || name == "te" || name == "grpc-status" ||
+            name == "grpc-message")
+            continue;
+        // Match header_map materialization: the last case-insensitive duplicate
+        // replaces its predecessor. Metadata retains its normal owning lifetime.
+        if (auto found = out.find(name); found != out.end())
+            found->second = header.value;
+        else
+            out.emplace(std::move(name), header.value);
+    }
+    return out;
+}
+
 auto metadata_value(const metadata& md, std::string_view name)
     -> std::string_view
 {
@@ -373,6 +389,23 @@ auto timeout_from_headers(const http::header_map& headers)
     auto value = parse_timeout_value(text);
     return value ? std::chrono::duration_cast<std::chrono::milliseconds>(*value)
                  : std::chrono::milliseconds{};
+}
+
+auto timeout_from_headers(std::span<const http::request_header_view> headers)
+    -> std::chrono::milliseconds
+{
+    const http::case_insensitive_less less;
+    for (std::size_t index = headers.size(); index != 0; --index)
+    {
+        const auto& header = headers[index - 1];
+        if (!less(header.name, "grpc-timeout") && !less("grpc-timeout", header.name))
+        {
+            auto value = parse_timeout_value(header.value);
+            return value ? std::chrono::duration_cast<std::chrono::milliseconds>(*value)
+                         : std::chrono::milliseconds{};
+        }
+    }
+    return {};
 }
 
 auto format_timeout(std::chrono::milliseconds timeout) -> std::string

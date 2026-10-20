@@ -26,8 +26,16 @@ namespace {
             out.service = std::move(parsed->first);
             out.method = std::move(parsed->second);
         }
-        out.headers = metadata_from_headers(ctx.headers());
-        out.timeout = timeout_from_headers(ctx.headers());
+        if (const auto views = ctx.borrowed_header_views(); !views.empty())
+        {
+            out.headers = metadata_from_headers(views);
+            out.timeout = timeout_from_headers(views);
+        }
+        else
+        {
+            out.headers = metadata_from_headers(ctx.headers());
+            out.timeout = timeout_from_headers(ctx.headers());
+        }
         out.started = std::chrono::steady_clock::now();
         return out;
     }
@@ -268,7 +276,7 @@ void service_router::add_bidi_streaming(std::string service, std::string method,
 
 auto service_router::find(std::string_view path) const -> const method_entry*
 {
-    auto it = methods_.find(std::string(path));
+    auto it = methods_.find(path);
     if (it == methods_.end())
         return nullptr;
     return &it->second;

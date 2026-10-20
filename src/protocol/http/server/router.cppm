@@ -244,6 +244,10 @@ public:
     [[nodiscard]] auto query_string() const noexcept -> std::string_view;
     [[nodiscard]] auto uri() const noexcept -> std::string_view;
     [[nodiscard]] auto headers() const -> const header_map&;
+    /// Raw borrowed headers, when this context was constructed from views.
+    /// Views remain valid for this request; owning/parser contexts return empty.
+    [[nodiscard]] auto borrowed_header_views() const noexcept
+        -> std::span<const request_header_view>;
     [[nodiscard]] auto body() const -> std::string_view;
     [[nodiscard]] auto has_body_stream() const noexcept -> bool;
     [[nodiscard]] auto receive_body_chunk()

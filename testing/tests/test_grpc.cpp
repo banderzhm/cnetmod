@@ -277,6 +277,25 @@ TEST(grpc_router_options_are_configurable)
     ASSERT_FALSE(router.options().accept_gzip);
 }
 
+TEST(grpc_borrowed_headers_preserve_metadata_and_last_duplicate_timeout)
+{
+    const std::array<cnetmod::http::request_header_view, 7> views{{
+        {"Content-Type", "application/grpc"}, {"TE", "trailers"},
+        {"X-Token", "first"}, {"x-token", "last"},
+        {"grpc-timeout", "1S"}, {"Grpc-Timeout", "23m"}, {"grpc-status", "0"}}};
+    cnetmod::http::header_map owning;
+    for (const auto& header : views)
+        owning[std::string{header.name}] = header.value;
+    const auto borrowed = metadata_from_headers(std::span{views});
+    ASSERT_TRUE(borrowed == metadata_from_headers(owning));
+    ASSERT_EQ(metadata_value(borrowed, "x-token"), std::string_view{"last"});
+    ASSERT_EQ(borrowed.size(), std::size_t{2});
+    ASSERT_EQ(timeout_from_headers(std::span{views}), std::chrono::milliseconds{23});
+    ASSERT_EQ(timeout_from_headers(std::span{views}), timeout_from_headers(owning));
+    ASSERT_TRUE(header_value(owning, "missing").empty());
+    ASSERT_EQ(header_value(owning, "X-TOKEN"), std::string_view{"last"});
+}
+
 TEST(grpc_sync_adapter_preserves_protocol_validation_and_compression)
 {
     auto io = cnetmod::make_io_context();

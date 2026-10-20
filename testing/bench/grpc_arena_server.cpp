@@ -74,6 +74,7 @@ auto main(int argc, char** argv) -> int
     grpc::service_router service;
     service.add_unary_sync("benchmark.BenchmarkService", "GetSum", get_sum);
     cn::http::router router;
+    router.any_sync("/benchmark.BenchmarkService/GetSum", service.make_http_sync_handler());
     router.any_sync("/*path", service.make_http_sync_handler());
 #ifdef CNETMOD_HAS_SSL
     std::optional<cn::ssl_context> tls;

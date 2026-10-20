@@ -347,6 +347,12 @@ auto request_context::uri() const noexcept -> std::string_view
     return uri_;
 }
 
+auto request_context::borrowed_header_views() const noexcept
+    -> std::span<const request_header_view>
+{
+    return header_views_;
+}
+
 auto request_context::headers() const -> const header_map&
 {
     if (parser_)

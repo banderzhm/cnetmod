@@ -78,7 +78,7 @@ private:
     [[nodiscard]] auto find(std::string_view path) const -> const method_entry*;
     [[nodiscard]] static auto key(std::string_view service, std::string_view method) -> std::string;
 
-    std::map<std::string, method_entry> methods_;
+    std::map<std::string, method_entry, std::less<>> methods_;
     server_options options_;
 };
 
