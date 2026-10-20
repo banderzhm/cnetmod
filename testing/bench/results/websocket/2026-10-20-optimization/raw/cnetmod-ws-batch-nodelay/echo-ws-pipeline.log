@@ -1,0 +1,253 @@
+[info] available CPUs: 32
+[info] framework: cnetmod-ws-batch-nodelay (cnetmod-ws-batch-nodelay, C++)
+[info] subscribed tests: echo-ws,echo-ws-pipeline,echo-ws-limited
+[info] building image: httparena-cnetmod-ws-batch-nodelay
+[info] skipping system tuning as requested (SKIP_TUNE=true)
+
+==============================================
+=== cnetmod-ws-batch-nodelay / echo-ws-pipeline / 512c (tool=gcannon) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] ws-only framework — skipping HTTP probe (sleep 2s for startup)
+
+[run 1/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     512 (8/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency    206us     78us    265us   3.14ms   8.07ms
+
+  197738240 frames sent in 5.00s, 197735936 frames received
+  Throughput: 39.54M req/s
+  Bandwidth:  263.94MB/s
+  WS upgrades: 512
+  WS frames:   197735936
+  Latency samples: 197735936 / 197735936 responses (100.0%)
+[info] CPU 1544.4% | Mem 90MiB
+
+[run 2/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     512 (8/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency    201us     78us    245us   3.09ms   8.10ms
+
+  205732880 frames sent in 5.00s, 205729808 frames received
+  Throughput: 41.14M req/s
+  Bandwidth:  274.62MB/s
+  WS upgrades: 512
+  WS frames:   205729808
+  Latency samples: 205729808 / 205729808 responses (100.0%)
+[info] CPU 1602.9% | Mem 90MiB
+
+[run 3/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     512 (8/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency    237us     84us    284us   4.02ms   10.80ms
+
+  174979568 frames sent in 5.00s, 174976352 frames received
+  Throughput: 34.99M req/s
+  Bandwidth:  233.56MB/s
+  WS upgrades: 512
+  WS frames:   174976352
+  Latency samples: 174976352 / 174976352 responses (100.0%)
+[info] CPU 1587.6% | Mem 90MiB
+
+=== Best: 41145961 req/s (CPU: 1602.9%, Mem: 90MiB) ===
+[info] saved results/echo-ws-pipeline/512/cnetmod-ws-batch-nodelay.json
+httparena-bench-cnetmod-ws-batch-nodelay
+httparena-bench-cnetmod-ws-batch-nodelay
+
+==============================================
+=== cnetmod-ws-batch-nodelay / echo-ws-pipeline / 4096c (tool=gcannon) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] ws-only framework — skipping HTTP probe (sleep 2s for startup)
+
+[run 1/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     4096 (64/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency   1.96ms    857us   5.22ms   11.00ms   34.10ms
+
+  166129568 frames sent in 5.00s, 166064032 frames received
+  Throughput: 33.20M req/s
+  Bandwidth:  221.74MB/s
+  WS upgrades: 4096
+  WS frames:   166064032
+  Latency samples: 166064032 / 166064032 responses (100.0%)
+[info] CPU 1507.9% | Mem 150MiB
+
+[run 2/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     4096 (64/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency   1.82ms    833us   5.09ms   10.50ms   27.90ms
+
+  181923696 frames sent in 5.00s, 181858160 frames received
+  Throughput: 36.36M req/s
+  Bandwidth:  242.80MB/s
+  WS upgrades: 4096
+  WS frames:   181858160
+  Latency samples: 181858160 / 181858160 responses (100.0%)
+[info] CPU 1659.9% | Mem 162MiB
+
+[run 3/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     4096 (64/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency   2.15ms    848us   5.49ms   14.70ms   33.70ms
+
+  154204848 frames sent in 5.01s, 154139312 frames received
+  Throughput: 30.79M req/s
+  Bandwidth:  205.63MB/s
+  WS upgrades: 4096
+  WS frames:   154139312
+  Latency samples: 154139312 / 154139312 responses (100.0%)
+[info] CPU 1573.4% | Mem 164MiB
+
+=== Best: 36371632 req/s (CPU: 1659.9%, Mem: 162MiB) ===
+[info] saved results/echo-ws-pipeline/4096/cnetmod-ws-batch-nodelay.json
+httparena-bench-cnetmod-ws-batch-nodelay
+httparena-bench-cnetmod-ws-batch-nodelay
+
+==============================================
+=== cnetmod-ws-batch-nodelay / echo-ws-pipeline / 16384c (tool=gcannon) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] ws-only framework — skipping HTTP probe (sleep 2s for startup)
+
+[run 1/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     16384 (256/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency   12.19ms   10.00ms   21.90ms   44.50ms   75.30ms
+
+  105954977 frames sent in 5.01s, 105692833 frames received
+  Throughput: 21.08M req/s
+  Bandwidth:  141.12MB/s
+  WS upgrades: 16384
+  WS frames:   105692833
+  Latency samples: 105692833 / 105692833 responses (100.0%)
+  Reconnects: 1
+  Errors: connect 0, read 1, timeout 0
+[info] CPU 1440.0% | Mem 377MiB
+
+[run 2/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     16384 (256/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency   11.55ms   9.94ms   19.30ms   35.20ms   53.90ms
+
+  116153056 frames sent in 5.00s, 115890912 frames received
+  Throughput: 23.16M req/s
+  Bandwidth:  155.02MB/s
+  WS upgrades: 16384
+  WS frames:   115890912
+  Latency samples: 115890912 / 115890912 responses (100.0%)
+[info] CPU 1539.0% | Mem 413MiB
+
+[run 3/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     16384 (256/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency   10.86ms   9.06ms   19.50ms   38.80ms   67.20ms
+
+  122380672 frames sent in 5.00s, 122118528 frames received
+  Throughput: 24.41M req/s
+  Bandwidth:  163.34MB/s
+  WS upgrades: 16384
+  WS frames:   122118528
+  Latency samples: 122118528 / 122118528 responses (100.0%)
+[info] CPU 1748.0% | Mem 440MiB
+
+=== Best: 24423705 req/s (CPU: 1748.0%, Mem: 440MiB) ===
+[info] saved results/echo-ws-pipeline/16384/cnetmod-ws-batch-nodelay.json
+httparena-bench-cnetmod-ws-batch-nodelay
+httparena-bench-cnetmod-ws-batch-nodelay
+[info] rebuilding site/data/*.json
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/frameworks.json
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-baseline.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch.json - 3 new, 3 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-candidate.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch-compact.json - 3 new, 3 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch-multishot.json - 3 new, 3 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch-nodelay.json - 3 new, 3 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch-ready.json - 3 new, 3 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-batch-sharded.json - 5 new, 5 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/fulmine.js.json - 8 new, 28 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/genhttp-ioxide.json - 8 new, 33 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/vanilla-epoll.json - 8 new, 35 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/current.json
+[info] done

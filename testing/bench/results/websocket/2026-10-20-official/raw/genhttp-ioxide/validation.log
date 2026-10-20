@@ -1,0 +1,18 @@
+[info] framework: genhttp-ioxide (genhttp-ioxide, C#)
+[info] subscribed tests: baseline,async,latency-1m,latency-10k,latency-500k-8cpu,pipelined,limited-conn,json-comp,json-tls,static-tls,baseline-h2c,json-h2c,baseline-h2,static-h2,static-h3,baseline-h3,8gbit,async-db,echo-ws,echo-ws-pipeline,echo-ws-limited
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] server ready
+[test] WebSocket echo validation (ws://localhost:8080/ws)
+  PASS [upgrade status 101] (HTTP/1.1 101 Switching Protocols)
+  PASS [Sec-WebSocket-Accept] (correct)
+  PASS [text echo] (echoed 35 chars)
+  PASS [binary echo] (sent 256 bytes, got 256 bytes)
+  PASS [multi-message echo (5 msgs)] (all 5 echoed correctly)
+  PASS [reject non-upgrade GET /ws] (HTTP 400)
+[test] post-validation health check
+  PASS [server alive after tests]
+
+=== WS Results: 7 passed, 0 failed ===
+httparena-bench-genhttp-ioxide
+httparena-bench-genhttp-ioxide

@@ -18,6 +18,7 @@ set(TEST_SOURCES
     test_deadline.cpp
     test_task_group.cpp
     test_task.cpp
+    test_stream_write.cpp
     test_lazy.cpp
     test_database_datetime.cpp
     test_configuration_properties.cpp
@@ -95,6 +96,10 @@ endif()
 
 if(WIN32)
     list(APPEND TEST_SOURCES test_udp_sendto_on_cancel.cpp)
+endif()
+
+if(CNETMOD_ENABLE_WEBSOCKET)
+    list(APPEND TEST_SOURCES test_websocket_frame.cpp)
 endif()
 
 # Filter out QUIC/HTTP3 tests if QUIC not available
@@ -226,6 +231,8 @@ function(cnetmod_test_component TEST_NAME OUTPUT_VARIABLE)
         set(_target cnetmod_mysql)
     elseif(TEST_NAME MATCHES "^test_mongodb")
         set(_target cnetmod_mongodb)
+    elseif(TEST_NAME MATCHES "^test_websocket")
+        set(_target cnetmod_websocket)
     elseif(TEST_NAME MATCHES "^test_mqtt")
         set(_target cnetmod_mqtt)
     elseif(TEST_NAME MATCHES "^test_raft")

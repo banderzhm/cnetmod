@@ -1,0 +1,148 @@
+{
+  "captured_at": "2026-10-20T11:20:39.330672+08:00",
+  "baseline_core_revision": "5c969d4ac3b772963df80ff66c93fc8165901dc1",
+  "harness_revision": "cd973a1864cba50fe234ca50f57b8a50a3da7dd9",
+  "official_revision": "8977be2721a5aba7b320345cddfcd6f6b654e698",
+  "network_namespace": "cnetmod-ws-20261020",
+  "host_network_restored": {
+    "net.core.somaxconn": "4096",
+    "net.ipv4.tcp_max_syn_backlog": "1024",
+    "net.core.netdev_max_backlog": "1000",
+    "net.ipv4.ip_local_port_range": "37795\t41890",
+    "net.ipv4.tcp_max_tw_buckets": "65536",
+    "net.ipv4.tcp_tw_reuse": "2",
+    "net.ipv4.ip_local_reserved_ports": "",
+    "net.core.rmem_max": "4194304",
+    "net.core.wmem_max": "4194304",
+    "mtu": "65536"
+  },
+  "measurements": [
+    {
+      "command": [
+        "uname",
+        "-a"
+      ],
+      "returncode": 0,
+      "output": "Linux BF-202607291749 6.18.33.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Thu Jun 18 21:54:43 UTC 2026 x86_64 GNU/Linux\n"
+    },
+    {
+      "command": [
+        "lscpu"
+      ],
+      "returncode": 0,
+      "output": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           46 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  32\nOn-line CPU(s) list:                     0-31\nVendor ID:                               GenuineIntel\nModel name:                              Intel(R) Core(TM) i9-14900K\nCPU family:                              6\nModel:                                   183\nThread(s) per core:                      2\nCore(s) per socket:                      16\nSocket(s):                               1\nStepping:                                1\nMicrocode version:                       0xffffffff\nBogoMIPS:                                6374.39\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology tsc_reliable nonstop_tsc cpuid tsc_known_freq pni pclmulqdq vmx ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves avx_vnni vnmi umip waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize ibt flush_l1d arch_capabilities\nVirtualization:                          VT-x\nHypervisor vendor:                       Microsoft\nVirtualization type:                     full\nL1d cache:                               768 KiB (16 instances)\nL1i cache:                               512 KiB (16 instances)\nL2 cache:                                32 MiB (16 instances)\nL3 cache:                                36 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-31\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Mitigation; Clear Register File\nVulnerability Retbleed:                  Mitigation; Enhanced IBRS\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS SW sequence; BHI BHI_DIS_S\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Not affected\n"
+    },
+    {
+      "command": [
+        "free",
+        "-b"
+      ],
+      "returncode": 0,
+      "output": "               total        used        free      shared  buff/cache   available\nMem:     16598638592  1310801920 13604036608     3866624  1903005696 15287836672\nSwap:     4294967296           0  4294967296\n"
+    },
+    {
+      "command": [
+        "clang++",
+        "--version"
+      ],
+      "returncode": 0,
+      "output": "clang version 23.1.3\nTarget: x86_64-pc-linux-gnu\nThread model: posix\nInstalledDir: /usr/bin\n"
+    },
+    {
+      "command": [
+        "cmake",
+        "--version"
+      ],
+      "returncode": 0,
+      "output": "cmake version 4.4.3\n\nCMake suite maintained and supported by Kitware (kitware.com/cmake).\n"
+    },
+    {
+      "command": [
+        "gcc",
+        "--version"
+      ],
+      "returncode": 0,
+      "output": "gcc (GCC) 16.2.1 20260810\nCopyright (C) 2026 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n"
+    },
+    {
+      "command": [
+        "pacman",
+        "-Q",
+        "libc++",
+        "libc++abi",
+        "liburing"
+      ],
+      "returncode": 0,
+      "output": "libc++ 22.1.8-1\nlibc++abi 22.1.8-1\nliburing 2.15-1\n"
+    },
+    {
+      "command": [
+        "docker",
+        "-H",
+        "unix:///run/cnetmod-ws-20261020.sock",
+        "info"
+      ],
+      "returncode": 0,
+      "output": "Client:\n Version:    29.9.1\n Context:    default\n Debug Mode: false\n\nServer:\n Containers: 1\n  Running: 1\n  Paused: 0\n  Stopped: 0\n Images: 1\n Server Version: 29.9.1\n Storage Driver: overlayfs\n  driver-type: io.containerd.snapshotter.v1\n Logging Driver: json-file\n Cgroup Driver: systemd\n Cgroup Version: 2\n Plugins:\n  Volume: local\n  Network: bridge host ipvlan macvlan null overlay\n  Log: awslogs fluentd gcplogs gelf journald json-file local splunk syslog\n CDI spec directories:\n  /etc/cdi\n  /var/run/cdi\n Swarm: inactive\n Runtimes: io.containerd.runc.v2 runc\n Default Runtime: runc\n Init Binary: docker-init\n containerd version: b7a25261e029d68978bbf290df0a62fc819b3c51.m\n runc version: \n init version: de40ad0\n Security Options:\n  seccomp\n   Profile: builtin\n  cgroupns\n Kernel Version: 6.18.33.2-microsoft-standard-WSL2\n Operating System: Arch Linux\n OSType: linux\n Architecture: x86_64\n CPUs: 32\n Total Memory: 15.46GiB\n Name: BF-202607291749\n ID: a0f470f0-d640-447e-84f1-5f64e43231fb\n Docker Root Dir: /root/cnetmod-ws-20261020/docker-isolated\n Debug Mode: false\n Experimental: false\n Insecure Registries:\n  127.0.0.0/8\n  ::1/128\n Live Restore Enabled: false\n Firewall Backend: iptables\n  EnableUserlandProxy: true\n  UserlandProxyPath: /usr/bin/docker-proxy\n\n"
+    },
+    {
+      "command": [
+        "git",
+        "-C",
+        "/root/cnetmod-ws-20261020/gcannon-src",
+        "rev-parse",
+        "HEAD"
+      ],
+      "returncode": 0,
+      "output": "11c802b2bdfe9af2fac4ac2571ae2de4c530cc62\n"
+    },
+    {
+      "command": [
+        "nsenter",
+        "--net=/run/netns/cnetmod-ws-20261020",
+        "ip",
+        "route",
+        "get",
+        "127.0.0.1"
+      ],
+      "returncode": 0,
+      "output": "local 127.0.0.1 dev lo src 127.0.0.1 uid 0 \n    cache <local> \n"
+    },
+    {
+      "command": [
+        "nsenter",
+        "--net=/run/netns/cnetmod-ws-20261020",
+        "sysctl",
+        "net.ipv4.ip_local_port_range",
+        "net.ipv4.tcp_tw_reuse",
+        "net.core.somaxconn"
+      ],
+      "returncode": 0,
+      "output": "net.ipv4.ip_local_port_range = 1024\t65535\nnet.ipv4.tcp_tw_reuse = 1\nnet.core.somaxconn = 65535\n"
+    },
+    {
+      "command": [
+        "nsenter",
+        "--net=/run/netns/cnetmod-ws-20261020",
+        "ip",
+        "link",
+        "show",
+        "lo"
+      ],
+      "returncode": 0,
+      "output": "1: lo: <LOOPBACK,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000\n    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00\n"
+    }
+  ],
+  "sha256": {
+    "baseline/bench_ws_server": "3b58a8483036c8bbbed85533eeec583e2f5aeb82c0f8b21aeebb69d31eb04863",
+    "baseline/bench_ws_codec": "127113ba87c3813eaaff35d0147611968c76833c7ec681f8f710e2f2b71057ac",
+    "gcannon-src/gcannon": "48d5fa257ca5559f2da88138ff2016adb3191914e3a685ca7e9be0a355eddf2e",
+    "build/CMakeCache.txt": "c50b138ab5f02fb761dd05ce8bf66e3cc69ab2e8d647289a4e4e525fa6b45b45"
+  },
+  "dependencies": {
+    "boringssl": "1a5078d343ba5d9501062caf11e3173fc364dc59",
+    "mimalloc": "d4881d338125e1cb7c47ba4cfb398d6f7c0c8d45",
+    "stdexec": "633c87370b986735b0c8667993b5fc18bf1b3129",
+    "json": "74aefc3486c6dcd03a5a039d86f1ac8d146c0f74"
+  }
+}

@@ -98,6 +98,11 @@ public:
 };
 ```
 
+需要固定 worker 亲和性时，可传
+`{.enabled = true, .auto_assign_workers = true}`。显式 `worker_processors`
+优先；为空时自动轮转当前调用线程实际允许的 CPU 集合（Linux 支持稀疏 cpuset，
+Windows 使用当前线程的 processor group）。默认不启用自动亲和性。
+
 第二个构造函数借用调用方已有的 CPU pool；`server_context` 不负责停止它。
 Application 使用该重载，确保整个进程只有 `application.cpu_threads` 配置的一套
 CPU 执行器。独立服务器需要自主管理 CPU pool 时使用第一个构造函数。

@@ -1,0 +1,10 @@
+--- official/Dockerfile
++++ local-build/Dockerfile
+@@ -6,6 +6,7 @@
+ RUN git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+ WORKDIR /app
+ COPY package.json .
++ENV npm_config_jobs=4
+ RUN npm install --omit=dev
+ 
+ FROM node:26-trixie-slim

@@ -1,0 +1,158 @@
+[
+  {
+    "framework": "cnetmod-ws-baseline",
+    "connections": 512,
+    "best_frames_per_second": 1125482,
+    "best_round": 2,
+    "three_round_fps": [
+      994183,
+      1125482,
+      1038482
+    ],
+    "error_events": 0,
+    "frames_received": 15790742
+  },
+  {
+    "framework": "cnetmod-ws-baseline",
+    "connections": 4096,
+    "best_frames_per_second": 1096330,
+    "best_round": 3,
+    "three_round_fps": [
+      931746,
+      911714,
+      1096330
+    ],
+    "error_events": 0,
+    "frames_received": 14698960
+  },
+  {
+    "framework": "cnetmod-ws-final24-b64",
+    "connections": 512,
+    "best_frames_per_second": 1331742,
+    "best_round": 2,
+    "three_round_fps": [
+      1263992,
+      1331742,
+      1258408
+    ],
+    "error_events": 0,
+    "frames_received": 19270718
+  },
+  {
+    "framework": "cnetmod-ws-final24-b64",
+    "connections": 4096,
+    "best_frames_per_second": 1292655,
+    "best_round": 2,
+    "three_round_fps": [
+      1075409,
+      1292655,
+      1259748
+    ],
+    "error_events": 0,
+    "frames_received": 18139067
+  },
+  {
+    "framework": "cnetmod-ws-reviewed16-b64",
+    "connections": 512,
+    "best_frames_per_second": 1925491,
+    "best_round": 1,
+    "three_round_fps": [
+      1925491,
+      1741106,
+      1853063
+    ],
+    "error_events": 0,
+    "frames_received": 27598308
+  },
+  {
+    "framework": "cnetmod-ws-reviewed16-b64",
+    "connections": 4096,
+    "best_frames_per_second": 1919206,
+    "best_round": 2,
+    "three_round_fps": [
+      1560546,
+      1919206,
+      1783762
+    ],
+    "error_events": 0,
+    "frames_received": 26317576
+  },
+  {
+    "framework": "fulmine",
+    "connections": 512,
+    "best_frames_per_second": 824185,
+    "best_round": 3,
+    "three_round_fps": [
+      744936,
+      768590,
+      824185
+    ],
+    "error_events": 0,
+    "frames_received": 11688555
+  },
+  {
+    "framework": "fulmine",
+    "connections": 4096,
+    "best_frames_per_second": 836060,
+    "best_round": 3,
+    "three_round_fps": [
+      741742,
+      725858,
+      836060
+    ],
+    "error_events": 0,
+    "frames_received": 11532983
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "connections": 512,
+    "best_frames_per_second": 1078146,
+    "best_round": 3,
+    "three_round_fps": [
+      806113,
+      1075027,
+      1078146
+    ],
+    "error_events": 0,
+    "frames_received": 14796432
+  },
+  {
+    "framework": "genhttp-ioxide",
+    "connections": 4096,
+    "best_frames_per_second": 1104826,
+    "best_round": 2,
+    "three_round_fps": [
+      848970,
+      1104826,
+      1075822
+    ],
+    "error_events": 0,
+    "frames_received": 15148102
+  },
+  {
+    "framework": "vanilla-epoll",
+    "connections": 512,
+    "best_frames_per_second": 1070274,
+    "best_round": 3,
+    "three_round_fps": [
+      986988,
+      1056205,
+      1070274
+    ],
+    "error_events": 0,
+    "frames_received": 15567339
+  },
+  {
+    "framework": "vanilla-epoll",
+    "connections": 4096,
+    "best_frames_per_second": 1376500,
+    "best_round": 2,
+    "three_round_fps": [
+      1328763,
+      1376500,
+      1184054
+    ],
+    "error_events": 0,
+    "frames_received": 19459876
+  }
+]

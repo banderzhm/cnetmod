@@ -148,8 +148,11 @@ namespace detail {
 } // namespace detail
 
 request_parser::request_parser()
+    : request_parser(4096) {}
+
+request_parser::request_parser(std::size_t initial_capacity)
 {
-    buf_.reserve(4096);
+    buf_.reserve(std::min(initial_capacity, max_header_size));
     header_fields_.reserve(16);
     header_index_.reserve(32);
     common_headers_.fill(missing_header);
@@ -191,6 +194,13 @@ auto request_parser::headers() const -> const header_map&
 {
     materialize_headers();
     return headers_;
+}
+
+auto request_parser::take_headers() -> header_map
+{
+    materialize_headers();
+    headers_materialized_ = false;
+    return std::exchange(headers_, header_map{});
 }
 
 auto request_parser::body() const noexcept -> std::string_view

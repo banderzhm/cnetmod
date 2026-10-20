@@ -1,0 +1,12 @@
+{
+  "upstream_commit": "11c802b2bdfe9af2fac4ac2571ae2de4c530cc62",
+  "correction": "return_buffer: buf_offset=0 before advance(1)",
+  "original_worker_sha256": "f53002a80f0e04db8c7b2c21fcba6d36fdd3c08ea34799ed33586fa6dcf28f54",
+  "corrected_worker_sha256": "f107156933573e7ab03e09d40cb375bfefb67cb68e834e25c2c282f994b8f981",
+  "binary_sha256": "ad285056f461aaa2cf92e42a1a18091166f7cde93a112e11653d44dbe7d7fbc2",
+  "original_binary_sha256": "48d5fa257ca5559f2da88138ff2016adb3191914e3a685ca7e9be0a355eddf2e",
+  "build_command": [
+    "make",
+    "-j4"
+  ]
+}

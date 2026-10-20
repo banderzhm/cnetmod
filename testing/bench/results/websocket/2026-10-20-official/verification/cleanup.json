@@ -1,0 +1,197 @@
+[
+  {
+    "command": [
+      "docker",
+      "-H",
+      "unix:///run/cnetmod-ws-20261020.sock",
+      "ps",
+      "-aq"
+    ],
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "docker",
+      "-H",
+      "unix:///run/cnetmod-ws-20261020.sock",
+      "ps",
+      "-aq"
+    ],
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "systemctl",
+      "stop",
+      "cnetmod-ws-docker-net",
+      "cnetmod-ws-containerd-net"
+    ],
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "ip",
+      "netns",
+      "delete",
+      "cnetmod-ws-20261020"
+    ],
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "sysctl",
+      "-n",
+      "net.core.somaxconn"
+    ],
+    "exit_code": 0,
+    "stdout": "4096\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "sysctl",
+      "-n",
+      "net.ipv4.tcp_max_syn_backlog"
+    ],
+    "exit_code": 0,
+    "stdout": "1024\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "sysctl",
+      "-n",
+      "net.core.netdev_max_backlog"
+    ],
+    "exit_code": 0,
+    "stdout": "1000\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "sysctl",
+      "-n",
+      "net.ipv4.ip_local_port_range"
+    ],
+    "exit_code": 0,
+    "stdout": "37795\t41890\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "sysctl",
+      "-n",
+      "net.ipv4.tcp_max_tw_buckets"
+    ],
+    "exit_code": 0,
+    "stdout": "65536\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "sysctl",
+      "-n",
+      "net.ipv4.tcp_tw_reuse"
+    ],
+    "exit_code": 0,
+    "stdout": "2\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "sysctl",
+      "-n",
+      "net.ipv4.ip_local_reserved_ports"
+    ],
+    "exit_code": 0,
+    "stdout": "\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "sysctl",
+      "-n",
+      "net.core.rmem_max"
+    ],
+    "exit_code": 0,
+    "stdout": "4194304\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "sysctl",
+      "-n",
+      "net.core.wmem_max"
+    ],
+    "exit_code": 0,
+    "stdout": "4194304\n",
+    "stderr": ""
+  },
+  {
+    "host_network_before": {
+      "net.core.somaxconn": "4096",
+      "net.ipv4.tcp_max_syn_backlog": "1024",
+      "net.core.netdev_max_backlog": "1000",
+      "net.ipv4.ip_local_port_range": "37795\t41890",
+      "net.ipv4.tcp_max_tw_buckets": "65536",
+      "net.ipv4.tcp_tw_reuse": "2",
+      "net.ipv4.ip_local_reserved_ports": "",
+      "net.core.rmem_max": "4194304",
+      "net.core.wmem_max": "4194304",
+      "mtu": "65536"
+    },
+    "host_network_after": {
+      "net.core.somaxconn": "4096",
+      "net.ipv4.tcp_max_syn_backlog": "1024",
+      "net.core.netdev_max_backlog": "1000",
+      "net.ipv4.ip_local_port_range": "37795\t41890",
+      "net.ipv4.tcp_max_tw_buckets": "65536",
+      "net.ipv4.tcp_tw_reuse": "2",
+      "net.ipv4.ip_local_reserved_ports": "",
+      "net.core.rmem_max": "4194304",
+      "net.core.wmem_max": "4194304",
+      "mtu": "65536"
+    },
+    "host_network_unchanged": true
+  },
+  {
+    "command": [
+      "systemctl",
+      "is-active",
+      "cnetmod-ws-docker-net",
+      "cnetmod-ws-containerd-net"
+    ],
+    "exit_code": 4,
+    "stdout": "inactive\ninactive\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "ip",
+      "netns",
+      "list"
+    ],
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "docker",
+      "ps",
+      "--format",
+      "{{.Names}} {{.Status}}"
+    ],
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  }
+]

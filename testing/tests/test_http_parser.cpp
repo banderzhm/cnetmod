@@ -7,6 +7,21 @@ import cnetmod.protocol.http;
 
 using namespace cnetmod::http;
 
+TEST(request_parser_transfers_headers_without_losing_parsed_state)
+{
+    request_parser parser(32);
+    const std::string raw = "GET /ws HTTP/1.1\r\nHost: localhost\r\nX-Value: first\r\nX-Value: second\r\n\r\n";
+    ASSERT_TRUE(parser.consume(raw.data(), raw.size()).has_value());
+    auto owned = parser.take_headers();
+    ASSERT_EQ(owned.at("X-Value"), std::string("first, second"));
+    ASSERT_EQ(parser.get_header("Host"), std::string_view("localhost"));
+    ASSERT_EQ(parser.get_header("X-Value"), std::string_view("first, second"));
+    ASSERT_EQ(parser.headers().at("Host"), std::string("localhost"));
+    ASSERT_TRUE(parser.ready());
+    parser.reset();
+    ASSERT_EQ(owned.at("Host"), std::string("localhost"));
+}
+
 // =============================================================================
 // request_parser — Basic GET
 // =============================================================================
@@ -472,6 +487,29 @@ TEST(roundtrip_response_serialize_parse)
     ASSERT_EQ(p.status_code(), 200);
     ASSERT_EQ(p.get_header("Server"), std::string_view("cnetmod"));
     ASSERT_EQ(p.body(), std::string_view("OK"));
+}
+
+TEST(upgrade_parser_preserves_binary_tail)
+{
+    const std::string tail{"\x82\x03\x00\x01\xff", 5};
+    request_parser request;
+    const auto header = std::string{"GET /ws HTTP/1.1\r\nHost: localhost\r\n\r\n"};
+    ASSERT_TRUE(request.consume(header.data(), 7).has_value());
+    ASSERT_TRUE(request.take_buffered_data().empty());
+    const auto rest = header.substr(7) + tail;
+    ASSERT_TRUE(request.consume(rest.data(), rest.size()).has_value());
+    ASSERT_TRUE(request.ready());
+    ASSERT_EQ(request.take_buffered_data(), tail);
+    ASSERT_TRUE(request.take_buffered_data().empty());
+    ASSERT_EQ(request.get_header("Host"), std::string_view{"localhost"});
+
+    response_parser response;
+    const auto raw = std::string{"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n\r\n"} + tail;
+    ASSERT_TRUE(response.consume(raw.data(), raw.size()).has_value());
+    ASSERT_TRUE(response.ready());
+    ASSERT_EQ(response.take_buffered_data(), tail);
+    ASSERT_TRUE(response.take_buffered_data().empty());
+    ASSERT_EQ(response.get_header("Upgrade"), std::string_view{"websocket"});
 }
 
 RUN_TESTS()

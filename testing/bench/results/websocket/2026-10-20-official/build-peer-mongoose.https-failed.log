@@ -1,0 +1,50 @@
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+Sending build context to Docker daemon  216.6kB
+Step 1/15 : FROM ubuntu:24.04 AS build
+ ---> 534baea6a22c
+Step 2/15 : COPY ws-build-ca-bundle.crt /etc/ssl/certs/ca-certificates.crt
+ ---> 9d765ecd23d7
+Step 3/15 : RUN sed -i "s|http://|https://|g" /etc/apt/sources.list.d/ubuntu.sources && apt-get update && apt-get install -y --no-install-recommends         gcc-14 curl ca-certificates libc6-dev libssl-dev     && rm -rf /var/lib/apt/lists/*
+ ---> Running in 7016e64b9550
+Ign:1 https://security.ubuntu.com/ubuntu noble-security InRelease
+Ign:2 https://archive.ubuntu.com/ubuntu noble InRelease
+Ign:3 https://archive.ubuntu.com/ubuntu noble-updates InRelease
+Ign:4 https://archive.ubuntu.com/ubuntu noble-backports InRelease
+Ign:1 https://security.ubuntu.com/ubuntu noble-security InRelease
+Ign:2 https://archive.ubuntu.com/ubuntu noble InRelease
+Ign:3 https://archive.ubuntu.com/ubuntu noble-updates InRelease
+Ign:4 https://archive.ubuntu.com/ubuntu noble-backports InRelease
+Ign:2 https://archive.ubuntu.com/ubuntu noble InRelease
+Ign:1 https://security.ubuntu.com/ubuntu noble-security InRelease
+Ign:3 https://archive.ubuntu.com/ubuntu noble-updates InRelease
+Ign:4 https://archive.ubuntu.com/ubuntu noble-backports InRelease
+Err:1 https://security.ubuntu.com/ubuntu noble-security InRelease
+  Could not handshake: The TLS connection was non-properly terminated. [IP: 127.0.0.1 7897]
+Err:2 https://archive.ubuntu.com/ubuntu noble InRelease
+  Could not handshake: The TLS connection was non-properly terminated. [IP: 127.0.0.1 7897]
+Err:3 https://archive.ubuntu.com/ubuntu noble-updates InRelease
+  Could not handshake: The TLS connection was non-properly terminated. [IP: 127.0.0.1 7897]
+Err:4 https://archive.ubuntu.com/ubuntu noble-backports InRelease
+  Could not handshake: The TLS connection was non-properly terminated. [IP: 127.0.0.1 7897]
+Reading package lists...
+[91mW: Failed to fetch https://archive.ubuntu.com/ubuntu/dists/noble/InRelease  Could not handshake: The TLS connection was non-properly terminated. [IP: 127.0.0.1 7897]
+W: Failed to fetch https://archive.ubuntu.com/ubuntu/dists/noble-updates/InRelease  Could not handshake: The TLS connection was non-properly terminated. [IP: 127.0.0.1 7897]
+W: Failed to fetch https://archive.ubuntu.com/ubuntu/dists/noble-backports/InRelease  Could not handshake: The TLS connection was non-properly terminated. [IP: 127.0.0.1 7897]
+W: Failed to fetch https://security.ubuntu.com/ubuntu/dists/noble-security/InRelease  Could not handshake: The TLS connection was non-properly terminated. [IP: 127.0.0.1 7897]
+W: Some index files failed to download. They have been ignored, or old ones used instead.
+[0mReading package lists...
+Building dependency tree...
+Reading state information...
+Package ca-certificates is not available, but is referred to by another package.
+This may mean that the package is missing, has been obsoleted, or
+is only available from another source
+
+[91mE: Unable to locate package gcc-14
+E: Unable to locate package curl
+E: Package 'ca-certificates' has no installation candidate
+E: Unable to locate package libc6-dev
+E: Unable to locate package libssl-dev
+[0mThe command '/bin/sh -c sed -i "s|http://|https://|g" /etc/apt/sources.list.d/ubuntu.sources && apt-get update && apt-get install -y --no-install-recommends         gcc-14 curl ca-certificates libc6-dev libssl-dev     && rm -rf /var/lib/apt/lists/*' returned a non-zero code: 100

@@ -37,6 +37,8 @@ if(NOT CNETMOD_ENABLE_GRPC)
 endif()
 if(NOT CNETMOD_ENABLE_WEBSOCKET)
     list(REMOVE_ITEM BENCH_TARGETS bench_ws)
+else()
+    list(APPEND BENCH_TARGETS bench_ws_codec bench_ws_server)
 endif()
 if(NOT CNETMOD_ENABLE_MQTT)
     list(REMOVE_ITEM BENCH_TARGETS bench_mqtt)
@@ -74,7 +76,9 @@ foreach(bench_name ${BENCH_TARGETS})
     elseif(bench_name STREQUAL "bench_http_disabled")
         target_compile_definitions(${bench_name} PRIVATE CNETMOD_BENCH_DISABLED_ONLY=1)
     endif()
-    if(bench_name STREQUAL "crosslang_cnetmod_server" OR
+    if(bench_name MATCHES "^bench_ws_(codec|server)$")
+        target_link_libraries(${bench_name} PRIVATE cnetmod_websocket)
+    elseif(bench_name STREQUAL "crosslang_cnetmod_server" OR
             bench_name STREQUAL "arena_h3_server")
         # The cross-language server exercises the HTTP stack directly. Keep
         # Application, ORM and unrelated protocols out of the benchmark binary

@@ -1,0 +1,107 @@
+[info] framework: vanilla-epoll (vanilla-epoll, V)
+[info] subscribed tests: baseline,async,latency-1m,latency-10k,latency-500k-8cpu,pipelined,limited-conn,json-comp,json-tls,static-tls,8gbit,async-db,fortunes,baseline-h2c,json-h2c,unary-grpc,echo-ws,echo-ws-pipeline,echo-ws-limited
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+sh: 1: addr2line: not found
+/server(+0x57a6c) [0x5bd56a3c3a6c]
+sh: 1: addr2line: not found
+/server(+0x57a6c) [0x5bd56a3c3a6c]
+sh: 1: addr2line: not found
+sh: 1: addr2line: not found
+/server(+0x57a6c) [0x5bd56a3c3a6c]
+/server(+0x57a6c) [0x5bd56a3c3a6c]
+sh: 1: addr2line: not found
+sh: 1: addr2line: not found
+/server(+0x57a6c) [0x5bd56a3c3a6c]
+/server(+0x57a6c) [0x5bd56a3c3a6c]
+sh: 1: addr2line: not found
+/server(+0x8f93) [0x5bd56a374f93]
+sh: 1: addr2line: not found
+/server(+0x57a6c) [0x5bd56a3c3a6c]
+sh: 1: addr2line: not found
+sh: 1: addr2line: not found
+sh: 1: addr2line: not found
+sh: 1: addr2line: not found
+sh: 1: addr2line: not found
+sh: 1: addr2line: not found
+sh: 1: addr2line: not found
+/server(+0x57a6c) [0x5bd56a3c3a6c]
+/server(+0x57a6c) [0x5bd56a3c3a6c]
+/server(+0x8f93) [0x5bd56a374f93]
+/server(+0x57a6c) [0x5bd56a3c3a6c]
+sh: 1: addr2line: not found
+/server(+0x57a6c) [0x5bd56a3c3a6c]
+sh: 1: addr2line: not found
+sh: 1: addr2line: not found
+/server(+0x57a6c) [0x5bd56a3c3a6c]
+/server(+0x57a6c) [0x5bd56a3c3a6c]
+sh: 1: addr2line: not found
+/server(+0x8f93) [0x5bd56a374f93]
+/server(+0x57a6c) [0x5bd56a3c3a6c]
+sh: 1: addr2line: not found
+sh: 1: addr2line: not found
+/server(+0x8f93) [0x5bd56a374f93]
+/server(+0x8f93) [0x5bd56a374f93]
+sh: 1: /server(+0x57a6c) [0x5bd56a3c3a6c]
+addr2line: not found
+sh: 1: addr2line: not found
+/server(+0x57a6c) [0x5bd56a3c3a6c]
+sh: 1: addr2line: not found
+/server(+0x8f93) [0x5bd56a374f93]
+/server(+0x8f93) [0x5bd56a374f93]
+/server(+0x8f93) [0x5bd56a374f93]
+/lib/x86_64-linux-gnu/libc.so.6(+0x928bb) [0x73a8151078bb]
+sh: 1: addr2line: not found
+/server(+0x57a6c) [0x5bd56a3c3a6c]
+/server(+0x8f93) [0x5bd56a374f93]
+sh: 1: addr2line: not found
+sh: 1: addr2line: not found
+/server(+0x8f93) [0x5bd56a374f93]
+/lib/x86_64-linux-gnu/libc.so.6(+0x928bb) [0x73a8151078bb]sh: 1: addr2line: not found
+
+/server(+0x57a6c) [0x5bd56a3c3a6c]/lib/x86_64-linux-gnu/libc.so.6(+0x928bb) [0x73a8151078bb]
+
+sh: 1: /server(+0x8f93) [0x5bd56a374f93]
+addr2line: not found
+/server(+0x8f93) [0x5bd56a374f93]
+sh: 1: addr2line: not found
+/lib/x86_64-linux-gnu/libc.so.6(+0x928bb) [0x73a8151078bb]
+sh: 1: addr2line: not found
+sh: 1: addr2line: not found
+/server(+0x8f93) [0x5bd56a374f93]
+/server(+0x8f93) [0x5bd56a374f93]
+sh: 1: addr2line: not found
+sh: 1: addr2line: not found
+sh: 1: addr2line: not found
+/server(+0x8f93) [0x5bd56a374f93]
+sh: 1: addr2line: not found
+sh: 1: addr2line: not found
+/server(+0x8f93) [0x5bd56a374f93]
+/lib/x86_64-linux-gnu/libc.so.6(+0x928bb) [0x73a8151078bb]
+sh: 1: addr2line: not found
+sh: 1: addr2line: not found
+/server(+0x8f93) [0x5bd56a374f93]
+sh: 1: addr2line: not found
+/server(+0x8f93) [0x5bd56a374f93]
+sh: 1: addr2line: not found
+/server(+0x8f93) [0x5bd56a374f93]
+sh: 1: addr2line: not found
+sh: 1: addr2line: not found
+/server(+0x8f93) [0x5bd56a374f93]
+sh: 1: addr2line: not found
+sh: 1: addr2line: not found
+sh: 1: addr2line: not found
+/lib/x86_64-linux-gnu/libc.so.6(+0x110538) [0x73a815185538]
+sh: 1: /server(+0x8f93) [0x5bd56a374f93]
+addr2line: not found
+/lib/x86_64-linux-gnu/libc.so.6(+0x928bb) [0x73a8151078bb]
+sh: 1: addr2line: not found
+/server(+0x8f93) [0x5bd56a374f93]
+sh: 1: addr2line: not found
+/server(+0x8f93) [0x5bd56a374f93]
+/server(+0x8f93) [0x5bd56a374f93]
+sh: 1: addr2line: not found
+sh: 1: addr2line: not found
+{"Status":"exited","Running":false,"Paused":false,"Restarting":false,"OOMKilled":false,"Dead":false,"Pid":0,"ExitCode":1,"Error":"","StartedAt":"2026-10-20T03:56:19.998841004Z","FinishedAt":"2026-10-20T03:56:50.176592736Z"}
+httparena-bench-vanilla-epoll
+httparena-bench-vanilla-epoll
