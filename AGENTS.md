@@ -9078,14 +9078,14 @@ QPACK 的两个方向分开配置：
   （`:authority`、`user-agent` 等）编成一个字节的索引，省去每个请求的 Huffman 字面量解码。
   解码侧的 Section Acknowledgement / Insert Count Increment 通过
   `quic_connection::try_queue_send` 提交，不单独发包，而是搭载在随后的响应包上；
-  早期每个 ack 单独 `await async_send` 才导致动态表反而更慢。
+  早期每个 ack 单独 `await async_send` 才导致动态表反而更慢。同一批并发请求的 ack
+  在 accept 循环挂起前合并成一次解码器流写入；只有单个在途请求时仍立即提交。
 - `set_qpack_encoder_table_limit(limit)` 限制本端**编码**响应时使用的动态表（不通告，
   默认不限制）。设为 0 时无论对端允许多少都只用静态表：每个字段一次哈希探测，
   `qpack_encoder::encode_into` 直接写入调用方缓冲，没有编码器流流量和每响应的表状态。
   响应头只有少量短字段时这是更省 CPU 的选择。
 
-HttpArena H3 适配器使用 4 KB 解码表 + 编码表上限 0：baseline-h3 每请求 CPU
-5.1 → 4.4–4.6 µs。
+HttpArena H3 适配器使用 4 KB 解码表 + 编码表上限 0。
 
 ### 共享缓冲响应体
 

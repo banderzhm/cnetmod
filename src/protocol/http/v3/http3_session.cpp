@@ -1439,7 +1439,16 @@ auto http3_server_session::run() -> task<void>
         if (const auto queued = conn_.try_accept_stream())
             accepted = *queued;
         else
+        {
+            // End of an accept batch: one decoder-stream write carries the
+            // acknowledgements its requests left pending; the response flush
+            // already scheduled for the batch sends it with the responses.
+            batching_decoder_acks_ = false;
+            if (decoder_.has_pending_decoder_instructions() && !conn_.is_closed())
+                (void)co_await flush_qpack_decoder_instructions(
+                    conn_, decoder_, qpack_decoder_stream_);
             accepted = co_await conn_.async_accept_stream();
+        }
         if (!accepted)
             break;
 
@@ -1453,8 +1462,10 @@ auto http3_server_session::run() -> task<void>
         // invokes its scope guard.  The accept loop already runs on the
         // connection's context, so start the child inline instead of paying
         // a post-queue allocation and reactor hop for every request stream.
+        batching_decoder_acks_ = true;
         spawn_local(conn_.context(), service_peer_stream(*accepted));
     }
+    batching_decoder_acks_ = false;
     close_qpack_waiters(qpack_waiters_);
     co_await peer_streams_.wait();
 }
@@ -1855,7 +1866,10 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                 if (parsed_request)
                 {
                     std::expected<void, std::error_code> decoder_flush{};
-                    if (decoder_.has_pending_decoder_instructions())
+                    // Within an accept batch with other requests in flight,
+                    // run() commits this acknowledgement with the batch's.
+                    if (decoder_.has_pending_decoder_instructions() &&
+                        !(batching_decoder_acks_ && active_streams_ > 1U))
                         decoder_flush = co_await flush_qpack_decoder_instructions(
                             conn_, decoder_, qpack_decoder_stream_);
                     if (!decoder_flush)

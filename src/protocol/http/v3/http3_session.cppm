@@ -357,6 +357,9 @@ private:
     bool control_stream_sent_{};
     bool closing_{};
     std::size_t active_streams_{};
+    // True while run() dispatches the streams of one accept batch; it then
+    // commits the batch's QPACK decoder acknowledgements in one write.
+    bool batching_decoder_acks_{};
     bool peer_control_stream_seen_{};
     bool peer_settings_seen_{};
     bool peer_datagram_enabled_{};
