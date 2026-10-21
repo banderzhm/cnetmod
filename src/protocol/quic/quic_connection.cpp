@@ -4980,7 +4980,8 @@ auto quic_connection::flush_send_queue() -> task<void>
         if (!std::exchange(coalescing_checked, true) &&
             impl_->connection_state == connection_state::connected &&
             !impl_->queued_protocol_error &&
-            impl_->write_commands.approximate_size() != 0U)
+            (impl_->write_commands.approximate_size() != 0U ||
+                impl_->has_prioritized_stream_frames()))
         {
             // This is a bounded scheduling hint, independent of MAX_STREAMS
             // or stream-ID gaps. Avoid a reactor turn for a single active
@@ -5391,6 +5392,45 @@ auto quic_connection::await_local_stream_send_authority(stream_id sid)
     }
 }
 
+auto quic_connection::try_apply_stream_write_now(stream_id sid,
+    std::vector<std::byte>& prefix,
+    const std::shared_ptr<const std::string>& shared_data, bool fin)
+    -> std::optional<std::expected<void, std::error_code>>
+{
+    // Responses are emitted where they are produced, as one state-locked
+    // write, instead of a command, a completion and a resumption per
+    // response. A queued command for any stream goes first: the queue is
+    // FIFO, and a command already dequeued is applied under this same lock,
+    // so an empty queue observed under the lock means no earlier write of
+    // this producer is still pending.
+    if (impl_->write_commands.approximate_size() != 0U ||
+        !impl_->receive_mutex.try_lock())
+        return std::nullopt;
+    async_lock_guard guard{impl_->receive_mutex, std::adopt_lock};
+    if (impl_->write_commands.approximate_size() != 0U)
+        return std::nullopt;
+    auto result = apply_stream_write(sid, prefix, shared_data, fin);
+    if (!result && result.error() != make_error_code(quic_errc::flow_control_error))
+        return result;
+    if (result)
+    {
+        impl_->send_flush_requested.store(true, std::memory_order_release);
+        impl_->receive_rearm_requested.store(true, std::memory_order_release);
+        if (impl_->receive_wait_token &&
+            impl_->receive_wait_token->pending_.load(std::memory_order_acquire))
+            impl_->receive_wait_token->cancel();
+    }
+    return result;
+}
+
+auto quic_connection::flush_after_direct_write() -> task<void>
+{
+    // A coroutine that already owns the packet writer rechecks the request
+    // bit before it releases ownership, so a loser needs no coroutine frame.
+    if (impl_->can_start_requested_flush())
+        co_await flush_send_queue();
+}
+
 auto quic_connection::async_send_fragments(stream_id sid,
     std::vector<std::byte> owned_data, bool fin)
     -> task<std::expected<void, std::error_code>>
@@ -5457,6 +5497,19 @@ auto quic_connection::async_send(stream_id sid, std::vector<std::byte>&& owned_d
         if (!authority)
             co_return std::unexpected(authority.error());
     }
+    if (auto direct = try_apply_stream_write_now(sid, owned_data, {}, fin))
+    {
+        if (!*direct)
+        {
+            if (direct->error() == make_error_code(quic_errc::flow_control_error))
+                co_return co_await async_send_fragments(sid, std::move(owned_data), fin);
+            co_return std::unexpected(direct->error());
+        }
+        co_await flush_after_direct_write();
+        if (impl_->terminal_send_error)
+            co_return std::unexpected(impl_->terminal_send_error);
+        co_return {};
+    }
     for (;;)
     {
         auto* const completion = impl_->write_commands.try_acquire();
@@ -5516,6 +5569,24 @@ auto quic_connection::async_send_shared(stream_id sid,
         const auto authority = co_await await_local_stream_send_authority(sid);
         if (!authority)
             co_return std::unexpected(authority.error());
+    }
+    if (auto direct = try_apply_stream_write_now(sid, prefix, shared_data, fin))
+    {
+        if (!*direct && direct->error() != make_error_code(quic_errc::flow_control_error))
+            co_return std::unexpected(direct->error());
+        if (*direct)
+        {
+            co_await flush_after_direct_write();
+            if (impl_->terminal_send_error)
+                co_return std::unexpected(impl_->terminal_send_error);
+            co_return {};
+        }
+        std::vector<std::byte> owned_data;
+        owned_data.reserve(prefix.size() + shared_data->size());
+        owned_data.insert(owned_data.end(), prefix.begin(), prefix.end());
+        const auto bytes = std::as_bytes(std::span{shared_data->data(), shared_data->size()});
+        owned_data.insert(owned_data.end(), bytes.begin(), bytes.end());
+        co_return co_await async_send_fragments(sid, std::move(owned_data), fin);
     }
     for (;;)
     {

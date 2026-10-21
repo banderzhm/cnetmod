@@ -536,6 +536,18 @@ private:
         std::vector<std::byte>& prefix,
         const std::shared_ptr<const std::string>& shared_data, bool fin)
         -> std::expected<void, std::error_code>;
+    /// Applies a stream write inline when the state lock is free and no
+    /// producer command is queued ahead of it (which keeps per-stream FIFO
+    /// order). Returns nullopt when the caller must use the command queue;
+    /// the payload is then untouched. A flow-control rejection also leaves
+    /// it untouched so the caller can fragment it.
+    [[nodiscard]] auto try_apply_stream_write_now(stream_id sid,
+        std::vector<std::byte>& prefix,
+        const std::shared_ptr<const std::string>& shared_data, bool fin)
+        -> std::optional<std::expected<void, std::error_code>>;
+    /// Becomes the packet owner for writes committed inline, unless another
+    /// coroutine already owns it and will observe the published request.
+    auto flush_after_direct_write() -> task<void>;
     [[nodiscard]] auto apply_application_datagram(std::vector<std::byte> data)
         -> task<std::expected<void, std::error_code>>;
     [[nodiscard]] auto await_local_stream_send_authority(stream_id sid)
