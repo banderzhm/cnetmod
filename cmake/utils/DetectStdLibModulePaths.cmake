@@ -40,19 +40,21 @@ function(detect_stdlib_module_paths)
             message(STATUS "macOS detection: arch=${CMAKE_HOST_SYSTEM_PROCESSOR}, Homebrew LLVM path=${HOMEBREW_LLVM_PREFIX}")
         endif()
 
-        # Try to find libc++ module directory (LLVM 19-22)
+        # Try to find libc++ module directory (LLVM 19-23)
         find_path(STDLIB_MODULE_DIRS
             NAMES std.cppm
             PATHS
                 # Linux paths
-                /usr/lib/llvm-19/share/libc++/v1
+                /usr/lib/llvm-23/share/libc++/v1
                 /usr/lib/llvm-22/share/libc++/v1
                 /usr/lib/llvm-21/share/libc++/v1
                 /usr/lib/llvm-20/share/libc++/v1
-                /usr/local/lib/llvm-19/share/libc++/v1
+                /usr/lib/llvm-19/share/libc++/v1
+                /usr/local/lib/llvm-23/share/libc++/v1
                 /usr/local/lib/llvm-22/share/libc++/v1
                 /usr/local/lib/llvm-21/share/libc++/v1
                 /usr/local/lib/llvm-20/share/libc++/v1
+                /usr/local/lib/llvm-19/share/libc++/v1
                 /opt/llvm/share/libc++/v1
                 # Arch Linux libc++ package
                 /usr/share/libc++/v1
@@ -62,15 +64,17 @@ function(detect_stdlib_module_paths)
             DOC "Path to standard library modules (libc++)"
         )
 
-        # Try to find libc++ header directory (LLVM 19-22)
+        # Try to find libc++ header directory (LLVM 19-23)
         find_path(STDLIB_INCLUDE_DIRS
             NAMES __config
             PATHS
                 # Linux paths
+                /usr/lib/llvm-23/include/c++/v1
                 /usr/lib/llvm-22/include/c++/v1
                 /usr/lib/llvm-21/include/c++/v1
                 /usr/lib/llvm-20/include/c++/v1
                 /usr/lib/llvm-19/include/c++/v1
+                /usr/local/lib/llvm-23/include/c++/v1
                 /usr/local/lib/llvm-22/include/c++/v1
                 /usr/local/lib/llvm-21/include/c++/v1
                 /usr/local/lib/llvm-20/include/c++/v1
