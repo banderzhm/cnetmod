@@ -148,8 +148,39 @@ private:
         // State tracking
         stream_state state_ = stream_state::idle;
 
+        // Bytes received in order, starting at next_expected_offset_.
+        // In-order delivery (the common case) appends here; only data that
+        // arrives beyond a gap uses receive_buffer_. The two are never both
+        // non-empty. Small request headers fit the inline storage.
+        struct in_order_bytes
+        {
+            static constexpr std::size_t inline_capacity = 192U;
+            std::array<std::byte, inline_capacity> inline_storage{};
+            std::vector<std::byte> heap;
+            std::size_t begin{};
+            std::size_t end{};
+
+            [[nodiscard]] auto empty() const noexcept -> bool { return begin == end; }
+            [[nodiscard]] auto size() const noexcept -> std::size_t { return end - begin; }
+            [[nodiscard]] auto data() noexcept -> std::byte*
+            {
+                return heap.empty() ? inline_storage.data() : heap.data();
+            }
+            [[nodiscard]] auto capacity() const noexcept -> std::size_t
+            {
+                return heap.empty() ? inline_capacity : heap.size();
+            }
+            auto append(std::span<const std::byte> bytes) -> void;
+            auto consume(std::size_t count) noexcept -> void;
+            auto clear() noexcept -> void;
+        };
+        in_order_bytes in_order_;
         // Receive buffer (sorted by offset for gaps)
         std::map<std::uint64_t, std::vector<std::byte>> receive_buffer_;
+        [[nodiscard]] auto has_buffered_data() const noexcept -> bool
+        {
+            return !in_order_.empty() || !receive_buffer_.empty();
+        }
         std::uint64_t next_expected_offset_ = 0;
         std::uint64_t highest_received_offset_ = 0;
         std::optional<std::uint64_t> final_size_;
