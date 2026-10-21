@@ -91,6 +91,12 @@ using transport_reader =
 using transport_writer =
     std::function<cnetmod::task<std::expected<void, std::error_code>>(
         cnetmod::const_buffer)>;
+/// Optional vectored transport. When installed, large shared response bodies
+/// are framed by reference and handed to the transport together with the
+/// owned frame bytes instead of being copied into the outbound buffer first.
+using transport_gather_writer =
+    std::function<cnetmod::task<std::expected<void, std::error_code>>(
+        std::span<const cnetmod::const_buffer>)>;
 
 /// RFC 9113 connection state machine.  It is transport-neutral at the frame
 /// layer and owns all stream and HPACK state on the connection's io_context.
@@ -111,6 +117,10 @@ public:
         sync_server_handler sync_handler = {},
         bool buffer_complete_requests = false,
         buffered_request_filter buffer_filter = {});
+
+    /// Install a vectored writer used whenever borrowed body segments are
+    /// queued. Call before run(); the regular writer remains the fallback.
+    void set_gather_writer(transport_gather_writer writer);
 
     [[nodiscard]] auto run(std::span<const std::byte> initial = {})
         -> cnetmod::task<void>;
@@ -161,6 +171,12 @@ private:
         -> cnetmod::task<void>;
     void queue_connection_error(std::uint32_t code);
     void queue_frame(frame_header header, std::span<const std::byte> payload);
+    /// Queue a DATA frame whose payload stays in `owner`'s storage.
+    void queue_borrowed_frame(frame_header header,
+        std::span<const std::byte> payload,
+        const std::shared_ptr<const std::string>& owner);
+    /// Owned plus borrowed bytes waiting for the next transport write.
+    [[nodiscard]] auto pending_outbound_bytes() const noexcept -> std::size_t;
     [[nodiscard]] auto acquire_request_headers()
         -> std::vector<header_field>;
     void release_request_headers(std::vector<header_field> headers) noexcept;
@@ -196,6 +212,19 @@ private:
     std::vector<std::byte> input_;
     std::vector<std::byte> outbound_;
     std::vector<std::byte> write_buffer_;
+    /// A borrowed payload transmitted after outbound_[0, offset). The owner
+    /// keeps the bytes alive until the write that carries them completes.
+    struct borrowed_segment
+    {
+        std::size_t offset{};
+        std::span<const std::byte> data;
+        std::shared_ptr<const std::string> owner;
+    };
+    std::vector<borrowed_segment> outbound_borrowed_;
+    std::vector<borrowed_segment> write_borrowed_;
+    std::size_t outbound_borrowed_bytes_ = 0;
+    std::vector<cnetmod::const_buffer> write_parts_;
+    transport_gather_writer gather_writer_;
     bool writer_active_ = false;
     std::vector<std::byte> header_block_;
     std::vector<header_field> response_headers_;

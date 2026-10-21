@@ -1979,12 +1979,23 @@ auto server::handle_h2_tls(socket& client, io_context& io, ssl_stream& ssl,
     v2::session session(io, client, make_h2_streaming_handler(io, client), {},
         std::move(reader), std::move(writer),
         make_h2_sync_handler(io, client), buffer_complete, std::move(filter));
+    // Static responses are framed by reference and sealed straight from the
+    // shared file cache instead of being copied into the frame buffer first.
+    session.set_gather_writer(
+        [&ssl, &write_cancellation](std::span<const const_buffer> parts)
+            -> task<std::expected<void, std::error_code>>
+        {
+            co_return co_await ssl.async_write_gather(parts, write_cancellation);
+        });
     co_await session.run();
 }
 
 auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
     cancel_token& cancellation) -> task<void>
 {
+    // Bodies at least this large are sealed from their own storage; smaller
+    // ones are cheaper to batch with pipelined neighbours by copying.
+    constexpr std::size_t tls_gather_body_threshold = 4U * 1024U;
     bool keep_alive = true;
     response resp(status::ok);
     std::string pending_responses;
@@ -2208,6 +2219,21 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
                 }
                 // Send chunked response (TLS)
                 co_await send_chunked_response_tls(io, ssl, resp, cancellation);
+            }
+            else if (const auto body = resp.body(); body.size() >= tls_gather_body_threshold)
+            {
+                // Seal a large body straight from response storage (often the
+                // shared static-file cache) instead of copying it behind the
+                // header block; queued pipelined responses go out first in
+                // the same flush.
+                resp.append_serialized_headers_to(pending_responses);
+                const std::array<const_buffer, 2> parts{
+                    const_buffer{pending_responses.data(), pending_responses.size()},
+                    const_buffer{body.data(), body.size()}};
+                auto written = co_await ssl.async_write_gather(parts, cancellation);
+                if (!written)
+                    co_return;
+                pending_responses.clear();
             }
             else
             {

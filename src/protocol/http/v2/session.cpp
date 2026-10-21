@@ -24,6 +24,9 @@ namespace {
     constexpr std::uint32_t error_protocol = 0x1;
     constexpr std::uint32_t error_frame_size = 0x6;
     constexpr std::size_t response_batch_bytes = 64U * 1024U;
+    // DATA payloads at least this large are framed by reference when the
+    // transport supports vectored writes; smaller ones are cheaper to copy.
+    constexpr std::size_t borrowed_frame_threshold = 4U * 1024U;
     constexpr auto response_batch_max_age = std::chrono::microseconds{250};
     constexpr std::size_t response_batch_time_check_interval = 32;
 
@@ -149,9 +152,36 @@ auto session::local_settings() noexcept -> settings&
     return local_;
 }
 
+void session::set_gather_writer(transport_gather_writer writer)
+{
+    gather_writer_ = std::move(writer);
+}
+
 auto session::take_outbound() -> std::vector<std::byte>
 {
-    return std::exchange(outbound_, {});
+    if (outbound_borrowed_.empty())
+        return std::exchange(outbound_, {});
+    std::vector<std::byte> joined;
+    joined.reserve(pending_outbound_bytes());
+    std::size_t cursor = 0;
+    for (const auto& segment : outbound_borrowed_)
+    {
+        joined.insert(joined.end(), outbound_.begin() + static_cast<std::ptrdiff_t>(cursor),
+            outbound_.begin() + static_cast<std::ptrdiff_t>(segment.offset));
+        joined.insert(joined.end(), segment.data.begin(), segment.data.end());
+        cursor = segment.offset;
+    }
+    joined.insert(joined.end(), outbound_.begin() + static_cast<std::ptrdiff_t>(cursor),
+        outbound_.end());
+    outbound_.clear();
+    outbound_borrowed_.clear();
+    outbound_borrowed_bytes_ = 0;
+    return joined;
+}
+
+auto session::pending_outbound_bytes() const noexcept -> std::size_t
+{
+    return outbound_.size() + outbound_borrowed_bytes_;
 }
 
 void session::queue_frame(frame_header header,
@@ -161,6 +191,17 @@ void session::queue_frame(frame_header header,
     const auto encoded = encode_frame_header(header);
     outbound_.insert(outbound_.end(), encoded.begin(), encoded.end());
     outbound_.insert(outbound_.end(), payload.begin(), payload.end());
+}
+
+void session::queue_borrowed_frame(frame_header header,
+    std::span<const std::byte> payload,
+    const std::shared_ptr<const std::string>& owner)
+{
+    header.length = static_cast<std::uint32_t>(payload.size());
+    const auto encoded = encode_frame_header(header);
+    outbound_.insert(outbound_.end(), encoded.begin(), encoded.end());
+    outbound_borrowed_.push_back({outbound_.size(), payload, owner});
+    outbound_borrowed_bytes_ += payload.size();
 }
 
 void session::queue_connection_error(std::uint32_t code)
@@ -310,10 +351,15 @@ auto session::queue_response_data(std::uint32_t stream_id, server_response& resp
         send_window_ -= static_cast<std::int32_t>(size);
         if (found != streams_.end())
             (void)found->second.send_window().consume(static_cast<std::uint32_t>(size));
-        queue_frame({.type = frame_type::data,
-                        .flags = static_cast<std::uint8_t>(offset + size == body.size() && !trailers ? flag_end_stream : 0),
-                        .stream_id = stream_id},
-            body.subspan(offset, size));
+        const frame_header data_header{.type = frame_type::data,
+            .flags = static_cast<std::uint8_t>(offset + size == body.size() && !trailers ? flag_end_stream : 0),
+            .stream_id = stream_id};
+        // Shared bodies (the static-file cache) outlive this response, so a
+        // vectored transport can send them by reference without a copy.
+        if (gather_writer_ && response.shared_body && size >= borrowed_frame_threshold)
+            queue_borrowed_frame(data_header, body.subspan(offset, size), response.shared_body);
+        else
+            queue_frame(data_header, body.subspan(offset, size));
         offset += size;
     }
     if (trailers && !queue_response_trailers(stream_id, response))
@@ -412,7 +458,13 @@ auto session::flush_batched_outbound()
     }
     // One buffer can be in the kernel while the reader builds the next batch.
     // Apply backpressure instead of accumulating an unbounded outbound queue.
-    if (outbound_.size() + write_buffer_.size() >= response_batch_bytes * 2)
+    const auto in_flight = write_buffer_.size() +
+        std::accumulate(write_borrowed_.begin(), write_borrowed_.end(), std::size_t{},
+            [](std::size_t total, const borrowed_segment& segment)
+            {
+                return total + segment.data.size();
+            });
+    if (pending_outbound_bytes() + in_flight >= response_batch_bytes * 2)
         co_return co_await flush_outbound();
     co_return std::expected<void, std::error_code>{};
 }
@@ -424,10 +476,36 @@ auto session::write_outbound_locked()
         co_return std::expected<void, std::error_code>{};
     write_buffer_.clear();
     write_buffer_.swap(outbound_);
-    auto result = co_await writer_({write_buffer_.data(), write_buffer_.size()});
+    write_borrowed_.clear();
+    write_borrowed_.swap(outbound_borrowed_);
+    outbound_borrowed_bytes_ = 0;
+    std::expected<void, std::error_code> result;
+    if (write_borrowed_.empty())
+        result = co_await writer_({write_buffer_.data(), write_buffer_.size()});
+    else
+    {
+        // Interleave owned frame bytes with the borrowed payloads they frame.
+        write_parts_.clear();
+        std::size_t cursor = 0;
+        for (const auto& segment : write_borrowed_)
+        {
+            if (segment.offset > cursor)
+                write_parts_.push_back({write_buffer_.data() + cursor, segment.offset - cursor});
+            write_parts_.push_back({segment.data.data(), segment.data.size()});
+            cursor = segment.offset;
+        }
+        if (cursor < write_buffer_.size())
+            write_parts_.push_back({write_buffer_.data() + cursor, write_buffer_.size() - cursor});
+        result = co_await gather_writer_(write_parts_);
+    }
     write_buffer_.clear();
+    // Release the shared bodies only after the transport is done with them.
+    write_borrowed_.clear();
     if (outbound_.empty())
+    {
         outbound_.swap(write_buffer_);
+        outbound_borrowed_.swap(write_borrowed_);
+    }
     co_return result;
 }
 
@@ -741,7 +819,7 @@ auto session::dispatch_ready() -> cnetmod::task<void>
                 if (source)
                     continue;
                 ++batched_responses;
-                if (outbound_.size() >= response_batch_bytes ||
+                if (pending_outbound_bytes() >= response_batch_bytes ||
                     (batched_responses % response_batch_time_check_interval == 0 &&
                         std::chrono::steady_clock::now() - batch_started >= response_batch_max_age))
                 {
@@ -823,7 +901,7 @@ auto session::dispatch_ready() -> cnetmod::task<void>
         queue_response(stream_id, std::move(response), pending.detached);
         ++batched_responses;
         const bool size_limit_reached =
-            outbound_.size() >= response_batch_bytes;
+            pending_outbound_bytes() >= response_batch_bytes;
         const bool time_limit_reached =
             batched_responses % response_batch_time_check_interval == 0 &&
             std::chrono::steady_clock::now() - batch_started >=

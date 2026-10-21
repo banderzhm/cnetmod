@@ -164,6 +164,12 @@ public:
     /// used by HTTP/1 pipelining to submit several ordered responses with one
     /// kernel write while keeping serialize_to()'s replacement semantics.
     void append_serialized_to(std::string& output) const;
+    /// Append the status line and header block only, leaving body() for the
+    /// caller to transmit from its own storage (gather writes of large or
+    /// shared bodies). `reserve_extra` sizes the reservation for bytes the
+    /// caller will append afterwards.
+    void append_serialized_headers_to(std::string& output,
+        std::size_t reserve_extra = 0) const;
 
     /// Install a fixed-width, server-generated IMF-fixdate without allocating
     /// a header-map value. A later explicit `set_header("Date", ...)` retains

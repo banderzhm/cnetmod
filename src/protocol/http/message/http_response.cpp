@@ -416,7 +416,14 @@ void response::serialize_to(std::string& output) const
 void response::append_serialized_to(std::string& output) const
 {
     const auto body_view = body();
-    const auto reserve_size = 64U + body_view.size() +
+    append_serialized_headers_to(output, body_view.size());
+    output += body_view;
+}
+
+void response::append_serialized_headers_to(std::string& output,
+    std::size_t reserve_extra) const
+{
+    const auto reserve_size = 64U + reserve_extra +
         (has_cached_date_header_ ? cached_date_header_.size() + 8U : 0U) +
         std::accumulate(headers_.begin(), headers_.end(), std::size_t{},
             [](std::size_t total, const auto& header)
@@ -514,7 +521,6 @@ void response::append_serialized_to(std::string& output) const
         output += "\r\n";
     }
     output += "\r\n";
-    output += body_view;
 }
 
 auto response::common_header_slot(std::string_view key) noexcept

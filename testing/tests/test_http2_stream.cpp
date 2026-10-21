@@ -886,6 +886,133 @@ TEST(http2_complete_body_batch_and_split_body_return_exact_consumed_credit)
     }
 }
 
+TEST(http2_shared_bodies_are_framed_by_reference_with_identical_wire_bytes)
+{
+    // 20 KB splits into one borrowed 16 KB DATA frame plus a borrowed 4 KB
+    // remainder; 1 KB stays below the threshold and is copied.
+    const auto large = std::make_shared<const std::string>(20'480, 'L');
+    const auto small = std::make_shared<const std::string>(1'024, 's');
+    auto exchange = [&](bool gather, std::size_t& borrowed_parts)
+        -> std::vector<std::byte>
+    {
+        cnetmod::net_init network;
+        auto io = cnetmod::make_io_context();
+        cnetmod::socket unused;
+        header_compression encoder;
+        std::vector<std::byte> input{reinterpret_cast<const std::byte*>(preface.data()),
+            reinterpret_cast<const std::byte*>(preface.data()) + preface.size()};
+        auto settings = framed({.type = frame_type::settings}, {});
+        input.insert(input.end(), settings.begin(), settings.end());
+        for (const auto [id, path] : {std::pair{1U, "/large"}, std::pair{3U, "/small"}, std::pair{5U, "/large"}})
+        {
+            const std::array headers{header_field{":method", "GET"},
+                header_field{":scheme", "https"}, header_field{":path", path}};
+            auto encoded = encoder.encode(headers);
+            ASSERT_TRUE(encoded.has_value());
+            auto head = framed({.type = frame_type::headers, .flags = 0x5,
+                                   .stream_id = id}, *encoded);
+            input.insert(input.end(), head.begin(), head.end());
+        }
+        bool delivered = false;
+        auto reader = [&](cnetmod::mutable_buffer destination)
+            -> cnetmod::task<std::expected<std::size_t, std::error_code>>
+        {
+            co_await cnetmod::post_awaitable{*io};
+            if (delivered)
+            {
+                for (unsigned turn{}; turn < 8; ++turn)
+                    co_await cnetmod::post_awaitable{*io};
+                co_return std::size_t{};
+            }
+            delivered = true;
+            std::memcpy(destination.data, input.data(), input.size());
+            co_return input.size();
+        };
+        std::vector<std::byte> output;
+        auto writer = [&](cnetmod::const_buffer source)
+            -> cnetmod::task<std::expected<void, std::error_code>>
+        {
+            const auto* first = static_cast<const std::byte*>(source.data);
+            output.insert(output.end(), first, first + source.size);
+            co_return std::expected<void, std::error_code>{};
+        };
+        borrowed_streaming_server_handler handler =
+            [](server_request&, cnetmod::cancel_token&) -> cnetmod::task<server_response>
+        {
+            co_return server_response{.status = 500};
+        };
+        sync_server_handler synchronous = [&](server_request& request, cnetmod::cancel_token&)
+            -> std::optional<server_response>
+        {
+            for (const auto& header : request.headers)
+                if (header.name == ":path")
+                    return server_response{.status = 200,
+                        .shared_body = header.value == "/large" ? large : small};
+            return server_response{.status = 404};
+        };
+        session connection{*io, unused, std::move(handler),
+            {.max_bytes = 64 * 1024, .chunk_capacity = 4}, std::move(reader),
+            std::move(writer), std::move(synchronous)};
+        if (gather)
+        {
+            connection.set_gather_writer([&](std::span<const cnetmod::const_buffer> parts)
+                    -> cnetmod::task<std::expected<void, std::error_code>>
+                {
+                    for (const auto& part : parts)
+                    {
+                        const auto* first = static_cast<const std::byte*>(part.data);
+                        // Borrowed parts point into the shared bodies themselves.
+                        if (first >= reinterpret_cast<const std::byte*>(large->data()) &&
+                            first < reinterpret_cast<const std::byte*>(large->data() + large->size()))
+                            ++borrowed_parts;
+                        output.insert(output.end(), first, first + part.size);
+                    }
+                    co_return std::expected<void, std::error_code>{};
+                });
+        }
+        auto execute = [&]() -> cnetmod::task<void>
+        {
+            co_await connection.run();
+            io->stop();
+        };
+        auto operation = execute();
+        operation.handle().resume();
+        io->run();
+        ASSERT_TRUE(operation.handle().done());
+        operation.handle().promise().result();
+        return output;
+    };
+    std::size_t copied_parts{}, borrowed_parts{};
+    const auto copied = exchange(false, copied_parts);
+    const auto borrowed = exchange(true, borrowed_parts);
+    ASSERT_EQ(copied_parts, std::size_t{0});
+    // Two large responses, each framed as two borrowed DATA payloads.
+    ASSERT_EQ(borrowed_parts, std::size_t{4});
+    ASSERT_EQ(borrowed.size(), copied.size());
+    ASSERT_TRUE(borrowed == copied);
+
+    // The copied wire image carries both bodies byte for byte.
+    std::array<std::size_t, 6> received{};
+    for (std::size_t offset{}; offset + frame_header_size <= copied.size();)
+    {
+        auto header = decode_frame_header(std::span{copied}.subspan(offset, frame_header_size));
+        ASSERT_TRUE(header.has_value());
+        if (!header || offset + frame_header_size + header->length > copied.size())
+            break;
+        if (header->type == frame_type::data && header->stream_id < received.size())
+        {
+            const auto payload = std::span{copied}.subspan(offset + frame_header_size, header->length);
+            const auto fill = header->stream_id == 3 ? std::byte{'s'} : std::byte{'L'};
+            ASSERT_TRUE(std::ranges::all_of(payload, [fill](std::byte value) { return value == fill; }));
+            received[header->stream_id] += header->length;
+        }
+        offset += frame_header_size + header->length;
+    }
+    ASSERT_EQ(received[1], large->size());
+    ASSERT_EQ(received[3], small->size());
+    ASSERT_EQ(received[5], large->size());
+}
+
 TEST(http2_streaming_response_source_is_framed_without_buffering_the_body)
 {
     cnetmod::net_init network;
