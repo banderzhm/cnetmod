@@ -5423,6 +5423,14 @@ auto quic_connection::try_apply_stream_write_now(stream_id sid,
     return result;
 }
 
+auto quic_connection::try_queue_send(stream_id sid,
+    std::span<const std::byte> data) -> bool
+{
+    std::vector<std::byte> owned{data.begin(), data.end()};
+    const auto committed = try_apply_stream_write_now(sid, owned, {}, false);
+    return committed && committed->has_value();
+}
+
 auto quic_connection::flush_after_direct_write() -> task<void>
 {
     // A coroutine that already owns the packet writer rechecks the request

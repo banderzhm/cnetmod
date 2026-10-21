@@ -178,6 +178,14 @@ public:
         bool fin = false)
         -> task<std::expected<void, std::error_code>>;
 
+    /// Commits a stream write without sending a packet now: the bytes ride
+    /// on the next packet this connection builds (typically the response
+    /// produced right after). Intended for control data with no latency
+    /// requirement, such as QPACK decoder acknowledgements. Returns false,
+    /// leaving nothing committed, when the caller must use async_send.
+    [[nodiscard]] auto try_queue_send(stream_id sid,
+        std::span<const std::byte> data) -> bool;
+
     /// Update the RFC 9218 scheduling policy for subsequent data on one
     /// stream. Calls are serialized by the connection's I/O domain; urgency
     /// is clamped to the protocol range [0, 7].

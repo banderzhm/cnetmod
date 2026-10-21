@@ -442,6 +442,11 @@ namespace {
             co_return {};
         if (!stream)
             co_return std::unexpected(std::make_error_code(std::errc::protocol_error));
+        // Section Acknowledgements and Insert Count Increments carry no
+        // latency requirement (RFC 9204 4.4). Let them ride on the packet of
+        // the response that follows instead of a packet of their own.
+        if (connection.try_queue_send(*stream, instructions))
+            co_return {};
         auto sent = co_await connection.async_send(*stream, instructions, false);
         if (!sent)
             co_return std::unexpected(sent.error());

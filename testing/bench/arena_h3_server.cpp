@@ -167,6 +167,20 @@ auto main(int argc, char** argv) -> int
             configured.error().message()};
         return 1;
     }
+    // Let the client index its repeated request fields in our QPACK decoder
+    // table: literal Huffman decoding of every request was the largest item
+    // of the request path. The acknowledgements ride on the response packets.
+    // CNETMOD_QPACK_DECODER_CAPACITY=0 restores the static-only decoder.
+    std::uint64_t qpack_capacity = 4096U;
+    if (const auto* capacity = std::getenv("CNETMOD_QPACK_DECODER_CAPACITY"))
+        qpack_capacity = std::strtoull(capacity, nullptr, 10);
+    if (const auto configured = server->set_qpack_settings(qpack_capacity,
+            qpack_capacity == 0U ? 0U : 100U);
+        !configured)
+    {
+        logger::error{"HTTP/3 QPACK setup failed: {}", configured.error().message()};
+        return 1;
+    }
     if (const auto result = server->start(); !result)
     {
         logger::error{"HTTP/3 start failed: {}", result.error().message()};
