@@ -5326,6 +5326,26 @@ auto quic_connection::apply_stream_write(stream_id sid,
         impl_->stream_scheduler.enqueue_shared_write(sid, std::move(prefix), shared_data,
             first_offset, fin, send_packet_payload, pending_stream_header);
     }
+    else if (!use_early_data && !shared_data && payload_size != 0U && [&]
+        {
+            const auto header = 1U + static_cast<std::size_t>(varint_size(sid)) +
+                (first_offset != 0U ? static_cast<std::size_t>(varint_size(first_offset)) : 0U) +
+                static_cast<std::size_t>(varint_size(payload_size));
+            return header + payload_size <= send_packet_payload;
+        }())
+    {
+        // The whole write is one STREAM frame: write its header in front of
+        // the producer's buffer and hand that buffer over, instead of
+        // encoding a copy of the payload into a second allocation.
+        std::array<std::byte, 32> header{};
+        const auto header_size = pending_stream_header(header, sid, first_offset,
+            payload_size, fin);
+        if (header_size == 0U)
+            return std::unexpected(std::make_error_code(std::errc::message_size));
+        prefix.insert(prefix.begin(), header.begin(), header.begin() +
+            static_cast<std::ptrdiff_t>(header_size));
+        impl_->enqueue_stream_frame(sid, quic_send_frame{std::move(prefix)});
+    }
     else
     {
         for (std::size_t sent_offset = 0; sent_offset < payload_size;)

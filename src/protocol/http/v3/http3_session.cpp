@@ -786,7 +786,9 @@ namespace {
         // avoids a temporary frame vector that the previous code copied into
         // a second allocation whose reserve then reallocated again.
         byte_buffer result;
-        result.reserve(block.size() + 16U +
+        // The extra 24 bytes let QUIC prepend its STREAM frame header in
+        // place when the response fits one packet.
+        result.reserve(block.size() + 16U + 24U +
             (suppress_body ? 0U : body->size() + 16U));
         append_http3_frame(result,
             static_cast<std::uint64_t>(http3_frame_type::headers), block);
@@ -2380,7 +2382,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
         else
         {
             response_sent = co_await conn_.async_send(
-                id, std::move(*prepared_response), true);
+                id, prepared_response->release(), true);
         }
     }
     if (!response_sent)
