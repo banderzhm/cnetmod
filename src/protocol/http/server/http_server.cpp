@@ -49,88 +49,6 @@ import cnetmod.core.ssl;
 namespace cnetmod::http {
 
 // =============================================================================
-// MIME Type Inference Implementation
-// =============================================================================
-
-auto guess_mime_type(std::string_view ext) noexcept -> std::string_view
-{
-    if (ext.empty())
-        return "application/octet-stream";
-    if (ext[0] == '.')
-        ext.remove_prefix(1);
-
-    // Text
-    if (ext == "html" || ext == "htm")
-        return "text/html; charset=utf-8";
-    if (ext == "css")
-        return "text/css; charset=utf-8";
-    if (ext == "js")
-        return "application/javascript; charset=utf-8";
-    if (ext == "json")
-        return "application/json; charset=utf-8";
-    if (ext == "xml")
-        return "application/xml; charset=utf-8";
-    if (ext == "txt")
-        return "text/plain; charset=utf-8";
-    if (ext == "csv")
-        return "text/csv; charset=utf-8";
-    if (ext == "md")
-        return "text/markdown; charset=utf-8";
-
-    // Images
-    if (ext == "png")
-        return "image/png";
-    if (ext == "jpg" || ext == "jpeg")
-        return "image/jpeg";
-    if (ext == "gif")
-        return "image/gif";
-    if (ext == "svg")
-        return "image/svg+xml";
-    if (ext == "ico")
-        return "image/x-icon";
-    if (ext == "webp")
-        return "image/webp";
-    if (ext == "bmp")
-        return "image/bmp";
-
-    // Audio/Video
-    if (ext == "mp3")
-        return "audio/mpeg";
-    if (ext == "mp4")
-        return "video/mp4";
-    if (ext == "webm")
-        return "video/webm";
-    if (ext == "ogg")
-        return "audio/ogg";
-    if (ext == "wav")
-        return "audio/wav";
-
-    // Compressed/Binary
-    if (ext == "pdf")
-        return "application/pdf";
-    if (ext == "zip")
-        return "application/zip";
-    if (ext == "gz" || ext == "gzip")
-        return "application/gzip";
-    if (ext == "tar")
-        return "application/x-tar";
-    if (ext == "wasm")
-        return "application/wasm";
-
-    // Fonts
-    if (ext == "woff")
-        return "font/woff";
-    if (ext == "woff2")
-        return "font/woff2";
-    if (ext == "ttf")
-        return "font/ttf";
-    if (ext == "otf")
-        return "font/otf";
-
-    return "application/octet-stream";
-}
-
-// =============================================================================
 // Static File Serving Implementation
 // =============================================================================
 
@@ -1542,7 +1460,8 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                         std::make_unique<std::array<std::byte, 8192>>();
                 auto rd = co_await async_read(io, client,
                     mutable_buffer{fallback_buffer->data(),
-                        fallback_buffer->size()}, cancellation);
+                        fallback_buffer->size()},
+                    cancellation);
                 if (!rd || *rd == 0)
                 {
 #if defined(CNETMOD_HAS_IO_URING) &&             \
@@ -1556,7 +1475,8 @@ auto server::handle_h1_clear(socket& client, io_context& io,
 
                 auto consumed =
                     parser.consume(reinterpret_cast<const char*>(
-                        fallback_buffer->data()), *rd);
+                                       fallback_buffer->data()),
+                        *rd);
                 if (!consumed)
                 {
 #if defined(CNETMOD_HAS_IO_URING) &&             \
@@ -1737,12 +1657,13 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                     recv_stream->append_buffered_data(received);
                 recv_stream.reset();
 #else
-                auto received = parser.take_buffered_data();
+            auto received = parser.take_buffered_data();
 #endif
                 resp.append_serialized_to(pending_responses);
                 auto written = co_await async_write_all(io, client,
                     const_buffer{pending_responses.data(),
-                        pending_responses.size()}, cancellation);
+                        pending_responses.size()},
+                    cancellation);
                 if (!written)
                     co_return;
                 pending_responses.clear();

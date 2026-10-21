@@ -711,6 +711,40 @@ HTTP/1 明文、TLS 和 HTTP/2 由服务器传输层分别编码。不要为了�
 静态文件 handler 中直接调用 `raw_socket()`；那会绕过 TLS 加密与 HTTP/2
 帧编码。框架会保持每次请求重新打开、stat 文件，因此替换静态资源后无需重启。
 
+HTTP/3 使用同一磁盘一致性语义，但请求类型不同，因此显式导入
+`cnetmod.protocol.http.v3.static_files`：
+
+```cpp
+import std;
+import cnetmod.protocol.http.v3.server;
+import cnetmod.protocol.http.v3.static_files;
+
+auto static_files = cnetmod::http::v3::serve_dir({
+    .root = "/srv/public",
+    .url_prefix = "/static/",
+    .serve_precompressed = true,
+});
+
+cnetmod::http::v3::server_request_handler handler =
+    [static_files = std::move(static_files)](auto& request, auto& response)
+        -> std::error_code
+{
+    auto served = static_files(request, response);
+    if (!served)
+        return served.error();
+    if (*served)
+        return {};
+    // 继续处理其他业务路由。
+    response.status = cnetmod::http::status::not_found;
+    return {};
+};
+```
+
+该入口属于框架正式能力，不会在应用入口预读目录或持有永久文件缓存：每个请求
+重新解析并打开挂载目录中的文件，支持 `.br`/`.gz` 预压缩副本，保留原文件的
+`Content-Type`，并拒绝编码后的目录穿越。因此磁盘文件被替换后，下一次请求会
+读取新文件；不要为了 benchmark 在应用层恢复启动时预加载缓存。
+
 ---
 
 ## Do's & Don'ts

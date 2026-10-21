@@ -9,6 +9,72 @@ import cnetmod.coro.task;
 
 namespace cnetmod::http {
 
+auto guess_mime_type(std::string_view extension) noexcept -> std::string_view
+{
+    if (!extension.empty() && extension.front() == '.')
+        extension.remove_prefix(1);
+
+    if (extension == "html" || extension == "htm")
+        return "text/html; charset=utf-8";
+    if (extension == "css")
+        return "text/css; charset=utf-8";
+    if (extension == "js")
+        return "application/javascript; charset=utf-8";
+    if (extension == "json")
+        return "application/json; charset=utf-8";
+    if (extension == "xml")
+        return "application/xml; charset=utf-8";
+    if (extension == "txt")
+        return "text/plain; charset=utf-8";
+    if (extension == "csv")
+        return "text/csv; charset=utf-8";
+    if (extension == "md")
+        return "text/markdown; charset=utf-8";
+    if (extension == "png")
+        return "image/png";
+    if (extension == "jpg" || extension == "jpeg")
+        return "image/jpeg";
+    if (extension == "gif")
+        return "image/gif";
+    if (extension == "svg")
+        return "image/svg+xml";
+    if (extension == "ico")
+        return "image/x-icon";
+    if (extension == "webp")
+        return "image/webp";
+    if (extension == "bmp")
+        return "image/bmp";
+    if (extension == "mp3")
+        return "audio/mpeg";
+    if (extension == "mp4")
+        return "video/mp4";
+    if (extension == "webm")
+        return "video/webm";
+    if (extension == "ogg")
+        return "audio/ogg";
+    if (extension == "wav")
+        return "audio/wav";
+    if (extension == "pdf")
+        return "application/pdf";
+    if (extension == "zip")
+        return "application/zip";
+    if (extension == "gz" || extension == "gzip")
+        return "application/gzip";
+    if (extension == "tar")
+        return "application/x-tar";
+    if (extension == "wasm")
+        return "application/wasm";
+    if (extension == "woff")
+        return "font/woff";
+    if (extension == "woff2")
+        return "font/woff2";
+    if (extension == "ttf")
+        return "font/ttf";
+    if (extension == "otf")
+        return "font/otf";
+    return "application/octet-stream";
+}
+
 request_body_stream::request_body_stream(std::size_t capacity,
     std::size_t max_bytes)
     : chunks_(capacity), max_bytes_(max_bytes) {}

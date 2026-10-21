@@ -2,6 +2,7 @@
 
 import cnetmod.protocol.http.v3.frame;
 import cnetmod.protocol.http.v3.session;
+import cnetmod.protocol.http.v3.static_files;
 import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.quic;
 import cnetmod.coro.cancel;
@@ -73,6 +74,68 @@ TEST(http3_async_server_handler_can_share_buffered_response_body)
     ASSERT_TRUE(handled.has_value());
     ASSERT_TRUE(response.body.empty());
     ASSERT_TRUE(response.shared_body == cached);
+}
+
+TEST(http3_static_files_follow_disk_and_negotiate_precompressed_content)
+{
+    const auto root = std::filesystem::temp_directory_path() /
+        std::format("cnetmod-http3-static-{}",
+            std::chrono::steady_clock::now().time_since_epoch().count());
+    std::filesystem::create_directories(root);
+
+    struct cleanup
+    {
+        std::filesystem::path root;
+
+        ~cleanup()
+        {
+            std::error_code ignored;
+            std::filesystem::remove_all(root, ignored);
+        }
+    } remove{root};
+
+    {
+        std::ofstream original{root / "app.js", std::ios::binary};
+        original << "first";
+        std::ofstream brotli{root / "app.js.br", std::ios::binary};
+        brotli << "compressed";
+    }
+
+    auto static_files = cnetmod::http::v3::serve_dir({.root = root});
+    cnetmod::http::v3::http3_request request;
+    request.path = "/static/app.js";
+    request.headers.emplace("accept-encoding", "br;q=1, gzip;q=0.8");
+    cnetmod::http::v3::http3_response response;
+    auto served = static_files(request, response);
+    ASSERT_TRUE(served.has_value());
+    ASSERT_TRUE(*served);
+    ASSERT_EQ(response.status, cnetmod::http::status::ok);
+    ASSERT_EQ(response.headers.find("content-type")->second,
+        "application/javascript; charset=utf-8");
+    ASSERT_EQ(response.headers.find("content-encoding")->second, "br");
+    ASSERT_EQ(response.headers.find("content-length")->second, "10");
+    ASSERT_TRUE(static_cast<bool>(response.body_source));
+
+    std::filesystem::remove(root / "app.js.br");
+    {
+        std::ofstream replacement{root / "app.js",
+            std::ios::binary | std::ios::trunc};
+        replacement << "replacement";
+    }
+    cnetmod::http::v3::http3_response changed;
+    served = static_files(request, changed);
+    ASSERT_TRUE(served.has_value());
+    ASSERT_TRUE(*served);
+    ASSERT_EQ(changed.headers.find("content-length")->second, "11");
+    ASSERT_TRUE(changed.headers.find("content-encoding") ==
+        changed.headers.end());
+
+    request.path = "/static/%2e%2e/secret.txt";
+    cnetmod::http::v3::http3_response traversal;
+    served = static_files(request, traversal);
+    ASSERT_TRUE(served.has_value());
+    ASSERT_TRUE(*served);
+    ASSERT_EQ(traversal.status, cnetmod::http::status::forbidden);
 }
 
 TEST(webtransport_async_server_handler_contract)
