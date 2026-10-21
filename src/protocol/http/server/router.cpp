@@ -434,7 +434,7 @@ auto request_context::wildcard() const noexcept -> std::string_view
 
 auto request_context::endpoint() const noexcept -> const http::endpoint*
 {
-    return params_.matched.get();
+    return params_.matched;
 }
 
 auto request_context::params() const noexcept -> const route_params&
@@ -1017,7 +1017,7 @@ auto router::match_borrowed(http_method m, std::string_view p) const
 {
     const auto matched = [](const route_entry& entry, route_params params)
     {
-        params.matched = entry.described;
+        params.matched = entry.described.get();
         return borrowed_match_result{&entry, std::move(params)};
     };
     if (auto x = find_exact(m, p))

@@ -228,8 +228,11 @@ export struct route_params
 {
     cnetmod::flat_map<std::string, std::string, std::less<>> named;
     std::string wildcard;
-    /// Endpoint selected by the router; null when no route matched.
-    std::shared_ptr<const endpoint> matched;
+    /// Endpoint selected by the router; null when no route matched. The
+    /// router owns it for its whole lifetime, which outlives every request,
+    /// so requests borrow it instead of sharing ownership (a per-request
+    /// shared_ptr copy contended one control block across all workers).
+    const endpoint* matched = nullptr;
     [[nodiscard]] auto get(std::string_view key) const noexcept
         -> std::string_view;
 };
