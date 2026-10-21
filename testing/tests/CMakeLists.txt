@@ -9,6 +9,7 @@ set(TEST_SOURCES
     test_metric_aggregation.cpp
     test_flat_map.cpp
     test_charconv.cpp
+    test_converter.cpp
     test_concurrent_containers.cpp
     test_application_result.cpp
     test_json_template.cpp

@@ -1,0 +1,239 @@
+[0/2] Re-checking globbed directories...
+[1/2] Re-running CMake...
+-- 
+-- Architecture: x64 (64 bit)
+-- Use the C++ compiler to compile (MI_USE_CXX=ON)
+-- Override standard malloc (MI_OVERRIDE=ON)
+-- Disable assertion checks (MI_DEBUG=OFF)
+-- Disable detailed statistics (MI_STATS=OFF)
+-- Disable profiling (MI_PROFILE=OFF)
+-- Enable full transparent huge pages support, where purging avoids splitting huge pages (MI_ALLOW_THP=FULL)
+-- 
+-- Library name     : mimalloc
+-- Version          : 3.5.3
+-- Build type       : release
+-- C++ Compiler     : /usr/bin/clang++
+-- Compiler flags   : -Wall;-Wextra;-Wpedantic;-Wno-deprecated;-Wno-unknown-pragmas;-fvisibility=hidden;-Wno-static-in-inline;-mno-outline;-ftls-model=initial-exec;-fno-builtin-malloc
+-- Compiler defines : NDEBUG=1;MI_GUARDED=0;MI_STATS=0;MI_PROFILE=0;MI_DEFAULT_ALLOW_THP=2;MI_HAS_EXECINFOH=1;MI_CMAKE_BUILD_TYPE=release;MI_BUILD_RELEASE
+-- Link libraries   : pthread;rt;atomic
+-- Build targets    : static;object
+-- 
+-- Memory allocator: bundled mimalloc 3.5.3
+-- Auto-detected libc++ paths:
+--   Module directory: /usr/share/libc++/v1
+--   Header directory: /usr/include/c++/v1
+-- Using BoringSSL from submodule: /root/cnetmod-compile-20261021/candidate-source/3rdparty/boringssl
+-- BoringSSL: Building static libraries
+-- BoringSSL: Assembly optimizations enabled
+-- LLVM FileCheck Found: /usr/sbin/FileCheck
+-- Google Benchmark version: v1.9.5, normalized to 1.9.5
+-- BoringSSL submodule targets found: ssl, crypto
+-- BoringSSL TLS enabled - QUIC support not requested
+-- I/O backend: io_uring (Linux)
+-- I/O backend: epoll (Linux)
+-- ==========================================
+-- Project: cnetmod v2.1.0
+-- C++ Standard: C++23
+-- Compiler: Clang 23.1.3
+-- Build Type: Release
+-- Platform: Linux
+-- Standard Library Modules: /usr/share/libc++/v1
+-- Linker: system default
+-- Memory Allocator: mimalloc (high-performance)
+-- ==========================================
+-- 
+-- Performance Optimizations Enabled:
+--   mimalloc: 2-3x faster memory allocation
+-- 
+-- Configuring done (9.1s)
+-- Generating done (1.1s)
+-- Build files have been written to: /root/cnetmod-compile-20261021/candidate
+[0/4] Re-checking globbed directories...
+[1/515] Generating CXX dyndep file CMakeFiles/cnetmod_runtime.dir/CXX.dd
+[2/378] Generating CXX dyndep file CMakeFiles/cnetmod_http.dir/CXX.dd
+[3/287] Generating CXX dyndep file CMakeFiles/cnetmod_grpc.dir/CXX.dd
+[4/251] Generating shared disposable TLS test identity
+....+..+.......+......+..+++++++++++++++++++++++++++++++++++++++*.......+.........+....+...........+..........+.........+..+...+....+...........+++++++++++++++++++++++++++++++++++++++*......+...+...+.+.....+......+..........+...+...............+..++++++
+........+..........+..+....+...+..+......+...+....+..+......+............+.+........................+++++++++++++++++++++++++++++++++++++++*......+....+.....+......+......+...+....+........+...+......+++++++++++++++++++++++++++++++++++++++*.....+.+......+........................+...+.....+......+.+...+..................+........+.+........+.+.....+......+.........+......+.+...+...........+.............+..+...+.............+.....+...+.........+.+......+......+...+.....+....+..+......+...+....+..+.+........+.........+.......+..............+.+......+.....+.............+......+........+..........+...+............+........+...+..........+.........+..+.............+.....+...+.......+......+......+......+............+........+.......+......+.....+................+...+..+...+.+..+..................+......+...+.+...........+.+...+.........+...........+.+.........+.....+..........+..+......................+...+.....+...+.+....................+.+.....+...+....+..+.........+....+...++++++
+-----
+[5/251] Generating CXX dyndep file CMakeFiles/cnetmod_mysql.dir/CXX.dd
+[6/225] Generating CXX dyndep file CMakeFiles/cnetmod_postgresql.dir/CXX.dd
+[7/215] Generating CXX dyndep file CMakeFiles/cnetmod_redis.dir/CXX.dd
+[8/194] Generating CXX dyndep file CMakeFiles/cnetmod_application.dir/CXX.dd
+[9/104] Scanning /root/cnetmod-compile-20261021/candidate-source/testing/tests/test_charconv.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-compile-20261021/candidate-source/testing/tests/test_charconv.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[10/104] Scanning /root/cnetmod-compile-20261021/candidate-source/testing/tests/test_converter.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-compile-20261021/candidate-source/testing/tests/test_converter.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[11/104] Scanning /root/cnetmod-compile-20261021/candidate-source/testing/tests/test_json_template.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-compile-20261021/candidate-source/testing/tests/test_json_template.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[12/104] Scanning /root/cnetmod-compile-20261021/candidate-source/testing/tests/test_application_integrations.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-compile-20261021/candidate-source/testing/tests/test_application_integrations.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[13/104] Scanning /root/cnetmod-compile-20261021/candidate-source/testing/tests/test_stream_write.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-compile-20261021/candidate-source/testing/tests/test_stream_write.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[14/104] Scanning /root/cnetmod-compile-20261021/candidate-source/testing/tests/test_task_group.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-compile-20261021/candidate-source/testing/tests/test_task_group.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[15/104] Scanning /root/cnetmod-compile-20261021/candidate-source/testing/tests/test_task.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-compile-20261021/candidate-source/testing/tests/test_task.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[16/104] Scanning /root/cnetmod-compile-20261021/candidate-source/testing/tests/test_channel.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-compile-20261021/candidate-source/testing/tests/test_channel.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[17/104] Scanning /root/cnetmod-compile-20261021/candidate-source/testing/tests/test_mutex.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-compile-20261021/candidate-source/testing/tests/test_mutex.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[18/104] Scanning /root/cnetmod-compile-20261021/candidate-source/testing/tests/test_wait_group.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-compile-20261021/candidate-source/testing/tests/test_wait_group.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[19/104] Scanning /root/cnetmod-compile-20261021/candidate-source/testing/tests/test_semaphore.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-compile-20261021/candidate-source/testing/tests/test_semaphore.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[20/104] Scanning /root/cnetmod-compile-20261021/candidate-source/testing/tests/test_shared_mutex.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-compile-20261021/candidate-source/testing/tests/test_shared_mutex.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[21/104] Scanning /root/cnetmod-compile-20261021/candidate-source/testing/tests/test_http_compress.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-compile-20261021/candidate-source/testing/tests/test_http_compress.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[22/104] Scanning /root/cnetmod-compile-20261021/candidate-source/testing/tests/test_http2_hpack.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-compile-20261021/candidate-source/testing/tests/test_http2_hpack.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[23/104] Scanning /root/cnetmod-compile-20261021/candidate-source/testing/tests/test_http_parser.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-compile-20261021/candidate-source/testing/tests/test_http_parser.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[24/104] Scanning /root/cnetmod-compile-20261021/candidate-source/testing/tests/test_http2_stream.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-compile-20261021/candidate-source/testing/tests/test_http2_stream.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[25/104] Scanning /root/cnetmod-compile-20261021/candidate-source/testing/tests/test_grpc.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-compile-20261021/candidate-source/testing/tests/test_grpc.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[26/104] Scanning /root/cnetmod-compile-20261021/candidate-source/testing/tests/test_grpc_proto.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-compile-20261021/candidate-source/testing/tests/test_grpc_proto.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[27/104] Scanning /root/cnetmod-compile-20261021/candidate-source/testing/tests/test_redis.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-compile-20261021/candidate-source/testing/tests/test_redis.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[28/104] Scanning /root/cnetmod-compile-20261021/candidate-source/testing/tests/test_redis_template.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-compile-20261021/candidate-source/testing/tests/test_redis_template.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[29/104] Generating CXX dyndep file testing/tests/CMakeFiles/test_charconv.dir/CXX.dd
+[30/104] Generating CXX dyndep file testing/tests/CMakeFiles/test_converter.dir/CXX.dd
+[31/104] Generating CXX dyndep file testing/tests/CMakeFiles/test_json_template.dir/CXX.dd
+[32/104] Generating CXX dyndep file testing/tests/CMakeFiles/test_application_integrations.dir/CXX.dd
+[33/104] Generating CXX dyndep file testing/tests/CMakeFiles/test_task_group.dir/CXX.dd
+[34/104] Generating CXX dyndep file testing/tests/CMakeFiles/test_task.dir/CXX.dd
+[35/104] Generating CXX dyndep file testing/tests/CMakeFiles/test_stream_write.dir/CXX.dd
+[36/104] Generating CXX dyndep file testing/tests/CMakeFiles/test_channel.dir/CXX.dd
+[37/104] Generating CXX dyndep file testing/tests/CMakeFiles/test_mutex.dir/CXX.dd
+[38/104] Generating CXX dyndep file testing/tests/CMakeFiles/test_semaphore.dir/CXX.dd
+[39/104] Scanning /root/cnetmod-compile-20261021/candidate-source/testing/tests/test_mysql_pool.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-compile-20261021/candidate-source/testing/tests/test_mysql_pool.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[40/104] Generating CXX dyndep file testing/tests/CMakeFiles/test_wait_group.dir/CXX.dd
+[41/104] Generating CXX dyndep file testing/tests/CMakeFiles/test_shared_mutex.dir/CXX.dd
+[42/104] Generating CXX dyndep file testing/tests/CMakeFiles/test_http_compress.dir/CXX.dd
+[43/104] Generating CXX dyndep file testing/tests/CMakeFiles/test_http_parser.dir/CXX.dd
+[44/104] Generating CXX dyndep file testing/tests/CMakeFiles/test_http2_hpack.dir/CXX.dd
+[45/104] Generating CXX dyndep file testing/tests/CMakeFiles/test_http2_stream.dir/CXX.dd
+[46/104] Generating CXX dyndep file testing/tests/CMakeFiles/test_grpc_proto.dir/CXX.dd
+[47/104] Generating CXX dyndep file testing/tests/CMakeFiles/test_grpc.dir/CXX.dd
+[48/104] Generating CXX dyndep file testing/tests/CMakeFiles/test_redis.dir/CXX.dd
+[49/104] Generating CXX dyndep file testing/tests/CMakeFiles/test_redis_template.dir/CXX.dd
+[50/104] Generating CXX dyndep file testing/tests/CMakeFiles/test_mysql_pool.dir/CXX.dd
+[51/104] Scanning /root/cnetmod-compile-20261021/candidate-source/testing/tests/test_postgresql_transport.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-compile-20261021/candidate-source/testing/tests/test_postgresql_transport.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[52/104] Scanning /root/cnetmod-compile-20261021/candidate-source/testing/tests/test_redis_tls.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-compile-20261021/candidate-source/testing/tests/test_redis_tls.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[53/104] Generating CXX dyndep file testing/tests/CMakeFiles/test_postgresql_transport.dir/CXX.dd
+[54/104] Generating CXX dyndep file testing/tests/CMakeFiles/test_redis_tls.dir/CXX.dd
+[55/104] Building CXX object testing/tests/CMakeFiles/test_charconv.dir/test_charconv.cpp.o
+[56/104] Building CXX object testing/tests/CMakeFiles/test_converter.dir/test_converter.cpp.o
+[57/104] Building CXX object 3rdparty/mimalloc/CMakeFiles/mimalloc-obj.dir/src/static.c.o
+In file included from /root/cnetmod-compile-20261021/candidate-source/3rdparty/mimalloc/src/static.c:23:
+In file included from /root/cnetmod-compile-20261021/candidate-source/3rdparty/mimalloc/src/alloc.c:20:
+/root/cnetmod-compile-20261021/candidate-source/3rdparty/mimalloc/src/alloc-override.c:343:44: warning: alias and aliasee have different types 'size_t (void *)' (aka 'unsigned long (void *)') and 'size_t (const void *) noexcept' (aka 'unsigned long (const void *) noexcept') [-Wattribute-alias]
+  343 |   size_t malloc_usable_size(void *p)       MI_FORWARD1(mi_malloc_usable_size,p)
+      |                                            ^
+/root/cnetmod-compile-20261021/candidate-source/3rdparty/mimalloc/src/alloc-override.c:37:35: note: expanded from macro 'MI_FORWARD1'
+   37 |   #define MI_FORWARD1(fun,x)      MI_FORWARD(fun)
+      |                                   ^
+/root/cnetmod-compile-20261021/candidate-source/3rdparty/mimalloc/src/alloc-override.c:35:49: note: expanded from macro 'MI_FORWARD'
+   35 |     #define MI_FORWARD(fun)      __attribute__((alias(#fun), used, visibility("default")));
+      |                                                 ^
+/root/cnetmod-compile-20261021/candidate-source/3rdparty/mimalloc/src/alloc-override.c:333:26: note: aliasee is declared here
+  333 | mi_decl_nodiscard size_t mi_malloc_usable_size(const void *p) mi_attr_noexcept {
+      |                          ^
+1 warning generated.
+[58/104] Building CXX object testing/tests/CMakeFiles/test_json_template.dir/test_json_template.cpp.o
+[59/104] Building CXX object testing/tests/CMakeFiles/test_task_group.dir/test_task_group.cpp.o
+[60/104] Building CXX object testing/tests/CMakeFiles/test_stream_write.dir/test_stream_write.cpp.o
+[61/104] Building CXX object testing/tests/CMakeFiles/test_channel.dir/test_channel.cpp.o
+[62/104] Building CXX object testing/tests/CMakeFiles/test_task.dir/test_task.cpp.o
+[63/104] Building CXX object testing/tests/CMakeFiles/test_mutex.dir/test_mutex.cpp.o
+[64/104] Building CXX object testing/tests/CMakeFiles/test_application_integrations.dir/test_application_integrations.cpp.o
+[65/104] Building CXX object testing/tests/CMakeFiles/test_semaphore.dir/test_semaphore.cpp.o
+[66/104] Building CXX object testing/tests/CMakeFiles/test_wait_group.dir/test_wait_group.cpp.o
+[67/104] Building CXX object testing/tests/CMakeFiles/test_shared_mutex.dir/test_shared_mutex.cpp.o
+[68/104] Building CXX object testing/tests/CMakeFiles/test_http_compress.dir/test_http_compress.cpp.o
+[69/104] Building CXX object testing/tests/CMakeFiles/test_http2_hpack.dir/test_http2_hpack.cpp.o
+[70/104] Building CXX object testing/tests/CMakeFiles/test_http_parser.dir/test_http_parser.cpp.o
+[71/104] Building CXX object testing/tests/CMakeFiles/test_grpc_proto.dir/test_grpc_proto.cpp.o
+[72/104] Building CXX object testing/tests/CMakeFiles/test_http2_stream.dir/test_http2_stream.cpp.o
+[73/104] Building CXX object testing/tests/CMakeFiles/test_grpc.dir/test_grpc.cpp.o
+[74/104] Building CXX object testing/tests/CMakeFiles/test_mysql_pool.dir/test_mysql_pool.cpp.o
+[75/104] Building CXX object testing/tests/CMakeFiles/test_postgresql_transport.dir/test_postgresql_transport.cpp.o
+[76/104] Building CXX object testing/tests/CMakeFiles/test_redis.dir/test_redis.cpp.o
+[77/104] Linking CXX executable testing/tests/test_charconv
+[78/104] Linking CXX executable testing/tests/test_converter
+[79/104] Building CXX object testing/tests/CMakeFiles/test_redis_template.dir/test_redis_template.cpp.o
+[80/104] Linking CXX executable testing/tests/test_json_template
+[81/104] Linking CXX executable testing/tests/test_application_integrations
+[82/104] Linking CXX executable testing/tests/test_task_group
+[83/104] Linking CXX executable testing/tests/test_task
+[84/104] Linking CXX executable testing/tests/test_stream_write
+[85/104] Linking CXX executable testing/tests/test_channel
+[86/104] Building CXX object testing/tests/CMakeFiles/test_redis_tls.dir/test_redis_tls.cpp.o
+[87/104] Linking CXX executable testing/tests/test_mutex
+[88/104] Linking CXX executable testing/tests/test_semaphore
+[89/104] Linking CXX executable testing/tests/test_wait_group
+[90/104] Linking CXX executable testing/tests/test_shared_mutex
+[91/104] Linking CXX executable testing/tests/test_http_compress
+[92/104] Linking CXX executable testing/tests/test_http_parser
+[93/104] Linking CXX executable testing/tests/test_http2_hpack
+[94/104] Linking CXX executable testing/tests/test_http2_stream
+[95/104] Linking CXX executable testing/tests/test_grpc
+[96/104] Linking CXX executable testing/tests/test_grpc_proto
+[97/104] Linking CXX executable testing/tests/test_redis
+[98/104] Linking CXX executable testing/tests/test_redis_template
+[99/104] Linking CXX executable testing/tests/test_mysql_pool
+[100/104] Linking CXX executable testing/tests/test_postgresql_transport
+[101/104] Linking CXX executable testing/tests/test_redis_tls

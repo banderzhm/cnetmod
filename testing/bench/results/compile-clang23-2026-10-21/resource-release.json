@@ -1,0 +1,10 @@
+{
+  "test_token": "released",
+  "heavy_work_complete": true,
+  "released_at_utc": "2026-10-21T04:49:56.028727+00:00",
+  "released_at_shanghai": "2026-10-21T12:49:56.028727+08:00",
+  "remaining_owned_build_or_test_processes": [],
+  "containers_started_by_this_task": [],
+  "max_build_jobs": 4,
+  "retained_cache": "/root/cnetmod-compile-20261021"
+}

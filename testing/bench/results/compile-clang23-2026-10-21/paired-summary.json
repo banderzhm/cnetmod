@@ -1,0 +1,159 @@
+{
+  "rounds": [
+    {
+      "name": "baseline-round1",
+      "command": [
+        "cmake",
+        "--build",
+        "/root/cnetmod-compile-20261021/baseline",
+        "--target",
+        "cnetmod_core",
+        "-j4"
+      ],
+      "seconds": 68.25037500899998,
+      "user_seconds": 215.01700799999998,
+      "system_seconds": 18.672592999999992,
+      "returncode": 0
+    },
+    {
+      "name": "candidate-round1",
+      "command": [
+        "cmake",
+        "--build",
+        "/root/cnetmod-compile-20261021/candidate",
+        "--target",
+        "cnetmod_core",
+        "-j4"
+      ],
+      "seconds": 66.54551384000001,
+      "user_seconds": 210.93018800000004,
+      "system_seconds": 18.586820000000003,
+      "returncode": 0
+    },
+    {
+      "name": "candidate-round2",
+      "command": [
+        "cmake",
+        "--build",
+        "/root/cnetmod-compile-20261021/candidate",
+        "--target",
+        "cnetmod_core",
+        "-j4"
+      ],
+      "seconds": 68.537638087,
+      "user_seconds": 216.96117200000003,
+      "system_seconds": 18.88257800000001,
+      "returncode": 0
+    },
+    {
+      "name": "baseline-round2",
+      "command": [
+        "cmake",
+        "--build",
+        "/root/cnetmod-compile-20261021/baseline",
+        "--target",
+        "cnetmod_core",
+        "-j4"
+      ],
+      "seconds": 70.842655885,
+      "user_seconds": 223.0207049999999,
+      "system_seconds": 19.512029,
+      "returncode": 0
+    },
+    {
+      "name": "baseline-round3",
+      "command": [
+        "cmake",
+        "--build",
+        "/root/cnetmod-compile-20261021/baseline",
+        "--target",
+        "cnetmod_core",
+        "-j4"
+      ],
+      "seconds": 76.97947433499985,
+      "user_seconds": 243.78435200000013,
+      "system_seconds": 22.301437000000007,
+      "returncode": 0
+    },
+    {
+      "name": "candidate-round3",
+      "command": [
+        "cmake",
+        "--build",
+        "/root/cnetmod-compile-20261021/candidate",
+        "--target",
+        "cnetmod_core",
+        "-j4"
+      ],
+      "seconds": 67.92183468500002,
+      "user_seconds": 216.05312000000004,
+      "system_seconds": 19.528985999999975,
+      "returncode": 0
+    }
+  ],
+  "aggregation": "median per version; elapsed reduction = 1 - candidate/baseline; shared load accepted",
+  "metrics": {
+    "seconds": {
+      "baseline": [
+        68.25037500899998,
+        70.842655885,
+        76.97947433499985
+      ],
+      "candidate": [
+        66.54551384000001,
+        68.537638087,
+        67.92183468500002
+      ],
+      "baseline_median": 70.842655885,
+      "candidate_median": 67.92183468500002,
+      "reduction_percent": 4.122969648034358
+    },
+    "cpu_seconds": {
+      "baseline": [
+        233.68960099999998,
+        242.5327339999999,
+        266.08578900000015
+      ],
+      "candidate": [
+        229.51700800000003,
+        235.84375000000006,
+        235.582106
+      ],
+      "baseline_median": 242.5327339999999,
+      "candidate_median": 235.582106,
+      "reduction_percent": 2.865851501925465
+    }
+  },
+  "ninja_recompilation_audit": {
+    "baseline-round1": {
+      "commands": 1240,
+      "outputs": 1883,
+      "third_party_commands": 407
+    },
+    "baseline-round2": {
+      "commands": 1240,
+      "outputs": 1883,
+      "third_party_commands": 407
+    },
+    "baseline-round3": {
+      "commands": 1240,
+      "outputs": 1883,
+      "third_party_commands": 407
+    },
+    "candidate-round1": {
+      "commands": 1240,
+      "outputs": 1883,
+      "third_party_commands": 407
+    },
+    "candidate-round2": {
+      "commands": 1240,
+      "outputs": 1883,
+      "third_party_commands": 407
+    },
+    "candidate-round3": {
+      "commands": 1240,
+      "outputs": 1883,
+      "third_party_commands": 407
+    }
+  }
+}
