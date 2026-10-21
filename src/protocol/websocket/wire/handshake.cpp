@@ -80,6 +80,22 @@ auto validate_upgrade_request(const http::request_parser& req)
     return compute_accept_key(req.get_header("Sec-WebSocket-Key"));
 }
 
+auto validate_upgrade_request(const http::request_context& req)
+    -> std::expected<std::string, std::error_code>
+{
+    if (!req.can_upgrade_connection())
+        return std::unexpected(
+            std::make_error_code(std::errc::operation_not_supported));
+    if (req.method() != "GET" ||
+        ascii_lower(req.get_header("Upgrade")) != "websocket" ||
+        ascii_lower(req.get_header("Connection")).find("upgrade") ==
+            std::string::npos ||
+        req.get_header("Sec-WebSocket-Key").empty() ||
+        req.get_header("Sec-WebSocket-Version") != "13")
+        return std::unexpected(make_error_code(ws_errc::handshake_failed));
+    return compute_accept_key(req.get_header("Sec-WebSocket-Key"));
+}
+
 auto build_upgrade_response(std::string_view accept_key,
     std::string_view subprotocol) -> http::response
 {

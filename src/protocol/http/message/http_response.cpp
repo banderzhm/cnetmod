@@ -165,6 +165,7 @@ auto response::remove_header(std::string_view key) -> response&
 
 auto response::set_body(std::string_view body) -> response&
 {
+    shared_body_.reset();
     body_source_.reset();
     body_.assign(body);
     std::array<char, 24> length{};
@@ -177,6 +178,7 @@ auto response::set_body(std::string_view body) -> response&
 
 auto response::set_body(std::string body) -> response&
 {
+    shared_body_.reset();
     body_source_.reset();
     std::array<char, 24> length{};
     const auto [end, error] = std::to_chars(
@@ -187,8 +189,24 @@ auto response::set_body(std::string body) -> response&
     return *this;
 }
 
+auto response::set_shared_body(std::shared_ptr<const std::string> body)
+    -> response&
+{
+    body_.clear();
+    body_source_.reset();
+    shared_body_ = std::move(body);
+    std::array<char, 24> length{};
+    const auto size = shared_body_ ? shared_body_->size() : 0U;
+    const auto [end, error] = std::to_chars(
+        length.data(), length.data() + length.size(), size);
+    if (error == std::errc{})
+        set_common_header(0, {length.data(), end});
+    return *this;
+}
+
 auto response::set_body_preserve_headers(std::string body) -> response&
 {
+    shared_body_.reset();
     body_source_.reset();
     body_ = std::move(body);
     return *this;
@@ -198,6 +216,7 @@ auto response::set_body_source(std::shared_ptr<response_body_source> source)
     -> response&
 {
     body_.clear();
+    shared_body_.reset();
     body_source_ = std::move(source);
     remove_header("Content-Length");
     if (body_source_ && body_source_->content_length())
@@ -225,6 +244,7 @@ void response::reset(int status_code, http_version version) noexcept
     invalidate_headers_snapshot();
     trailers_.clear();
     body_.clear();
+    shared_body_.reset();
     body_source_.reset();
     has_cached_date_header_ = false;
 }
@@ -274,7 +294,8 @@ auto response::trailers() const noexcept -> const header_map&
 
 auto response::body() const noexcept -> std::string_view
 {
-    return body_;
+    return shared_body_ ? std::string_view{*shared_body_}
+                        : std::string_view{body_};
 }
 
 auto response::take_headers() -> header_map
@@ -298,6 +319,18 @@ auto response::take_trailers() noexcept -> header_map
 auto response::take_body() noexcept -> std::string
 {
     return std::move(body_);
+}
+
+auto response::shared_body() const noexcept
+    -> const std::shared_ptr<const std::string>&
+{
+    return shared_body_;
+}
+
+auto response::take_shared_body() noexcept
+    -> std::shared_ptr<const std::string>
+{
+    return std::exchange(shared_body_, {});
 }
 
 auto response::body_source() const noexcept
@@ -362,7 +395,8 @@ void response::serialize_to(std::string& output) const
 
 void response::append_serialized_to(std::string& output) const
 {
-    const auto reserve_size = 64U + body_.size() +
+    const auto body_view = body();
+    const auto reserve_size = 64U + body_view.size() +
         (has_cached_date_header_ ? cached_date_header_.size() + 8U : 0U) +
         std::accumulate(headers_.begin(), headers_.end(), std::size_t{},
             [](std::size_t total, const auto& header)
@@ -460,7 +494,7 @@ void response::append_serialized_to(std::string& output) const
         output += "\r\n";
     }
     output += "\r\n";
-    output += body_;
+    output += body_view;
 }
 
 auto response::common_header_slot(std::string_view key) noexcept

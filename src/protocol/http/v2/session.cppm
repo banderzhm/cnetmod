@@ -63,6 +63,7 @@ struct server_response
     std::vector<header_field> trailers;
     std::vector<std::byte> body;
     std::string body_text;
+    std::shared_ptr<const std::string> shared_body;
     std::shared_ptr<cnetmod::http::response_body_source> body_source;
     static_header_fields static_headers;
     static_header_fields static_trailers;

@@ -693,6 +693,33 @@ auto request_context::raw_socket() noexcept -> socket&
     return sock_;
 }
 
+void request_context::upgrade_connection(connection_upgrade_handler handler)
+{
+    if (!handler)
+        throw std::invalid_argument("connection upgrade handler must not be empty");
+    if (!connection_upgrade_enabled_ || body_stream_)
+        throw std::logic_error("this request transport cannot upgrade connections");
+    extended().connection_upgrade = std::move(handler);
+}
+
+auto request_context::can_upgrade_connection() const noexcept -> bool
+{
+    return connection_upgrade_enabled_ && !body_stream_;
+}
+
+void request_context::enable_connection_upgrade() noexcept
+{
+    connection_upgrade_enabled_ = true;
+}
+
+auto request_context::take_connection_upgrade()
+    -> connection_upgrade_handler
+{
+    auto* state = extended_if();
+    return state ? std::move(state->connection_upgrade)
+                 : connection_upgrade_handler{};
+}
+
 auto request_context::peer_address() const -> std::string
 {
     auto remote = sock_.remote_endpoint();

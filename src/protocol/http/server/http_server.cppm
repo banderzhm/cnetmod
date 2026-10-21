@@ -35,12 +35,6 @@ import cnetmod.protocol.http.v2.session;
 namespace cnetmod::http {
 
 // =============================================================================
-// MIME Type Inference
-// =============================================================================
-
-export auto guess_mime_type(std::string_view ext) noexcept -> std::string_view;
-
-// =============================================================================
 // Static File Serving
 // =============================================================================
 
@@ -48,6 +42,13 @@ export struct static_file_options
 {
     std::filesystem::path root;
     std::string index_file = "index.html";
+    bool serve_precompressed = true;
+    /// Files no larger than this are retained in a disk-coherent memory cache.
+    /// Set to zero to disable body caching.
+    std::size_t cache_max_file_size = 1024U * 1024U;
+    /// Cached metadata is revalidated after this interval. A zero interval
+    /// checks the mounted directory on every request.
+    std::chrono::milliseconds revalidate_interval{500};
 };
 
 export auto serve_dir(static_file_options opts) -> handler_fn;

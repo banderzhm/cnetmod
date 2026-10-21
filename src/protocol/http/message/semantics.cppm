@@ -13,6 +13,16 @@ import cnetmod.utils.flat_map;
 
 namespace cnetmod::http {
 
+/// Infer the response media type for a file extension. The extension may
+/// include its leading dot.
+export auto guess_mime_type(std::string_view extension) noexcept
+    -> std::string_view;
+
+/// Return whether an Accept-Encoding field permits `encoding`. Matching is
+/// ASCII case-insensitive and an explicit q=0 disables the coding.
+export auto accepts_content_encoding(std::string_view header,
+    std::string_view encoding) noexcept -> bool;
+
 // =============================================================================
 // Request Body Streaming
 // =============================================================================

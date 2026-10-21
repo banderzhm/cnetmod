@@ -42,30 +42,44 @@ auto pending_stream_header(std::span<std::byte> output, std::uint64_t stream,
 }
 } // namespace
 
-
 void retired_stream_history::insert(stream_id id, final_sizes sizes)
 {
     auto& ranges = ranges_[id & 3U];
-    auto low = id / 4U;
-    auto high = low;
-    auto next = ranges.upper_bound(low);
-    if (next != ranges.begin())
+    const auto sequence = id / 4U;
+    const auto next = std::lower_bound(ranges.begin(), ranges.end(), sequence,
+        [](const closed_stream_range& range, std::uint64_t value)
+        { return range.low < value; });
+    const auto index = static_cast<std::size_t>(next - ranges.begin());
+
+    if (index < ranges.size() && ranges[index].low == sequence)
+        return;
+    if (index != 0U && ranges[index - 1U].high >= sequence)
+        return;
+
+    const auto joins_previous = index != 0U &&
+        ranges[index - 1U].high + 1U == sequence;
+    const auto joins_next = index < ranges.size() &&
+        sequence + 1U == ranges[index].low;
+    if (joins_previous)
     {
-        const auto previous = std::prev(next);
-        if (previous->second >= low)
-            return;
-        if (previous->second + 1U == low)
+        auto& previous = ranges[index - 1U];
+        previous.high = sequence;
+        if (joins_next)
         {
-            low = previous->first;
-            ranges.erase(previous);
+            previous.high = ranges[index].high;
+            ranges.erase(ranges.begin() + static_cast<std::ptrdiff_t>(index));
         }
     }
-    if (next != ranges.end() && high + 1U == next->first)
+    else if (joins_next)
     {
-        high = next->second;
-        ranges.erase(next);
+        ranges[index].low = sequence;
     }
-    ranges.emplace(low, high);
+    else
+    {
+        ranges.insert(ranges.begin() + static_cast<std::ptrdiff_t>(index),
+            closed_stream_range{sequence, sequence});
+    }
+
     recent_.emplace(id, sizes);
     order_.push_back(id);
     if (order_.size() > final_size_capacity)
@@ -78,8 +92,11 @@ void retired_stream_history::insert(stream_id id, final_sizes sizes)
 auto retired_stream_history::contains(stream_id id) const -> bool
 {
     const auto& ranges = ranges_[id & 3U];
-    const auto next = ranges.upper_bound(id / 4U);
-    return next != ranges.begin() && std::prev(next)->second >= id / 4U;
+    const auto sequence = id / 4U;
+    const auto next = std::upper_bound(ranges.begin(), ranges.end(), sequence,
+        [](std::uint64_t value, const closed_stream_range& range)
+        { return value < range.low; });
+    return next != ranges.begin() && std::prev(next)->high >= sequence;
 }
 
 auto retired_stream_history::find_final_sizes(stream_id id) const
@@ -153,39 +170,77 @@ namespace {
         bool dispatched_{};
     };
 
-    // RFC 9000 §19.3 encodes ACK ranges from the largest packet number down.
-    // Keep this transformation beside the transport state rather than relying on
-    // callers to hand-build gap values (an off-by-one here causes peers to declare
-    // healthy packets lost).
-    auto take_ack_frame(std::set<std::uint64_t>& received)
-        -> std::optional<ack_frame>
+    class received_packet_ranges
     {
-        if (received.empty())
-            return std::nullopt;
-
+    public:
         struct interval
         {
             std::uint64_t low;
             std::uint64_t high;
         };
 
-        std::vector<interval> intervals;
-        auto it = received.rbegin();
-        while (it != received.rend())
+        [[nodiscard]] auto empty() const noexcept -> bool { return ranges_.empty(); }
+        [[nodiscard]] auto ranges() const noexcept -> std::span<const interval>
         {
-            interval current{*it, *it};
-            while (++it != received.rend() && *it + 1 == current.low)
-                current.low = *it;
-            intervals.push_back(current);
+            return ranges_;
+        }
+        auto clear() noexcept -> void { ranges_.clear(); }
+
+        auto insert(std::uint64_t packet_number) -> void
+        {
+            auto next = std::ranges::lower_bound(ranges_, packet_number, {},
+                &interval::high);
+            if (next != ranges_.end() && next->low <= packet_number)
+                return;
+
+            const auto joins_previous = next != ranges_.begin() &&
+                std::prev(next)->high != (std::numeric_limits<std::uint64_t>::max)() &&
+                std::prev(next)->high + 1U == packet_number;
+            const auto joins_next = next != ranges_.end() &&
+                packet_number != (std::numeric_limits<std::uint64_t>::max)() &&
+                packet_number + 1U == next->low;
+            if (joins_previous && joins_next)
+            {
+                std::prev(next)->high = next->high;
+                ranges_.erase(next);
+            }
+            else if (joins_previous)
+                std::prev(next)->high = packet_number;
+            else if (joins_next)
+                next->low = packet_number;
+            else
+                ranges_.insert(next, interval{packet_number, packet_number});
+
+            // Bound attacker-controlled reordering by range count while a
+            // contiguous run of any length still occupies one compact entry.
+            if (ranges_.size() > maximum_ranges)
+                ranges_.erase(ranges_.begin());
         }
 
+    private:
+        static constexpr std::size_t maximum_ranges{256U};
+        std::vector<interval> ranges_;
+    };
+
+    // RFC 9000 §19.3 encodes ACK ranges from the largest packet number down.
+    // Keep this transformation beside the transport state rather than relying on
+    // callers to hand-build gap values (an off-by-one here causes peers to declare
+    // healthy packets lost).
+    auto take_ack_frame(const received_packet_ranges& received)
+        -> std::optional<ack_frame>
+    {
+        if (received.empty())
+            return std::nullopt;
+
         ack_frame ack{};
-        ack.largest_acked = intervals.front().high;
-        ack.first_ack_range = intervals.front().high - intervals.front().low;
-        for (std::size_t index = 1; index < intervals.size(); ++index)
+        const auto ranges = received.ranges();
+        const auto& highest = ranges.back();
+        ack.largest_acked = highest.high;
+        ack.first_ack_range = highest.high - highest.low;
+        for (auto index = ranges.size() - 1U; index != 0U; --index)
         {
-            const auto& previous = intervals[index - 1];
-            const auto& current = intervals[index];
+            const auto& previous = ranges[index];
+            const auto& current = ranges[index - 1U];
             ack.ack_ranges.push_back(ack_range{
                 previous.low - current.high - 2,
                 current.high - current.low});
@@ -194,16 +249,10 @@ namespace {
         return ack;
     }
 
-    auto record_ack_eliciting_packet(std::set<std::uint64_t>& received,
+    auto record_ack_eliciting_packet(received_packet_ranges& received,
         std::uint64_t packet_number) -> void
     {
-        // ACK state is peer-controlled input.  Retaining an unbounded sparse set
-        // would let an authenticated peer turn reordering into memory growth.
-        // 256 ranges is well above normal reordering while bounding the state.
-        constexpr std::size_t maximum_tracked_packet_numbers = 256;
         received.insert(packet_number);
-        while (received.size() > maximum_tracked_packet_numbers)
-            received.erase(received.begin());
     }
 
     auto queue_crypto_frames(std::span<const std::byte> data,
@@ -886,7 +935,7 @@ struct quic_connection::quic_connection_impl
         std::uint64_t bytes_sent{};
         std::uint64_t next_send_packet_number{};
         std::optional<std::uint64_t> largest_received_packet_number;
-        std::set<std::uint64_t> received_ack_eliciting_packet_numbers;
+        received_packet_ranges received_ack_eliciting_packet_numbers;
         quic_recovery_controller recovery;
         std::optional<time_point> pacing_credit_updated_at;
         double pacing_credit_bytes{};
@@ -1215,7 +1264,7 @@ struct quic_connection::quic_connection_impl
     // Appendix A.
     std::array<std::optional<std::uint64_t>, encryption_level_count>
         largest_received_packet_number{};
-    std::array<std::set<std::uint64_t>, encryption_level_count>
+    std::array<received_packet_ranges, encryption_level_count>
         received_ack_eliciting_packet_numbers{};
     std::array<std::map<std::uint64_t, std::vector<std::byte>>,
         encryption_level_count>

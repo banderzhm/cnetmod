@@ -171,6 +171,51 @@ auto ws_context::raw_connection() noexcept -> connection&
     return conn_;
 }
 
+auto accept_upgrade(http::request_context& request,
+    ws_handler_fn handler, std::string_view subprotocol)
+    -> std::expected<void, std::error_code>
+{
+    if (!handler)
+        return std::unexpected(
+            std::make_error_code(std::errc::invalid_argument));
+    auto accept_key = validate_upgrade_request(request);
+    if (!accept_key)
+        return std::unexpected(accept_key.error());
+
+    auto path = std::string{request.path()};
+    auto query = std::string{request.query_string()};
+    auto headers = request.headers();
+    detail::ws_route_params params;
+    for (const auto& [name, value] : request.params().named)
+        params.named.emplace(name, value);
+    params.wildcard = request.params().wildcard;
+
+    auto& response = request.resp();
+    response.set_status(http::status::switching_protocols);
+    response.set_header("Upgrade", "websocket");
+    response.set_header("Connection", "Upgrade");
+    response.set_header("Sec-WebSocket-Accept", *accept_key);
+    if (!subprotocol.empty())
+        response.set_header("Sec-WebSocket-Protocol", subprotocol);
+
+    request.upgrade_connection(
+        [handler = std::move(handler), path = std::move(path),
+            query = std::move(query), headers = std::move(headers),
+            params = std::move(params)](io_context& io, socket transport,
+            std::string received) mutable -> task<void>
+        {
+            connection conn(io);
+            conn.attach(std::move(transport), true,
+                std::as_bytes(std::span{received}));
+            ws_context context(conn, std::move(path), std::move(headers),
+                std::move(query), std::move(params));
+            co_await handler(context);
+            if (conn.is_open())
+                (void)co_await conn.async_close();
+        });
+    return {};
+}
+
 server::server(io_context& ctx)
     : ctx_(ctx) {}
 

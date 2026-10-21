@@ -8683,13 +8683,60 @@ router r;
 r.get("/static/*filepath", serve_dir({
     .root = "./public",
     .index_file = "index.html",
+    .serve_precompressed = true,
+    .cache_max_file_size = 1024 * 1024,
+    .revalidate_interval = std::chrono::milliseconds{500},
 }));
 ```
 
 `serve_dir()` 使用协议无关的 pull-based response body：文件分块异步读取，
 HTTP/1 明文、TLS 和 HTTP/2 由服务器传输层分别编码。不要为了零拷贝或性能在
 静态文件 handler 中直接调用 `raw_socket()`；那会绕过 TLS 加密与 HTTP/2
-帧编码。框架会保持每次请求重新打开、stat 文件，因此替换静态资源后无需重启。
+帧编码。默认对不超过 1 MiB 的热点文件保留不可变共享响应体，HTTP/1 与 HTTP/2
+不会按请求重复打开、读取或复制文件；超过上限的文件仍按背压异步分块读取。
+缓存每 500 ms 重新核对文件大小和修改时间，因此替换或删除静态资源后无需重启。
+将 `cache_max_file_size` 设为 `0` 可关闭 body 缓存，将
+`revalidate_interval` 设为 `0ms` 可要求每次请求检查磁盘元数据。
+
+`serve_precompressed` 默认开启。客户端的 `Accept-Encoding` 允许时优先选择同目录的
+`.br`，其次选择 `.gz`；`q=0` 会明确禁用对应编码，并自动设置
+`Content-Encoding` 与 `Vary: Accept-Encoding`。Range 请求固定读取原始文件，避免
+把原文件的字节范围错误地应用到压缩表示。
+
+HTTP/3 使用同一磁盘一致性语义，但请求类型不同，因此显式导入
+`cnetmod.protocol.http.v3.static_files`：
+
+```cpp
+import std;
+import cnetmod.protocol.http.v3.server;
+import cnetmod.protocol.http.v3.static_files;
+
+auto static_files = cnetmod::http::v3::serve_dir({
+    .root = "/srv/public",
+    .url_prefix = "/static/",
+    .serve_precompressed = true,
+});
+
+cnetmod::http::v3::server_request_handler handler =
+    [static_files = std::move(static_files)](auto& request, auto& response)
+        -> std::error_code
+{
+    auto served = static_files(request, response);
+    if (!served)
+        return served.error();
+    if (*served)
+        return {};
+    // 继续处理其他业务路由。
+    response.status = cnetmod::http::status::not_found;
+    return {};
+};
+```
+
+该入口属于框架正式能力，不会在应用入口预读整个目录，也不会持有不校验磁盘的
+永久缓存。HTTP/3 对不超过 `cache_max_file_size`（默认 1 MiB）的文件保留共享内容，
+但每次请求都会核对大小与修改时间；替换或删除文件后立即更新或失效。它同样支持
+`.br`/`.gz` 预压缩副本、保留原文件的 `Content-Type`，并拒绝编码后的目录穿越。
+不要为了 benchmark 在应用层恢复启动时预加载目录。
 
 ---
 
@@ -10850,6 +10897,15 @@ target_link_libraries(my_backend PRIVATE
 
 请求包中不存在的组件必须在配置阶段失败，不能等到链接阶段。消费者仍须使用与目标
 ID 一致的工具链和 ABI；系统依赖模式的 Unix SDK 还要求目标机器具有对应系统库。
+
+### 源码子目录消费
+
+需要跟随 cnetmod 源码构建的集成可在设置协议开关后使用
+`add_subdirectory(<cnetmod-source> <build-dir> EXCLUDE_FROM_ALL)`。Unix + Clang 下，
+cnetmod 会把 `-stdlib=libc++`、`-nostdinc++` 和匹配的 libc++ 头目录绑定到每个
+模块 target，并通过公开用法要求传递给消费目标。不要只在父工程全局追加这些参数：
+CMake 为导入模块生成的合成 BMI target 不保证继承父目录选项，可能把 libc++ 的
+`std.cppm` 与系统 libstdc++ 头混合，产生难以理解的标准库声明错误。
 
 ## 发布操作
 
@@ -17635,6 +17691,7 @@ auto main() -> int {
 ## 场景导航
 
 - 我要做 echo 服务 → [看这里](#场景1ws_server-路由注册)
+- 我要让 HTTP/1、h2c/gRPC、WebSocket 共用端口 → [看这里](#场景http-router-内升级)
 - 我要做 WebSocket 客户端 → [看这里](#场景2ws_client)
 - 我要做 frame 编解码 → [看这里](#场景3frame-编解码)
 - 我要做多核 WebSocket → [看这里](#场景4多核-server_context)
@@ -17686,8 +17743,26 @@ auto build_upgrade_request(std::string_view host, std::string_view path,
 auto validate_upgrade_response(const http::response_parser& resp, std::string_view expected_accept)
     -> std::expected<void, std::error_code>;
 auto validate_upgrade_request(const http::request_parser& req) -> std::expected<std::string, std::error_code>;
+auto validate_upgrade_request(const http::request_context& req) -> std::expected<std::string, std::error_code>;
 auto build_upgrade_response(std::string_view accept_key, std::string_view subprotocol = {}) -> http::response;
 ```
+
+### HTTP router 内升级
+
+```cpp
+auto accept_upgrade(http::request_context& request,
+    ws_handler_fn handler, std::string_view subprotocol = {})
+    -> std::expected<void, std::error_code>;
+```
+
+`accept_upgrade()` 是业务路由应使用的标准入口。它校验 RFC 6455 握手、准备
+`101 Switching Protocols`，并让 HTTP server 在 handler 返回后安全移交连接。
+移交前会停止 HTTP 的持续接收，再把 HTTP parser 和 io_uring 已预读的尾部字节
+一并交给 `ws::connection`，因此客户端把第一帧和握手放在同一个 TCP 包中也不会丢帧。
+
+该入口用于明文 HTTP/1.1 listener；同一 listener 仍可自动处理 h2c/gRPC。
+TLS/WSS 使用 `ws::server::set_ssl_context()` 的独立 listener。应用不要自行调用
+`request_context::raw_socket()`、手写 101 或在 handler 中移动底层 socket。
 
 ### `ws::connection` — 底层连接
 
@@ -17803,6 +17878,50 @@ auto raw_connection() noexcept -> connection&;
 ```
 
 **`ws_handler_fn`**: `std::function<task<void>(ws_context&)>`
+
+## 场景：HTTP router 内升级
+
+```cpp
+import std;
+import cnetmod.core;
+import cnetmod.coro;
+import cnetmod.executor;
+import cnetmod.protocol.http;
+import cnetmod.protocol.websocket;
+
+namespace http = cnetmod::http;
+namespace ws = cnetmod::ws;
+
+http::router routes;
+routes.get("/ws", [](http::request_context& request) -> cnetmod::task<void>
+{
+    auto accepted = ws::accept_upgrade(request,
+        [](ws::ws_context& connection) -> cnetmod::task<void>
+        {
+            (void)co_await connection.raw_connection().async_process_messages(
+                [](ws::opcode op, std::span<const std::byte> payload,
+                    ws::message_writer& output)
+                    -> std::expected<void, std::error_code>
+                {
+                    return output.send(op, payload);
+                });
+        });
+    if (!accepted)
+        request.text(http::status::bad_request, "Bad WebSocket handshake");
+    co_return;
+});
+
+cnetmod::server_context runtime(4, 4);
+http::server server(runtime);
+server.set_router(std::move(routes));
+if (auto listening = server.listen("0.0.0.0", 8080); !listening)
+    throw std::system_error(listening.error());
+cnetmod::spawn(runtime.accept_io(), server.run());
+runtime.run();
+```
+
+路由中间件在升级前照常执行，所以认证、授权、限流应声明在 `/ws` 路由上。
+升级成功后 HTTP handler 已结束，长连接生命周期由 `ws_handler_fn` 管理。
 
 ## 场景 1：ws::server 路由注册
 
@@ -18085,6 +18204,7 @@ auto chat_handler(ws::ws_context& ctx) -> cn::task<void> {
 | 长连接启用 `heartbeat_interval` | 不要忽略 close 帧的读取 |
 | 使用 `ws_context::param` 获取路由参数 | 不要在 handler 外保存 `ws_context` 引用 |
 | 多核模式使用 `server_context` | 不要在单线程 server 上调用 `sctx.run()` |
+| 共用 8080 时使用 `ws::accept_upgrade()` | 不要解析第二遍 Bearer/HTTP 头或手写 101 |
 | 控制帧由 `connection` 自动响应 | 不要手动构造 pong 帧回复 |
 | 广播使用互斥保护的连接注册表 | 不要无锁遍历连接集合 |
 

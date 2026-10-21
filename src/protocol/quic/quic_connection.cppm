@@ -68,7 +68,13 @@ public:
     [[nodiscard]] auto final_size_count() const -> std::size_t;
 
 private:
-    std::array<std::map<std::uint64_t, std::uint64_t>, 4> ranges_;
+    struct closed_stream_range
+    {
+        std::uint64_t low{};
+        std::uint64_t high{};
+    };
+
+    std::array<std::vector<closed_stream_range>, 4> ranges_;
     std::map<stream_id, final_sizes> recent_;
     std::deque<stream_id> order_;
 };

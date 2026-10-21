@@ -49,6 +49,16 @@ export using sse_handler_fn =
     std::function<task<void>(request_context&, sse_stream&)>;
 
 /**
+ * @brief Continues a successful cleartext HTTP/1.1 protocol upgrade.
+ *
+ * The HTTP server writes the 101 response, stops its receive operation, and
+ * transfers ownership of the socket together with bytes already read beyond
+ * the HTTP request.  The continuation runs on the connection's event loop.
+ */
+export using connection_upgrade_handler =
+    std::function<task<void>(io_context&, socket, std::string)>;
+
+/**
  * @brief Owns typed values whose lifetime is exactly one HTTP request.
  *
  * Middleware may bind an authenticated principal or another request service.
@@ -317,6 +327,16 @@ public:
     [[nodiscard]] auto resp() noexcept -> response&;
     [[nodiscard]] auto io_ctx() noexcept -> io_context&;
     [[nodiscard]] auto raw_socket() noexcept -> socket&;
+    [[nodiscard]] auto can_upgrade_connection() const noexcept -> bool;
+    /**
+     * @brief Transfer a cleartext HTTP/1.1 connection to another protocol.
+     *
+     * The route must prepare a 101 response before returning. Streaming
+     * request bodies, HTTP/2 and TLS transports are deliberately rejected;
+     * protocol modules should expose a typed helper instead of application
+     * code calling this primitive directly.
+     */
+    void upgrade_connection(connection_upgrade_handler handler);
     /// IP address of the TCP peer (the proxy when one is in front); empty
     /// when the socket has no peer. Use resolve_client_ip() for the client.
     [[nodiscard]] auto peer_address() const -> std::string;
@@ -388,6 +408,9 @@ private:
         std::string_view, cnetmod::cancel_token&)>;
     void configure_sse(sse_stream_options options);
     void set_stream_writer(stream_write_fn writer);
+    void enable_connection_upgrade() noexcept;
+    [[nodiscard]] auto take_connection_upgrade()
+        -> connection_upgrade_handler;
     void expire_sse() noexcept;
     auto write_sse_bytes(std::string_view bytes) -> task<bool>;
     auto write_sse_frame(std::string frame) -> task<bool>;
@@ -411,6 +434,7 @@ private:
     std::string_view query_;
     mutable bool body_stream_drained_ = false;
     cnetmod::deadline deadline_{};
+    bool connection_upgrade_enabled_{};
 
     struct operation_registration;
     struct extended_state
@@ -419,6 +443,7 @@ private:
         sse_stream_state sse_state = sse_stream_state::not_started;
         bool sse_chunked = false;
         stream_write_fn stream_writer;
+        connection_upgrade_handler connection_upgrade;
         deadline sse_deadline{};
         std::chrono::milliseconds sse_write_timeout{5000};
         cnetmod::cancel_token cancellation;
