@@ -1609,8 +1609,10 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                             completed_header_blocks(id));
                         if (parsed)
                         {
-                            auto decoder_flush = co_await flush_qpack_decoder_instructions(
-                                conn_, decoder_, qpack_decoder_stream_);
+                            std::expected<void, std::error_code> decoder_flush{};
+                            if (decoder_.has_pending_decoder_instructions())
+                                decoder_flush = co_await flush_qpack_decoder_instructions(
+                                    conn_, decoder_, qpack_decoder_stream_);
                             if (!decoder_flush)
                                 parsed = std::unexpected(decoder_flush.error());
                         }
@@ -1666,8 +1668,10 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                     completed_header_blocks(id));
                 if (parsed_request)
                 {
-                    auto decoder_flush = co_await flush_qpack_decoder_instructions(
-                        conn_, decoder_, qpack_decoder_stream_);
+                    std::expected<void, std::error_code> decoder_flush{};
+                    if (decoder_.has_pending_decoder_instructions())
+                        decoder_flush = co_await flush_qpack_decoder_instructions(
+                            conn_, decoder_, qpack_decoder_stream_);
                     if (!decoder_flush)
                         parsed_request = std::unexpected(decoder_flush.error());
                 }
@@ -1784,8 +1788,10 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                     completed_header_blocks(id));
                 if (parsed_request)
                 {
-                    auto decoder_flush = co_await flush_qpack_decoder_instructions(
-                        conn_, decoder_, qpack_decoder_stream_);
+                    std::expected<void, std::error_code> decoder_flush{};
+                    if (decoder_.has_pending_decoder_instructions())
+                        decoder_flush = co_await flush_qpack_decoder_instructions(
+                            conn_, decoder_, qpack_decoder_stream_);
                     if (!decoder_flush)
                         parsed_request = std::unexpected(decoder_flush.error());
                 }
@@ -1896,8 +1902,10 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                                 fields = decoder_.decode(headers->encoded_headers, id);
                             if (fields)
                             {
-                                auto decoder_flush = co_await flush_qpack_decoder_instructions(
-                                    conn_, decoder_, qpack_decoder_stream_);
+                                std::expected<void, std::error_code> decoder_flush{};
+                                if (decoder_.has_pending_decoder_instructions())
+                                    decoder_flush = co_await flush_qpack_decoder_instructions(
+                                        conn_, decoder_, qpack_decoder_stream_);
                                 if (!decoder_flush)
                                     fields = std::unexpected(decoder_flush.error());
                             }

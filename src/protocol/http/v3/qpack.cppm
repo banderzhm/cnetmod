@@ -106,6 +106,8 @@ public:
     /// Returns and clears decoder-stream acknowledgements generated while
     /// decoding successfully processed header blocks.
     [[nodiscard]] auto take_decoder_instructions() -> byte_buffer;
+    /// True when decoder-stream instructions are waiting to be flushed.
+    [[nodiscard]] auto has_pending_decoder_instructions() const noexcept -> bool;
     /// Retrieves header blocks whose Required Insert Count became available
     /// after process_encoder_instructions().
     [[nodiscard]] auto take_completed_header_blocks() -> std::vector<qpack_decoded_header_block>;

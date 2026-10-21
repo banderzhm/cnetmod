@@ -1038,6 +1038,11 @@ auto qpack_decoder::take_decoder_instructions() -> byte_buffer
     return std::exchange(impl_->pending_decoder_instructions, {});
 }
 
+auto qpack_decoder::has_pending_decoder_instructions() const noexcept -> bool
+{
+    return !impl_->pending_decoder_instructions.empty();
+}
+
 auto qpack_decoder::take_completed_header_blocks() -> std::vector<qpack_decoded_header_block>
 {
     return std::exchange(impl_->completed_header_blocks, {});

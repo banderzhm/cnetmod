@@ -2493,9 +2493,12 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
 
         co_return {};
     }
+    // One clock sample covers key expiry, path validation and ACK timing for
+    // this packet; the exact same instant is more correct than re-sampling.
+    const auto received_at = std::chrono::steady_clock::now();
     impl_->tls->confirm_application_read_key(accepted_key_kind);
     impl_->tls->discard_expired_application_read_keys(
-        std::chrono::steady_clock::now(), application_path.recovery.pto_duration() * 3);
+        received_at, application_path.recovery.pto_duration() * 3);
     auto& largest = application_path.largest_received_packet_number;
     if (!largest || packet_number > *largest)
         largest = packet_number;
@@ -2571,7 +2574,7 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
     auto post_handshake = impl_->tls->process_post_handshake();
     if (!post_handshake)
         co_return std::unexpected(post_handshake.error());
-    const auto now = std::chrono::steady_clock::now();
+    const auto now = received_at;
     const auto validation_timeout = impl_->path_validation_timeout(application_path);
     std::erase_if(impl_->pending_path_validations,
         [now, validation_timeout](const auto& candidate)
