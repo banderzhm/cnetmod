@@ -1318,6 +1318,16 @@ http3_server_session::http3_server_session(quic_connection& connection,
     local_settings_.webtransport_max_sessions = local_settings_.enable_webtransport ? 1U : 0U;
 }
 
+auto http3_server_session::completed_header_blocks(stream_id id)
+    -> std::deque<std::vector<header_field>>&
+{
+    // Request parsing only reads and pops completed blocks, so an absent
+    // entry can share one empty scratch deque.  QPACK-blocked blocks are
+    // inserted by the decoder coroutine for that stream id alone.
+    const auto it = completed_headers_.find(id);
+    return it != completed_headers_.end() ? it->second : no_completed_headers_;
+}
+
 auto http3_server_session::configure_local_settings(http3_settings settings) noexcept -> void
 {
     // Datagram and WebTransport settings are derived from the QUIC transport
@@ -1373,8 +1383,10 @@ auto http3_server_session::run() -> task<void>
         // through spawn() prevents that re-entrant interleaving from dropping
         // the later coroutine before its first receive awaiter is installed.
         // peer_streams_ keeps this session alive until every spawned child
-        // invokes its scope guard.
-        spawn(conn_.context(), service_peer_stream(*accepted));
+        // invokes its scope guard.  The accept loop already runs on the
+        // connection's context, so start the child inline instead of paying
+        // a post-queue allocation and reactor hop for every request stream.
+        spawn_local(conn_.context(), service_peer_stream(*accepted));
     }
     close_qpack_waiters(qpack_waiters_);
     co_await peer_streams_.wait();
@@ -1588,7 +1600,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                             request_header_mutex_, std::adopt_lock};
                         parsed = request_from_frames(
                             decoder_, wire.readable_view().first(first->second), id,
-                            completed_headers_[id]);
+                            completed_header_blocks(id));
                         if (parsed)
                         {
                             auto decoder_flush = co_await flush_qpack_decoder_instructions(
@@ -1645,7 +1657,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                 cnetmod::async_lock_guard header_guard{
                     request_header_mutex_, std::adopt_lock};
                 parsed_request = request_from_frames(decoder_, wire.readable_view(), id,
-                    completed_headers_[id]);
+                    completed_header_blocks(id));
                 if (parsed_request)
                 {
                     auto decoder_flush = co_await flush_qpack_decoder_instructions(
@@ -1763,7 +1775,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                 cnetmod::async_lock_guard header_guard{
                     request_header_mutex_, std::adopt_lock};
                 parsed_request = request_from_frames(decoder_, wire.readable_view(), id,
-                    completed_headers_[id]);
+                    completed_header_blocks(id));
                 if (parsed_request)
                 {
                     auto decoder_flush = co_await flush_qpack_decoder_instructions(
@@ -1868,7 +1880,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                             co_await request_header_mutex_.lock();
                             cnetmod::async_lock_guard header_guard{
                                 request_header_mutex_, std::adopt_lock};
-                            auto& completed_headers = completed_headers_[id];
+                            auto& completed_headers = completed_header_blocks(id);
                             if (!completed_headers.empty())
                             {
                                 fields = std::move(completed_headers.front());

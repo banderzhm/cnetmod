@@ -379,6 +379,13 @@ private:
         qpack_waiters_;
     cnetmod::flat_map<stream_id, std::deque<std::vector<header_field>>>
         completed_headers_;
+    // Request parsing only consumes completed QPACK blocks; an entry exists
+    // only when the decoder actually completed a blocked block.  The common
+    // unblocked request must not materialize an empty deque (deque's default
+    // constructor allocates) for its stream id.
+    std::deque<std::vector<header_field>> no_completed_headers_;
+    [[nodiscard]] auto completed_header_blocks(stream_id id)
+        -> std::deque<std::vector<header_field>>&;
     cnetmod::flat_map<stream_id, std::shared_ptr<webtransport_session_state>>
         webtransport_sessions_;
     channel<std::pair<std::uint64_t, std::vector<std::byte>>> http_datagrams_{256};
