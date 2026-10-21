@@ -28,9 +28,12 @@ async def prepare(port):
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sender:
             sender.setblocking(False)
             loop = asyncio.get_running_loop()
-            for data, target in datagrams:
-                await loop.sock_sendto(sender, data, target)
-            await asyncio.wait_for(loop.sock_recvfrom(sender, 65536), 5)
+            target = datagrams[0][1]
+            assert all(candidate == target for _, candidate in datagrams)
+            sender.connect(target)
+            for data, _ in datagrams:
+                await loop.sock_sendall(sender, data)
+            await asyncio.wait_for(loop.sock_recv(sender, 65536), 5)
         assert await peer.get(port, b"/cold-cleanup-start") == b"ok\n"
     # Context-manager teardown closes the UDP transport. From this point no
     # probe, keepalive or statistics request is sent to the server.
