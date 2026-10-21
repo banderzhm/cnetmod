@@ -808,7 +808,10 @@ struct quic_connection::quic_connection_impl
         flush_mutex.unlock();
         return true;
     }
-    static constexpr std::size_t max_send_batch_datagrams{16U};
+    // One flush admits a deeper burst so a wake-up that already has many
+    // ready streams (HTTP/3 batch requests) turns into one sendmmsg instead
+    // of several 16-packet rounds.
+    static constexpr std::size_t max_send_batch_datagrams{64U};
     // The packet owner is unique for a connection, including across the
     // asynchronous socket submission below. Keep its MTU-sized ciphertext
     // allocations and reuse them on the next burst instead of allocating one
