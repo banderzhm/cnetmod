@@ -18,7 +18,6 @@ namespace cnetmod::quic {
 // =============================================================================
 
 quic_stream::quic_stream(stream_id id, quic_role owner, bool bidirectional)
-    : impl_(std::make_unique<impl>())
 {
     impl_->id_ = id;
     impl_->owner_ = owner;

@@ -528,6 +528,32 @@ struct quic_connection::quic_connection_impl
     std::set<stream_id> remotely_cancelled_streams;
 
     retired_stream_history retired_streams;
+
+    // While a datagram is parsed under receive_mutex, readers woken by its
+    // STREAM frames are resumed only after the lock is released: resumed
+    // inline they would find the state locked and fall back to a suspended
+    // read per request. Packet parsing is the only collector.
+    bool defer_stream_wakeups{};
+    std::vector<channel<std::monostate>::pending_resumption> deferred_readiness;
+    std::vector<channel<stream_id>::pending_resumption> deferred_accepts;
+    auto resume_deferred_stream_wakeups() noexcept -> void
+    {
+        defer_stream_wakeups = false;
+        // A resumed reader may parse another datagram and refill the lists.
+        while (!deferred_accepts.empty() || !deferred_readiness.empty())
+        {
+            if (!deferred_accepts.empty())
+            {
+                auto accept = deferred_accepts.back();
+                deferred_accepts.pop_back();
+                accept.resume();
+                continue;
+            }
+            auto readiness = deferred_readiness.back();
+            deferred_readiness.pop_back();
+            readiness.resume();
+        }
+    }
     channel<stream_id> accepted_streams;
     std::uint64_t peer_max_data;
     std::uint64_t sent_stream_data{};
@@ -1632,6 +1658,12 @@ auto quic_connection::process_datagram(std::span<const std::byte> datagram,
     const endpoint& sender) -> task<std::expected<void, std::error_code>>
 {
     co_await impl_->receive_mutex.lock();
+    // Declared before the guard so it runs after the unlock on every exit.
+    struct deferred_wakeups
+    {
+        quic_connection_impl& state;
+        ~deferred_wakeups() { state.resume_deferred_stream_wakeups(); }
+    } wakeups{*impl_};
     quic_connection_impl::listener_state_guard receive_guard{*this, *impl_};
     if (impl_->connection_state == connection_state::draining)
     {
@@ -1645,7 +1677,9 @@ auto quic_connection::process_datagram(std::span<const std::byte> datagram,
     }
     if (is_closed())
         co_return std::unexpected(std::make_error_code(std::errc::not_connected));
+    impl_->defer_stream_wakeups = true;
     auto processed = co_await process_packet(datagram, sender);
+    impl_->defer_stream_wakeups = false;
     if (!processed)
         co_return std::unexpected(processed.error());
     schedule_idle_timeout();
@@ -3537,7 +3571,17 @@ auto quic_connection::process_stream_frame_state(const stream_frame& frame) -> v
         it->second.value->set_initial_receive_limit(impl_->config.max_stream_data);
         it->second.value->init();
         it->second.readiness = std::make_shared<channel<std::monostate>>(1);
-        if (!impl_->accepted_streams.try_send(frame.stream_id))
+        bool accepted{};
+        if (impl_->defer_stream_wakeups)
+        {
+            channel<stream_id>::pending_resumption resumption;
+            accepted = impl_->accepted_streams.try_send_deferred(frame.stream_id, resumption);
+            if (resumption)
+                impl_->deferred_accepts.push_back(resumption);
+        }
+        else
+            accepted = impl_->accepted_streams.try_send(frame.stream_id);
+        if (!accepted)
         {
             impl_->streams.erase(it);
             impl_->queue_protocol_close(quic_errc::internal_error, frame_type::stream);
@@ -3579,7 +3623,16 @@ auto quic_connection::process_stream_frame_state(const stream_frame& frame) -> v
             impl_->return_receive_credit(discarded);
             (void)retire_stream(frame.stream_id);
         }
-        (void)readiness->try_send({});
+        if (impl_->defer_stream_wakeups)
+        {
+            // The waiter keeps its channel alive: it is suspended in it.
+            channel<std::monostate>::pending_resumption resumption;
+            (void)readiness->try_send_deferred({}, resumption);
+            if (resumption)
+                impl_->deferred_readiness.push_back(resumption);
+        }
+        else
+            (void)readiness->try_send({});
     }
     return;
 }

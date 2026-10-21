@@ -162,12 +162,19 @@ private:
         // Flow control limits
         std::uint64_t max_data_ = 65536;
         std::uint64_t max_send_data_ = 262144;
-
-        // Notification channel for reads
-        channel<std::vector<std::byte>> notify_channel_;
     };
 
-    std::unique_ptr<impl> impl_;
+    // The stream is neither copyable nor movable, so its state lives inline:
+    // a separate heap block per stream was one allocation per request.
+    struct inline_impl
+    {
+        impl state;
+        auto operator->() noexcept -> impl* { return &state; }
+        auto operator->() const noexcept -> const impl* { return &state; }
+        auto operator*() noexcept -> impl& { return state; }
+        auto operator*() const noexcept -> const impl& { return state; }
+    };
+    inline_impl impl_;
 
     /// Deliver contiguous data from beginning of receive buffer
     auto deliver_contiguous_data(mutable_buffer buf) -> std::size_t;

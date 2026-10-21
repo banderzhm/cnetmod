@@ -416,6 +416,46 @@ public:
         return succeeded;
     }
 
+    /// A receiver that a deferred send has already handed its value to and
+    /// that must be resumed later by calling resume() exactly once.
+    class pending_resumption
+    {
+    public:
+        pending_resumption() noexcept = default;
+        explicit operator bool() const noexcept { return waiter_ != nullptr; }
+        void resume() noexcept { resume_waiter(std::exchange(waiter_, nullptr)); }
+
+    private:
+        friend class channel;
+        explicit pending_resumption(waiter_node* waiter) noexcept : waiter_(waiter) {}
+        waiter_node* waiter_{};
+    };
+
+    /// Like try_send, but a receiver that was waiting is returned instead of
+    /// resumed. The value is already delivered; the caller resumes it once
+    /// it has released state the receiver is going to need (for example a
+    /// lock held around the send).
+    auto try_send_deferred(T value, pending_resumption& resumption) -> bool
+    {
+        auto_lock g(lock_);
+        if (closed_)
+            return false;
+        if (recv_head_)
+        {
+            auto* w = static_cast<recv_node*>(recv_head_);
+            *w->slot = std::move(value);
+            dequeue(recv_head_, recv_tail_);
+            resumption = pending_resumption{w};
+            return true;
+        }
+        if (capacity_ > 0 && !buf_full())
+        {
+            buf_push(std::move(value));
+            return true;
+        }
+        return false;
+    }
+
     /// Non-blocking send from an existing object.
     /// The value is moved only when the send succeeds, which lets callers
     /// safely fall back to the suspending send path when the channel is full.
