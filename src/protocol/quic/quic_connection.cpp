@@ -80,13 +80,16 @@ void retired_stream_history::insert(stream_id id, final_sizes sizes)
             closed_stream_range{sequence, sequence});
     }
 
-    recent_.emplace(id, sizes);
-    order_.push_back(id);
-    if (order_.size() > final_size_capacity)
+    if (!recent_)
+        recent_ = std::make_unique<std::array<final_size_slot, final_size_capacity>>();
+    auto& slot = (*recent_)[id % final_size_capacity];
+    if (!slot.used)
     {
-        recent_.erase(order_.front());
-        order_.pop_front();
+        slot.used = true;
+        ++recent_count_;
     }
+    slot.id = id;
+    slot.sizes = sizes;
 }
 
 auto retired_stream_history::contains(stream_id id) const -> bool
@@ -102,9 +105,10 @@ auto retired_stream_history::contains(stream_id id) const -> bool
 auto retired_stream_history::find_final_sizes(stream_id id) const
     -> std::optional<final_sizes>
 {
-    const auto found = recent_.find(id);
-    return found == recent_.end() ? std::nullopt
-                                  : std::optional{found->second};
+    if (!recent_)
+        return std::nullopt;
+    const auto& slot = (*recent_)[id % final_size_capacity];
+    return slot.used && slot.id == id ? std::optional{slot.sizes} : std::nullopt;
 }
 
 auto retired_stream_history::range_count() const -> std::size_t
@@ -117,7 +121,7 @@ auto retired_stream_history::range_count() const -> std::size_t
 
 auto retired_stream_history::final_size_count() const -> std::size_t
 {
-    return recent_.size();
+    return recent_count_;
 }
 
 namespace {

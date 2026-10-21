@@ -74,9 +74,19 @@ private:
         std::uint64_t high{};
     };
 
+    struct final_size_slot
+    {
+        stream_id id{};
+        final_sizes sizes{};
+        bool used{};
+    };
+
     std::array<std::vector<closed_stream_range>, 4> ranges_;
-    std::map<stream_id, final_sizes> recent_;
-    std::deque<stream_id> order_;
+    // Direct-mapped by stream ID: a closed stream overwrites the slot of the
+    // one closed final_size_capacity IDs earlier, with no allocation per
+    // stream. Created on the first retirement.
+    std::unique_ptr<std::array<final_size_slot, final_size_capacity>> recent_;
+    std::size_t recent_count_{};
 };
 
 export class quic_connection
