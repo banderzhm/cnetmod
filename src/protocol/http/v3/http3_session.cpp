@@ -716,13 +716,19 @@ namespace {
                 return std::unexpected(encoded.error());
             block = std::move(*encoded);
         }
-        auto result = encode_http3_frame(headers_frame{block});
         const auto body = buffered_response_body(response);
         if (!body)
             return std::unexpected(body.error());
+        // Assemble the whole response in one buffer: appending HEADERS/DATA
+        // avoids a temporary frame vector that the previous code copied into
+        // a second allocation whose reserve then reallocated again.
+        byte_buffer result;
+        result.reserve(block.size() + 16U +
+            (suppress_body ? 0U : body->size() + 16U));
+        append_http3_frame(result,
+            static_cast<std::uint64_t>(http3_frame_type::headers), block);
         if (!suppress_body && !body->empty())
         {
-            result.reserve(result.size() + body->size() + 16U);
             append_varint(static_cast<std::uint64_t>(http3_frame_type::data), result);
             append_varint(static_cast<std::uint64_t>(body->size()), result);
             const auto bytes = ::utils::conv::to_bytes(*body);

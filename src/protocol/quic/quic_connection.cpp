@@ -732,6 +732,24 @@ struct quic_connection::quic_connection_impl
     // domain briefly; UDP sends happen only after it is released.
     std::function<void(std::optional<std::chrono::steady_clock::time_point>)>
         timer_deadline_observer;
+    // Last deadline published to the observer. Re-publishing an unchanged
+    // future deadline would enqueue a duplicate listener entry and can
+    // cancel/rearm its wakeup without making progress. Immediate (<= now)
+    // edges are always published because the listener consumes them.
+    std::optional<std::chrono::steady_clock::time_point> published_timer_deadline;
+    auto publish_timer_deadline(
+        std::optional<std::chrono::steady_clock::time_point> deadline) -> void
+    {
+        if (!timer_deadline_observer)
+            return;
+        if (deadline && published_timer_deadline == deadline &&
+            *deadline > std::chrono::steady_clock::now())
+        {
+            return;
+        }
+        published_timer_deadline = deadline;
+        timer_deadline_observer(deadline);
+    }
     async_mutex receive_mutex;
     // The short-header receive path runs under receive_mutex, so one scratch
     // buffer is enough: copy the datagram once and decrypt it in place instead
@@ -759,7 +777,7 @@ struct quic_connection::quic_connection_impl
             // As for every async member operation, its caller retains the
             // connection until this task completes. The observer is immutable.
             if (deadline)
-                state.timer_deadline_observer(deadline);
+                state.publish_timer_deadline(deadline);
         }
     };
 
@@ -1643,6 +1661,10 @@ auto quic_connection::async_poll_timers() -> task<void>
 {
     co_await impl_->receive_mutex.lock();
     quic_connection_impl::listener_state_guard receive_guard{*this, *impl_};
+    // The shared listener consumes this connection's scheduled entry before
+    // invoking timer polling. Force the recomputed deadline to be published
+    // even when it happens to equal the value that just fired.
+    impl_->published_timer_deadline.reset();
     if (is_closed())
         co_return;
 
@@ -2580,7 +2602,7 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
         }
     }
     impl_->current_packet_sender.reset();
-    co_return co_await handle_short_header_packet(*header);
+    co_return handle_short_header_packet(*header);
 }
 
 auto quic_connection::handle_long_header_packet(long_header header)
@@ -2641,7 +2663,7 @@ auto quic_connection::handle_long_header_packet(long_header header)
 }
 
 auto quic_connection::handle_short_header_packet(short_header)
-    -> task<std::expected<void, std::error_code>>
+    -> std::expected<void, std::error_code>
 {
     if (impl_->tls->is_handshake_complete() &&
         (impl_->connection_state == connection_state::idle ||
@@ -2650,10 +2672,10 @@ auto quic_connection::handle_short_header_packet(short_header)
     {
         auto settled = impl_->settle_early_data_outcome();
         if (!settled)
-            co_return std::unexpected(settled.error());
+            return std::unexpected(settled.error());
         auto parameters_valid = validate_peer_transport_parameters();
         if (!parameters_valid)
-            co_return std::unexpected(parameters_valid.error());
+            return std::unexpected(parameters_valid.error());
         if (!impl_->peer_transport_parameters_applied)
         {
             const auto& params = impl_->tls->received_transport_params();
@@ -2672,7 +2694,7 @@ auto quic_connection::handle_short_header_packet(short_header)
                 // Parameter application is a one-time transition. A failed
                 // CID setup must not let a later packet skip confirmation.
                 impl_->queue_protocol_close(quic_errc::internal_error, frame_type::crypto);
-                co_return std::unexpected(issued.error());
+                return std::unexpected(issued.error());
             }
             if (impl_->connection_role == quic_role::server)
             {
@@ -2692,7 +2714,7 @@ auto quic_connection::handle_short_header_packet(short_header)
         if (impl_->tls->early_data_status() == early_data_state::accepted)
             impl_->early_data_streams.clear();
     }
-    co_return {};
+    return {};
 }
 
 auto quic_connection::validate_peer_transport_parameters()
@@ -3881,7 +3903,7 @@ auto quic_connection::pack_and_send_packet()
             timer_deadline = next_timer_deadline();
     }
     if (timer_deadline)
-        impl_->timer_deadline_observer(timer_deadline);
+        impl_->publish_timer_deadline(timer_deadline);
     if (packet.empty())
         co_return std::expected<void, std::error_code>{};
     co_await await_application_pacing(packet.size());
@@ -3900,8 +3922,11 @@ auto quic_connection::pack_and_send_packets()
         endpoint peer;
     };
 
-    std::vector<pending_datagram> pending;
-    pending.reserve(quic_connection_impl::max_send_batch_datagrams);
+    // Both arrays live on the flush coroutine's stack: a batch is bounded by
+    // max_send_batch_datagrams, so neither needs a heap allocation per flush.
+    std::array<pending_datagram, quic_connection_impl::max_send_batch_datagrams>
+        pending{};
+    std::size_t pending_count{};
     bool primary_socket_only{};
     std::optional<time_point> timer_deadline;
     {
@@ -3942,20 +3967,20 @@ auto quic_connection::pack_and_send_packets()
                     impl_->application_packet_storage[index] = std::move(packet);
                     break;
                 }
-                pending.push_back({std::move(packet),
-                    impl_->sending_application_path().peer});
+                pending[pending_count++] = {std::move(packet),
+                    impl_->sending_application_path().peer};
             }
         }
-        if (!pending.empty() && impl_->timer_deadline_observer)
+        if (pending_count != 0U && impl_->timer_deadline_observer)
             timer_deadline = next_timer_deadline();
     }
     if (timer_deadline)
-        impl_->timer_deadline_observer(timer_deadline);
+        impl_->publish_timer_deadline(timer_deadline);
     if (!primary_socket_only)
     {
         co_return co_await pack_and_send_packet();
     }
-    if (pending.empty())
+    if (pending_count == 0U)
         co_return std::expected<void, std::error_code>{};
 
     // The packer has already limited this burst to the path's available
@@ -3963,27 +3988,27 @@ auto quic_connection::pack_and_send_packets()
     // then submit the admitted packets together. Sleeping once for the total
     // byte budget preserves the controller's average rate without creating a
     // timer and an io_uring wakeup for every UDP packet.
-    const auto paced_bytes = std::accumulate(pending.begin(), pending.end(),
-        std::size_t{}, [](std::size_t total, const pending_datagram& item)
-        {
-            return total + item.packet.size();
-        });
+    std::size_t paced_bytes{};
+    for (std::size_t index{}; index < pending_count; ++index)
+        paced_bytes += pending[index].packet.size();
     co_await await_application_pacing(paced_bytes);
 
-    std::vector<udp_send_datagram> datagrams;
-    datagrams.reserve(pending.size());
-    for (const auto& item : pending)
+    std::array<udp_send_datagram, quic_connection_impl::max_send_batch_datagrams>
+        datagrams{};
+    for (std::size_t index{}; index < pending_count; ++index)
     {
-        datagrams.push_back({const_buffer{item.packet.data(), item.packet.size()},
-            item.peer});
+        datagrams[index] = {const_buffer{pending[index].packet.data(),
+                                             pending[index].packet.size()},
+            pending[index].peer};
     }
     // async_sendto_batch preserves partial submission and retries the unsent
     // suffix after readiness. Packet metadata was already marked in-flight by
     // the packer, exactly as on the pre-existing single-send path.
-    const auto sent = co_await send_datagram_batch(datagrams);
+    const auto sent = co_await send_datagram_batch(
+        std::span<const udp_send_datagram>{datagrams.data(), pending_count});
     if (!sent && is_terminal_udp_send_error(sent.error()))
         co_return std::unexpected(sent.error());
-    for (std::size_t index{}; index < pending.size(); ++index)
+    for (std::size_t index{}; index < pending_count; ++index)
     {
         pending[index].packet.clear();
         impl_->application_packet_storage[index] =
@@ -4249,12 +4274,12 @@ auto quic_connection::pack_initial_packet() -> std::vector<std::byte>
         impl_->received_ack_eliciting_packet_numbers[level_index(encryption_level::initial)];
     if (auto ack = take_ack_frame(received))
     {
-        auto encoded_ack = encode_frame(*ack);
-        if (payload.size() + encoded_ack.size() <= maximum_payload)
-        {
-            payload.insert(payload.end(), encoded_ack.begin(), encoded_ack.end());
+        const auto ack_begin = payload.size();
+        append_ack_frame(payload, *ack);
+        if (payload.size() <= maximum_payload)
             received.clear();
-        }
+        else
+            payload.resize(ack_begin);
     }
     if (payload.empty())
         return {};
@@ -4344,12 +4369,12 @@ auto quic_connection::pack_handshake_packet() -> std::vector<std::byte>
         impl_->received_ack_eliciting_packet_numbers[level_index(encryption_level::handshake)];
     if (auto ack = take_ack_frame(received))
     {
-        auto encoded_ack = encode_frame(*ack);
-        if (payload.size() + encoded_ack.size() <= maximum_payload)
-        {
-            payload.insert(payload.end(), encoded_ack.begin(), encoded_ack.end());
+        const auto ack_begin = payload.size();
+        append_ack_frame(payload, *ack);
+        if (payload.size() <= maximum_payload)
             received.clear();
-        }
+        else
+            payload.resize(ack_begin);
     }
     if (payload.empty())
         return {};
@@ -4426,10 +4451,10 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe,
     const auto ack = take_ack_frame(ack_source->received_ack_eliciting_packet_numbers);
     if (ack)
     {
-        const auto encoded_ack = impl_->multipath_negotiated
-            ? encode_frame(path_ack_frame{ack_source->id, *ack})
-            : encode_frame(*ack);
-        payload.insert(payload.end(), encoded_ack.begin(), encoded_ack.end());
+        if (impl_->multipath_negotiated)
+            append_path_ack_frame(payload, path_ack_frame{ack_source->id, *ack});
+        else
+            append_ack_frame(payload, *ack);
     }
     retransmittable_frame_storage retransmittable_frames;
 
@@ -6101,7 +6126,7 @@ auto quic_connection::set_path_backup(std::uint32_t path_id, bool backup)
         path_id, path->second->next_local_path_status_sequence, backup}));
     impl_->send_flush_requested.store(true, std::memory_order_release);
     if (impl_->timer_deadline_observer)
-        impl_->timer_deadline_observer(next_timer_deadline());
+        impl_->publish_timer_deadline(next_timer_deadline());
     else if (impl_->receive_wait_token && impl_->receive_wait_token->pending_.load(std::memory_order_acquire))
         impl_->receive_wait_token->cancel();
     return {};

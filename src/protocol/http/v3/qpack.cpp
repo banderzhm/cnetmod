@@ -183,18 +183,23 @@ namespace detail {
         }
     }
 
-    auto append_string(byte_buffer& out, std::string_view s) -> void
+    auto append_string(byte_buffer& out, std::string_view s,
+        std::vector<std::byte>& scratch) -> void
     {
-        auto huffman = cnetmod::http::v2::huffman_encode(s);
-        if (huffman.size() < s.size())
+        // The caller owns a reusable scratch buffer: huffman_encode() clears
+        // and reserves it, so a repeated header value no longer allocates a
+        // temporary vector for every field.
+        cnetmod::http::v2::huffman_encode(s, scratch);
+        if (scratch.size() < s.size())
         {
-            append_int(out, 0x80U, 7, huffman.size());
-            out.insert(out.end(), huffman.begin(), huffman.end());
+            append_int(out, 0x80U, 7, scratch.size());
+            out.insert(out.end(), scratch.begin(), scratch.end());
             return;
         }
         append_int(out, 0, 7, s.size());
-        for (const auto c : s)
-            out.push_back(static_cast<std::byte>(static_cast<unsigned char>(c)));
+        out.insert(out.end(),
+            reinterpret_cast<const std::byte*>(s.data()),
+            reinterpret_cast<const std::byte*>(s.data()) + s.size());
     }
 
     auto read_string(byte_view& in) -> std::expected<std::string, std::error_code>
@@ -461,6 +466,9 @@ struct qpack_encoder::impl
     // including sections whose entries are already known to the decoder.
     cnetmod::flat_map<std::uint64_t, std::deque<std::uint64_t>> outstanding_streams;
     byte_buffer pending_decoder_stream_input;
+    // Reused by append_string() so header values do not allocate a
+    // temporary Huffman buffer per field.
+    std::vector<std::byte> string_scratch;
 };
 
 struct qpack_decoder::impl
@@ -525,42 +533,55 @@ auto qpack_encoder::encode(std::span<const header_field> headers, std::uint64_t 
             if (const auto static_name = detail::name(h.name))
             {
                 detail::append_int(impl_->pending_encoder_instructions, 0xc0U, 6, *static_name);
-                detail::append_string(impl_->pending_encoder_instructions, h.value);
+                detail::append_string(impl_->pending_encoder_instructions, h.value,
+                    impl_->string_scratch);
             }
             else
             {
                 detail::append_int(impl_->pending_encoder_instructions, 0x40U, 5, h.name.size());
                 for (const auto c : h.name)
                     impl_->pending_encoder_instructions.push_back(static_cast<std::byte>(static_cast<unsigned char>(c)));
-                detail::append_string(impl_->pending_encoder_instructions, h.value);
+                detail::append_string(impl_->pending_encoder_instructions, h.value,
+                    impl_->string_scratch);
             }
             (void)impl_->dynamic_table.insert(h);
         }
     }
     // Finish insertions before retaining table-entry pointers: a later field
     // can evict an earlier field in this same section when capacity is small.
+    const bool dynamic_enabled = impl_->max_table_capacity != 0U;
     std::uint64_t required{};
     for (const auto& h : headers)
     {
         const bool sensitive = is_sensitive_header(h.name);
-        representations.push_back({&h, sensitive ? nullptr : impl_->dynamic_table.exact(h.name, h.value), sensitive ? nullptr : impl_->dynamic_table.by_name(h.name)});
+        // With no dynamic table capacity every lookup would hash a name that
+        // can never be present, so the default static-only configuration
+        // skips them entirely.
+        representations.push_back({&h,
+            (dynamic_enabled && !sensitive) ? impl_->dynamic_table.exact(h.name, h.value) : nullptr,
+            (dynamic_enabled && !sensitive) ? impl_->dynamic_table.by_name(h.name) : nullptr});
         const auto& representation = representations.back();
         if (representation.exact_dynamic)
             required = std::max(required, representation.exact_dynamic->absolute);
         else if (!detail::exact(h.name, h.value) && representation.name_dynamic)
             required = std::max(required, representation.name_dynamic->absolute);
     }
-    const auto blocked_streams = std::ranges::count_if(impl_->outstanding_streams, [this](const auto& stream)
-        {
-            return std::ranges::any_of(stream.second, [this](auto required)
+    bool may_reference_dynamic = required <= impl_->acknowledged_insert_count;
+    if (!may_reference_dynamic)
+    {
+        const auto blocked_streams = std::ranges::count_if(impl_->outstanding_streams, [this](const auto& stream)
             {
-                return required > impl_->acknowledged_insert_count;
+                return std::ranges::any_of(stream.second, [this](auto required)
+                {
+                    return required > impl_->acknowledged_insert_count;
+                });
             });
-        });
-    const bool may_reference_dynamic = required <= impl_->acknowledged_insert_count || std::cmp_less(blocked_streams, impl_->max_blocked_streams);
+        may_reference_dynamic = std::cmp_less(blocked_streams, impl_->max_blocked_streams);
+    }
     if (!may_reference_dynamic)
         required = 0U;
     byte_buffer out;
+    out.reserve(32U + headers.size() * 16U);
     detail::append_int(out, 0, 8, detail::encode_required_insert_count(required, impl_->max_table_capacity));
     detail::append_int(out, 0, 7, 0U);
     for (const auto& representation : representations)
@@ -575,19 +596,19 @@ auto qpack_encoder::encode(std::span<const header_field> headers, std::uint64_t 
         else if (required != 0U && representation.name_dynamic != nullptr)
         {
             detail::append_int(out, 0x40U, 4, required - representation.name_dynamic->absolute);
-            detail::append_string(out, h.value);
+            detail::append_string(out, h.value, impl_->string_scratch);
         }
         else if (const auto i = detail::name(h.name))
         {
             detail::append_int(out, 0x50U, 4, *i);
-            detail::append_string(out, h.value);
+            detail::append_string(out, h.value, impl_->string_scratch);
         }
         else
         {
             detail::append_int(out, 0x20U, 3, h.name.size());
             for (auto c : h.name)
                 out.push_back(static_cast<std::byte>(static_cast<unsigned char>(c)));
-            detail::append_string(out, h.value);
+            detail::append_string(out, h.value, impl_->string_scratch);
         }
     }
     if (required != 0U)
@@ -882,11 +903,10 @@ auto qpack_decoder::decode(byte_view in, std::uint64_t stream_id)
     }
     // A header representation occupies at least one byte, so the encoded
     // block size is a safe upper bound for the number of decoded fields.
-    // Reserve a modest common-case capacity up front: this is the per-request
-    // HTTP/3 hot path and avoids the geometric vector growth for ordinary
-    // pseudo-header blocks without over-reserving unusually large requests.
+    // Reserve the common HTTP/3 request shape up front; ordinary requests
+    // carry five to seven pseudo/application fields.
     std::vector<header_field> out;
-    out.reserve(std::min<std::size_t>(in.size(), 16U));
+    out.reserve(std::min<std::size_t>(in.size(), 8U));
     while (!in.empty())
     {
         auto f = std::to_integer<std::uint8_t>(in.front());

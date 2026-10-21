@@ -324,6 +324,12 @@ export auto encode_frame(const handshake_done_frame& f)
     -> std::vector<std::byte>;
 export auto encode_frame(const datagram_frame& f) -> std::vector<std::byte>;
 export auto encode_frame(const path_ack_frame& f) -> std::vector<std::byte>;
+
+/// Append the encoded ACK/PATH_ACK frame to an existing payload buffer.
+/// ACK is generated for nearly every received packet, so the common path
+/// must not allocate a temporary vector and copy it into the payload.
+export void append_ack_frame(std::vector<std::byte>& out, const ack_frame& f);
+export void append_path_ack_frame(std::vector<std::byte>& out, const path_ack_frame& f);
 export auto encode_frame(const path_abandon_frame& f) -> std::vector<std::byte>;
 export auto encode_frame(const path_status_frame& f) -> std::vector<std::byte>;
 export auto encode_frame(const path_new_connection_id_frame& f) -> std::vector<std::byte>;

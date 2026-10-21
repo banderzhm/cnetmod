@@ -3,6 +3,7 @@
 import cnetmod.protocol.http.v3.frame;
 import cnetmod.protocol.http.v3.session;
 import cnetmod.protocol.http.v3.static_files;
+import cnetmod.protocol.http.v3.qpack;
 import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.quic;
 import cnetmod.coro.cancel;
@@ -113,10 +114,28 @@ TEST(http3_static_files_follow_disk_and_negotiate_precompressed_content)
     ASSERT_TRUE(served.has_value());
     ASSERT_TRUE(*served);
     ASSERT_EQ(response.status, cnetmod::http::status::ok);
-    ASSERT_EQ(response.headers.find("content-type")->second,
+    // A cached resource carries a pre-encoded HEADERS block instead of a
+    // per-request header map; decode it to assert the wire-visible fields.
+    ASSERT_TRUE(response.headers.empty());
+    ASSERT_TRUE(static_cast<bool>(response.static_headers));
+    cnetmod::http::v3::qpack_decoder header_decoder;
+    auto decode_headers = [&header_decoder](const auto& encoded) {
+        auto fields = header_decoder.decode(encoded, 0);
+        ASSERT_TRUE(fields.has_value());
+        return *fields;
+    };
+    auto served_fields = decode_headers(response.static_headers->encoded());
+    auto field_value = [](const std::vector<cnetmod::http::v3::header_field>& fields,
+                           std::string_view name) -> std::string {
+        const auto found = std::ranges::find_if(fields,
+            [name](const auto& field) { return field.name == name; });
+        return found == fields.end() ? std::string{} : found->value;
+    };
+    ASSERT_EQ(field_value(served_fields, ":status"), "200");
+    ASSERT_EQ(field_value(served_fields, "content-type"),
         "application/javascript; charset=utf-8");
-    ASSERT_EQ(response.headers.find("content-encoding")->second, "br");
-    ASSERT_EQ(response.headers.find("content-length")->second, "10");
+    ASSERT_EQ(field_value(served_fields, "content-encoding"), "br");
+    ASSERT_EQ(field_value(served_fields, "content-length"), "10");
     ASSERT_TRUE(static_cast<bool>(response.shared_body));
     ASSERT_EQ(*response.shared_body, "compressed");
 
@@ -127,12 +146,14 @@ TEST(http3_static_files_follow_disk_and_negotiate_precompressed_content)
         replacement << "replacement";
     }
     cnetmod::http::v3::http3_response changed;
-    served = static_files(request, changed);
-    ASSERT_TRUE(served.has_value());
-    ASSERT_TRUE(*served);
-    ASSERT_EQ(changed.headers.find("content-length")->second, "11");
-    ASSERT_TRUE(changed.headers.find("content-encoding") ==
-        changed.headers.end());
+    auto changed_served = static_files(request, changed);
+    ASSERT_TRUE(changed_served.has_value());
+    ASSERT_TRUE(*changed_served);
+    ASSERT_TRUE(changed.headers.empty());
+    ASSERT_TRUE(static_cast<bool>(changed.static_headers));
+    auto changed_fields = decode_headers(changed.static_headers->encoded());
+    ASSERT_EQ(field_value(changed_fields, "content-length"), "11");
+    ASSERT_EQ(field_value(changed_fields, "content-encoding"), "");
     ASSERT_TRUE(static_cast<bool>(changed.shared_body));
     ASSERT_EQ(*changed.shared_body, "replacement");
 

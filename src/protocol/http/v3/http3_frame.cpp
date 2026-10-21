@@ -197,6 +197,13 @@ auto encode_http3_frame(const headers_frame& frame) -> byte_buffer
     return encode_frame(static_cast<std::uint64_t>(http3_frame_type::headers), frame.encoded_headers);
 }
 
+void append_http3_frame(byte_buffer& out, std::uint64_t type, byte_view payload)
+{
+    encode_varint(type, out);
+    encode_varint(payload.size(), out);
+    out.append(payload);
+}
+
 auto encode_http3_frame(const settings_frame& frame) -> byte_buffer
 {
     byte_buffer payload;

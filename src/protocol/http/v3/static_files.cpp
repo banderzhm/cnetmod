@@ -11,6 +11,7 @@ import cnetmod.executor.async_op;
 import cnetmod.io.io_context;
 import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.http.v3.session;
+import cnetmod.protocol.http.v3.qpack;
 import cnetmod.utils.concurrent_containers.striped_hash_map;
 
 namespace cnetmod::http::v3 {
@@ -25,6 +26,9 @@ namespace {
         std::string content_encoding;
         std::shared_ptr<const std::string> content;
         std::chrono::steady_clock::time_point validated_at;
+        // A cached resource always answers 200 with the same fields, so its
+        // complete HEADERS block is encoded once and copied per request.
+        std::shared_ptr<const qpack_static_response_headers> encoded_headers;
     };
 
     struct static_file_state
@@ -97,6 +101,15 @@ namespace {
         response.headers.emplace("vary", "Accept-Encoding");
         if (!resource.content_encoding.empty())
             response.headers.emplace("content-encoding", resource.content_encoding);
+
+        // A cached resource always answers 200 with the same fields, so the
+        // matching HEADERS block was encoded once when the entry was built.
+        // HEAD uses the same block; it simply sends no DATA.
+        if (resource.content && resource.encoded_headers)
+        {
+            response.headers.clear();
+            response.static_headers = resource.encoded_headers;
+        }
 
         if (method == http_method::HEAD || resource.size == 0)
             return {};
@@ -295,6 +308,22 @@ auto serve_dir(static_file_options options) -> static_file_handler
             .content = std::move(content),
             .validated_at = now,
         });
+        if (refreshed->content)
+        {
+            std::vector<header_field> fields{
+                {"content-type", refreshed->mime_type},
+                {"content-length", std::to_string(refreshed->size)},
+                {"vary", "Accept-Encoding"}};
+            if (!refreshed->content_encoding.empty())
+                fields.push_back({"content-encoding", refreshed->content_encoding});
+            if (auto encoded = qpack_static_response_headers::encode(
+                    status::ok, fields))
+            {
+                refreshed->encoded_headers =
+                    std::make_shared<const qpack_static_response_headers>(
+                        std::move(*encoded));
+            }
+        }
         shared->entries.insert_or_assign(std::move(key), refreshed);
         auto populated = populate_response(*refreshed, request.method, response);
         if (!populated)

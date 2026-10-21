@@ -431,10 +431,12 @@ private:
         long_header hdr)
         -> task<std::expected<void, std::error_code>>;
 
-    /// Handle short header packet
+    /// Handle short header packet. This step performs only synchronous
+    /// post-handshake transitions, so it must not allocate a coroutine frame
+    /// for every received 1-RTT packet.
     [[nodiscard]] auto handle_short_header_packet(
         short_header hdr)
-        -> task<std::expected<void, std::error_code>>;
+        -> std::expected<void, std::error_code>;
 
     /// Process frames from packet
     [[nodiscard]] auto process_frames(const quic_frame_variant& frame)
