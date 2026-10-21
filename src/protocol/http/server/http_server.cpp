@@ -34,6 +34,7 @@ import cnetmod.executor.async_op;
 import cnetmod.executor.pool;
 import cnetmod.protocol.tcp;
 import cnetmod.utils.concurrent_containers.atomic_rw_latch;
+import cnetmod.utils.concurrent_containers.striped_hash_map;
 import cnetmod.protocol.http.v2.session;
 
 #if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING)
@@ -54,12 +55,138 @@ namespace cnetmod::http {
 
 namespace detail {
 
-    auto serve_dir_body(const static_file_options& opts, request_context& ctx)
+    struct cached_static_file
+    {
+        std::filesystem::path selected_path;
+        std::filesystem::file_time_type modified_at;
+        std::uint64_t size{};
+        std::string mime_type;
+        std::string content_encoding;
+        std::shared_ptr<const std::string> content;
+        std::chrono::steady_clock::time_point validated_at;
+    };
+
+    struct static_file_state
+    {
+        explicit static_file_state(static_file_options value)
+            : options(std::move(value)), entries(64U, 16U) {}
+
+        static_file_options options;
+        concurrent_containers::striped_hash_map<std::string,
+            std::shared_ptr<const cached_static_file>>
+            entries;
+    };
+
+    struct static_file_stream
+    {
+        file source;
+        io_context* io{};
+        std::uint64_t offset{};
+        std::uint64_t remaining{};
+    };
+
+    auto resolve_static_file(static_file_state& state, request_context& ctx,
+        const std::string& relative, bool range_requested)
+        -> task<std::expected<std::shared_ptr<const cached_static_file>,
+            std::error_code>>
+    {
+        const auto accepted = ctx.get_header("Accept-Encoding");
+        auto requested_encoding = std::string_view{"identity"};
+        if (!range_requested && state.options.serve_precompressed)
+        {
+            if (accepts_content_encoding(accepted, "br"))
+                requested_encoding = "br";
+            else if (accepts_content_encoding(accepted, "gzip"))
+                requested_encoding = "gzip";
+        }
+        auto key = relative;
+        key.push_back('\n');
+        key.append(requested_encoding);
+
+        const auto now = std::chrono::steady_clock::now();
+        auto cached = state.entries.find(key).value_or(nullptr);
+        if (cached && now - cached->validated_at < state.options.revalidate_interval)
+            co_return cached;
+
+        auto original = state.options.root / relative;
+        std::error_code error;
+        if (std::filesystem::is_directory(original, error))
+            original /= state.options.index_file;
+        if (error || !std::filesystem::is_regular_file(original, error))
+            co_return std::unexpected(error ? error : std::make_error_code(std::errc::no_such_file_or_directory));
+
+        auto selected = original;
+        auto content_encoding = std::string{};
+        if (requested_encoding != "identity")
+        {
+            auto variant = original;
+            variant += requested_encoding == "br" ? ".br" : ".gz";
+            if (std::filesystem::is_regular_file(variant, error) && !error)
+            {
+                selected = std::move(variant);
+                content_encoding = requested_encoding == "br" ? "br" : "gzip";
+            }
+            error.clear();
+            if (content_encoding.empty() && requested_encoding == "br" &&
+                accepts_content_encoding(accepted, "gzip"))
+            {
+                variant = original;
+                variant += ".gz";
+                if (std::filesystem::is_regular_file(variant, error) && !error)
+                {
+                    selected = std::move(variant);
+                    content_encoding = "gzip";
+                }
+                error.clear();
+            }
+        }
+
+        const auto size = std::filesystem::file_size(selected, error);
+        if (error)
+            co_return std::unexpected(error);
+        const auto modified = std::filesystem::last_write_time(selected, error);
+        if (error)
+            co_return std::unexpected(error);
+
+        if (cached && cached->selected_path == selected &&
+            cached->size == size && cached->modified_at == modified)
+        {
+            auto refreshed = std::make_shared<cached_static_file>(*cached);
+            refreshed->validated_at = now;
+            state.entries.insert_or_assign(key, refreshed);
+            co_return refreshed;
+        }
+
+        std::shared_ptr<const std::string> content;
+        if (state.options.cache_max_file_size != 0U &&
+            size <= state.options.cache_max_file_size)
+        {
+            auto loaded = co_await async_file_read_all(ctx.io_ctx(), selected);
+            if (!loaded)
+                co_return std::unexpected(loaded.error());
+            content = std::make_shared<const std::string>(std::move(*loaded));
+        }
+
+        auto result = std::make_shared<cached_static_file>(cached_static_file{
+            .selected_path = std::move(selected),
+            .modified_at = modified,
+            .size = size,
+            .mime_type = std::string{guess_mime_type(
+                original.extension().string())},
+            .content_encoding = std::move(content_encoding),
+            .content = std::move(content),
+            .validated_at = now,
+        });
+        state.entries.insert_or_assign(std::move(key), result);
+        co_return result;
+    }
+
+    auto serve_dir_body(static_file_state& state, request_context& ctx)
         -> task<void>
     {
         auto rel_path = ctx.wildcard();
         if (rel_path.empty())
-            rel_path = opts.index_file;
+            rel_path = state.options.index_file;
 
         auto rel_str = std::string(rel_path);
         if (rel_str.find("..") != std::string::npos)
@@ -68,39 +195,20 @@ namespace detail {
             co_return;
         }
 
-        auto full_path = opts.root / rel_str;
-
-        std::error_code ec;
-        if (std::filesystem::is_directory(full_path, ec))
+        const auto range_hdr = ctx.get_header("Range");
+        auto resolved = co_await resolve_static_file(
+            state, ctx, rel_str, !range_hdr.empty());
+        if (!resolved)
         {
-            full_path /= opts.index_file;
-        }
-
-        if (!std::filesystem::exists(full_path, ec))
-        {
-            ctx.not_found();
+            if (resolved.error() == std::errc::no_such_file_or_directory)
+                ctx.not_found();
+            else
+                ctx.text(status::internal_server_error, "500 Cannot read file");
             co_return;
         }
+        const auto& resource = **resolved;
+        const auto file_size = resource.size;
 
-        auto f = file::open(full_path, open_mode::read);
-        if (!f)
-        {
-            ctx.text(status::internal_server_error, "500 Cannot open file");
-            co_return;
-        }
-
-        auto file_size_r = f->size();
-        if (!file_size_r)
-        {
-            ctx.text(status::internal_server_error, "500 Cannot stat file");
-            co_return;
-        }
-        auto file_size = *file_size_r;
-
-        auto ext = full_path.extension().string();
-        auto mime = guess_mime_type(ext);
-
-        auto range_hdr = ctx.get_header("Range");
         std::uint64_t range_start = 0;
         std::uint64_t range_end = file_size == 0 ? 0 : file_size - 1;
         bool is_range = false;
@@ -146,33 +254,56 @@ namespace detail {
             range_start = 0;
             range_end = file_size == 0 ? 0 : file_size - 1;
         }
-        resp.set_header("Content-Type", mime);
+        resp.set_header("Content-Type", resource.mime_type);
         resp.set_header("Accept-Ranges", "bytes");
+        if (state.options.serve_precompressed)
+            resp.set_header("Vary", "Accept-Encoding");
+        if (!resource.content_encoding.empty())
+            resp.set_header("Content-Encoding", resource.content_encoding);
 
         const auto content_length = file_size == 0
             ? std::uint64_t{0}
             : range_end - range_start + 1;
-        auto source_file = std::make_shared<file>(std::move(*f));
-        auto offset = std::make_shared<std::uint64_t>(range_start);
-        auto remaining = std::make_shared<std::uint64_t>(content_length);
-        auto* io = &ctx.io_ctx();
+        if (resource.content)
+        {
+            if (!is_range)
+                resp.set_shared_body(resource.content);
+            else
+                resp.set_body(std::string_view{
+                    resource.content->data() + range_start,
+                    static_cast<std::size_t>(content_length)});
+            co_return;
+        }
+
+        auto opened = file::open(resource.selected_path, open_mode::read);
+        if (!opened)
+        {
+            ctx.text(status::internal_server_error, "500 Cannot open file");
+            co_return;
+        }
+        auto stream = std::make_shared<static_file_stream>(static_file_stream{
+            .source = std::move(*opened),
+            .io = &ctx.io_ctx(),
+            .offset = range_start,
+            .remaining = content_length,
+        });
         constexpr std::size_t chunk_size = 64U * 1024U;
         resp.set_body_source(std::make_shared<response_body_source>(
-            [source_file, offset, remaining, io, chunk_size](cancel_token& token)
+            [stream, chunk_size](cancel_token& token)
                 -> task<std::optional<request_body_chunk>>
             {
-                if (token.is_cancelled() || *remaining == 0)
+                if (token.is_cancelled() || stream->remaining == 0)
                     co_return std::nullopt;
                 const auto read_size = static_cast<std::size_t>(
-                    std::min<std::uint64_t>(*remaining, chunk_size));
+                    std::min<std::uint64_t>(stream->remaining, chunk_size));
                 request_body_chunk chunk(read_size);
-                auto read = co_await async_file_read(*io, *source_file,
-                    chunk.writable_view(), *offset, token);
+                auto read = co_await async_file_read(*stream->io,
+                    stream->source, chunk.writable_view(), stream->offset, token);
                 if (!read || *read == 0)
                     co_return std::nullopt;
                 chunk.resize(*read);
-                *offset += *read;
-                *remaining -= *read;
+                stream->offset += *read;
+                stream->remaining -= *read;
                 co_return chunk;
             },
             content_length));
@@ -183,10 +314,10 @@ namespace detail {
 
 auto serve_dir(static_file_options opts) -> handler_fn
 {
-    auto opts_ptr = std::make_shared<static_file_options>(std::move(opts));
-    return [opts_ptr](request_context& ctx) -> task<void>
+    auto state = std::make_shared<detail::static_file_state>(std::move(opts));
+    return [state](request_context& ctx) -> task<void>
     {
-        return detail::serve_dir_body(*opts_ptr, ctx);
+        return detail::serve_dir_body(*state, ctx);
     };
 }
 
@@ -374,6 +505,7 @@ namespace detail {
         v2::server_response result;
         result.status = static_cast<std::uint32_t>(output.status_code());
         result.body_text = output.take_body();
+        result.shared_body = output.take_shared_body();
         result.body_source = output.take_body_source();
         result.headers.reserve(output.header_count());
         output.take_headers(

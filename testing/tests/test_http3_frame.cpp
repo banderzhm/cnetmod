@@ -101,7 +101,10 @@ TEST(http3_static_files_follow_disk_and_negotiate_precompressed_content)
         brotli << "compressed";
     }
 
-    auto static_files = cnetmod::http::v3::serve_dir({.root = root});
+    auto static_files = cnetmod::http::v3::serve_dir({
+        .root = root,
+        .revalidate_interval = std::chrono::milliseconds::zero(),
+    });
     cnetmod::http::v3::http3_request request;
     request.path = "/static/app.js";
     request.headers.emplace("accept-encoding", "br;q=1, gzip;q=0.8");
@@ -114,7 +117,8 @@ TEST(http3_static_files_follow_disk_and_negotiate_precompressed_content)
         "application/javascript; charset=utf-8");
     ASSERT_EQ(response.headers.find("content-encoding")->second, "br");
     ASSERT_EQ(response.headers.find("content-length")->second, "10");
-    ASSERT_TRUE(static_cast<bool>(response.body_source));
+    ASSERT_TRUE(static_cast<bool>(response.shared_body));
+    ASSERT_EQ(*response.shared_body, "compressed");
 
     std::filesystem::remove(root / "app.js.br");
     {
@@ -129,6 +133,8 @@ TEST(http3_static_files_follow_disk_and_negotiate_precompressed_content)
     ASSERT_EQ(changed.headers.find("content-length")->second, "11");
     ASSERT_TRUE(changed.headers.find("content-encoding") ==
         changed.headers.end());
+    ASSERT_TRUE(static_cast<bool>(changed.shared_body));
+    ASSERT_EQ(*changed.shared_body, "replacement");
 
     request.path = "/static/%2e%2e/secret.txt";
     cnetmod::http::v3::http3_response traversal;

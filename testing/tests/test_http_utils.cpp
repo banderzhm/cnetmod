@@ -11,43 +11,51 @@ using namespace cnetmod::http;
 // parse_query_param
 // =============================================================================
 
-TEST(parse_query_param_basic) {
+TEST(parse_query_param_basic)
+{
     auto val = parse_query_param("type=json&size=10", "type");
     ASSERT_EQ(val, std::string("json"));
 }
 
-TEST(parse_query_param_second_key) {
+TEST(parse_query_param_second_key)
+{
     auto val = parse_query_param("type=json&size=10", "size");
     ASSERT_EQ(val, std::string("10"));
 }
 
-TEST(parse_query_param_missing_key) {
+TEST(parse_query_param_missing_key)
+{
     auto val = parse_query_param("type=json&size=10", "missing");
     ASSERT_TRUE(val.empty());
 }
 
-TEST(parse_query_param_empty_value) {
+TEST(parse_query_param_empty_value)
+{
     auto val = parse_query_param("key=&other=1", "key");
     ASSERT_TRUE(val.empty());
 }
 
-TEST(parse_query_param_single_param) {
+TEST(parse_query_param_single_param)
+{
     auto val = parse_query_param("queries=5", "queries");
     ASSERT_EQ(val, std::string("5"));
 }
 
-TEST(parse_query_param_no_boundary_confusion) {
+TEST(parse_query_param_no_boundary_confusion)
+{
     // "mykey" should not match when looking for "key"
     auto val = parse_query_param("mykey=bad&key=good", "key");
     ASSERT_EQ(val, std::string("good"));
 }
 
-TEST(parse_query_param_empty_query) {
+TEST(parse_query_param_empty_query)
+{
     auto val = parse_query_param("", "key");
     ASSERT_TRUE(val.empty());
 }
 
-TEST(parse_query_param_url_encoded_value) {
+TEST(parse_query_param_url_encoded_value)
+{
     // Does NOT decode %xx — that's by design
     auto val = parse_query_param("email=test%40example.com", "email");
     ASSERT_EQ(val, std::string("test%40example.com"));
@@ -57,7 +65,8 @@ TEST(parse_query_param_url_encoded_value) {
 // parse_query_params
 // =============================================================================
 
-TEST(parse_query_params_basic) {
+TEST(parse_query_params_basic)
+{
     auto params = parse_query_params("a=1&b=hello&c=");
     ASSERT_EQ(params.size(), static_cast<std::size_t>(3));
     ASSERT_EQ(params["a"], std::string("1"));
@@ -65,30 +74,63 @@ TEST(parse_query_params_basic) {
     ASSERT_EQ(params["c"], std::string(""));
 }
 
-TEST(parse_query_params_single) {
+TEST(parse_query_params_single)
+{
     auto params = parse_query_params("queries=20");
     ASSERT_EQ(params.size(), static_cast<std::size_t>(1));
     ASSERT_EQ(params["queries"], std::string("20"));
 }
 
-TEST(parse_query_params_empty) {
+TEST(parse_query_params_empty)
+{
     auto params = parse_query_params("");
     ASSERT_TRUE(params.empty());
 }
 
-TEST(parse_query_params_duplicate_key) {
+TEST(parse_query_params_duplicate_key)
+{
     // Later value overwrites earlier
     auto params = parse_query_params("x=1&x=2");
     ASSERT_EQ(params.size(), static_cast<std::size_t>(1));
     ASSERT_EQ(params["x"], std::string("2"));
 }
 
-TEST(parse_query_params_no_value) {
+TEST(parse_query_params_no_value)
+{
     // Segments without '=' should be skipped
     auto params = parse_query_params("a=1&noval&b=2");
     ASSERT_EQ(params.size(), static_cast<std::size_t>(2));
     ASSERT_EQ(params["a"], std::string("1"));
     ASSERT_EQ(params["b"], std::string("2"));
+}
+
+// =============================================================================
+// Accept-Encoding negotiation
+// =============================================================================
+
+TEST(accepts_content_encoding_common_list)
+{
+    ASSERT_TRUE(accepts_content_encoding("gzip, deflate, br", "br"));
+    ASSERT_TRUE(accepts_content_encoding("gzip, deflate, br", "gzip"));
+}
+
+TEST(accepts_content_encoding_case_insensitive)
+{
+    ASSERT_TRUE(accepts_content_encoding("GZip", "gzip"));
+}
+
+TEST(accepts_content_encoding_rejects_zero_quality)
+{
+    ASSERT_FALSE(accepts_content_encoding("br; q=0, gzip;q=1", "br"));
+    ASSERT_TRUE(accepts_content_encoding("br; q=0, gzip;q=1", "gzip"));
+}
+
+TEST(accepts_content_encoding_wildcard)
+{
+    ASSERT_TRUE(accepts_content_encoding("*;q=0.5", "br"));
+    ASSERT_FALSE(accepts_content_encoding("*;q=0", "gzip"));
+    ASSERT_FALSE(accepts_content_encoding("br;q=0, *;q=1", "br"));
+    ASSERT_FALSE(accepts_content_encoding("gzip;q=0.0000", "gzip"));
 }
 
 RUN_TESTS()

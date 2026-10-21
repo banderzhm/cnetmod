@@ -75,6 +75,92 @@ auto guess_mime_type(std::string_view extension) noexcept -> std::string_view
     return "application/octet-stream";
 }
 
+auto accepts_content_encoding(std::string_view header,
+    std::string_view encoding) noexcept -> bool
+{
+    const auto equal_ascii = [](std::string_view left,
+                                 std::string_view right) noexcept
+    {
+        return left.size() == right.size() &&
+            std::ranges::equal(left, right, [](char lhs, char rhs)
+                {
+                    const auto lower = [](char value) noexcept
+                    {
+                        return value >= 'A' && value <= 'Z'
+                            ? static_cast<char>(value - 'A' + 'a')
+                            : value;
+                    };
+                    return lower(lhs) == lower(rhs);
+                });
+    };
+    const auto trim = [](std::string_view value) noexcept
+    {
+        while (!value.empty() &&
+            (value.front() == ' ' || value.front() == '\t'))
+            value.remove_prefix(1);
+        while (!value.empty() &&
+            (value.back() == ' ' || value.back() == '\t'))
+            value.remove_suffix(1);
+        return value;
+    };
+
+    const auto quality_enabled = [trim](std::string_view value) noexcept
+    {
+        value = trim(value);
+        if (value.empty() || value.front() != '0')
+            return true;
+        value.remove_prefix(1);
+        if (!value.empty() && value.front() == '.')
+            value.remove_prefix(1);
+        return std::ranges::any_of(value, [](char digit)
+            {
+                return digit != '0';
+            });
+    };
+
+    bool explicit_found{};
+    bool explicit_enabled{};
+    bool wildcard_enabled{};
+    while (!header.empty())
+    {
+        const auto comma = header.find(',');
+        const auto item = header.substr(0, comma);
+        const auto semicolon = item.find(';');
+        const auto name = trim(item.substr(0, semicolon));
+        auto enabled = true;
+        if (semicolon != std::string_view::npos)
+        {
+            auto parameters = item.substr(semicolon + 1);
+            while (!parameters.empty())
+            {
+                const auto separator = parameters.find(';');
+                const auto parameter = trim(parameters.substr(0, separator));
+                const auto equals = parameter.find('=');
+                if (equals != std::string_view::npos &&
+                    equal_ascii(trim(parameter.substr(0, equals)), "q"))
+                {
+                    const auto quality = trim(parameter.substr(equals + 1));
+                    enabled = quality_enabled(quality);
+                }
+                if (separator == std::string_view::npos)
+                    break;
+                parameters.remove_prefix(separator + 1);
+            }
+        }
+        if (equal_ascii(name, encoding))
+        {
+            explicit_found = true;
+            explicit_enabled = explicit_enabled || enabled;
+        }
+        else if (name == "*")
+            wildcard_enabled = wildcard_enabled || enabled;
+        if (comma == std::string_view::npos)
+            break;
+        header.remove_prefix(comma + 1);
+    }
+    return explicit_found ? explicit_enabled : wildcard_enabled;
+}
+
 request_body_stream::request_body_stream(std::size_t capacity,
     std::size_t max_bytes)
     : chunks_(capacity), max_bytes_(max_bytes) {}

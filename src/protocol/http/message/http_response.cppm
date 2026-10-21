@@ -49,6 +49,10 @@ public:
 
     auto set_body(std::string body) -> response&;
 
+    /// Reuse immutable buffered content without copying it into every
+    /// response. The storage remains alive until the transport consumes it.
+    auto set_shared_body(std::shared_ptr<const std::string> body) -> response&;
+
     auto set_body_preserve_headers(std::string body) -> response&;
 
     /// Install a pull-based response body. The transport consumes the source
@@ -126,6 +130,10 @@ public:
     [[nodiscard]] auto header_count() const noexcept -> std::size_t;
     [[nodiscard]] auto take_trailers() noexcept -> header_map;
     [[nodiscard]] auto take_body() noexcept -> std::string;
+    [[nodiscard]] auto shared_body() const noexcept
+        -> const std::shared_ptr<const std::string>&;
+    [[nodiscard]] auto take_shared_body() noexcept
+        -> std::shared_ptr<const std::string>;
     [[nodiscard]] auto body_source() const noexcept
         -> const std::shared_ptr<response_body_source>&;
     [[nodiscard]] auto take_body_source() noexcept
@@ -184,6 +192,7 @@ private:
     mutable bool headers_snapshot_valid_{};
     header_map trailers_;
     std::string body_;
+    std::shared_ptr<const std::string> shared_body_;
     std::shared_ptr<response_body_source> body_source_;
     std::array<char, 29U> cached_date_header_{};
     bool has_cached_date_header_ = false;

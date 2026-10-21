@@ -8683,13 +8683,25 @@ router r;
 r.get("/static/*filepath", serve_dir({
     .root = "./public",
     .index_file = "index.html",
+    .serve_precompressed = true,
+    .cache_max_file_size = 1024 * 1024,
+    .revalidate_interval = std::chrono::milliseconds{500},
 }));
 ```
 
 `serve_dir()` 使用协议无关的 pull-based response body：文件分块异步读取，
 HTTP/1 明文、TLS 和 HTTP/2 由服务器传输层分别编码。不要为了零拷贝或性能在
 静态文件 handler 中直接调用 `raw_socket()`；那会绕过 TLS 加密与 HTTP/2
-帧编码。框架会保持每次请求重新打开、stat 文件，因此替换静态资源后无需重启。
+帧编码。默认对不超过 1 MiB 的热点文件保留不可变共享响应体，HTTP/1 与 HTTP/2
+不会按请求重复打开、读取或复制文件；超过上限的文件仍按背压异步分块读取。
+缓存每 500 ms 重新核对文件大小和修改时间，因此替换或删除静态资源后无需重启。
+将 `cache_max_file_size` 设为 `0` 可关闭 body 缓存，将
+`revalidate_interval` 设为 `0ms` 可要求每次请求检查磁盘元数据。
+
+`serve_precompressed` 默认开启。客户端的 `Accept-Encoding` 允许时优先选择同目录的
+`.br`，其次选择 `.gz`；`q=0` 会明确禁用对应编码，并自动设置
+`Content-Encoding` 与 `Vary: Accept-Encoding`。Range 请求固定读取原始文件，避免
+把原文件的字节范围错误地应用到压缩表示。
 
 HTTP/3 使用同一磁盘一致性语义，但请求类型不同，因此显式导入
 `cnetmod.protocol.http.v3.static_files`：
@@ -8720,10 +8732,11 @@ cnetmod::http::v3::server_request_handler handler =
 };
 ```
 
-该入口属于框架正式能力，不会在应用入口预读目录或持有永久文件缓存：每个请求
-重新解析并打开挂载目录中的文件，支持 `.br`/`.gz` 预压缩副本，保留原文件的
-`Content-Type`，并拒绝编码后的目录穿越。因此磁盘文件被替换后，下一次请求会
-读取新文件；不要为了 benchmark 在应用层恢复启动时预加载缓存。
+该入口属于框架正式能力，不会在应用入口预读整个目录，也不会持有不校验磁盘的
+永久缓存。HTTP/3 对不超过 `cache_max_file_size`（默认 1 MiB）的文件保留共享内容，
+但每次请求都会核对大小与修改时间；替换或删除文件后立即更新或失效。它同样支持
+`.br`/`.gz` 预压缩副本、保留原文件的 `Content-Type`，并拒绝编码后的目录穿越。
+不要为了 benchmark 在应用层恢复启动时预加载目录。
 
 ---
 

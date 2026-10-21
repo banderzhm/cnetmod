@@ -219,7 +219,9 @@ void session::queue_response(std::uint32_t stream_id, server_response response, 
 {
     if (!detached && !streams_.contains(stream_id))
         return;
-    const auto body = response.body_text.empty()
+    const auto body = response.shared_body
+        ? std::as_bytes(std::span{*response.shared_body})
+        : response.body_text.empty()
         ? std::span<const std::byte>{response.body}
         : std::as_bytes(std::span{response.body_text});
     response_headers_.clear();
@@ -274,7 +276,9 @@ auto session::queue_response_data(std::uint32_t stream_id, server_response& resp
     const auto found = streams_.find(stream_id);
     if (found == streams_.end() && !detached)
         return true;
-    const auto body = response.body_text.empty()
+    const auto body = response.shared_body
+        ? std::as_bytes(std::span{*response.shared_body})
+        : response.body_text.empty()
         ? std::span<const std::byte>{response.body}
         : std::as_bytes(std::span{response.body_text});
     const bool trailers = !response.trailers.empty() || !response.static_trailers.empty();
@@ -431,7 +435,8 @@ auto session::write_response(std::uint32_t stream_id,
         co_return std::expected<void, std::error_code>{};
     if (response.body_source)
     {
-        if (!response.body.empty() || !response.body_text.empty())
+        if (!response.body.empty() || !response.body_text.empty() ||
+            response.shared_body)
             co_return std::unexpected(
                 std::make_error_code(std::errc::invalid_argument));
         std::vector<header_field> headers;
@@ -556,7 +561,7 @@ void session::schedule_flow_credit(std::uint32_t stream_id, std::size_t bytes)
         flow_credit_scheduled_ = true;
     }
     (void)background_->run([this](cnetmod::cancel_token&)
-        -> cnetmod::task<std::expected<void, std::error_code>>
+                               -> cnetmod::task<std::expected<void, std::error_code>>
         {
             co_return co_await return_flow_credit();
         });
@@ -694,7 +699,8 @@ auto session::dispatch_ready() -> cnetmod::task<void>
                 .body = found->second.take_body()};
             cancel_token cancellation;
             if (auto immediate = sync_handler_
-                    ? sync_handler_(request, cancellation) : std::nullopt)
+                    ? sync_handler_(request, cancellation)
+                    : std::nullopt)
             {
                 // These complete requests have already received END_STREAM.
                 // Their synchronous consumer has finished, so no stream credit

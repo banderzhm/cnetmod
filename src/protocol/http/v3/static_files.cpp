@@ -11,9 +11,32 @@ import cnetmod.executor.async_op;
 import cnetmod.io.io_context;
 import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.http.v3.session;
+import cnetmod.utils.concurrent_containers.striped_hash_map;
 
 namespace cnetmod::http::v3 {
 namespace {
+
+    struct cached_static_file
+    {
+        std::filesystem::path selected_path;
+        std::filesystem::file_time_type modified_at;
+        std::uintmax_t size{};
+        std::string mime_type;
+        std::string content_encoding;
+        std::shared_ptr<const std::string> content;
+        std::chrono::steady_clock::time_point validated_at;
+    };
+
+    struct static_file_state
+    {
+        explicit static_file_state(static_file_options value)
+            : options(std::move(value)), entries(64U, 16U) {}
+
+        static_file_options options;
+        concurrent_containers::striped_hash_map<std::string,
+            std::shared_ptr<const cached_static_file>>
+            entries;
+    };
 
     auto hex_value(char value) noexcept -> int
     {
@@ -56,45 +79,6 @@ namespace {
         return decoded;
     }
 
-    auto accepts_encoding(std::string_view header, std::string_view wanted) noexcept
-        -> bool
-    {
-        while (!header.empty())
-        {
-            const auto comma = header.find(',');
-            auto item = header.substr(0, comma);
-            const auto semicolon = item.find(';');
-            auto name = item.substr(0, semicolon);
-            while (!name.empty() && std::isspace(static_cast<unsigned char>(name.front())))
-                name.remove_prefix(1);
-            while (!name.empty() && std::isspace(static_cast<unsigned char>(name.back())))
-                name.remove_suffix(1);
-
-            bool disabled = false;
-            if (semicolon != std::string_view::npos)
-            {
-                auto parameters = item.substr(semicolon + 1);
-                const auto quality = parameters.find("q=");
-                if (quality != std::string_view::npos)
-                {
-                    auto value = parameters.substr(quality + 2);
-                    const auto end = value.find(';');
-                    value = value.substr(0, end);
-                    while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back())))
-                        value.remove_suffix(1);
-                    disabled = value == "0" || value == "0.0" ||
-                        value == "0.00" || value == "0.000";
-                }
-            }
-            if ((name == wanted || name == "*") && !disabled)
-                return true;
-            if (comma == std::string_view::npos)
-                break;
-            header.remove_prefix(comma + 1);
-        }
-        return false;
-    }
-
     auto is_within_root(const std::filesystem::path& root,
         const std::filesystem::path& candidate) -> bool
     {
@@ -103,129 +87,31 @@ namespace {
             *relative.begin() != "..";
     }
 
-} // namespace
-
-auto serve_dir(static_file_options options) -> static_file_handler
-{
-    std::error_code canonical_error;
-    options.root = std::filesystem::weakly_canonical(
-        options.root, canonical_error);
-    auto shared = std::make_shared<const static_file_options>(
-        std::move(options));
-
-    return [shared, canonical_error](http3_request& request,
-               http3_response& response) -> std::expected<bool, std::error_code>
+    auto populate_response(const cached_static_file& resource,
+        http_method method, http3_response& response)
+        -> std::expected<void, std::error_code>
     {
-        if (canonical_error)
-            return std::unexpected(canonical_error);
-
-        const auto query = request.path.find('?');
-        const auto path = std::string_view{request.path}.substr(0, query);
-        if (!path.starts_with(shared->url_prefix))
-            return false;
-
-        if (request.method != http_method::GET &&
-            request.method != http_method::HEAD)
-        {
-            response.status = status::method_not_allowed;
-            response.headers.emplace("allow", "GET, HEAD");
-            return true;
-        }
-
-        auto decoded = decode_path(path.substr(shared->url_prefix.size()));
-        if (!decoded)
-        {
-            response.status = status::bad_request;
-            return true;
-        }
-        if (decoded->empty())
-            *decoded = shared->index_file;
-
-        const std::filesystem::path relative{*decoded};
-        if (relative.is_absolute() || relative.has_root_name())
-        {
-            response.status = status::forbidden;
-            return true;
-        }
-        for (const auto& component : relative)
-        {
-            if (component == "..")
-            {
-                response.status = status::forbidden;
-                return true;
-            }
-        }
-
-        std::error_code path_error;
-        auto original = std::filesystem::weakly_canonical(
-            shared->root / relative, path_error);
-        if (path_error || !is_within_root(shared->root, original))
-        {
-            response.status = status::not_found;
-            return true;
-        }
-        if (std::filesystem::is_directory(original, path_error))
-            original = std::filesystem::weakly_canonical(
-                original / shared->index_file, path_error);
-        if (path_error || !std::filesystem::is_regular_file(original, path_error))
-        {
-            response.status = status::not_found;
-            return true;
-        }
-
-        auto selected = original;
-        std::string content_encoding;
-        const auto encoding = request.headers.find("accept-encoding");
-        const auto accepted = encoding == request.headers.end()
-            ? std::string_view{}
-            : std::string_view{encoding->second};
-        if (shared->serve_precompressed && accepts_encoding(accepted, "br"))
-        {
-            auto brotli = original;
-            brotli += ".br";
-            if (std::filesystem::is_regular_file(brotli, path_error))
-            {
-                selected = std::move(brotli);
-                content_encoding = "br";
-            }
-        }
-        if (shared->serve_precompressed && content_encoding.empty() &&
-            accepts_encoding(accepted, "gzip"))
-        {
-            auto gzip = original;
-            gzip += ".gz";
-            if (std::filesystem::is_regular_file(gzip, path_error))
-            {
-                selected = std::move(gzip);
-                content_encoding = "gzip";
-            }
-        }
-
-        auto opened = file::open(selected, open_mode::read);
-        if (!opened)
-        {
-            response.status = status::not_found;
-            return true;
-        }
-        auto size = opened->size();
-        if (!size)
-            return std::unexpected(size.error());
-
         response.status = status::ok;
-        response.headers.emplace("content-type",
-            std::string{guess_mime_type(original.extension().string())});
-        response.headers.emplace("content-length", std::to_string(*size));
+        response.headers.emplace("content-type", resource.mime_type);
+        response.headers.emplace("content-length", std::to_string(resource.size));
         response.headers.emplace("vary", "Accept-Encoding");
-        if (!content_encoding.empty())
-            response.headers.emplace("content-encoding",
-                std::move(content_encoding));
+        if (!resource.content_encoding.empty())
+            response.headers.emplace("content-encoding", resource.content_encoding);
 
-        if (request.method == http_method::HEAD || *size == 0)
-            return true;
+        if (method == http_method::HEAD || resource.size == 0)
+            return {};
+        if (resource.content)
+        {
+            response.shared_body = resource.content;
+            return {};
+        }
 
+        auto opened = file::open(resource.selected_path, open_mode::read);
+        if (!opened)
+            return std::unexpected(opened.error());
         auto source = std::make_shared<file>(std::move(*opened));
         auto offset = std::make_shared<std::uint64_t>(0);
-        auto remaining = std::make_shared<std::uint64_t>(*size);
+        auto remaining = std::make_shared<std::uint64_t>(resource.size);
         response.body_source = std::make_shared<response_body_source>(
             [source, offset, remaining](cancel_token& cancellation)
                 -> task<std::optional<request_body_chunk>>
@@ -248,7 +134,171 @@ auto serve_dir(static_file_options options) -> static_file_handler
                 *remaining -= *read;
                 co_return chunk;
             },
-            *size);
+            resource.size);
+        return {};
+    }
+
+} // namespace
+
+auto serve_dir(static_file_options options) -> static_file_handler
+{
+    std::error_code canonical_error;
+    options.root = std::filesystem::weakly_canonical(
+        options.root, canonical_error);
+    auto shared = std::make_shared<static_file_state>(std::move(options));
+
+    return [shared, canonical_error](http3_request& request,
+               http3_response& response) -> std::expected<bool, std::error_code>
+    {
+        if (canonical_error)
+            return std::unexpected(canonical_error);
+
+        const auto query = request.path.find('?');
+        const auto path = std::string_view{request.path}.substr(0, query);
+        if (!path.starts_with(shared->options.url_prefix))
+            return false;
+
+        if (request.method != http_method::GET &&
+            request.method != http_method::HEAD)
+        {
+            response.status = status::method_not_allowed;
+            response.headers.emplace("allow", "GET, HEAD");
+            return true;
+        }
+
+        auto decoded = decode_path(path.substr(shared->options.url_prefix.size()));
+        if (!decoded)
+        {
+            response.status = status::bad_request;
+            return true;
+        }
+        if (decoded->empty())
+            *decoded = shared->options.index_file;
+
+        const std::filesystem::path relative{*decoded};
+        if (relative.is_absolute() || relative.has_root_name())
+        {
+            response.status = status::forbidden;
+            return true;
+        }
+        for (const auto& component : relative)
+        {
+            if (component == "..")
+            {
+                response.status = status::forbidden;
+                return true;
+            }
+        }
+
+        const auto encoding = request.headers.find("accept-encoding");
+        const auto accepted = encoding == request.headers.end()
+            ? std::string_view{}
+            : std::string_view{encoding->second};
+        auto requested_encoding = std::string_view{"identity"};
+        if (shared->options.serve_precompressed)
+        {
+            if (accepts_content_encoding(accepted, "br"))
+                requested_encoding = "br";
+            else if (accepts_content_encoding(accepted, "gzip"))
+                requested_encoding = "gzip";
+        }
+        auto key = decoded.value();
+        key.push_back('\n');
+        key.append(requested_encoding);
+        const auto now = std::chrono::steady_clock::now();
+        auto cached = shared->entries.find(key).value_or(nullptr);
+        if (cached &&
+            now - cached->validated_at < shared->options.revalidate_interval)
+        {
+            auto populated = populate_response(*cached, request.method, response);
+            if (!populated)
+                return std::unexpected(populated.error());
+            return true;
+        }
+
+        std::error_code path_error;
+        auto original = std::filesystem::weakly_canonical(
+            shared->options.root / relative, path_error);
+        if (path_error || !is_within_root(shared->options.root, original))
+        {
+            response.status = status::not_found;
+            return true;
+        }
+        if (std::filesystem::is_directory(original, path_error))
+            original = std::filesystem::weakly_canonical(
+                original / shared->options.index_file, path_error);
+        if (path_error || !std::filesystem::is_regular_file(original, path_error))
+        {
+            response.status = status::not_found;
+            return true;
+        }
+
+        auto selected = original;
+        std::string content_encoding;
+        if (requested_encoding == "br")
+        {
+            auto brotli = original;
+            brotli += ".br";
+            if (std::filesystem::is_regular_file(brotli, path_error))
+            {
+                selected = std::move(brotli);
+                content_encoding = "br";
+            }
+            path_error.clear();
+        }
+        if ((requested_encoding == "gzip" ||
+                (requested_encoding == "br" && content_encoding.empty() &&
+                    accepts_content_encoding(accepted, "gzip"))))
+        {
+            auto gzip = original;
+            gzip += ".gz";
+            if (std::filesystem::is_regular_file(gzip, path_error))
+            {
+                selected = std::move(gzip);
+                content_encoding = "gzip";
+            }
+            path_error.clear();
+        }
+
+        const auto size = std::filesystem::file_size(selected, path_error);
+        if (path_error)
+            return std::unexpected(path_error);
+        const auto modified = std::filesystem::last_write_time(
+            selected, path_error);
+        if (path_error)
+            return std::unexpected(path_error);
+
+        std::shared_ptr<const std::string> content;
+        if (cached && cached->selected_path == selected &&
+            cached->modified_at == modified && cached->size == size)
+            content = cached->content;
+        else if (shared->options.cache_max_file_size != 0U &&
+            size <= shared->options.cache_max_file_size)
+        {
+            auto loaded = std::make_shared<std::string>(
+                static_cast<std::size_t>(size), '\0');
+            std::ifstream input{selected, std::ios::binary};
+            if (!input ||
+                !input.read(loaded->data(),
+                    static_cast<std::streamsize>(loaded->size())))
+                return std::unexpected(std::make_error_code(std::errc::io_error));
+            content = std::move(loaded);
+        }
+
+        auto refreshed = std::make_shared<cached_static_file>(cached_static_file{
+            .selected_path = std::move(selected),
+            .modified_at = modified,
+            .size = size,
+            .mime_type = std::string{
+                guess_mime_type(original.extension().string())},
+            .content_encoding = std::move(content_encoding),
+            .content = std::move(content),
+            .validated_at = now,
+        });
+        shared->entries.insert_or_assign(std::move(key), refreshed);
+        auto populated = populate_response(*refreshed, request.method, response);
+        if (!populated)
+            return std::unexpected(populated.error());
         return true;
     };
 }
