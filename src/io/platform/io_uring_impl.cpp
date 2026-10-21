@@ -18,45 +18,52 @@ namespace cnetmod {
 io_uring_context::io_uring_context(unsigned queue_depth)
     : instance_id_(next_instance_id_.fetch_add(1, std::memory_order_relaxed))
 {
+    queue_depth_ = queue_depth;
     submit_batch_size_ = submit_batch_size_from_env();
     cqe_tick_limit_ = cqe_tick_limit_from_env();
+    if (::pipe2(pipe_fds_, O_NONBLOCK | O_CLOEXEC) < 0)
+        throw std::system_error(errno, std::generic_category(), "pipe2 failed");
+}
+
+auto io_uring_context::ensure_ring() -> void
+{
+    if (initialized_)
+        return;
+
     int ret = 0;
 #ifdef IORING_SETUP_CQSIZE
-    ::io_uring_params params{};
-    params.flags = IORING_SETUP_CQSIZE;
-    params.cq_entries = queue_depth * 2;
-    #ifdef IORING_SETUP_COOP_TASKRUN
-    const auto coop_taskrun =
-        env_enabled("CNETMOD_IOURING_COOP_TASKRUN", true);
-    if (coop_taskrun)
-        params.flags |= IORING_SETUP_COOP_TASKRUN;
+    const auto try_init = [this](unsigned extra_flags) {
+        ::io_uring_params params{};
+        params.flags = IORING_SETUP_CQSIZE | extra_flags;
+        params.cq_entries = queue_depth_ * 2;
+        return ::io_uring_queue_init_params(queue_depth_, &ring_, &params);
+    };
+
+    #if defined(IORING_SETUP_SINGLE_ISSUER) && defined(IORING_SETUP_DEFER_TASKRUN)
+    // Deferred task work avoids cross-thread task_work IPIs for every
+    // completion.  It requires one issuer thread, which the reactor already
+    // guarantees: submission only happens on the driving thread.
+    if (env_enabled("CNETMOD_IOURING_DEFER_TASKRUN", true))
+        ret = try_init(IORING_SETUP_SINGLE_ISSUER | IORING_SETUP_DEFER_TASKRUN);
     #endif
-    ret = ::io_uring_queue_init_params(queue_depth, &ring_, &params);
+    if (ret == -EINVAL || ret == -EPERM)
+        ret = try_init(0);
     if (ret == -EINVAL)
     {
     #ifdef IORING_SETUP_COOP_TASKRUN
-        if (coop_taskrun)
-        {
-            params.flags = IORING_SETUP_CQSIZE;
-            ret = ::io_uring_queue_init_params(queue_depth, &ring_, &params);
-        }
+        if (env_enabled("CNETMOD_IOURING_COOP_TASKRUN", true))
+            ret = try_init(IORING_SETUP_COOP_TASKRUN);
     #endif
     }
-    if (ret == -EINVAL)
-        ret = ::io_uring_queue_init(queue_depth, &ring_, 0);
 #else
-    ret = ::io_uring_queue_init(queue_depth, &ring_, 0);
+    ret = ::io_uring_queue_init(queue_depth_, &ring_, 0);
 #endif
+    if (ret == -EINVAL)
+        ret = ::io_uring_queue_init(queue_depth_, &ring_, 0);
     if (ret < 0)
         throw std::system_error(-ret, std::generic_category(),
             "io_uring_queue_init failed");
     initialized_ = true;
-    if (::pipe2(pipe_fds_, O_NONBLOCK | O_CLOEXEC) < 0)
-    {
-        ::io_uring_queue_exit(&ring_);
-        throw std::system_error(errno, std::generic_category(), "pipe2 failed");
-    }
-    submit_wake_read();
 }
 
 io_uring_context::~io_uring_context()
@@ -91,12 +98,10 @@ auto io_uring_context::poll() -> std::size_t
 void io_uring_context::stop()
 {
     stopped_.store(true, std::memory_order_relaxed);
-    if (auto* sqe = ::io_uring_get_sqe(&ring_))
-    {
-        ::io_uring_prep_nop(sqe);
-        ::io_uring_sqe_set_data(sqe, nullptr);
-        ::io_uring_submit(&ring_);
-    }
+    // Never touch the ring from another thread: a SINGLE_ISSUER ring rejects
+    // foreign submissions.  The wake pipe is safe from any thread and the
+    // loop re-checks stopped() after every wakeup.
+    wake();
 }
 
 auto io_uring_context::stopped() const noexcept -> bool
@@ -111,6 +116,7 @@ auto io_uring_context::instance_id() const noexcept -> std::uint64_t
 
 auto io_uring_context::native_ring() noexcept -> ::io_uring*
 {
+    ensure_ring();
     return &ring_;
 }
 
@@ -121,11 +127,13 @@ void io_uring_context::restart()
 
 auto io_uring_context::get_sqe() -> ::io_uring_sqe*
 {
+    ensure_ring();
     return ::io_uring_get_sqe(&ring_);
 }
 
 auto io_uring_context::prepare_sqe() -> ::io_uring_sqe*
 {
+    ensure_ring();
     auto* sqe = ::io_uring_get_sqe(&ring_);
     if (sqe)
         ++pending_sqes_;
@@ -134,6 +142,7 @@ auto io_uring_context::prepare_sqe() -> ::io_uring_sqe*
 
 auto io_uring_context::flush() -> std::expected<int, std::error_code>
 {
+    ensure_ring();
     if (pending_sqes_ == 0 || pending_sqes_ < submit_batch_size_)
         return 0;
     const auto result = submit_pending();
@@ -142,6 +151,7 @@ auto io_uring_context::flush() -> std::expected<int, std::error_code>
 
 auto io_uring_context::flush_pending() -> std::expected<int, std::error_code>
 {
+    ensure_ring();
     if (pending_sqes_ == 0)
         return 0;
     const auto result = submit_pending();
@@ -155,6 +165,7 @@ auto io_uring_context::submit_batch_size() const noexcept -> unsigned
 
 auto io_uring_context::submit() -> std::expected<int, std::error_code>
 {
+    ensure_ring();
     return submit_pending();
 }
 
@@ -260,6 +271,7 @@ auto io_uring_context::submit_pending() -> std::expected<int, std::error_code>
 
 auto io_uring_context::run_one_impl(bool blocking) -> std::size_t
 {
+    ensure_ring();
     if (cancel_head_)
         drain_cancellations();
     if (pending_sqes_ > 0)
