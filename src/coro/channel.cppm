@@ -65,33 +65,32 @@ class channel
 
     class spinlock
     {
-        std::atomic_flag flag_{};
-        // Most channel operations are uncontended. Avoid entering libc++'s
-        // global atomic-notify table on every unlock; a waiter announces
-        // itself before sleeping, and an unlock only notifies when one exists.
-        std::atomic<std::uint32_t> waiters_{};
+        // 0 = free, 1 = held, 2 = held with a sleeping contender. Unlock
+        // only enters the platform wait table when a contender slept.
+        std::atomic<std::uint32_t> state_{};
 
     public:
         void lock() noexcept
         {
-            if (!flag_.test_and_set(std::memory_order_acquire))
+            std::uint32_t expected = 0U;
+            if (state_.compare_exchange_strong(expected, 1U, std::memory_order_acquire,
+                    std::memory_order_relaxed))
                 return;
-            waiters_.fetch_add(1U, std::memory_order_relaxed);
-            do
+            // Advertise a sleeper before waiting; the exchange is a full barrier, so
+            // an unlock that observes 1 cannot race past a contender about to sleep.
+            if (expected != 2U)
+                expected = state_.exchange(2U, std::memory_order_acquire);
+            while (expected != 0U)
             {
-                flag_.wait(true, std::memory_order_relaxed);
-            } while (flag_.test_and_set(std::memory_order_acquire));
-            waiters_.fetch_sub(1U, std::memory_order_relaxed);
+                state_.wait(2U, std::memory_order_relaxed);
+                expected = state_.exchange(2U, std::memory_order_acquire);
+            }
         }
 
         void unlock() noexcept
         {
-            flag_.clear(std::memory_order_release);
-            // If an unlock wins the tiny race before a contender increments
-            // waiters_, that contender observes the cleared flag and retries
-            // instead of sleeping, so no wakeup can be lost.
-            if (waiters_.load(std::memory_order_relaxed) != 0U)
-                flag_.notify_one();
+            if (state_.exchange(0U, std::memory_order_release) == 2U)
+                state_.notify_one();
         }
     };
 

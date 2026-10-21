@@ -34,7 +34,9 @@ export class async_semaphore
 
     class spinlock
     {
-        std::atomic_flag flag_{};
+        // 0 = free, 1 = held, 2 = held with a sleeping contender. Unlock
+        // only enters the platform wait table when a contender slept.
+        std::atomic<std::uint32_t> state_{};
 
     public:
         void lock() noexcept;
