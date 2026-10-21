@@ -78,11 +78,6 @@ private:
     static auto submit_batch_size_from_env() noexcept -> unsigned;
     static auto env_enabled(const char* name, bool default_value) noexcept -> bool;
     static auto cqe_tick_limit_from_env() noexcept -> unsigned;
-    /// Creates the ring on the thread that first drives this context.  A ring
-    /// configured with IORING_SETUP_SINGLE_ISSUER|DEFER_TASKRUN must be
-    /// created and entered from the same thread, and cnetmod constructs
-    /// contexts before worker threads start.
-    auto ensure_ring() -> void;
     [[nodiscard]] auto submit_pending() -> std::expected<int, std::error_code>;
     auto run_one_impl(bool blocking) -> std::size_t;
     void submit_wake_read();
@@ -91,7 +86,6 @@ private:
     ::io_uring ring_{};
     std::atomic<bool> stopped_{false};
     bool initialized_ = false;
-    unsigned queue_depth_ = 256;
     int pipe_fds_[2] = {-1, -1};
     char pipe_buf_ = 0;
     uring_overlapped wake_ov_{};
