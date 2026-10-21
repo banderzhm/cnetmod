@@ -256,6 +256,20 @@ TEST(channel_deferred_send_resumes_receiver_only_when_asked)
     sync_wait(when_all(consumer(), producer()));
 }
 
+TEST(channel_reopen_restores_an_empty_open_channel)
+{
+    channel<int> ch(1);
+    ASSERT_FALSE(ch.reopen()); // still open
+    ASSERT_TRUE(ch.try_send(1));
+    ch.close();
+    ASSERT_TRUE(ch.is_closed());
+    ASSERT_TRUE(ch.reopen());  // drops the buffered value
+    ASSERT_FALSE(ch.is_closed());
+    ASSERT_FALSE(ch.try_receive().has_value());
+    ASSERT_TRUE(ch.try_send(2));
+    ASSERT_EQ(*ch.try_receive(), 2);
+}
+
 TEST(channel_move_only_type)
 {
     channel<std::unique_ptr<int>> ch(2);

@@ -632,6 +632,26 @@ public:
     }
 
     /// Close channel — wakes all waiting senders/receivers, zero heap allocation
+    /// Returns a closed channel to its initial open, empty state so that its
+    /// owner can reuse it. Fails, changing nothing, unless the channel is
+    /// closed and no coroutine is waiting on it; the caller must also be the
+    /// only owner (no coroutine may be about to await it).
+    auto reopen() noexcept -> bool
+    {
+        auto_lock g(lock_);
+        if (!closed_ || send_head_ || recv_head_)
+            return false;
+        while (count_ > 0)
+        {
+            slots_[read_pos_].destroy();
+            read_pos_ = next_pos(read_pos_);
+            --count_;
+        }
+        read_pos_ = write_pos_ = 0;
+        closed_ = false;
+        return true;
+    }
+
     void close() noexcept
     {
         waiter_node* sends = nullptr;

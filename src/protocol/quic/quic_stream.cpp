@@ -66,6 +66,14 @@ quic_stream::quic_stream(stream_id id, quic_role owner, bool bidirectional)
 
 quic_stream::~quic_stream() = default;
 
+auto quic_stream::reset(stream_id id, quic_role owner, bool bidirectional) noexcept -> void
+{
+    impl_.state = impl{};
+    impl_->id_ = id;
+    impl_->owner_ = owner;
+    impl_->bidirectional_ = bidirectional;
+}
+
 auto quic_stream::init() -> void
 {
     if (impl_->state_ != stream_state::idle)

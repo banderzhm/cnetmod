@@ -50,6 +50,10 @@ public:
     /// Initialize stream state
     auto init() -> void;
 
+    /// Returns the object to the state of a newly constructed stream with a
+    /// new identity, keeping no data or limits of its previous use.
+    auto reset(stream_id id, quic_role owner, bool bidirectional) noexcept -> void;
+
     // =========================================================================
     // Send Operations
     // =========================================================================

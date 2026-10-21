@@ -521,6 +521,39 @@ struct quic_connection::quic_connection_impl
     };
 
     std::unordered_map<stream_id, stream_entry> streams;
+    // Retired peer-stream entries, kept with their stream object and (when
+    // no one else holds it) their readiness channel, so that a request
+    // stream reuses one instead of allocating three blocks.
+    static constexpr std::size_t stream_node_pool_capacity{128U};
+    std::vector<std::unordered_map<stream_id, stream_entry>::node_type> stream_node_pool;
+
+    /// Inserts a fresh peer-stream entry; `id` must not be present.
+    auto acquire_peer_stream(stream_id id)
+        -> std::unordered_map<stream_id, stream_entry>::iterator
+    {
+        const auto bidirectional = is_bidirectional(id);
+        if (!stream_node_pool.empty())
+        {
+            auto node = std::move(stream_node_pool.back());
+            stream_node_pool.pop_back();
+            node.key() = id;
+            auto& entry = node.mapped();
+            entry.value->reset(id, connection_role, bidirectional);
+            if (entry.readiness.use_count() != 1 || !entry.readiness->reopen())
+                entry.readiness = std::make_shared<channel<std::monostate>>(1);
+            entry.deferred_reset_error = 0U;
+            entry.local_send_accepted = false;
+            entry.deferred_reset_stop_peer = false;
+            entry.has_deferred_reset = false;
+            entry.deferred_reset_queued = false;
+            entry.deferred_stop_queued = false;
+            return streams.insert(std::move(node)).position;
+        }
+        auto it = streams.try_emplace(id).first;
+        it->second.value = std::make_unique<quic_stream>(id, connection_role, bidirectional);
+        it->second.readiness = std::make_shared<channel<std::monostate>>(1);
+        return it;
+    }
     // Request handlers own these tokens; entries are removed before a handler
     // returns. QUIC packet processing and handlers share the same io_context,
     // so raw observer pointers need no cross-thread synchronization.
@@ -3547,9 +3580,10 @@ auto quic_connection::process_stream_frame_state(const stream_frame& frame) -> v
             impl_->queue_protocol_close(quic_errc::final_size_error, frame_type::stream);
         return;
     }
-    auto [it, inserted] = impl_->streams.try_emplace(frame.stream_id);
-    impl_->pending_priority_streams.erase(frame.stream_id);
-    if (inserted)
+    auto it = impl_->streams.find(frame.stream_id);
+    if (!impl_->pending_priority_streams.empty())
+        impl_->pending_priority_streams.erase(frame.stream_id);
+    if (it == impl_->streams.end())
     {
         const auto peer_initiated = is_client_initiated(frame.stream_id) !=
             (impl_->connection_role == quic_role::client);
@@ -3558,13 +3592,11 @@ auto quic_connection::process_stream_frame_state(const stream_frame& frame) -> v
             : impl_->local_max_streams_uni;
         if (!peer_initiated || frame.stream_id / 4 + 1 > peer_limit)
         {
-            impl_->streams.erase(it);
             impl_->queue_protocol_close(!peer_initiated ? quic_errc::stream_state_error
                 : quic_errc::stream_limit_error, frame_type::stream);
             return;
         }
-        it->second.value = std::make_unique<quic_stream>(frame.stream_id,
-            impl_->connection_role, is_bidirectional(frame.stream_id));
+        it = impl_->acquire_peer_stream(frame.stream_id);
         // A peer-opened bidirectional stream uses the peer's bidi_local
         // credit for our replies. The local receive window is independent.
         // Retaining the stream's fallback cap stranded responses larger than
@@ -3574,7 +3606,6 @@ auto quic_connection::process_stream_frame_state(const stream_frame& frame) -> v
                 : 0U);
         it->second.value->set_initial_receive_limit(impl_->config.max_stream_data);
         it->second.value->init();
-        it->second.readiness = std::make_shared<channel<std::monostate>>(1);
         bool accepted{};
         if (impl_->defer_stream_wakeups)
         {
@@ -6082,7 +6113,15 @@ auto quic_connection::retire_stream(stream_id sid)
     impl_->stream_scheduler.retire_stream(sid);
     impl_->pending_priority_streams.erase(sid);
     auto readiness = stream->second.readiness;
-    impl_->streams.erase(stream);
+    if (impl_->stream_node_pool.size() < quic_connection_impl::stream_node_pool_capacity &&
+        is_client_initiated(sid) != (impl_->connection_role == quic_role::client))
+    {
+        if (impl_->stream_node_pool.capacity() == 0U)
+            impl_->stream_node_pool.reserve(quic_connection_impl::stream_node_pool_capacity);
+        impl_->stream_node_pool.push_back(impl_->streams.extract(stream));
+    }
+    else
+        impl_->streams.erase(stream);
     auto* const context = std::addressof(impl_->ctx);
     std::unique_ptr<std::function<void()>> notification;
     if (credit_updated)
