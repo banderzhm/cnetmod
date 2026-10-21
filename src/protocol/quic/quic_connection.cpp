@@ -2451,12 +2451,16 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
     application_read_key_kind accepted_key_kind = application_read_key_kind::current;
     const auto protected_header_size = std::min(packet.size(),
         static_cast<std::size_t>(pn_offset) + 4U);
+    bool restore_ciphertext{};
     for (const auto& candidate : read_candidates)
     {
-        // A failed candidate may have unprotected the flags byte and packet
-        // number in place; restore those protected bytes from the original
-        // datagram before the next attempt.
-        std::copy_n(packet.begin(), protected_header_size, wire.begin());
+        // AEAD failure clears its output, which aliases the ciphertext here.
+        // Restore the complete datagram only on that cold retry path. Header
+        // protection alone changes only the flags and packet-number bytes.
+        if (std::exchange(restore_ciphertext, false))
+            std::ranges::copy(packet, wire.begin());
+        else
+            std::copy_n(packet.begin(), protected_header_size, wire.begin());
         auto pn_length = unprotect_header(*candidate.keys, wire, pn_offset, false);
         if (!pn_length || pn_offset + *pn_length > wire.size())
             continue;
@@ -2476,7 +2480,10 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
             std::span<const std::byte>{wire}.first(pn_offset + *pn_length),
             candidate_packet_number, application_path.id);
         if (!candidate_plaintext)
+        {
+            restore_ciphertext = true;
             continue;
+        }
         plaintext = std::span<const std::byte>{*candidate_plaintext};
         packet_number = candidate_packet_number;
         accepted_key_kind = candidate.kind;

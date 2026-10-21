@@ -619,6 +619,8 @@ public:
     }
 
 private:
+    // Exercise secret replacement without a public secret-injection API.
+    friend struct quic_crypto_regression_access;
     explicit quic_tls_session(SSL* ssl);
 
     /// Register QUIC method callbacks with BoringSSL

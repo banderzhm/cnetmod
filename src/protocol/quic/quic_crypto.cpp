@@ -426,6 +426,7 @@ auto quic_tls_session::install_secret(
     // A TLS callback may replace an existing level while retrying a
     // handshake. The cached AEAD precomputation belongs to the old immutable
     // key and must never survive that replacement.
+    keys.aead_context_cached = nullptr;
     std::atomic_store_explicit(&keys.aead_context,
         std::shared_ptr<quic_aead_context>{}, std::memory_order_release);
     keys.cipher_id = cipher_id;

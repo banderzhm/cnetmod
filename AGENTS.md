@@ -9098,7 +9098,8 @@ response.shared_body = cached_body;
 ```
 
 使用 `static_headers` 时，`response.status` 必须与预编码状态一致，
-`response.headers` 必须为空，并且不能同时使用 `body_source`。
+并且不能同时使用 `body_source`。`response.headers` 为空时直接复用预编码块；
+非空时合并缓存字段后走普通 QPACK 编码，同名字段以 `response.headers` 为准。
 
 ### 响应体流式发送
 

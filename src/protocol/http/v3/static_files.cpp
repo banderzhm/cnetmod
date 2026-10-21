@@ -96,19 +96,21 @@ namespace {
         -> std::expected<void, std::error_code>
     {
         response.status = status::ok;
-        response.headers.emplace("content-type", resource.mime_type);
-        response.headers.emplace("content-length", std::to_string(resource.size));
-        response.headers.emplace("vary", "Accept-Encoding");
-        if (!resource.content_encoding.empty())
-            response.headers.emplace("content-encoding", resource.content_encoding);
-
-        // A cached resource always answers 200 with the same fields, so the
-        // matching HEADERS block was encoded once when the entry was built.
-        // HEAD uses the same block; it simply sends no DATA.
-        if (resource.content && resource.encoded_headers)
+        // Decide before constructing fields: a resource-only response uses
+        // the cached block without allocating a temporary header map.
+        // Existing caller fields retain their values on the ordinary path.
+        if (resource.content && resource.encoded_headers && response.headers.empty())
         {
-            response.headers.clear();
             response.static_headers = resource.encoded_headers;
+        }
+        else
+        {
+            response.static_headers.reset();
+            response.headers.emplace("content-type", resource.mime_type);
+            response.headers.emplace("content-length", std::to_string(resource.size));
+            response.headers.emplace("vary", "Accept-Encoding");
+            if (!resource.content_encoding.empty())
+                response.headers.emplace("content-encoding", resource.content_encoding);
         }
 
         if (method == http_method::HEAD || resource.size == 0)

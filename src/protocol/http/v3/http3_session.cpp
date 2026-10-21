@@ -684,34 +684,65 @@ namespace {
         return request;
     }
 
+    // Materialize cached fields only when the caller adds per-response fields.
+    // Never concatenate complete QPACK sections: their prefixes and dynamic
+    // references belong to different encoding contexts.
+    auto response_header_fields(const http3_response& response)
+        -> std::expected<std::vector<header_field>, std::error_code>
+    {
+        std::vector<header_field> fields;
+        if (response.static_headers)
+        {
+            if (response.status != response.static_headers->status())
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            qpack_decoder decoder;
+            auto decoded = decoder.decode(response.static_headers->encoded());
+            if (!decoded)
+                return std::unexpected(decoded.error());
+            fields = std::move(*decoded);
+        }
+        else
+        {
+            fields.reserve(response.headers.size() + 2U);
+            fields.push_back({":status", std::to_string(response.status)});
+        }
+        for (const auto& [name, value] : response.headers)
+        {
+            if (name.starts_with(':') || std::ranges::equal(name, "transfer-encoding", {},
+                    [](unsigned char character) { return static_cast<char>(std::tolower(character)); },
+                    [](unsigned char character) { return static_cast<char>(std::tolower(character)); }))
+                continue;
+            if (response.static_headers)
+            {
+                const auto existing = std::ranges::find(fields, name, &header_field::name);
+                if (existing != fields.end())
+                {
+                    existing->value = value;
+                    continue;
+                }
+            }
+            fields.push_back({name, value});
+        }
+        return fields;
+    }
+
     auto response_frames(qpack_encoder& encoder, const http3_response& response, stream_id id,
         bool suppress_body = false)
         -> std::expected<byte_buffer, std::error_code>
     {
         byte_buffer block;
-        if (response.static_headers)
+        if (response.static_headers && response.headers.empty())
         {
-            if (!response.headers.empty() ||
-                response.status != response.static_headers->status())
+            if (response.status != response.static_headers->status())
                 return std::unexpected(std::make_error_code(std::errc::invalid_argument));
             block.append(response.static_headers->encoded());
         }
         else
         {
-            std::vector<header_field> fields;
-            fields.reserve(response.headers.size() + 1U);
-            fields.push_back({":status", std::to_string(response.status)});
-            for (const auto& [name, value] : response.headers)
-                if (!name.starts_with(':') && !std::ranges::equal(name, "transfer-encoding", {}, [](unsigned char character)
-                                                  {
-                                                      return static_cast<char>(std::tolower(character));
-                                                  },
-                                                  [](unsigned char character)
-                                                  {
-                                                      return static_cast<char>(std::tolower(character));
-                                                  }))
-                    fields.push_back({name, value});
-            auto encoded = encoder.encode(fields, id);
+            auto fields = response_header_fields(response);
+            if (!fields)
+                return std::unexpected(fields.error());
+            auto encoded = encoder.encode(*fields, id);
             if (!encoded)
                 return std::unexpected(encoded.error());
             block = std::move(*encoded);
@@ -756,34 +787,22 @@ namespace {
     auto response_headers_frame(qpack_encoder& encoder, const http3_response& response,
         stream_id id) -> std::expected<byte_buffer, std::error_code>
     {
-        if (response.static_headers)
+        if (response.static_headers && response.body_source)
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        if (response.static_headers && response.headers.empty())
         {
-            if (!response.headers.empty() || response.body_source ||
-                response.status != response.static_headers->status())
+            if (response.status != response.static_headers->status())
                 return std::unexpected(std::make_error_code(std::errc::invalid_argument));
             return encode_http3_frame(headers_frame{response.static_headers->encoded()});
         }
-        std::vector<header_field> fields;
-        fields.reserve(response.headers.size() + 2U);
-        fields.push_back({":status", std::to_string(response.status)});
-        for (const auto& [name, value] : response.headers)
-        {
-            if (name.starts_with(':') || std::ranges::equal(name, "transfer-encoding", {}, [](unsigned char character)
-                                             {
-                                                 return static_cast<char>(std::tolower(character));
-                                             },
-                                             [](unsigned char character)
-                                             {
-                                                 return static_cast<char>(std::tolower(character));
-                                             }))
-                continue;
-            fields.push_back({name, value});
-        }
+        auto fields = response_header_fields(response);
+        if (!fields)
+            return std::unexpected(fields.error());
         if (response.body_source && response.body_source->content_length() &&
             response.headers.find("content-length") == response.headers.end())
-            fields.push_back({"content-length",
+            fields->push_back({"content-length",
                 std::to_string(*response.body_source->content_length())});
-        auto block = encoder.encode(fields, id);
+        auto block = encoder.encode(*fields, id);
         if (!block)
             return std::unexpected(block.error());
         return encode_http3_frame(headers_frame{*block});

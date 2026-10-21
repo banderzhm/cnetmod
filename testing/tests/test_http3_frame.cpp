@@ -165,6 +165,68 @@ TEST(http3_static_files_follow_disk_and_negotiate_precompressed_content)
     ASSERT_EQ(traversal.status, cnetmod::http::status::forbidden);
 }
 
+TEST(http3_static_files_preserve_custom_headers_on_cache_miss_and_hit)
+{
+    const auto root = std::filesystem::temp_directory_path() /
+        std::format("cnetmod-http3-static-headers-{}",
+            std::chrono::steady_clock::now().time_since_epoch().count());
+    std::filesystem::create_directories(root);
+    struct cleanup
+    {
+        std::filesystem::path root;
+        ~cleanup()
+        {
+            std::error_code ignored;
+            std::filesystem::remove_all(root, ignored);
+        }
+    } remove{root};
+    {
+        std::ofstream file{root / "asset.txt", std::ios::binary};
+        file << "asset";
+    }
+    auto files = cnetmod::http::v3::serve_dir({
+        .root = root, .revalidate_interval = std::chrono::hours{1}});
+    cnetmod::http::v3::http3_request request;
+    request.path = "/static/asset.txt";
+    for (const auto method : {cnetmod::http::http_method::GET,
+             cnetmod::http::http_method::HEAD})
+    {
+        request.method = method;
+        for (const bool custom : {true, false, true})
+        {
+            cnetmod::http::v3::http3_response response;
+            if (custom)
+            {
+                response.headers.emplace("access-control-allow-origin", "https://example.test");
+                response.headers.emplace("set-cookie", "session=abc; Secure");
+                response.headers.emplace("content-type", "application/custom");
+            }
+            const auto served = files(request, response);
+            ASSERT_TRUE(served.has_value() && *served);
+            if (custom)
+            {
+                ASSERT_FALSE(static_cast<bool>(response.static_headers));
+                ASSERT_EQ(response.headers.at("access-control-allow-origin"), "https://example.test");
+                ASSERT_EQ(response.headers.at("set-cookie"), "session=abc; Secure");
+                ASSERT_EQ(response.headers.at("content-type"), "application/custom");
+                ASSERT_EQ(response.headers.at("content-length"), "5");
+            }
+            else
+            {
+                ASSERT_TRUE(static_cast<bool>(response.static_headers));
+                ASSERT_TRUE(response.headers.empty());
+            }
+            if (method == cnetmod::http::http_method::GET)
+            {
+                ASSERT_TRUE(static_cast<bool>(response.shared_body));
+                ASSERT_EQ(*response.shared_body, "asset");
+            }
+            else
+                ASSERT_FALSE(static_cast<bool>(response.shared_body));
+        }
+    }
+}
+
 TEST(webtransport_async_server_handler_contract)
 {
     cnetmod::http::v3::async_webtransport_handler handler =
