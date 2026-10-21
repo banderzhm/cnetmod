@@ -1561,7 +1561,7 @@ SSL 上下文（RAII 封装 `SSL_CTX*`），不可拷贝，仅可移动。
 ### `ssl_stream`
 **签名**: `export class ssl_stream`
 
-异步 TLS 流（基于 Memory BIO），不可拷贝，仅可移动。
+异步 TLS 流（基于框架自有的密文队列 BIO），不可拷贝，仅可移动。
 
 **构造**: `ssl_stream(ssl_context& ssl_ctx, io_context& io_ctx, socket& sock)`
 
@@ -1576,6 +1576,7 @@ Socket 必须已通过 `async_connect`（客户端）或 `async_accept`（服务
 | `async_read` | `auto async_read(mutable_buffer buf) -> task<expected<size_t, error_code>>` | 异步读取解密明文 |
 | `async_write` | `auto async_write(const_buffer buf) -> task<expected<size_t, error_code>>` | 异步写入（加密后发送） |
 | `async_write_all` | `auto async_write_all(const_buffer buf) -> task<expected<void, error_code>>` | 异步写完所有字节 |
+| `async_write_gather` | `auto async_write_gather(span<const const_buffer> bufs, cancel_token& token) -> task<expected<void, error_code>>` | 多段明文依次封装后一次刷出，缓冲区须存活到任务结束 |
 | `async_shutdown` | `auto async_shutdown() -> task<expected<void, error_code>>` | 异步 TLS 关闭 |
 | `async_shutdown` | `auto async_shutdown(cancel_token& token) -> task<expected<void, error_code>>` | 可取消关闭，token 与流必须存活到任务结束 |
 | `get_alpn_selected` | `auto get_alpn_selected() const noexcept -> string_view` | 获取 ALPN 协商结果 |
@@ -1596,17 +1597,21 @@ BoringSSL 导出 AES-128/256-GCM 的 TLS 1.2 发送密钥并安装到 Linux TLS 
 普通上下文默认不启用，继续协商 TLS 1.3。该路径仅卸载 TX，接收方向仍由 BoringSSL
 解密；QUIC 不使用 kTLS。
 
-HTTP/2 会在同一个 `ssl_stream` 上同时挂起读取协程和串行化的写入协程。框架在每次
-`SSL_read` / `SSL_write` 到对应 memory BIO 密文刷出完成之间持有协程锁，保证另一协程
-不会使 `BIO_get_mem_data()` 返回的内部存储失效，也不会在刷出后被错误的 `BIO_reset()`
-清掉新记录。应用层不需要再给一个读协程加锁；多个业务写入仍应由上层协议按帧顺序
-串行化。禁止绕过 `ssl_stream` 直接操作 `native()` 返回的 `SSL*`，否则该并发保证失效。
+用户态 TLS 的收发方向使用框架自有的密文队列 BIO，而不是 BoringSSL memory BIO：
+memory BIO 每次 `BIO_reset()` 都会把整块容量清零，部分读取后还要 memmove 剩余数据，
+大响应会多出一整遍内存写。队列只移动偏移、刷出后保留容量（超过 256 KiB 才释放），
+刷出只丢弃已写入的前缀。队列创建失败时自动回退到 memory BIO。
 
 HTTP/2 会在同一个 `ssl_stream` 上同时挂起读取协程和串行化的写入协程。框架在每次
-`SSL_read` / `SSL_write` 到对应 memory BIO 密文刷出完成之间持有协程锁，保证另一协程
-不会使 `BIO_get_mem_data()` 返回的内部存储失效，也不会在刷出后被错误的 `BIO_reset()`
-清掉新记录。应用层不需要再给一个读协程加锁；多个业务写入仍应由上层协议按帧顺序
-串行化。禁止绕过 `ssl_stream` 直接操作 `native()` 返回的 `SSL*`，否则该并发保证失效。
+`SSL_read` / `SSL_write` 到对应密文刷出完成之间持有协程锁，保证另一协程不会使正在
+提交给 socket 的队列存储失效。应用层不需要再给一个读协程加锁；多个业务写入仍应由
+上层协议按帧顺序串行化。禁止绕过 `ssl_stream` 直接操作 `native()` 返回的 `SSL*`，
+否则该并发保证失效。
+
+`async_write_gather` 在同一把锁内把所有段依次 `SSL_write` 进队列再一次刷出，
+HTTP/1.1 TLS 用它直接从共享静态文件缓存封装大响应体，HTTP/2 TLS 用它把共享响应体
+以引用方式成帧（`session::set_gather_writer`），都省去把响应体拷贝到帧缓冲区的一遍。
+kTLS 生效时逐段写入，由内核成帧。
 
 ### 错误处理
 **签名**:

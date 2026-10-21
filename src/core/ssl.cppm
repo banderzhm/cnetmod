@@ -268,6 +268,13 @@ public:
     auto async_write_all(const_buffer buf, cancel_token& token)
         -> task<std::expected<void, std::error_code>>;
 
+    /// Encrypt several plaintext buffers and send them with one transport
+    /// flush. Every buffer is sealed into the outbound queue before the
+    /// socket write, so a header block and a borrowed body need neither a
+    /// joining copy nor two writes. The buffers must outlive the task.
+    auto async_write_gather(std::span<const const_buffer> buffers,
+        cancel_token& token) -> task<std::expected<void, std::error_code>>;
+
     /// Async TLS shutdown
     auto async_shutdown() -> task<std::expected<void, std::error_code>>;
     /**
