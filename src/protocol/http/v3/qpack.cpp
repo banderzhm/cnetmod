@@ -120,18 +120,77 @@ namespace detail {
         {"x-frame-options", "sameorigin"},
     }};
 
-    using static_name_index = cnetmod::flat_map<std::string_view,
-        std::vector<std::uint16_t>, std::less<>>;
+    // Open-addressed name index over the static table. Every encoded and
+    // decoded field probes it, so it replaces an ordered map (a string
+    // comparison per binary-search step) with one hash and usually one probe.
+    // Each distinct name owns a contiguous run of its wire indices, kept in
+    // ascending order so the first entry is the canonical name reference.
+    struct static_name_index
+    {
+        static constexpr std::size_t slot_count = 256U;
+        static constexpr std::uint8_t empty = 0xffU;
+        struct name_run
+        {
+            std::string_view name;
+            std::uint8_t first{};
+            std::uint8_t count{};
+        };
+        std::array<std::uint8_t, slot_count> slots{};
+        std::array<name_run, static_table.size()> runs{};
+        std::array<std::uint8_t, static_table.size()> wire_indices{};
+        std::size_t run_count{};
+
+        [[nodiscard]] static constexpr auto hash(std::string_view text) noexcept -> std::size_t
+        {
+            std::uint32_t value = 2166136261U;
+            for (const auto character : text)
+                value = (value ^ static_cast<unsigned char>(character)) * 16777619U;
+            return value;
+        }
+
+        [[nodiscard]] auto find(std::string_view name) const noexcept -> const name_run*
+        {
+            for (auto slot = hash(name) & (slot_count - 1U);; slot = (slot + 1U) & (slot_count - 1U))
+            {
+                const auto run = slots[slot];
+                if (run == empty)
+                    return nullptr;
+                if (runs[run].name == name)
+                    return &runs[run];
+            }
+        }
+
+        [[nodiscard]] auto indices(const name_run& run) const noexcept
+            -> std::span<const std::uint8_t>
+        {
+            return {wire_indices.data() + run.first, run.count};
+        }
+    };
 
     [[nodiscard]] auto static_entries_by_name() -> const static_name_index&
     {
         static const auto index = []
         {
             static_name_index result;
-            result.reserve(static_table.size());
-            for (std::uint16_t wire_index{};
-                wire_index < static_table.size(); ++wire_index)
-                result[static_table[wire_index].name].push_back(wire_index);
+            result.slots.fill(static_name_index::empty);
+            std::size_t next_index{};
+            for (std::uint16_t wire_index{}; wire_index < static_table.size(); ++wire_index)
+            {
+                const auto name = static_table[wire_index].name;
+                if (result.find(name) != nullptr)
+                    continue;
+                auto& run = result.runs[result.run_count];
+                run.name = name;
+                run.first = static_cast<std::uint8_t>(next_index);
+                for (std::uint16_t candidate = wire_index; candidate < static_table.size(); ++candidate)
+                    if (static_table[candidate].name == name)
+                        result.wire_indices[next_index++] = static_cast<std::uint8_t>(candidate);
+                run.count = static_cast<std::uint8_t>(next_index - run.first);
+                auto slot = static_name_index::hash(name) & (static_name_index::slot_count - 1U);
+                while (result.slots[slot] != static_name_index::empty)
+                    slot = (slot + 1U) & (static_name_index::slot_count - 1U);
+                result.slots[slot] = static_cast<std::uint8_t>(result.run_count++);
+            }
             return result;
         }();
         return index;
@@ -202,6 +261,18 @@ namespace detail {
             reinterpret_cast<const std::byte*>(s.data()) + s.size());
     }
 
+    /// Huffman-decodes into a reused scratch string and returns an exactly
+    /// sized copy. Decoding straight into the result reserves twice the
+    /// encoded length, which pushes typical short header values out of the
+    /// small-string buffer and onto the heap.
+    auto huffman_string(byte_view encoded) -> std::expected<std::string, std::error_code>
+    {
+        thread_local std::string scratch;
+        if (auto decoded = cnetmod::http::v2::huffman_decode(encoded, scratch); !decoded)
+            return std::unexpected(decoded.error());
+        return std::string{scratch};
+    }
+
     auto read_string(byte_view& in) -> std::expected<std::string, std::error_code>
     {
         if (in.empty())
@@ -212,7 +283,7 @@ namespace detail {
             return std::unexpected(error());
         if (huffman)
         {
-            auto result = cnetmod::http::v2::huffman_decode(in.first(*n));
+            auto result = huffman_string(in.first(*n));
             in = in.subspan(*n);
             return result;
         }
@@ -321,25 +392,40 @@ namespace detail {
         return std::unexpected(error());
     }
 
-    auto exact(std::string_view n, std::string_view v) -> std::optional<std::uint16_t>
+    /// Static-table references for one field, from a single index probe.
+    struct static_match
+    {
+        std::optional<std::uint16_t> exact;
+        std::optional<std::uint16_t> name;
+    };
+
+    auto match_static(std::string_view n, std::string_view v) -> static_match
     {
         const auto& index = static_entries_by_name();
-        const auto entries = index.find(n);
-        if (entries == index.end())
-            return std::nullopt;
-        for (const auto wire_index : entries->second)
+        const auto* run = index.find(n);
+        if (run == nullptr)
+            return {};
+        static_match result{.name = index.indices(*run).front()};
+        for (const auto wire_index : index.indices(*run))
             if (static_table[wire_index].value == v)
-                return wire_index;
-        return std::nullopt;
+            {
+                result.exact = wire_index;
+                break;
+            }
+        return result;
+    }
+
+    auto exact(std::string_view n, std::string_view v) -> std::optional<std::uint16_t>
+    {
+        return match_static(n, v).exact;
     }
 
     auto name(std::string_view n) -> std::optional<std::uint16_t>
     {
         const auto& index = static_entries_by_name();
-        const auto entries = index.find(n);
-        return entries == index.end() || entries->second.empty()
-            ? std::nullopt
-            : std::optional{entries->second.front()};
+        const auto* run = index.find(n);
+        return run == nullptr ? std::nullopt
+                              : std::optional<std::uint16_t>{index.indices(*run).front()};
     }
 
     struct dynamic_entry
@@ -505,6 +591,57 @@ void qpack_encoder::set_max_blocked_streams(std::uint64_t maximum) noexcept
     impl_->max_blocked_streams = maximum;
 }
 
+namespace detail {
+    /// Appends a field section that references the static table only. This is
+    /// the complete encoding whenever the dynamic table is disabled: Required
+    /// Insert Count and Delta Base are zero and each field costs one index probe.
+    void append_static_section(byte_buffer& out, std::span<const header_field> headers,
+        std::vector<std::byte>& scratch)
+    {
+        out.reserve(out.size() + 2U + headers.size() * 16U);
+        append_int(out, 0, 8, 0U);
+        append_int(out, 0, 7, 0U);
+        for (const auto& h : headers)
+        {
+            const auto match = match_static(h.name, h.value);
+            if (match.exact)
+                append_int(out, 0xc0U, 6, *match.exact);
+            else if (match.name)
+            {
+                append_int(out, 0x50U, 4, *match.name);
+                append_string(out, h.value, scratch);
+            }
+            else
+            {
+                append_int(out, 0x20U, 3, h.name.size());
+                for (const auto c : h.name)
+                    out.push_back(static_cast<std::byte>(static_cast<unsigned char>(c)));
+                append_string(out, h.value, scratch);
+            }
+        }
+    }
+} // namespace detail
+
+auto qpack_encoder::encode_into(std::span<const header_field> headers,
+    std::uint64_t stream_id, byte_buffer& out) -> std::expected<void, std::error_code>
+{
+    if (impl_->max_table_capacity == 0U)
+    {
+        if (impl_->capacity_update_pending)
+        {
+            detail::append_int(impl_->pending_encoder_instructions, 0x20U, 5, 0U);
+            impl_->capacity_update_pending = false;
+        }
+        detail::append_static_section(out, headers, impl_->string_scratch);
+        return {};
+    }
+    auto encoded = encode(headers, stream_id);
+    if (!encoded)
+        return std::unexpected(encoded.error());
+    out.insert(out.end(), encoded->begin(), encoded->end());
+    return {};
+}
+
 auto qpack_encoder::encode(std::span<const header_field> headers, std::uint64_t stream_id)
     -> std::expected<byte_buffer, std::error_code>
 {
@@ -512,6 +649,12 @@ auto qpack_encoder::encode(std::span<const header_field> headers, std::uint64_t 
     {
         detail::append_int(impl_->pending_encoder_instructions, 0x20U, 5, impl_->max_table_capacity);
         impl_->capacity_update_pending = false;
+    }
+    if (impl_->max_table_capacity == 0U)
+    {
+        byte_buffer out;
+        detail::append_static_section(out, headers, impl_->string_scratch);
+        return out;
     }
 
     struct representation
@@ -964,7 +1107,7 @@ auto qpack_decoder::decode(byte_view in, std::uint64_t stream_id)
             std::string name;
             if (huffman)
             {
-                auto decoded = cnetmod::http::v2::huffman_decode(in.first(*n));
+                auto decoded = detail::huffman_string(in.first(*n));
                 if (!decoded)
                     return std::unexpected(decoded.error());
                 name = std::move(*decoded);

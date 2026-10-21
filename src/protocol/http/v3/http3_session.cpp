@@ -730,23 +730,50 @@ namespace {
         bool suppress_body = false)
         -> std::expected<byte_buffer, std::error_code>
     {
-        byte_buffer block;
+        // Header encoding runs synchronously on the connection's loop, so the
+        // field list and the encoded block reuse per-thread storage instead
+        // of allocating both for every response.
+        thread_local std::vector<header_field> fields_scratch;
+        thread_local byte_buffer block_scratch;
+        block_scratch.clear();
         if (response.static_headers && response.headers.empty())
         {
             if (response.status != response.static_headers->status())
                 return std::unexpected(std::make_error_code(std::errc::invalid_argument));
-            block.append(response.static_headers->encoded());
+            block_scratch.append(response.static_headers->encoded());
+        }
+        else if (!response.static_headers)
+        {
+            fields_scratch.clear();
+            std::array<char, 8> status_text{};
+            const auto [status_end, status_error] = std::to_chars(
+                status_text.data(), status_text.data() + status_text.size(), response.status);
+            if (status_error != std::errc{})
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            fields_scratch.push_back({":status",
+                std::string{status_text.data(), static_cast<std::size_t>(status_end - status_text.data())}});
+            for (const auto& [name, value] : response.headers)
+            {
+                if (name.starts_with(':') || std::ranges::equal(name, "transfer-encoding", {},
+                        [](unsigned char character) { return static_cast<char>(std::tolower(character)); },
+                        [](unsigned char character) { return static_cast<char>(std::tolower(character)); }))
+                    continue;
+                fields_scratch.push_back({name, value});
+            }
+            auto encoded = encoder.encode_into(fields_scratch, id, block_scratch);
+            if (!encoded)
+                return std::unexpected(encoded.error());
         }
         else
         {
             auto fields = response_header_fields(response);
             if (!fields)
                 return std::unexpected(fields.error());
-            auto encoded = encoder.encode(*fields, id);
+            auto encoded = encoder.encode_into(*fields, id, block_scratch);
             if (!encoded)
                 return std::unexpected(encoded.error());
-            block = std::move(*encoded);
         }
+        const auto& block = block_scratch;
         const auto body = buffered_response_body(response);
         if (!body)
             return std::unexpected(body.error());

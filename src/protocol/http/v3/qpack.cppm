@@ -39,6 +39,10 @@ public:
     /// stream before allowing the peer to consume a block using dynamic data.
     [[nodiscard]] auto encode(std::span<const header_field> headers, std::uint64_t stream_id = 0)
         -> std::expected<byte_buffer, std::error_code>;
+    /// Appends the encoded block to `out` (same encoding as encode()). With
+    /// the dynamic table disabled this writes directly, without a temporary.
+    [[nodiscard]] auto encode_into(std::span<const header_field> headers,
+        std::uint64_t stream_id, byte_buffer& out) -> std::expected<void, std::error_code>;
 
     /// Returns and clears instructions queued for the encoder stream.
     [[nodiscard]] auto take_encoder_instructions() -> byte_buffer;
