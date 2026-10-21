@@ -68,7 +68,7 @@ public:
         if (!ack_eliciting)
             return;
 
-        insert_inflight_packet(space_state,
+        space_state.in_flight_packets_.insert(
             inflight_packet{pn, bytes_in_flight, send_time, ack_eliciting});
         space_state.bytes_in_flight_ += bytes_in_flight;
         space_state.time_of_last_ack_eliciting_packet_ = send_time;
@@ -97,13 +97,13 @@ public:
             space_state.largest_acked_pn_ = largest_acked_pn;
 
         // Track largest acknowledged PN and its sent time
-        auto it = space_state.in_flight_packets_.find(largest_acked_pn);
-        if (it != space_state.in_flight_packets_.end())
+        const auto* largest_acked = space_state.in_flight_packets_.find(largest_acked_pn);
+        if (largest_acked != nullptr)
         {
-            space_state.largest_acked_pn_sent_time_ = it->second.sent_time;
+            space_state.largest_acked_pn_sent_time_ = largest_acked->sent_time;
 
             // Calculate RTT sample
-            auto rtt = recv_time - it->second.sent_time;
+            auto rtt = recv_time - largest_acked->sent_time;
             update_rtt_estimate(rtt, static_cast<std::uint32_t>(frame.ack_delay));
         }
 
@@ -117,14 +117,23 @@ public:
         auto range_low = range_high - frame.first_ack_range;
         auto acknowledge_range = [&](std::uint64_t low, std::uint64_t high)
         {
-            // ACK ranges are peer-controlled. Iterate only tracked packets,
-            // never every number in a potentially attacker-sized range.
-            auto it = space_state.in_flight_packets_.lower_bound(low);
-            while (it != space_state.in_flight_packets_.end() && it->first <= high)
+            // ACK ranges are peer-controlled. Visit only packets we actually
+            // sent, never every number inside a potentially sparse range.
+            const auto first_new = newly_acked.size();
+            space_state.in_flight_packets_.for_each(
+                [&](const inflight_packet& packet)
+                {
+                    if (packet.pn >= low && packet.pn <= high)
+                        newly_acked.push_back(packet.pn);
+                });
+            for (auto index = first_new; index < newly_acked.size(); ++index)
             {
-                newly_acked.push_back(it->first);
-                space_state.bytes_in_flight_ -= it->second.bytes;
-                it = recycle_inflight_packet(space_state, it);
+                const auto packet_number = newly_acked[index];
+                if (const auto* packet = space_state.in_flight_packets_.find(packet_number))
+                {
+                    space_state.bytes_in_flight_ -= packet->bytes;
+                    space_state.in_flight_packets_.erase(packet_number);
+                }
             }
         };
         acknowledge_range(range_low, range_high);
@@ -165,26 +174,26 @@ public:
         const auto loss_threshold = std::max(max_rtt + max_rtt / 8,
             duration_type{std::chrono::milliseconds(1)});
 
-        // Time-based loss detection
-        for (auto it = space_state.in_flight_packets_.begin();
-            it != space_state.in_flight_packets_.end();)
-        {
-            // Both RFC 9002 loss tests apply only at or below the largest
-            // acknowledged packet number. The map is ordered, so every later
-            // entry is ineligible in this pass. Avoid walking the whole newer
-            // flight on every ACK during a high-bandwidth transfer.
-            if (it->first > space_state.largest_acked_pn_)
-                break;
-            const bool packet_threshold = it->first + 3 <= space_state.largest_acked_pn_;
-            const bool time_threshold = it->second.sent_time + loss_threshold <= now;
-            if (packet_threshold || time_threshold)
+        // Time-based and packet-threshold loss detection visits only live
+        // packets, so intentionally skipped packet numbers add no work.
+        space_state.in_flight_packets_.for_each(
+            [&](const inflight_packet& packet)
             {
-                lost.push_back(it->first);
-                space_state.bytes_in_flight_ -= it->second.bytes;
-                it = recycle_inflight_packet(space_state, it);
-            }
-            else
-                ++it;
+                if (packet.pn > space_state.largest_acked_pn_)
+                    return;
+                const bool packet_threshold = packet.pn + 3 <=
+                    space_state.largest_acked_pn_;
+                const bool time_threshold = packet.sent_time + loss_threshold <= now;
+                if (packet_threshold || time_threshold)
+                    lost.push_back(packet.pn);
+            });
+        for (const auto packet_number : lost)
+        {
+            const auto* packet = space_state.in_flight_packets_.find(packet_number);
+            if (packet == nullptr)
+                continue;
+            space_state.bytes_in_flight_ -= packet->bytes;
+            space_state.in_flight_packets_.erase(packet_number);
         }
 
         // Threshold-based loss detection
@@ -316,27 +325,67 @@ private:
         bool ack_eliciting;
     };
 
-    using inflight_packet_map = std::map<std::uint64_t, inflight_packet>;
-
-    /// Retain at most 64 empty nodes per packet-number space. Copies retain
-    /// live recovery state but start with an empty allocation cache.
-    struct packet_node_cache
+    class inflight_packet_store
     {
-        packet_node_cache() = default;
-        packet_node_cache(const packet_node_cache&) noexcept;
-        auto operator=(const packet_node_cache&) noexcept -> packet_node_cache&;
-        packet_node_cache(packet_node_cache&& other) noexcept;
-        auto operator=(packet_node_cache&& other) noexcept -> packet_node_cache&;
-        auto clear() noexcept -> void;
+    public:
+        inflight_packet_store() = default;
+        inflight_packet_store(const inflight_packet_store&) = default;
+        auto operator=(const inflight_packet_store&) -> inflight_packet_store& = default;
+        inflight_packet_store(inflight_packet_store&& other) noexcept;
+        auto operator=(inflight_packet_store&& other) noexcept
+            -> inflight_packet_store&;
 
-        std::array<inflight_packet_map::node_type, 64U> nodes;
-        std::size_t size{};
+        auto insert(inflight_packet packet) -> void;
+        [[nodiscard]] auto find(std::uint64_t packet_number) noexcept
+            -> inflight_packet*;
+        [[nodiscard]] auto find(std::uint64_t packet_number) const noexcept
+            -> const inflight_packet*;
+        auto erase(std::uint64_t packet_number) noexcept -> void;
+        auto release() noexcept -> void;
+
+        template <class Function>
+        auto for_each(Function&& function) const -> void
+        {
+            for (const auto& slot : slots_)
+            {
+                if (slot.packet)
+                    function(*slot.packet);
+            }
+            for (const auto& [packet_number, packet] : overflow_)
+            {
+                (void)packet_number;
+                function(packet);
+            }
+        }
+
+        [[nodiscard]] auto empty() const noexcept -> bool
+        {
+            return primary_size_ == 0U && overflow_.empty();
+        }
+        [[nodiscard]] auto size() const noexcept -> std::size_t
+        { return primary_size_ + overflow_.size(); }
+
+    private:
+        struct packet_slot
+        {
+            std::uint64_t packet_number{};
+            std::optional<inflight_packet> packet;
+        };
+
+        static constexpr std::size_t initial_capacity{64U};
+        [[nodiscard]] auto slot_index(std::uint64_t packet_number) const noexcept
+            -> std::size_t;
+        [[nodiscard]] auto ensure_available(std::uint64_t packet_number) -> bool;
+        auto grow() -> void;
+
+        std::vector<packet_slot> slots_;
+        std::map<std::uint64_t, inflight_packet> overflow_;
+        std::size_t primary_size_{};
     };
 
     struct pn_space_state
     {
-        inflight_packet_map in_flight_packets_{};
-        packet_node_cache cached_nodes_;
+        inflight_packet_store in_flight_packets_{};
         std::uint64_t largest_sent_packet_number_ = 0;
         bool has_sent_packet_ = false;
         std::uint64_t largest_acked_pn_ = std::numeric_limits<std::uint64_t>::max();
@@ -345,10 +394,6 @@ private:
         std::uint32_t pto_count_ = 0;
         std::uint64_t bytes_in_flight_ = 0;
     };
-
-    static auto insert_inflight_packet(pn_space_state& state, inflight_packet packet) -> void;
-    static auto recycle_inflight_packet(pn_space_state& state,
-        inflight_packet_map::iterator packet) noexcept -> inflight_packet_map::iterator;
 
     pn_space_state initial_space_{};
     pn_space_state handshake_space_{};
@@ -385,11 +430,11 @@ private:
     auto remove_if_inflight(std::uint64_t pn, pn_space space) -> bool
     {
         auto& state = get_pn_space_state(space);
-        const auto it = state.in_flight_packets_.find(pn);
-        if (it != state.in_flight_packets_.end())
+        const auto* packet = state.in_flight_packets_.find(pn);
+        if (packet != nullptr)
         {
-            state.bytes_in_flight_ -= it->second.bytes;
-            (void)recycle_inflight_packet(state, it);
+            state.bytes_in_flight_ -= packet->bytes;
+            state.in_flight_packets_.erase(pn);
             return true;
         }
 
