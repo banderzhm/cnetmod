@@ -480,6 +480,15 @@ export struct case_insensitive_less
 export using header_map =
     cnetmod::flat_map<std::string, std::string, case_insensitive_less>;
 
+/// A complete, self-contained HPACK header block for one fixed status and
+/// field set.  It is encoded without dynamic-table references, so a cached
+/// block can be replayed verbatim on any connection.
+export struct preencoded_header_block
+{
+    int status{};
+    std::vector<std::byte> block;
+};
+
 /// Non-owning request header used by protocol adapters. The referenced bytes
 /// must outlive request_context; headers() materializes ownership only when a
 /// caller explicitly asks for the complete map.

@@ -139,6 +139,16 @@ public:
     [[nodiscard]] auto take_body_source() noexcept
         -> std::shared_ptr<response_body_source>;
 
+    /// Attach a fully encoded HTTP/2 header block for a fixed response shape.
+    /// Transports may send it verbatim instead of rebuilding and re-encoding
+    /// the status line and fields for every request.
+    auto set_preencoded_h2_headers(
+        std::shared_ptr<const preencoded_header_block> block) -> response&;
+    [[nodiscard]] auto preencoded_h2_headers() const noexcept
+        -> const std::shared_ptr<const preencoded_header_block>&;
+    [[nodiscard]] auto take_preencoded_h2_headers() noexcept
+        -> std::shared_ptr<const preencoded_header_block>;
+
     [[nodiscard]] auto get_header(std::string_view key) const -> std::string_view;
 
     // --- Serialization ---
@@ -194,6 +204,7 @@ private:
     std::string body_;
     std::shared_ptr<const std::string> shared_body_;
     std::shared_ptr<response_body_source> body_source_;
+    std::shared_ptr<const preencoded_header_block> preencoded_h2_headers_;
     std::array<char, 29U> cached_date_header_{};
     bool has_cached_date_header_ = false;
 };

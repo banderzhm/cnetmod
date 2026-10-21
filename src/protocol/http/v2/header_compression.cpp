@@ -440,7 +440,11 @@ auto header_compression::encode(std::span<const header_field> fields,
             encode_integer(output, exact, 7, 0x80);
             continue;
         }
-        const auto indexed = !field.sensitive && field.name != "authorization" &&
+        // With no dynamic-table capacity the block must not ask the peer to
+        // insert either: a shared, connection-independent block cannot shift
+        // another encoder's indices. Emit literal-without-indexing instead.
+        const auto indexed = dynamic_table_limit_ != 0U &&
+            !field.sensitive && field.name != "authorization" &&
             field.name != "cookie" && field.name != "set-cookie";
         const auto name = find(field.name, {}, false);
         encode_integer(output, name, indexed ? 6 : 4,

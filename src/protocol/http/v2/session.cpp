@@ -224,35 +224,50 @@ void session::queue_response(std::uint32_t stream_id, server_response response, 
         : response.body_text.empty()
         ? std::span<const std::byte>{response.body}
         : std::as_bytes(std::span{response.body_text});
-    response_headers_.clear();
-    response_headers_.reserve(response.headers.size() + response.static_headers.fields().size() + 2);
-    response_headers_.push_back({":status", std::to_string(response.status)});
-    bool has_length = false;
-    const auto append = [&](auto&& header)
+    std::span<const std::byte> header_block;
+    const auto use_preencoded = response.preencoded_headers != nullptr &&
+        static_cast<int>(response.status) == response.preencoded_headers->status &&
+        response.headers.empty() && response.static_headers.empty() &&
+        response.body_source == nullptr;
+    if (use_preencoded)
     {
-        if (header.name.starts_with(':') || header.name == "connection" ||
-            header.name == "transfer-encoding" || header.name == "upgrade")
+        // A cached static response reuses its completely encoded header block,
+        // skipping the status string, field vector and HPACK encoding.
+        header_block = response.preencoded_headers->block;
+    }
+    else
+    {
+        response_headers_.clear();
+        response_headers_.reserve(response.headers.size() + response.static_headers.fields().size() + 2);
+        response_headers_.push_back({":status", std::to_string(response.status)});
+        bool has_length = false;
+        const auto append = [&](auto&& header)
+        {
+            if (header.name.starts_with(':') || header.name == "connection" ||
+                header.name == "transfer-encoding" || header.name == "upgrade")
+                return;
+            has_length |= header.name == "content-length";
+            response_headers_.push_back(std::forward<decltype(header)>(header));
+        };
+        for (auto& header : response.headers)
+            append(std::move(header));
+        for (const auto& header : response.static_headers.fields())
+            append(header);
+        if (response.automatic_content_length && !body.empty() && !has_length)
+            response_headers_.push_back(
+                {"content-length", std::to_string(body.size())});
+        auto encoded = encoder_.encode(response_headers_, encoded_headers_);
+        if (!encoded)
             return;
-        has_length |= header.name == "content-length";
-        response_headers_.push_back(std::forward<decltype(header)>(header));
-    };
-    for (auto& header : response.headers)
-        append(std::move(header));
-    for (const auto& header : response.static_headers.fields())
-        append(header);
-    if (response.automatic_content_length && !body.empty() && !has_length)
-        response_headers_.push_back(
-            {"content-length", std::to_string(body.size())});
-    auto encoded = encoder_.encode(response_headers_, encoded_headers_);
-    if (!encoded)
-        return;
+        header_block = encoded_headers_;
+    }
     const auto has_trailers = !response.trailers.empty() || !response.static_trailers.empty();
     const auto end_on_headers = body.empty() && !has_trailers;
     queue_frame({.type = frame_type::headers,
                     .flags = static_cast<std::uint8_t>(
                         flag_end_headers | (end_on_headers ? flag_end_stream : 0)),
                     .stream_id = stream_id},
-        encoded_headers_);
+        header_block);
     std::size_t offset{};
     if (queue_response_data(stream_id, response, offset, detached))
         streams_.erase(stream_id);

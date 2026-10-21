@@ -246,6 +246,7 @@ void response::reset(int status_code, http_version version) noexcept
     body_.clear();
     shared_body_.reset();
     body_source_.reset();
+    preencoded_h2_headers_.reset();
     has_cached_date_header_ = false;
 }
 
@@ -343,6 +344,25 @@ auto response::take_body_source() noexcept
     -> std::shared_ptr<response_body_source>
 {
     return std::exchange(body_source_, {});
+}
+
+auto response::set_preencoded_h2_headers(
+    std::shared_ptr<const preencoded_header_block> block) -> response&
+{
+    preencoded_h2_headers_ = std::move(block);
+    return *this;
+}
+
+auto response::preencoded_h2_headers() const noexcept
+    -> const std::shared_ptr<const preencoded_header_block>&
+{
+    return preencoded_h2_headers_;
+}
+
+auto response::take_preencoded_h2_headers() noexcept
+    -> std::shared_ptr<const preencoded_header_block>
+{
+    return std::exchange(preencoded_h2_headers_, {});
 }
 
 auto response::get_header(std::string_view key) const -> std::string_view

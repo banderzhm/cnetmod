@@ -36,6 +36,7 @@ import cnetmod.protocol.tcp;
 import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 import cnetmod.utils.concurrent_containers.striped_hash_map;
 import cnetmod.protocol.http.v2.session;
+import cnetmod.protocol.http.v2.header_compression;
 
 #if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING)
 import cnetmod.io.platform.io_uring;
@@ -64,6 +65,9 @@ namespace detail {
         std::string content_encoding;
         std::shared_ptr<const std::string> content;
         std::chrono::steady_clock::time_point validated_at;
+        // The fixed 200 response shape is HPACK-encoded once per resource
+        // without dynamic-table references, so HTTP/2 can replay it verbatim.
+        std::shared_ptr<const preencoded_header_block> h2_headers;
     };
 
     struct static_file_state
@@ -177,6 +181,27 @@ namespace detail {
             .content = std::move(content),
             .validated_at = now,
         });
+        if (result->content)
+        {
+            std::vector<v2::header_field> fields{
+                {":status", "200"},
+                {"content-length", std::to_string(result->size)},
+                {"content-type", result->mime_type},
+                {"accept-ranges", "bytes"}};
+            if (state.options.serve_precompressed)
+                fields.push_back({"vary", "Accept-Encoding"});
+            if (!result->content_encoding.empty())
+                fields.push_back({"content-encoding", result->content_encoding});
+            // Capacity 0 forbids dynamic-table insertions, so the resulting
+            // block is self-contained and safe to share across connections.
+            v2::header_compression encoder(0);
+            if (auto block = encoder.encode(fields))
+            {
+                result->h2_headers =
+                    std::make_shared<const preencoded_header_block>(
+                        preencoded_header_block{status::ok, std::move(*block)});
+            }
+        }
         state.entries.insert_or_assign(std::move(key), result);
         co_return result;
     }
@@ -267,7 +292,10 @@ namespace detail {
         if (resource.content)
         {
             if (!is_range)
+            {
                 resp.set_shared_body(resource.content);
+                resp.set_preencoded_h2_headers(resource.h2_headers);
+            }
             else
                 resp.set_body(std::string_view{
                     resource.content->data() + range_start,
@@ -507,6 +535,15 @@ namespace detail {
         result.body_text = output.take_body();
         result.shared_body = output.take_shared_body();
         result.body_source = output.take_body_source();
+        result.preencoded_headers = output.take_preencoded_h2_headers();
+        if (result.preencoded_headers)
+        {
+            // The cached block already carries the fixed status and fields.
+            // Consume the builder's values without materializing strings.
+            output.take_headers([](std::string, std::string) {});
+            (void)output.take_trailers();
+            return result;
+        }
         result.headers.reserve(output.header_count());
         output.take_headers(
             [&result](std::string name, std::string value)

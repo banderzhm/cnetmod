@@ -67,6 +67,9 @@ struct server_response
     std::shared_ptr<cnetmod::http::response_body_source> body_source;
     static_header_fields static_headers;
     static_header_fields static_trailers;
+    /// Complete HPACK block for a fixed response shape. When present, the
+    /// fields above are ignored and no per-response encoding is performed.
+    std::shared_ptr<const preencoded_header_block> preencoded_headers;
     bool automatic_content_length = true;
 };
 
