@@ -488,6 +488,33 @@ TEST(quic_recovery_controller_emits_lost_frames)
         1U);
 }
 
+TEST(quic_recovery_sparse_packet_numbers_do_not_expand_the_fast_store)
+{
+    constexpr std::uint64_t sparse_packet = 1ULL << 40U;
+    constexpr auto space = cnetmod::quic::pn_space::application;
+    const auto now = std::chrono::steady_clock::now();
+
+    auto config = make_test_config();
+    cnetmod::quic::loss_detector detector(config);
+    detector.on_packet_sent(0U, 1200U, now, true, space);
+    detector.on_packet_sent(sparse_packet, 1200U, now + 1ms, true, space);
+
+    cnetmod::quic::ack_frame ack;
+    ack.largest_acked = sparse_packet;
+    const auto acknowledged = detector.on_ack_received(
+        ack, sparse_packet, now + 20ms, space);
+    ASSERT_TRUE(acknowledged.has_value());
+    ASSERT_EQ(acknowledged->size(), 1U);
+    ASSERT_EQ(acknowledged->front(), sparse_packet);
+    ASSERT_EQ(detector.bytes_in_flight(space), 1200U);
+
+    cnetmod::quic::quic_recovery_controller recovery(config);
+    recovery.on_packet_sent(0U, 1200U, now, true, space);
+    recovery.on_packet_sent(sparse_packet, 1200U, now + 1ms, true, space);
+    const auto update = recovery.on_ack_received(ack, now + 20ms, space);
+    ASSERT_TRUE(update.has_value());
+}
+
 namespace {
 
 auto shared_test_frames(const std::shared_ptr<const std::string>& body)
@@ -589,8 +616,8 @@ TEST(quic_recovery_repeated_bursts_release_acknowledged_shared_bodies)
     for (const auto space : {cnetmod::quic::pn_space::initial,
              cnetmod::quic::pn_space::handshake, cnetmod::quic::pn_space::application})
     {
-        // More than the 64-node cache capacity exercises both cached and
-        // upstream nodes again on every round, without changing ACK ranges.
+        // More than the initial 64-slot recovery ledger forces a collision
+        // resize, then reuses the grown storage on every later round.
         for (std::uint64_t round{}; round < 3U; ++round)
         {
             auto body = std::make_shared<const std::string>("body");
@@ -635,7 +662,7 @@ TEST(quic_recovery_recycled_loss_nodes_transfer_body_ownership)
         return;
     ASSERT_EQ(update->lost_frames.size(), 1U);
     ASSERT_FALSE(owner.expired());
-    // The event is now the sole owner: the recycled map node is empty.
+    // The event is now the sole owner: the recycled packet slot is empty.
     update->lost_frames.clear();
     ASSERT_TRUE(owner.expired());
     recovery.on_packet_sent(5U, 1200U, now + 21ms, true, space);
@@ -693,8 +720,8 @@ TEST(quic_recovery_copy_and_move_keep_live_packets_and_empty_source_caches)
     cnetmod::quic::ack_frame ack;
     ack.largest_acked = 1U;
     ASSERT_TRUE(original.on_ack_received(ack, now + 20ms, space).has_value());
-    // Move a populated cache, then reuse both the moved-to and moved-from
-    // controllers. A stale cache count would dereference an empty node here.
+    // Move a populated ledger, then reuse both the moved-to and moved-from
+    // controllers. The moved-from ledger must restart with an empty size.
     auto moved = std::move(original);
     original.on_packet_sent(2U, 1200U, now, true, space);
     ack.largest_acked = 2U;
