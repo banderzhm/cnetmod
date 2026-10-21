@@ -733,6 +733,12 @@ struct quic_connection::quic_connection_impl
     std::function<void(std::optional<std::chrono::steady_clock::time_point>)>
         timer_deadline_observer;
     async_mutex receive_mutex;
+    // The short-header receive path runs under receive_mutex, so one scratch
+    // buffer is enough: copy the datagram once and decrypt it in place instead
+    // of allocating a wire vector per candidate key and a second plaintext
+    // vector for every packet.  Frame processing copies what it retains
+    // (stream data, datagrams, crypto) before returning.
+    std::vector<std::byte> receive_wire_buffer;
     // Publishes a snapshot while its state is still serialized, then releases
     // the mutex before notifying a shared listener. Covers every early return
     // without another task frame or an unlocked read of recovery state.
@@ -2414,12 +2420,21 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
     impl_->receiving_application_path_id = cid_path->second;
     auto& application_path = impl_->receiving_application_path();
     const auto pn_offset = 1 + cid_size;
-    std::optional<std::vector<std::byte>> plaintext;
+    // Serialized by receive_mutex: one copy into the scratch buffer, then
+    // every candidate unprotects and decrypts in place in that same storage.
+    impl_->receive_wire_buffer.assign(packet.begin(), packet.end());
+    auto wire = std::span<std::byte>{impl_->receive_wire_buffer};
+    std::span<const std::byte> plaintext;
     std::uint64_t packet_number{};
     application_read_key_kind accepted_key_kind = application_read_key_kind::current;
+    const auto protected_header_size = std::min(packet.size(),
+        static_cast<std::size_t>(pn_offset) + 4U);
     for (const auto& candidate : read_candidates)
     {
-        std::vector<std::byte> wire(packet.begin(), packet.end());
+        // A failed candidate may have unprotected the flags byte and packet
+        // number in place; restore those protected bytes from the original
+        // datagram before the next attempt.
+        std::copy_n(packet.begin(), protected_header_size, wire.begin());
         auto pn_length = unprotect_header(*candidate.keys, wire, pn_offset, false);
         if (!pn_length || pn_offset + *pn_length > wire.size())
             continue;
@@ -2434,13 +2449,13 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
             static_cast<std::uint32_t>(truncated_packet_number),
             static_cast<std::uint32_t>(*pn_length * 8),
             application_path.largest_received_packet_number.value_or(0));
-        auto candidate_plaintext = open_payload(*candidate.keys,
-            std::span<const std::byte>{wire}.subspan(pn_offset + *pn_length),
-            std::span<const std::byte>{wire}.first(pn_offset + *pn_length), candidate_packet_number,
-            application_path.id);
+        auto candidate_plaintext = open_payload_in_place(*candidate.keys,
+            wire, pn_offset + *pn_length,
+            std::span<const std::byte>{wire}.first(pn_offset + *pn_length),
+            candidate_packet_number, application_path.id);
         if (!candidate_plaintext)
             continue;
-        plaintext = std::move(*candidate_plaintext);
+        plaintext = std::span<const std::byte>{*candidate_plaintext};
         packet_number = candidate_packet_number;
         accepted_key_kind = candidate.kind;
         break;
@@ -2451,7 +2466,7 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
     // being advanced, and a corrupted UDP datagram must not tear down the
     // connection either.  Keep receiving so a retransmission can make
     // progress; authenticated frame/protocol errors are still handled below.
-    if (!plaintext)
+    if (plaintext.empty())
     {
 
         co_return {};
@@ -2469,7 +2484,7 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
     // this path until async_probe_path (or the peer validation response)
     // marks it validated.
     if (application_path.id != 0U &&
-        sender.to_string() != application_path.peer.to_string())
+        sender != application_path.peer)
     {
         application_path.peer = sender;
         application_path.validated = false;
@@ -2507,14 +2522,14 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
     impl_->receiving_level = encryption_level::application;
     impl_->current_packet_sender = sender;
     bool ack_eliciting = false;
-    for (std::size_t frame_offset = 0; frame_offset < plaintext->size();)
+    for (std::size_t frame_offset = 0; frame_offset < plaintext.size();)
     {
-        while (frame_offset < plaintext->size() &&
-            (*plaintext)[frame_offset] == std::byte{})
+        while (frame_offset < plaintext.size() &&
+            plaintext[frame_offset] == std::byte{})
             ++frame_offset;
-        if (frame_offset == plaintext->size())
+        if (frame_offset == plaintext.size())
             break;
-        auto frame = decode_frame(std::span<const std::byte>{*plaintext}.subspan(frame_offset));
+        auto frame = decode_frame(plaintext.subspan(frame_offset));
         if (!frame || frame->second == 0)
             co_return std::unexpected(frame ? std::make_error_code(std::errc::bad_message)
                                             : frame.error());
@@ -2543,7 +2558,7 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
         });
     if (impl_->tls->is_handshake_complete() &&
         !impl_->tls->received_transport_params().disable_active_migration &&
-        sender.to_string() != impl_->peer.to_string())
+        sender != impl_->peer)
     {
         const auto key = sender.to_string();
         if (!impl_->pending_path_validations.contains(key) &&
