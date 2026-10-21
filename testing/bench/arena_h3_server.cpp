@@ -181,6 +181,14 @@ auto main(int argc, char** argv) -> int
         logger::error{"HTTP/3 QPACK setup failed: {}", configured.error().message()};
         return 1;
     }
+    // Our answers are a few short fields that the static table already
+    // encodes in about two dozen bytes. Indexing them would add per-response
+    // table bookkeeping and encoder-stream writes for no CPU benefit.
+    if (const auto configured = server->set_qpack_encoder_table_limit(0U); !configured)
+    {
+        logger::error{"HTTP/3 QPACK encoder setup failed: {}", configured.error().message()};
+        return 1;
+    }
     if (const auto result = server->start(); !result)
     {
         logger::error{"HTTP/3 start failed: {}", result.error().message()};

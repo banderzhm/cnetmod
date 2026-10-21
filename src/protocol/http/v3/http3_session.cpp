@@ -1394,8 +1394,11 @@ auto http3_server_session::configure_local_settings(http3_settings settings) noe
     local_settings_.max_header_list_size = settings.max_header_list_size;
     local_settings_.qpack_max_table_capacity = settings.qpack_max_table_capacity;
     local_settings_.qpack_blocked_streams = settings.qpack_blocked_streams;
+    local_settings_.qpack_encoder_max_table_capacity =
+        settings.qpack_encoder_max_table_capacity;
     decoder_.set_max_table_capacity(settings.qpack_max_table_capacity);
     decoder_.set_max_blocked_streams(settings.qpack_blocked_streams);
+    encoder_.set_local_table_limit(settings.qpack_encoder_max_table_capacity);
 }
 
 auto http3_server_session::configure_push_cancellation_observer(

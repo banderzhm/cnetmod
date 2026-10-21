@@ -543,6 +543,7 @@ namespace detail {
 struct qpack_encoder::impl
 {
     std::uint64_t max_table_capacity{};
+    std::uint64_t local_table_limit{std::numeric_limits<std::uint64_t>::max()};
     byte_buffer pending_encoder_instructions;
     detail::dynamic_table dynamic_table;
     bool capacity_update_pending{true};
@@ -581,9 +582,17 @@ auto qpack_encoder::operator=(qpack_encoder&&) noexcept -> qpack_encoder& = defa
 
 void qpack_encoder::set_max_table_capacity(std::uint64_t capacity) noexcept
 {
+    capacity = std::min(capacity, impl_->local_table_limit);
     impl_->max_table_capacity = capacity;
     impl_->dynamic_table.set_capacity(capacity);
     impl_->capacity_update_pending = true;
+}
+
+void qpack_encoder::set_local_table_limit(std::uint64_t capacity) noexcept
+{
+    impl_->local_table_limit = capacity;
+    if (impl_->max_table_capacity > capacity)
+        set_max_table_capacity(capacity);
 }
 
 void qpack_encoder::set_max_blocked_streams(std::uint64_t maximum) noexcept

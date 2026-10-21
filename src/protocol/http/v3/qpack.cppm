@@ -52,6 +52,10 @@ public:
     [[nodiscard]] auto process_decoder_instructions(byte_view data)
         -> std::expected<void, std::error_code>;
     void set_max_table_capacity(std::uint64_t capacity) noexcept;
+    /// Caps the dynamic table this encoder uses below the peer's setting.
+    /// A peer capacity authorizes, never requires, dynamic references; zero
+    /// keeps the allocation-free static-table encoding. Default: unlimited.
+    void set_local_table_limit(std::uint64_t capacity) noexcept;
     /// Applies the peer's SETTINGS_QPACK_BLOCKED_STREAMS limit.
     void set_max_blocked_streams(std::uint64_t maximum) noexcept;
 

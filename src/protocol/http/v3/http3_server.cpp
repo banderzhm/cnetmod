@@ -1006,6 +1006,17 @@ public:
         return {};
     }
 
+    auto set_qpack_encoder_table_limit(std::uint64_t capacity)
+        -> std::expected<void, std::error_code>
+    {
+        if (running_)
+            return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
+        h3_settings_.qpack_encoder_max_table_capacity = capacity;
+        for (auto& shard : shards_)
+            shard->h3_settings_.qpack_encoder_max_table_capacity = capacity;
+        return {};
+    }
+
     auto set_request_body_limits(request_body_stream_options options)
         -> std::expected<void, std::error_code>
     {
@@ -2323,6 +2334,12 @@ auto http3_server::set_qpack_settings(std::uint64_t max_table_capacity,
     std::uint64_t max_blocked_streams) -> std::expected<void, std::error_code>
 {
     return impl_->set_qpack_settings(max_table_capacity, max_blocked_streams);
+}
+
+auto http3_server::set_qpack_encoder_table_limit(std::uint64_t capacity)
+    -> std::expected<void, std::error_code>
+{
+    return impl_->set_qpack_encoder_table_limit(capacity);
 }
 
 auto http3_server::set_request_body_limits(request_body_stream_options options)

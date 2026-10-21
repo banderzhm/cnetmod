@@ -265,6 +265,10 @@ export struct http3_settings
     bool enable_connect_protocol{};
     bool enable_webtransport{};
     std::uint64_t webtransport_max_sessions{};
+    /// Local ceiling on the dynamic table our encoder uses for the peer's
+    /// decoder (not advertised). Zero encodes against the static table only.
+    std::uint64_t qpack_encoder_max_table_capacity{
+        std::numeric_limits<std::uint64_t>::max()};
 };
 
 export class http3_server_session
