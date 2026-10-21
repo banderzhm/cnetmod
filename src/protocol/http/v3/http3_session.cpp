@@ -1424,7 +1424,14 @@ auto http3_server_session::run() -> task<void>
     }
     while (!closing_ && !conn_.is_closed())
     {
-        auto accepted = co_await conn_.async_accept_stream();
+        // Several streams usually arrive in one packet; take the queued ones
+        // without a coroutine frame per accept.
+        std::expected<stream_id, std::error_code> accepted{std::unexpect,
+            std::make_error_code(std::errc::not_connected)};
+        if (const auto queued = conn_.try_accept_stream())
+            accepted = *queued;
+        else
+            accepted = co_await conn_.async_accept_stream();
         if (!accepted)
             break;
 
@@ -1514,8 +1521,13 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
         const auto read_size = !webtransport_handler_ && wire.readable_bytes() < initial_request_read_size
             ? initial_request_read_size - wire.readable_bytes()
             : stream_read_chunk_size;
-        auto received = co_await conn_.async_recv(
-            id, wire.prepare(stream_classified ? read_size : 1U));
+        const auto destination = wire.prepare(stream_classified ? read_size : 1U);
+        // Request bytes are normally already buffered when this stream is
+        // serviced; read them inline and only fall back to the coroutine path
+        // when the connection state is busy or the read must grant credit.
+        auto immediate = conn_.try_recv(id, destination);
+        auto received = immediate ? std::move(*immediate)
+                                  : co_await conn_.async_recv(id, destination);
         if (!received)
         {
 

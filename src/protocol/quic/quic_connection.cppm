@@ -192,6 +192,14 @@ public:
         mutable_buffer buf)
         -> task<std::expected<std::size_t, std::error_code>>;
 
+    /// Synchronous form of async_recv for the common case: the connection
+    /// state is not held by another coroutine and this read cannot grant the
+    /// peer new flow-control credit (which would need a write). Returns
+    /// nullopt when the caller must use async_recv instead; otherwise returns
+    /// exactly what async_recv would have produced.
+    [[nodiscard]] auto try_recv(stream_id sid, mutable_buffer buf)
+        -> std::optional<std::expected<std::size_t, std::error_code>>;
+
     /// Wait until a stream receives additional contiguous data, reaches its
     /// remote FIN/reset, or the connection closes.  `async_recv` deliberately
     /// remains non-blocking so callers that need polling retain that option;
@@ -245,6 +253,10 @@ public:
     /// permits it). A closed connection returns not_connected.
     [[nodiscard]] auto async_accept_stream()
         -> task<std::expected<stream_id, std::error_code>>;
+    /// Non-blocking accept of an already queued peer stream; nullopt means
+    /// none is queued (or the connection is closing) and async_accept_stream
+    /// should be awaited.
+    [[nodiscard]] auto try_accept_stream() noexcept -> std::optional<stream_id>;
 
     /// Release the buffers and readiness state of a fully closed stream while
     /// retaining the final sizes needed to validate delayed duplicate frames.

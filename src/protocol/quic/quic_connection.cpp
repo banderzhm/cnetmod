@@ -5683,6 +5683,33 @@ auto quic_connection::async_recv(stream_id sid, mutable_buffer buffer)
     co_return received;
 }
 
+auto quic_connection::try_recv(stream_id sid, mutable_buffer buffer)
+    -> std::optional<std::expected<std::size_t, std::error_code>>
+{
+    if (!impl_->receive_mutex.try_lock())
+        return std::nullopt;
+    async_lock_guard guard{impl_->receive_mutex, std::adopt_lock};
+    const auto it = impl_->streams.find(sid);
+    if (it == impl_->streams.end())
+        return std::expected<std::size_t, std::error_code>{
+            std::unexpect, std::make_error_code(std::errc::no_such_file_or_directory)};
+    auto& stream = *it->second.value;
+    // async_recv extends a credit limit when the stream window has fallen to
+    // half, or when this read moves the connection window to half. Both need
+    // a frame write, so leave those reads to the coroutine path.
+    const auto half_stream = impl_->config.max_stream_data / 2;
+    const auto connection_remaining =
+        impl_->local_advertised_max_data - impl_->locally_consumed_data;
+    if (stream.remaining_receive_window() <= half_stream ||
+        connection_remaining <= impl_->config.max_data / 2U ||
+        buffer.size >= connection_remaining - impl_->config.max_data / 2U)
+        return std::nullopt;
+    auto received = stream.apply_receive_state(buffer);
+    if (received && *received != 0)
+        impl_->return_receive_credit(*received);
+    return received;
+}
+
 auto quic_connection::async_wait_readable(stream_id sid)
     -> task<std::expected<void, std::error_code>>
 {
@@ -5849,6 +5876,13 @@ auto quic_connection::async_open_stream(bool bidirectional)
     (void)impl_->ensure_local_stream(id);
     impl_->pending_priority_streams.erase(id);
     co_return id;
+}
+
+auto quic_connection::try_accept_stream() noexcept -> std::optional<stream_id>
+{
+    if (is_closed() || impl_->connection_state == connection_state::draining)
+        return std::nullopt;
+    return impl_->accepted_streams.try_receive();
 }
 
 auto quic_connection::async_accept_stream()
