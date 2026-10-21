@@ -430,7 +430,11 @@ auto session::write_response(std::uint32_t stream_id,
     server_response response, cnetmod::cancel_token& cancellation)
     -> cnetmod::task<std::expected<void, std::error_code>>
 {
-    co_await cnetmod::post_awaitable{*context_};
+    // The handler usually runs on this connection's own loop.  Posting
+    // unconditionally would add a reactor round-trip to every response; only
+    // hop when a caller from another executor is possible.
+    if (!context_->running_in_this_thread())
+        co_await cnetmod::post_awaitable{*context_};
     if (!streams_.contains(stream_id))
         co_return std::expected<void, std::error_code>{};
     if (response.body_source)
