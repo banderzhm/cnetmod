@@ -5660,6 +5660,7 @@ auto quic_connection::async_recv(stream_id sid, mutable_buffer buffer)
     if (!received || *received == 0)
         co_return received;
 
+    const auto queued_before = impl_->encoded_send_frames.size();
     impl_->return_receive_credit(*received);
     const auto consumed = it->second.value->bytes_consumed();
     if (it->second.value->remaining_receive_window() <= impl_->config.max_stream_data / 2)
@@ -5669,9 +5670,16 @@ auto quic_connection::async_recv(stream_id sid, mutable_buffer buffer)
         impl_->encoded_send_frames.push_back(encode_frame(max_stream_data_frame{
             sid, new_limit}));
     }
+    // Write only when this read granted the peer new credit. A pending ACK
+    // alone is left to the response this read usually leads to (or to the
+    // listener/connection writer, which already has the flush request): an
+    // unconditional flush here sent a separate ACK-only packet ahead of almost
+    // every response, doubling the datagrams per request.
+    const bool granted_credit = impl_->encoded_send_frames.size() != queued_before;
     guard.release();
     impl_->receive_mutex.unlock();
-    co_await flush_send_queue();
+    if (granted_credit)
+        co_await flush_send_queue();
     co_return received;
 }
 
