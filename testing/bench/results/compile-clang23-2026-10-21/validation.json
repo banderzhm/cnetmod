@@ -1,0 +1,82 @@
+{
+  "targets": [
+    "test_converter",
+    "test_charconv",
+    "test_task",
+    "test_task_group",
+    "test_stream_write",
+    "test_channel",
+    "test_mutex",
+    "test_shared_mutex",
+    "test_wait_group",
+    "test_semaphore",
+    "test_http_parser",
+    "test_http2_hpack",
+    "test_http2_stream",
+    "test_http_compress",
+    "test_grpc",
+    "test_grpc_proto",
+    "test_redis",
+    "test_redis_template",
+    "test_redis_tls",
+    "test_mysql_pool",
+    "test_postgresql_transport",
+    "test_application_integrations",
+    "test_json_template"
+  ],
+  "stages": [
+    {
+      "stage": "validation-build",
+      "command": [
+        "cmake",
+        "--build",
+        "/root/cnetmod-compile-20261021/candidate",
+        "--target",
+        "test_converter",
+        "test_charconv",
+        "test_task",
+        "test_task_group",
+        "test_stream_write",
+        "test_channel",
+        "test_mutex",
+        "test_shared_mutex",
+        "test_wait_group",
+        "test_semaphore",
+        "test_http_parser",
+        "test_http2_hpack",
+        "test_http2_stream",
+        "test_http_compress",
+        "test_grpc",
+        "test_grpc_proto",
+        "test_redis",
+        "test_redis_template",
+        "test_redis_tls",
+        "test_mysql_pool",
+        "test_postgresql_transport",
+        "test_application_integrations",
+        "test_json_template",
+        "-j4"
+      ],
+      "seconds": 26.36482846800004,
+      "returncode": 0
+    },
+    {
+      "stage": "validation-tests",
+      "command": [
+        "ctest",
+        "--test-dir",
+        "/root/cnetmod-compile-20261021/candidate",
+        "--output-on-failure",
+        "--timeout",
+        "90",
+        "-j1",
+        "-R",
+        "^(test_converter|test_charconv|test_task|test_task_group|test_stream_write|test_channel|test_mutex|test_shared_mutex|test_wait_group|test_semaphore|test_http_parser|test_http2_hpack|test_http2_stream|test_http_compress|test_grpc|test_grpc_proto|test_redis|test_redis_template|test_redis_tls|test_mysql_pool|test_postgresql_transport|test_application_integrations|test_json_template)$",
+        "--output-junit",
+        "/root/cnetmod-compile-20261021/validation-junit.xml"
+      ],
+      "seconds": 4.310245196000096,
+      "returncode": 0
+    }
+  ]
+}
