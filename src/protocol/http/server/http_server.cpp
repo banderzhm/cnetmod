@@ -1668,7 +1668,10 @@ auto server::handle_h1_clear(socket& client, io_context& io,
             auto qpos = uri.find('?');
             auto path = (qpos != std::string_view::npos) ? uri.substr(0, qpos) : uri;
 
-            auto mr = router_.match(parser.method(), path);
+            // Borrow the route: the synchronous fast path calls the router's
+            // handler in place (as HTTP/2 does) instead of copying two
+            // std::function objects per request.
+            auto mr = router_.match_borrowed(parser.method(), path);
 
             resp.reset(status::ok, parser.version());
             if (response_headers_.emit_server)
@@ -1676,24 +1679,29 @@ auto server::handle_h1_clear(socket& client, io_context& io,
             if (response_headers_.emit_date)
                 resp.set_cached_date_header(date_cache_.get());
             route_params rp;
-            handler_fn handler;
-            sync_handler_fn sync_handler;
+            const sync_handler_fn* sync_route = nullptr;
+            std::optional<handler_fn> owned_handler;
             connection_upgrade_handler connection_upgrade;
 
             if (mr)
             {
-                handler = std::move(mr->handler);
-                sync_handler = std::move(mr->sync_handler);
+                if (mr->route->sync_handler)
+                    sync_route = &mr->route->sync_handler;
                 rp = std::move(mr->params);
             }
-            else
+            // Asynchronous handlers and middleware chains take a mutable copy;
+            // it is materialised only when one of those paths needs it.
+            auto handler_for_chain = [&]() -> handler_fn&
             {
-                handler = detail::unmatched_route_handler(router_, path);
-            }
+                if (!owned_handler)
+                    owned_handler.emplace(mr ? mr->route->handler
+                                             : detail::unmatched_route_handler(router_, path));
+                return *owned_handler;
+            };
 
-            if (mr && mr->request_stream)
+            if (mr && mr->route->request_stream)
             {
-                const auto options = *mr->request_stream;
+                const auto options = *mr->route->request_stream;
                 auto body_stream = std::make_shared<request_body_stream>(
                     options.chunk_capacity, options.max_bytes);
                 request_context rctx(io, client, parser, resp, std::move(rp),
@@ -1745,9 +1753,9 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                 auto invoke_handler = [&]() -> task<void>
                 {
                     if (middlewares_.empty())
-                        co_await handler(rctx);
+                        co_await handler_for_chain()(rctx);
                     else
-                        co_await execute_chain(rctx, handler);
+                        co_await execute_chain(rctx, handler_for_chain());
                     body_stream->close();
                 };
                 co_await when_all(invoke_handler(), pump_body());
@@ -1765,8 +1773,8 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                         co_return;
                 request_context rctx(io, client, parser, resp, std::move(rp));
                 rctx.enable_connection_upgrade();
-                if (middlewares_.empty() && sync_handler)
-                    sync_handler(rctx);
+                if (middlewares_.empty() && sync_route)
+                    (*sync_route)(rctx);
                 else
                 {
                     rctx.set_stream_writer(
@@ -1788,17 +1796,17 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                                 const_buffer{bytes.data(), bytes.size()}, token);
                         });
                     if (middlewares_.empty())
-                        co_await handler(rctx);
+                        co_await handler_for_chain()(rctx);
                     else
                     {
                         handler_fn adapted;
-                        auto* selected = &handler;
-                        if (sync_handler)
+                        auto* selected = &handler_for_chain();
+                        if (sync_route)
                         {
-                            adapted = [&sync_handler](request_context& context)
+                            adapted = [sync_route](request_context& context)
                                 -> task<void>
                             {
-                                sync_handler(context);
+                                (*sync_route)(context);
                                 co_return;
                             };
                             selected = &adapted;
@@ -2076,7 +2084,10 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
         auto qpos = uri.find('?');
         auto path = (qpos != std::string_view::npos) ? uri.substr(0, qpos) : uri;
 
-        auto mr = router_.match(parser.method(), path);
+        // Borrow the route: the synchronous fast path calls the router's
+        // handler in place (as HTTP/2 does) instead of copying two
+        // std::function objects per request.
+        auto mr = router_.match_borrowed(parser.method(), path);
 
         resp.reset(status::ok, parser.version());
         if (response_headers_.emit_server)
@@ -2084,23 +2095,28 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
         if (response_headers_.emit_date)
             resp.set_cached_date_header(date_cache_.get());
         route_params rp;
-        handler_fn handler;
-        sync_handler_fn sync_handler;
+        const sync_handler_fn* sync_route = nullptr;
+        std::optional<handler_fn> owned_handler;
 
         if (mr)
         {
-            handler = std::move(mr->handler);
-            sync_handler = std::move(mr->sync_handler);
+            if (mr->route->sync_handler)
+                sync_route = &mr->route->sync_handler;
             rp = std::move(mr->params);
         }
-        else
+        // Asynchronous handlers and middleware chains take a mutable copy;
+        // it is materialised only when one of those paths needs it.
+        auto handler_for_chain = [&]() -> handler_fn&
         {
-            handler = detail::unmatched_route_handler(router_, path);
-        }
+            if (!owned_handler)
+                owned_handler.emplace(mr ? mr->route->handler
+                                         : detail::unmatched_route_handler(router_, path));
+            return *owned_handler;
+        };
 
-        if (mr && mr->request_stream)
+        if (mr && mr->route->request_stream)
         {
-            const auto options = *mr->request_stream;
+            const auto options = *mr->route->request_stream;
             auto body_stream = std::make_shared<request_body_stream>(
                 options.chunk_capacity, options.max_bytes);
             request_context rctx(io, client, parser, resp, std::move(rp),
@@ -2135,9 +2151,9 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
             auto invoke_handler = [&]() -> task<void>
             {
                 if (middlewares_.empty())
-                    co_await handler(rctx);
+                    co_await handler_for_chain()(rctx);
                 else
-                    co_await execute_chain(rctx, handler);
+                    co_await execute_chain(rctx, handler_for_chain());
                 body_stream->close();
             };
             co_await when_all(invoke_handler(), pump_body());
@@ -2153,23 +2169,23 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
                 if (!(co_await receive_more()))
                     co_return;
             request_context rctx(io, client, parser, resp, std::move(rp));
-            if (middlewares_.empty() && sync_handler)
-                sync_handler(rctx);
+            if (middlewares_.empty() && sync_route)
+                (*sync_route)(rctx);
             else
             {
                 configure_stream_writer(rctx);
                 if (middlewares_.empty())
-                    co_await handler(rctx);
+                    co_await handler_for_chain()(rctx);
                 else
                 {
                     handler_fn adapted;
-                    auto* selected = &handler;
-                    if (sync_handler)
+                    auto* selected = &handler_for_chain();
+                    if (sync_route)
                     {
-                        adapted = [&sync_handler](request_context& context)
+                        adapted = [sync_route](request_context& context)
                             -> task<void>
                         {
-                            sync_handler(context);
+                            (*sync_route)(context);
                             co_return;
                         };
                         selected = &adapted;

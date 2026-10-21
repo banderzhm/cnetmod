@@ -936,7 +936,7 @@ auto router::add_route(std::optional<http_method> m, std::string_view p,
     e.score = detail::route_specificity(e.segments, !m, order);
     if (stat)
     {
-        exact_index_[detail::method_path_key(m, canonical)].push_back(idx);
+        exact_index_[canonical].push_back(idx);
         static_exact_indices_.push_back(idx);
     }
     else if (first)
@@ -965,20 +965,16 @@ auto router::find_exact(http_method m, std::string_view p) const
         }
         return best;
     }
-    auto find = [&](std::optional<http_method> x)
+    const auto it = exact_index_.find(p);
+    if (it == exact_index_.end())
+        return nullptr;
+    for (const auto i : it->second)
     {
-        auto it = exact_index_.find(detail::method_path_key(x, p));
-        if (it == exact_index_.end())
-            return;
-        for (auto i : it->second)
-        {
-            auto& e = entries_[i];
-            if (!best || detail::better_score(e.score, best->score))
-                best = &e;
-        }
-    };
-    find(m);
-    find({});
+        const auto& e = entries_[i];
+        if ((!e.method || *e.method == m) &&
+            (!best || detail::better_score(e.score, best->score)))
+            best = &e;
+    }
     return best;
 }
 

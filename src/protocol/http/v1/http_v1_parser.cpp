@@ -240,6 +240,7 @@ void request_parser::reset() noexcept
     if (buf_.capacity() < header_storage_.capacity())
         buf_.swap(header_storage_);
     read_pos_ = 0;
+    message_start_ = 0;
     reset_message_state();
 }
 
@@ -265,14 +266,25 @@ auto request_parser::has_buffered_data() const noexcept -> bool
 
 auto request_parser::reset_for_next_message() noexcept -> bool
 {
+    // A pipelined batch is parsed in place: the next message starts at the
+    // current read position. Moving the unread tail to the front for every
+    // request made a batch of N requests cost O(N^2) byte moves; compact only
+    // once the consumed prefix is large, so the buffer stays bounded.
+    constexpr std::size_t compaction_threshold = 16U * 1024U;
     if (read_pos_ == buf_.size())
+    {
         buf_.clear();
-    else if (read_pos_ != 0)
+        read_pos_ = 0;
+    }
+    else if (read_pos_ >= compaction_threshold)
+    {
         buf_.erase(0, read_pos_);
-    read_pos_ = 0;
+        read_pos_ = 0;
+    }
+    message_start_ = read_pos_;
     header_storage_.clear();
     reset_message_state();
-    return !buf_.empty();
+    return read_pos_ < buf_.size();
 }
 
 auto request_parser::consume_buffered()
@@ -364,15 +376,33 @@ auto request_parser::header_value(std::size_t index) const noexcept
 void request_parser::finalize_headers()
 {
     const auto header_end = read_pos_;
-    header_storage_.clear();
-    header_storage_.swap(buf_);
-    // The header backing allocation is transferred, not copied. Only bytes
-    // already received after the header boundary need to move into the body
-    // parser's buffer.
-    buf_.assign(header_storage_.data() + header_end,
-        header_storage_.size() - header_end);
-    header_storage_.resize(header_end);
-    read_pos_ = 0;
+    const auto header_size = header_end - message_start_;
+    const auto remainder = buf_.size() - header_end;
+    if (message_start_ == 0 && remainder <= header_size)
+    {
+        header_storage_.clear();
+        header_storage_.swap(buf_);
+        // The header backing allocation is transferred, not copied. Only bytes
+        // already received after the header boundary need to move into the
+        // body parser's buffer.
+        buf_.assign(header_storage_.data() + header_end, remainder);
+        header_storage_.resize(header_end);
+        read_pos_ = 0;
+    }
+    else
+    {
+        // A pipelined batch leaves more bytes after this header block than
+        // the block holds: copy the block out instead of the batch, and keep
+        // parsing the rest in place. Offsets become relative to the copy.
+        header_storage_.assign(buf_.data() + message_start_, header_size);
+        method_offset_ -= message_start_;
+        uri_offset_ -= message_start_;
+        for (auto& field : header_fields_)
+        {
+            field.name_offset -= message_start_;
+            field.value_offset -= message_start_;
+        }
+    }
 
     std::size_t capacity = 8;
     while (capacity < header_fields_.size() * 2)

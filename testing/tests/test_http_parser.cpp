@@ -253,6 +253,54 @@ TEST(request_parser_preserves_pipelined_requests)
     ASSERT_FALSE(parser.reset_for_next_message());
 }
 
+TEST(request_parser_parses_long_pipelined_batches_in_place)
+{
+    // Enough requests to cross the in-place compaction threshold, each with a
+    // custom header (rebased offsets) and every third one with a body, plus a
+    // final request split across two reads.
+    request_parser parser;
+    std::string batch;
+    constexpr int count = 400;
+    for (int index = 0; index < count; ++index)
+    {
+        batch += std::format("{} /item/{} HTTP/1.1\r\nHost: localhost\r\nX-Index: {}\r\n",
+            index % 3 == 0 ? "POST" : "GET", index, index);
+        if (index % 3 == 0)
+            batch += std::format("Content-Length: {}\r\n\r\nbody{}", 4 + std::to_string(index).size(), index);
+        else
+            batch += "\r\n";
+    }
+    const std::string tail = "GET /last HTTP/1.1\r\nHost: localhost\r\nX-Index: last\r\n\r\n";
+    batch += tail.substr(0, 20);
+
+    ASSERT_TRUE(parser.consume(batch.data(), batch.size()).has_value());
+    for (int index = 0; index < count; ++index)
+    {
+        if (index != 0)
+        {
+            ASSERT_TRUE(parser.reset_for_next_message());
+            ASSERT_TRUE(parser.consume_buffered().has_value());
+        }
+        ASSERT_TRUE(parser.ready());
+        ASSERT_EQ(parser.method(), std::string_view(index % 3 == 0 ? "POST" : "GET"));
+        ASSERT_EQ(parser.uri(), std::string_view(std::format("/item/{}", index)));
+        ASSERT_EQ(parser.get_header("Host"), std::string_view("localhost"));
+        ASSERT_EQ(parser.get_header("X-Index"), std::string_view(std::to_string(index)));
+        if (index % 3 == 0)
+            ASSERT_EQ(parser.body(), std::string_view(std::format("body{}", index)));
+        else
+            ASSERT_TRUE(parser.body().empty());
+    }
+    ASSERT_TRUE(parser.reset_for_next_message());
+    ASSERT_TRUE(parser.consume_buffered().has_value());
+    ASSERT_FALSE(parser.ready());
+    ASSERT_TRUE(parser.consume(tail.data() + 20, tail.size() - 20).has_value());
+    ASSERT_TRUE(parser.ready());
+    ASSERT_EQ(parser.uri(), std::string_view("/last"));
+    ASSERT_EQ(parser.get_header("X-Index"), std::string_view("last"));
+    ASSERT_FALSE(parser.reset_for_next_message());
+}
+
 // =============================================================================
 // request_parser — URI with query string
 // =============================================================================

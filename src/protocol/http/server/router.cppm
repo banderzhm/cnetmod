@@ -767,7 +767,20 @@ private:
     unmatched_handler_fn unmatched_;
     sse_stream_options sse_defaults_{};
     std::vector<std::size_t> static_exact_indices_;
-    std::unordered_map<std::string, std::vector<std::size_t>> exact_index_;
+    /// Transparent string hashing so a request path can be looked up as a
+    /// view, without building a key string per request.
+    struct path_hash
+    {
+        using is_transparent = void;
+        [[nodiscard]] auto operator()(std::string_view value) const noexcept -> std::size_t
+        {
+            return std::hash<std::string_view>{}(value);
+        }
+    };
+    /// Static routes keyed by canonical path; method filtering happens on
+    /// the (usually single) candidate list.
+    std::unordered_map<std::string, std::vector<std::size_t>, path_hash,
+        std::equal_to<>> exact_index_;
     std::unordered_map<std::string, std::vector<std::size_t>>
         first_literal_index_;
     std::vector<std::size_t> generic_indices_;

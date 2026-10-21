@@ -93,6 +93,9 @@ private:
     state state_ = state::request_line;
     std::size_t read_pos_ = 0, header_bytes_ = 0, body_bytes_remaining_ = 0,
                 body_bytes_received_ = 0;
+    /// Offset in buf_ where the current message starts. Pipelined requests
+    /// advance it instead of moving the unread tail to the buffer front.
+    std::size_t message_start_ = 0;
     bool chunked_ = false, headers_ready_ = false, ready_ = false;
 };
 
