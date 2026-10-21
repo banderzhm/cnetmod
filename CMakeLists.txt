@@ -61,6 +61,29 @@ elseif(CMAKE_BUILD_TYPE MATCHES "^(Release|RelWithDebInfo|MinSizeRel)$")
     add_compile_definitions(NDEBUG)
 endif()
 
+# The same toolchains also drop the optimization level, which silently turns
+# an optimized configuration into an -O0 build.  Restore the CMake default
+# level only for configurations whose flags carry none.
+if(NOT MSVC)
+    set(_cnetmod_optimization_RELEASE -O3)
+    set(_cnetmod_optimization_RELWITHDEBINFO -O2)
+    set(_cnetmod_optimization_MINSIZEREL -Os)
+    foreach(_cnetmod_config RELEASE RELWITHDEBINFO MINSIZEREL)
+        if(NOT "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${_cnetmod_config}}"
+                MATCHES "(^| )-O")
+            if(_cnetmod_config STREQUAL "RELWITHDEBINFO")
+                set(_cnetmod_config_name RelWithDebInfo)
+            elseif(_cnetmod_config STREQUAL "MINSIZEREL")
+                set(_cnetmod_config_name MinSizeRel)
+            else()
+                set(_cnetmod_config_name Release)
+            endif()
+            add_compile_options(
+                "$<$<CONFIG:${_cnetmod_config_name}>:${_cnetmod_optimization_${_cnetmod_config}}>")
+        endif()
+    endforeach()
+endif()
+
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Protocols.cmake)
