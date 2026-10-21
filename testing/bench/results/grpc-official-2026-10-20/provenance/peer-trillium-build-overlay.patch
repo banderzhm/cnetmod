@@ -1,0 +1,17 @@
+--- official/trillium/Dockerfile
++++ local/trillium/Dockerfile
+@@ -2,12 +2,12 @@
+ WORKDIR /app
+ COPY Cargo.toml .
+ RUN mkdir src && echo "fn main() {}" > src/main.rs && \
+-    cargo build --release && \
++    cargo build --jobs 4 --release && \
+     rm -rf src/ target/release/httparena-trillium* target/release/deps/httparena_trillium*
+ COPY src ./src
+ COPY templates ./templates
+ COPY askama.toml .
+-RUN RUSTFLAGS="-C target-cpu=native" cargo build --release
++RUN RUSTFLAGS="-C target-cpu=native" cargo build --jobs 4 --release
+ 
+ FROM debian:bookworm-slim
+ COPY --from=build /app/target/release/httparena-trillium /server

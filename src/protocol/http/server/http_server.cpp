@@ -34,7 +34,9 @@ import cnetmod.executor.async_op;
 import cnetmod.executor.pool;
 import cnetmod.protocol.tcp;
 import cnetmod.utils.concurrent_containers.atomic_rw_latch;
+import cnetmod.utils.concurrent_containers.striped_hash_map;
 import cnetmod.protocol.http.v2.session;
+import cnetmod.protocol.http.v2.header_compression;
 
 #if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING)
 import cnetmod.io.platform.io_uring;
@@ -49,99 +51,167 @@ import cnetmod.core.ssl;
 namespace cnetmod::http {
 
 // =============================================================================
-// MIME Type Inference Implementation
-// =============================================================================
-
-auto guess_mime_type(std::string_view ext) noexcept -> std::string_view
-{
-    if (ext.empty())
-        return "application/octet-stream";
-    if (ext[0] == '.')
-        ext.remove_prefix(1);
-
-    // Text
-    if (ext == "html" || ext == "htm")
-        return "text/html; charset=utf-8";
-    if (ext == "css")
-        return "text/css; charset=utf-8";
-    if (ext == "js")
-        return "application/javascript; charset=utf-8";
-    if (ext == "json")
-        return "application/json; charset=utf-8";
-    if (ext == "xml")
-        return "application/xml; charset=utf-8";
-    if (ext == "txt")
-        return "text/plain; charset=utf-8";
-    if (ext == "csv")
-        return "text/csv; charset=utf-8";
-    if (ext == "md")
-        return "text/markdown; charset=utf-8";
-
-    // Images
-    if (ext == "png")
-        return "image/png";
-    if (ext == "jpg" || ext == "jpeg")
-        return "image/jpeg";
-    if (ext == "gif")
-        return "image/gif";
-    if (ext == "svg")
-        return "image/svg+xml";
-    if (ext == "ico")
-        return "image/x-icon";
-    if (ext == "webp")
-        return "image/webp";
-    if (ext == "bmp")
-        return "image/bmp";
-
-    // Audio/Video
-    if (ext == "mp3")
-        return "audio/mpeg";
-    if (ext == "mp4")
-        return "video/mp4";
-    if (ext == "webm")
-        return "video/webm";
-    if (ext == "ogg")
-        return "audio/ogg";
-    if (ext == "wav")
-        return "audio/wav";
-
-    // Compressed/Binary
-    if (ext == "pdf")
-        return "application/pdf";
-    if (ext == "zip")
-        return "application/zip";
-    if (ext == "gz" || ext == "gzip")
-        return "application/gzip";
-    if (ext == "tar")
-        return "application/x-tar";
-    if (ext == "wasm")
-        return "application/wasm";
-
-    // Fonts
-    if (ext == "woff")
-        return "font/woff";
-    if (ext == "woff2")
-        return "font/woff2";
-    if (ext == "ttf")
-        return "font/ttf";
-    if (ext == "otf")
-        return "font/otf";
-
-    return "application/octet-stream";
-}
-
-// =============================================================================
 // Static File Serving Implementation
 // =============================================================================
 
 namespace detail {
 
-    auto serve_dir_body(const static_file_options& opts, request_context& ctx)
+    struct cached_static_file
+    {
+        std::filesystem::path selected_path;
+        std::filesystem::file_time_type modified_at;
+        std::uint64_t size{};
+        std::string mime_type;
+        std::string content_encoding;
+        std::shared_ptr<const std::string> content;
+        std::chrono::steady_clock::time_point validated_at;
+        // The fixed 200 response shape is HPACK-encoded once per resource
+        // without dynamic-table references, so HTTP/2 can replay it verbatim.
+        std::shared_ptr<const preencoded_header_block> h2_headers;
+    };
+
+    struct static_file_state
+    {
+        explicit static_file_state(static_file_options value)
+            : options(std::move(value)), entries(64U, 16U) {}
+
+        static_file_options options;
+        concurrent_containers::striped_hash_map<std::string,
+            std::shared_ptr<const cached_static_file>>
+            entries;
+    };
+
+    struct static_file_stream
+    {
+        file source;
+        io_context* io{};
+        std::uint64_t offset{};
+        std::uint64_t remaining{};
+    };
+
+    auto resolve_static_file(static_file_state& state, request_context& ctx,
+        const std::string& relative, bool range_requested)
+        -> task<std::expected<std::shared_ptr<const cached_static_file>,
+            std::error_code>>
+    {
+        const auto accepted = ctx.get_header("Accept-Encoding");
+        auto requested_encoding = std::string_view{"identity"};
+        if (!range_requested && state.options.serve_precompressed)
+        {
+            if (accepts_content_encoding(accepted, "br"))
+                requested_encoding = "br";
+            else if (accepts_content_encoding(accepted, "gzip"))
+                requested_encoding = "gzip";
+        }
+        auto key = relative;
+        key.push_back('\n');
+        key.append(requested_encoding);
+
+        const auto now = std::chrono::steady_clock::now();
+        auto cached = state.entries.find(key).value_or(nullptr);
+        if (cached && now - cached->validated_at < state.options.revalidate_interval)
+            co_return cached;
+
+        auto original = state.options.root / relative;
+        std::error_code error;
+        if (std::filesystem::is_directory(original, error))
+            original /= state.options.index_file;
+        if (error || !std::filesystem::is_regular_file(original, error))
+            co_return std::unexpected(error ? error : std::make_error_code(std::errc::no_such_file_or_directory));
+
+        auto selected = original;
+        auto content_encoding = std::string{};
+        if (requested_encoding != "identity")
+        {
+            auto variant = original;
+            variant += requested_encoding == "br" ? ".br" : ".gz";
+            if (std::filesystem::is_regular_file(variant, error) && !error)
+            {
+                selected = std::move(variant);
+                content_encoding = requested_encoding == "br" ? "br" : "gzip";
+            }
+            error.clear();
+            if (content_encoding.empty() && requested_encoding == "br" &&
+                accepts_content_encoding(accepted, "gzip"))
+            {
+                variant = original;
+                variant += ".gz";
+                if (std::filesystem::is_regular_file(variant, error) && !error)
+                {
+                    selected = std::move(variant);
+                    content_encoding = "gzip";
+                }
+                error.clear();
+            }
+        }
+
+        const auto size = std::filesystem::file_size(selected, error);
+        if (error)
+            co_return std::unexpected(error);
+        const auto modified = std::filesystem::last_write_time(selected, error);
+        if (error)
+            co_return std::unexpected(error);
+
+        if (cached && cached->selected_path == selected &&
+            cached->size == size && cached->modified_at == modified)
+        {
+            auto refreshed = std::make_shared<cached_static_file>(*cached);
+            refreshed->validated_at = now;
+            state.entries.insert_or_assign(key, refreshed);
+            co_return refreshed;
+        }
+
+        std::shared_ptr<const std::string> content;
+        if (state.options.cache_max_file_size != 0U &&
+            size <= state.options.cache_max_file_size)
+        {
+            auto loaded = co_await async_file_read_all(ctx.io_ctx(), selected);
+            if (!loaded)
+                co_return std::unexpected(loaded.error());
+            content = std::make_shared<const std::string>(std::move(*loaded));
+        }
+
+        auto result = std::make_shared<cached_static_file>(cached_static_file{
+            .selected_path = std::move(selected),
+            .modified_at = modified,
+            .size = size,
+            .mime_type = std::string{guess_mime_type(
+                original.extension().string())},
+            .content_encoding = std::move(content_encoding),
+            .content = std::move(content),
+            .validated_at = now,
+        });
+        if (result->content)
+        {
+            std::vector<v2::header_field> fields{
+                {":status", "200"},
+                {"content-length", std::to_string(result->size)},
+                {"content-type", result->mime_type},
+                {"accept-ranges", "bytes"}};
+            if (state.options.serve_precompressed)
+                fields.push_back({"vary", "Accept-Encoding"});
+            if (!result->content_encoding.empty())
+                fields.push_back({"content-encoding", result->content_encoding});
+            // Capacity 0 forbids dynamic-table insertions, so the resulting
+            // block is self-contained and safe to share across connections.
+            v2::header_compression encoder(0);
+            if (auto block = encoder.encode(fields))
+            {
+                result->h2_headers =
+                    std::make_shared<const preencoded_header_block>(
+                        preencoded_header_block{status::ok, std::move(*block)});
+            }
+        }
+        state.entries.insert_or_assign(std::move(key), result);
+        co_return result;
+    }
+
+    auto serve_dir_body(static_file_state& state, request_context& ctx)
         -> task<void>
     {
         auto rel_path = ctx.wildcard();
         if (rel_path.empty())
-            rel_path = opts.index_file;
+            rel_path = state.options.index_file;
 
         auto rel_str = std::string(rel_path);
         if (rel_str.find("..") != std::string::npos)
@@ -150,39 +220,20 @@ namespace detail {
             co_return;
         }
 
-        auto full_path = opts.root / rel_str;
-
-        std::error_code ec;
-        if (std::filesystem::is_directory(full_path, ec))
+        const auto range_hdr = ctx.get_header("Range");
+        auto resolved = co_await resolve_static_file(
+            state, ctx, rel_str, !range_hdr.empty());
+        if (!resolved)
         {
-            full_path /= opts.index_file;
-        }
-
-        if (!std::filesystem::exists(full_path, ec))
-        {
-            ctx.not_found();
+            if (resolved.error() == std::errc::no_such_file_or_directory)
+                ctx.not_found();
+            else
+                ctx.text(status::internal_server_error, "500 Cannot read file");
             co_return;
         }
+        const auto& resource = **resolved;
+        const auto file_size = resource.size;
 
-        auto f = file::open(full_path, open_mode::read);
-        if (!f)
-        {
-            ctx.text(status::internal_server_error, "500 Cannot open file");
-            co_return;
-        }
-
-        auto file_size_r = f->size();
-        if (!file_size_r)
-        {
-            ctx.text(status::internal_server_error, "500 Cannot stat file");
-            co_return;
-        }
-        auto file_size = *file_size_r;
-
-        auto ext = full_path.extension().string();
-        auto mime = guess_mime_type(ext);
-
-        auto range_hdr = ctx.get_header("Range");
         std::uint64_t range_start = 0;
         std::uint64_t range_end = file_size == 0 ? 0 : file_size - 1;
         bool is_range = false;
@@ -228,33 +279,59 @@ namespace detail {
             range_start = 0;
             range_end = file_size == 0 ? 0 : file_size - 1;
         }
-        resp.set_header("Content-Type", mime);
+        resp.set_header("Content-Type", resource.mime_type);
         resp.set_header("Accept-Ranges", "bytes");
+        if (state.options.serve_precompressed)
+            resp.set_header("Vary", "Accept-Encoding");
+        if (!resource.content_encoding.empty())
+            resp.set_header("Content-Encoding", resource.content_encoding);
 
         const auto content_length = file_size == 0
             ? std::uint64_t{0}
             : range_end - range_start + 1;
-        auto source_file = std::make_shared<file>(std::move(*f));
-        auto offset = std::make_shared<std::uint64_t>(range_start);
-        auto remaining = std::make_shared<std::uint64_t>(content_length);
-        auto* io = &ctx.io_ctx();
+        if (resource.content)
+        {
+            if (!is_range)
+            {
+                resp.set_shared_body(resource.content);
+                resp.set_preencoded_h2_headers(resource.h2_headers);
+            }
+            else
+                resp.set_body(std::string_view{
+                    resource.content->data() + range_start,
+                    static_cast<std::size_t>(content_length)});
+            co_return;
+        }
+
+        auto opened = file::open(resource.selected_path, open_mode::read);
+        if (!opened)
+        {
+            ctx.text(status::internal_server_error, "500 Cannot open file");
+            co_return;
+        }
+        auto stream = std::make_shared<static_file_stream>(static_file_stream{
+            .source = std::move(*opened),
+            .io = &ctx.io_ctx(),
+            .offset = range_start,
+            .remaining = content_length,
+        });
         constexpr std::size_t chunk_size = 64U * 1024U;
         resp.set_body_source(std::make_shared<response_body_source>(
-            [source_file, offset, remaining, io, chunk_size](cancel_token& token)
+            [stream, chunk_size](cancel_token& token)
                 -> task<std::optional<request_body_chunk>>
             {
-                if (token.is_cancelled() || *remaining == 0)
+                if (token.is_cancelled() || stream->remaining == 0)
                     co_return std::nullopt;
                 const auto read_size = static_cast<std::size_t>(
-                    std::min<std::uint64_t>(*remaining, chunk_size));
+                    std::min<std::uint64_t>(stream->remaining, chunk_size));
                 request_body_chunk chunk(read_size);
-                auto read = co_await async_file_read(*io, *source_file,
-                    chunk.writable_view(), *offset, token);
+                auto read = co_await async_file_read(*stream->io,
+                    stream->source, chunk.writable_view(), stream->offset, token);
                 if (!read || *read == 0)
                     co_return std::nullopt;
                 chunk.resize(*read);
-                *offset += *read;
-                *remaining -= *read;
+                stream->offset += *read;
+                stream->remaining -= *read;
                 co_return chunk;
             },
             content_length));
@@ -265,10 +342,10 @@ namespace detail {
 
 auto serve_dir(static_file_options opts) -> handler_fn
 {
-    auto opts_ptr = std::make_shared<static_file_options>(std::move(opts));
-    return [opts_ptr](request_context& ctx) -> task<void>
+    auto state = std::make_shared<detail::static_file_state>(std::move(opts));
+    return [state](request_context& ctx) -> task<void>
     {
-        return detail::serve_dir_body(*opts_ptr, ctx);
+        return detail::serve_dir_body(*state, ctx);
     };
 }
 
@@ -456,7 +533,17 @@ namespace detail {
         v2::server_response result;
         result.status = static_cast<std::uint32_t>(output.status_code());
         result.body_text = output.take_body();
+        result.shared_body = output.take_shared_body();
         result.body_source = output.take_body_source();
+        result.preencoded_headers = output.take_preencoded_h2_headers();
+        if (result.preencoded_headers)
+        {
+            // The cached block already carries the fixed status and fields.
+            // Consume the builder's values without materializing strings.
+            output.take_headers([](std::string, std::string) {});
+            (void)output.take_trailers();
+            return result;
+        }
         result.headers.reserve(output.header_count());
         output.take_headers(
             [&result](std::string name, std::string value)
@@ -490,6 +577,11 @@ auto save_upload(upload_options opts) -> handler_fn
     {
         return detail::save_upload_body(*opts_ptr, ctx);
     };
+}
+
+auto take_h2_response(response& output) -> v2::server_response
+{
+    return detail::take_h2_response(output);
 }
 
 // =============================================================================
@@ -604,6 +696,7 @@ struct server::connection_registration
     server& owner;
     socket& client;
     cancel_token cancellation;
+    cancel_token write_cancellation;
     connection_registration* previous{};
     connection_registration* next{};
 
@@ -618,6 +711,7 @@ struct server::connection_registration
         if (owner.connections_aborted_)
         {
             cancellation.cancel();
+            write_cancellation.cancel();
             client.shutdown_both();
         }
     }
@@ -781,6 +875,15 @@ void server::set_router(router r)
     router_ = std::move(r);
 }
 
+void server::set_h2_sync_adapter(v2::sync_server_handler handler,
+    v2::buffered_request_filter filter)
+{
+    if (static_cast<bool>(handler) != static_cast<bool>(filter))
+        throw std::invalid_argument("HTTP/2 synchronous adapters require a matching request filter");
+    h2_sync_adapter_ = std::move(handler);
+    h2_sync_filter_ = std::move(filter);
+}
+
 void server::use(middleware_fn mw)
 {
     if (mw)
@@ -827,6 +930,7 @@ void server::abort_connections() noexcept
         // there after the terminal receive completion; this avoids destroying a
         // worker-loop registration from the control loop.
         connection->cancellation.cancel();
+        connection->write_cancellation.cancel();
         connection->client.shutdown_both();
     }
 }
@@ -1092,7 +1196,9 @@ auto server::handle_connection(socket client, io_context& io,
 
         if (ssl.get_alpn_selected() == "h2")
         {
-            co_await handle_h2_tls(client, io, ssl, registration.cancellation);
+            (void)client.apply_options({.non_blocking = false, .no_delay = true});
+            co_await handle_h2_tls(client, io, ssl, registration.cancellation,
+                registration.write_cancellation);
         }
         else
         {
@@ -1149,7 +1255,7 @@ auto server::handle_connection(socket client, io_context& io,
         (void)client.apply_options({.non_blocking = false, .no_delay = true});
 
         co_await handle_h2(client, io, {peek_buf->data(), peek_len},
-            registration.cancellation);
+            registration.cancellation, registration.write_cancellation);
         co_return;
     }
 
@@ -1281,6 +1387,10 @@ auto server::make_h2_sync_handler(io_context& io, socket& client)
         if (!middlewares_.empty() || request.body_stream)
             return std::nullopt;
 
+        if (h2_sync_adapter_)
+            if (auto response = h2_sync_adapter_(request, cancellation))
+                return response;
+
         std::string_view method = "GET";
         std::string_view uri = "/";
         std::array<request_header_view, 32> headers{};
@@ -1326,22 +1436,57 @@ auto server::make_h2_sync_handler(io_context& io, socket& client)
     };
 }
 
-auto server::handle_h2(socket& client, io_context& io,
-    std::span<const std::byte> initial, cancel_token& cancellation) -> task<void>
+auto server::make_h2_buffered_request_filter() -> v2::buffered_request_filter
 {
+    const bool sync_routes = std::ranges::any_of(router_.entries_,
+        [](const auto& route)
+        {
+            return static_cast<bool>(route.sync_handler);
+        });
+    if (!middlewares_.empty() || (!sync_routes && !h2_sync_filter_))
+        return {};
+    return [this, sync_routes](std::span<const v2::header_field> headers)
+    {
+        if (h2_sync_filter_ && h2_sync_filter_(headers))
+            return true;
+        if (!sync_routes)
+            return false;
+        std::string_view method = "GET", uri = "/";
+        for (const auto& field : headers)
+        {
+            if (field.name == ":method")
+                method = field.value;
+            else if (field.name == ":path")
+                uri = field.value;
+        }
+        const auto path = uri.substr(0, uri.find('?'));
+        auto match = router_.match_borrowed(method, path);
+        return match && match->route->sync_handler && !match->route->request_stream;
+    };
+}
+
+auto server::handle_h2(socket& client, io_context& io,
+    std::span<const std::byte> initial, cancel_token& cancellation,
+    cancel_token& write_cancellation) -> task<void>
+{
+    // Reads and writes overlap on multiplexed connections. A cancel_token
+    // owns one pending operation; sharing it loses the reader's completion.
+    // abort_connections() cancels both tokens and shuts down the socket.
     auto reader = [&io, &client, &cancellation](mutable_buffer buffer)
         -> task<std::expected<std::size_t, std::error_code>>
     {
         co_return co_await async_read(io, client, buffer, cancellation);
     };
-    auto writer = [&io, &client, &cancellation](const_buffer buffer)
+    auto writer = [&io, &client, &write_cancellation](const_buffer buffer)
         -> task<std::expected<void, std::error_code>>
     {
-        co_return co_await async_write_all(io, client, buffer, cancellation);
+        co_return co_await async_write_all(io, client, buffer, write_cancellation);
     };
+    auto filter = make_h2_buffered_request_filter();
+    const bool buffer_complete = static_cast<bool>(filter);
     v2::session session(io, client, make_h2_streaming_handler(io, client), {},
         std::move(reader), std::move(writer),
-        make_h2_sync_handler(io, client));
+        make_h2_sync_handler(io, client), buffer_complete, std::move(filter));
     co_await session.run(initial);
 }
 
@@ -1484,7 +1629,8 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                         std::make_unique<std::array<std::byte, 8192>>();
                 auto rd = co_await async_read(io, client,
                     mutable_buffer{fallback_buffer->data(),
-                        fallback_buffer->size()}, cancellation);
+                        fallback_buffer->size()},
+                    cancellation);
                 if (!rd || *rd == 0)
                 {
 #if defined(CNETMOD_HAS_IO_URING) &&             \
@@ -1498,7 +1644,8 @@ auto server::handle_h1_clear(socket& client, io_context& io,
 
                 auto consumed =
                     parser.consume(reinterpret_cast<const char*>(
-                        fallback_buffer->data()), *rd);
+                                       fallback_buffer->data()),
+                        *rd);
                 if (!consumed)
                 {
 #if defined(CNETMOD_HAS_IO_URING) &&             \
@@ -1521,7 +1668,10 @@ auto server::handle_h1_clear(socket& client, io_context& io,
             auto qpos = uri.find('?');
             auto path = (qpos != std::string_view::npos) ? uri.substr(0, qpos) : uri;
 
-            auto mr = router_.match(parser.method(), path);
+            // Borrow the route: the synchronous fast path calls the router's
+            // handler in place (as HTTP/2 does) instead of copying two
+            // std::function objects per request.
+            auto mr = router_.match_borrowed(parser.method(), path);
 
             resp.reset(status::ok, parser.version());
             if (response_headers_.emit_server)
@@ -1529,23 +1679,29 @@ auto server::handle_h1_clear(socket& client, io_context& io,
             if (response_headers_.emit_date)
                 resp.set_cached_date_header(date_cache_.get());
             route_params rp;
-            handler_fn handler;
-            sync_handler_fn sync_handler;
+            const sync_handler_fn* sync_route = nullptr;
+            std::optional<handler_fn> owned_handler;
+            connection_upgrade_handler connection_upgrade;
 
             if (mr)
             {
-                handler = std::move(mr->handler);
-                sync_handler = std::move(mr->sync_handler);
+                if (mr->route->sync_handler)
+                    sync_route = &mr->route->sync_handler;
                 rp = std::move(mr->params);
             }
-            else
+            // Asynchronous handlers and middleware chains take a mutable copy;
+            // it is materialised only when one of those paths needs it.
+            auto handler_for_chain = [&]() -> handler_fn&
             {
-                handler = detail::unmatched_route_handler(router_, path);
-            }
+                if (!owned_handler)
+                    owned_handler.emplace(mr ? mr->route->handler
+                                             : detail::unmatched_route_handler(router_, path));
+                return *owned_handler;
+            };
 
-            if (mr && mr->request_stream)
+            if (mr && mr->route->request_stream)
             {
-                const auto options = *mr->request_stream;
+                const auto options = *mr->route->request_stream;
                 auto body_stream = std::make_shared<request_body_stream>(
                     options.chunk_capacity, options.max_bytes);
                 request_context rctx(io, client, parser, resp, std::move(rp),
@@ -1597,9 +1753,9 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                 auto invoke_handler = [&]() -> task<void>
                 {
                     if (middlewares_.empty())
-                        co_await handler(rctx);
+                        co_await handler_for_chain()(rctx);
                     else
-                        co_await execute_chain(rctx, handler);
+                        co_await execute_chain(rctx, handler_for_chain());
                     body_stream->close();
                 };
                 co_await when_all(invoke_handler(), pump_body());
@@ -1608,6 +1764,7 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                     resp.get_header("X-Streamed") != "1")
                     rctx.text(status::payload_too_large,
                         "Request body exceeds the route limit");
+                connection_upgrade = rctx.take_connection_upgrade();
             }
             else
             {
@@ -1615,8 +1772,9 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                     if (!(co_await receive_more()))
                         co_return;
                 request_context rctx(io, client, parser, resp, std::move(rp));
-                if (middlewares_.empty() && sync_handler)
-                    sync_handler(rctx);
+                rctx.enable_connection_upgrade();
+                if (middlewares_.empty() && sync_route)
+                    (*sync_route)(rctx);
                 else
                 {
                     rctx.set_stream_writer(
@@ -1638,17 +1796,17 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                                 const_buffer{bytes.data(), bytes.size()}, token);
                         });
                     if (middlewares_.empty())
-                        co_await handler(rctx);
+                        co_await handler_for_chain()(rctx);
                     else
                     {
                         handler_fn adapted;
-                        auto* selected = &handler;
-                        if (sync_handler)
+                        auto* selected = &handler_for_chain();
+                        if (sync_route)
                         {
-                            adapted = [&sync_handler](request_context& context)
+                            adapted = [sync_route](request_context& context)
                                 -> task<void>
                             {
-                                sync_handler(context);
+                                (*sync_route)(context);
                                 co_return;
                             };
                             selected = &adapted;
@@ -1656,6 +1814,39 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                         co_await execute_chain(rctx, *selected);
                     }
                 }
+                connection_upgrade = rctx.take_connection_upgrade();
+            }
+
+            if (connection_upgrade)
+            {
+                if (parser.version() != http_version::http_1_1 ||
+                    resp.status_code() != status::switching_protocols ||
+                    !resp.body().empty() || resp.body_source() ||
+                    resp.get_header("X-Streamed") == "1")
+                    co_return;
+#if defined(CNETMOD_HAS_IO_URING) &&             \
+    defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
+    defined(IORING_RECV_MULTISHOT) &&            \
+    defined(IORING_CQE_F_BUFFER) && defined(IORING_CQE_F_MORE)
+                auto received = parser.take_buffered_data();
+                co_await stop_recv();
+                if (recv_stream)
+                    recv_stream->append_buffered_data(received);
+                recv_stream.reset();
+#else
+            auto received = parser.take_buffered_data();
+#endif
+                resp.append_serialized_to(pending_responses);
+                auto written = co_await async_write_all(io, client,
+                    const_buffer{pending_responses.data(),
+                        pending_responses.size()},
+                    cancellation);
+                if (!written)
+                    co_return;
+                pending_responses.clear();
+                co_await connection_upgrade(
+                    io, std::move(client), std::move(received));
+                co_return;
             }
             const bool has_body_source = static_cast<bool>(resp.body_source());
             if (has_body_source)
@@ -1778,7 +1969,7 @@ auto server::handle_h1_clear(socket& client, io_context& io,
 // =============================================================================
 
 auto server::handle_h2_tls(socket& client, io_context& io, ssl_stream& ssl,
-    cancel_token& cancellation) -> task<void>
+    cancel_token& cancellation, cancel_token& write_cancellation) -> task<void>
 {
     auto reader = [&ssl, &cancellation](mutable_buffer buffer)
         -> task<std::expected<std::size_t, std::error_code>>
@@ -1786,20 +1977,33 @@ auto server::handle_h2_tls(socket& client, io_context& io, ssl_stream& ssl,
         co_return co_await ssl.async_read(buffer, cancellation);
     };
     auto writer =
-        [&ssl, &cancellation](
+        [&ssl, &write_cancellation](
             const_buffer buffer) -> task<std::expected<void, std::error_code>>
     {
-        co_return co_await ssl.async_write_all(buffer, cancellation);
+        co_return co_await ssl.async_write_all(buffer, write_cancellation);
     };
+    auto filter = make_h2_buffered_request_filter();
+    const bool buffer_complete = static_cast<bool>(filter);
     v2::session session(io, client, make_h2_streaming_handler(io, client), {},
         std::move(reader), std::move(writer),
-        make_h2_sync_handler(io, client));
+        make_h2_sync_handler(io, client), buffer_complete, std::move(filter));
+    // Static responses are framed by reference and sealed straight from the
+    // shared file cache instead of being copied into the frame buffer first.
+    session.set_gather_writer(
+        [&ssl, &write_cancellation](std::span<const const_buffer> parts)
+            -> task<std::expected<void, std::error_code>>
+        {
+            co_return co_await ssl.async_write_gather(parts, write_cancellation);
+        });
     co_await session.run();
 }
 
 auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
     cancel_token& cancellation) -> task<void>
 {
+    // Bodies at least this large are sealed from their own storage; smaller
+    // ones are cheaper to batch with pipelined neighbours by copying.
+    constexpr std::size_t tls_gather_body_threshold = 4U * 1024U;
     bool keep_alive = true;
     response resp(status::ok);
     std::string pending_responses;
@@ -1880,7 +2084,10 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
         auto qpos = uri.find('?');
         auto path = (qpos != std::string_view::npos) ? uri.substr(0, qpos) : uri;
 
-        auto mr = router_.match(parser.method(), path);
+        // Borrow the route: the synchronous fast path calls the router's
+        // handler in place (as HTTP/2 does) instead of copying two
+        // std::function objects per request.
+        auto mr = router_.match_borrowed(parser.method(), path);
 
         resp.reset(status::ok, parser.version());
         if (response_headers_.emit_server)
@@ -1888,23 +2095,28 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
         if (response_headers_.emit_date)
             resp.set_cached_date_header(date_cache_.get());
         route_params rp;
-        handler_fn handler;
-        sync_handler_fn sync_handler;
+        const sync_handler_fn* sync_route = nullptr;
+        std::optional<handler_fn> owned_handler;
 
         if (mr)
         {
-            handler = std::move(mr->handler);
-            sync_handler = std::move(mr->sync_handler);
+            if (mr->route->sync_handler)
+                sync_route = &mr->route->sync_handler;
             rp = std::move(mr->params);
         }
-        else
+        // Asynchronous handlers and middleware chains take a mutable copy;
+        // it is materialised only when one of those paths needs it.
+        auto handler_for_chain = [&]() -> handler_fn&
         {
-            handler = detail::unmatched_route_handler(router_, path);
-        }
+            if (!owned_handler)
+                owned_handler.emplace(mr ? mr->route->handler
+                                         : detail::unmatched_route_handler(router_, path));
+            return *owned_handler;
+        };
 
-        if (mr && mr->request_stream)
+        if (mr && mr->route->request_stream)
         {
-            const auto options = *mr->request_stream;
+            const auto options = *mr->route->request_stream;
             auto body_stream = std::make_shared<request_body_stream>(
                 options.chunk_capacity, options.max_bytes);
             request_context rctx(io, client, parser, resp, std::move(rp),
@@ -1939,9 +2151,9 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
             auto invoke_handler = [&]() -> task<void>
             {
                 if (middlewares_.empty())
-                    co_await handler(rctx);
+                    co_await handler_for_chain()(rctx);
                 else
-                    co_await execute_chain(rctx, handler);
+                    co_await execute_chain(rctx, handler_for_chain());
                 body_stream->close();
             };
             co_await when_all(invoke_handler(), pump_body());
@@ -1957,23 +2169,23 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
                 if (!(co_await receive_more()))
                     co_return;
             request_context rctx(io, client, parser, resp, std::move(rp));
-            if (middlewares_.empty() && sync_handler)
-                sync_handler(rctx);
+            if (middlewares_.empty() && sync_route)
+                (*sync_route)(rctx);
             else
             {
                 configure_stream_writer(rctx);
                 if (middlewares_.empty())
-                    co_await handler(rctx);
+                    co_await handler_for_chain()(rctx);
                 else
                 {
                     handler_fn adapted;
-                    auto* selected = &handler;
-                    if (sync_handler)
+                    auto* selected = &handler_for_chain();
+                    if (sync_route)
                     {
-                        adapted = [&sync_handler](request_context& context)
+                        adapted = [sync_route](request_context& context)
                             -> task<void>
                         {
-                            sync_handler(context);
+                            (*sync_route)(context);
                             co_return;
                         };
                         selected = &adapted;
@@ -2023,6 +2235,21 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
                 }
                 // Send chunked response (TLS)
                 co_await send_chunked_response_tls(io, ssl, resp, cancellation);
+            }
+            else if (const auto body = resp.body(); body.size() >= tls_gather_body_threshold)
+            {
+                // Seal a large body straight from response storage (often the
+                // shared static-file cache) instead of copying it behind the
+                // header block; queued pipelined responses go out first in
+                // the same flush.
+                resp.append_serialized_headers_to(pending_responses);
+                const std::array<const_buffer, 2> parts{
+                    const_buffer{pending_responses.data(), pending_responses.size()},
+                    const_buffer{body.data(), body.size()}};
+                auto written = co_await ssl.async_write_gather(parts, cancellation);
+                if (!written)
+                    co_return;
+                pending_responses.clear();
             }
             else
             {

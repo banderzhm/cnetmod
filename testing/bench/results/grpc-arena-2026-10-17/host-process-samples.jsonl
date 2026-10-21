@@ -1,0 +1,73 @@
+{"time": 1792232269.3435228, "hot": []}
+{"time": 1792232270.3454487, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 401}, {"pid": 324754, "comm": "h2load", "ticks": 380}]}
+{"time": 1792232271.3464973, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 381}, {"pid": 324722, "comm": "python", "ticks": 11}]}
+{"time": 1792232272.3499207, "hot": [{"pid": 324722, "comm": "python", "ticks": 62}]}
+{"time": 1792232273.3519378, "hot": []}
+{"time": 1792232274.3541658, "hot": []}
+{"time": 1792232275.3572254, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 188}, {"pid": 324808, "comm": "mv", "ticks": 8}]}
+{"time": 1792232276.3595972, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 394}, {"pid": 324808, "comm": "mv", "ticks": 16}, {"pid": 324833, "comm": "h2load", "ticks": 367}]}
+{"time": 1792232277.3622684, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 370}, {"pid": 324808, "comm": "mv", "ticks": 14}]}
+{"time": 1792232278.3643825, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 391}, {"pid": 324808, "comm": "mv", "ticks": 11}, {"pid": 324838, "comm": "h2load", "ticks": 373}]}
+{"time": 1792232279.366307, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 393}, {"pid": 324808, "comm": "mv", "ticks": 11}, {"pid": 324838, "comm": "h2load", "ticks": 378}]}
+{"time": 1792232280.369885, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 394}, {"pid": 324838, "comm": "h2load", "ticks": 381}]}
+{"time": 1792232281.3728662, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 392}, {"pid": 324838, "comm": "h2load", "ticks": 378}, {"pid": 324853, "comm": "cargo", "ticks": 17}]}
+{"time": 1792232282.374268, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 296}, {"pid": 324722, "comm": "python", "ticks": 32}]}
+{"time": 1792232283.3756375, "hot": [{"pid": 324722, "comm": "python", "ticks": 47}, {"pid": 324858, "comm": "rustc", "ticks": 96}, {"pid": 324859, "comm": "rustc", "ticks": 96}, {"pid": 324874, "comm": "cc1", "ticks": 92}]}
+{"time": 1792232284.3767686, "hot": [{"pid": 324858, "comm": "rustc", "ticks": 89}, {"pid": 324859, "comm": "rustc", "ticks": 84}, {"pid": 324874, "comm": "cc1", "ticks": 47}]}
+{"time": 1792232285.3780081, "hot": []}
+{"time": 1792232286.382388, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 249}, {"pid": 325149, "comm": "rustc", "ticks": 41}]}
+{"time": 1792232287.3862565, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 389}, {"pid": 325213, "comm": "rustc", "ticks": 26}, {"pid": 325214, "comm": "h2load", "ticks": 365}]}
+{"time": 1792232288.3900793, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 356}]}
+{"time": 1792232289.392819, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 395}, {"pid": 325382, "comm": "h2load", "ticks": 378}, {"pid": 325394, "comm": "rustc", "ticks": 96}]}
+{"time": 1792232290.395822, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 395}, {"pid": 325382, "comm": "h2load", "ticks": 381}, {"pid": 325394, "comm": "rustc", "ticks": 99}, {"pid": 325444, "comm": "rustc", "ticks": 98}]}
+{"time": 1792232291.3998764, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 395}, {"pid": 325382, "comm": "h2load", "ticks": 376}, {"pid": 325394, "comm": "rustc", "ticks": 98}, {"pid": 325444, "comm": "rustc", "ticks": 95}]}
+{"time": 1792232292.402821, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 392}, {"pid": 325382, "comm": "h2load", "ticks": 373}, {"pid": 325444, "comm": "rustc", "ticks": 91}]}
+{"time": 1792232293.4039495, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 233}, {"pid": 324722, "comm": "python", "ticks": 47}]}
+{"time": 1792232294.4051452, "hot": [{"pid": 324722, "comm": "python", "ticks": 13}]}
+{"time": 1792232295.4062722, "hot": [{"pid": 325749, "comm": "rustc", "ticks": 95}]}
+{"time": 1792232296.4076107, "hot": [{"pid": 325749, "comm": "rustc", "ticks": 98}]}
+{"time": 1792232297.417446, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 268}, {"pid": 325889, "comm": "rustc", "ticks": 103}, {"pid": 325953, "comm": "rustc", "ticks": 100}]}
+{"time": 1792232298.4215763, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 394}, {"pid": 325889, "comm": "rustc", "ticks": 95}, {"pid": 325953, "comm": "rustc", "ticks": 98}, {"pid": 326017, "comm": "h2load", "ticks": 352}]}
+{"time": 1792232299.4239202, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 342}, {"pid": 324853, "comm": "cargo", "ticks": 5}]}
+{"time": 1792232300.4281833, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 394}, {"pid": 326155, "comm": "h2load", "ticks": 377}, {"pid": 326185, "comm": "rustc", "ticks": 100}, {"pid": 326222, "comm": "rustc", "ticks": 99}, {"pid": 326228, "comm": "build-script-bu", "ticks": 18}]}
+{"time": 1792232301.432126, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 396}, {"pid": 326155, "comm": "h2load", "ticks": 375}, {"pid": 326185, "comm": "rustc", "ticks": 99}, {"pid": 326222, "comm": "rustc", "ticks": 95}, {"pid": 326237, "comm": "rustc", "ticks": 88}]}
+{"time": 1792232302.4346428, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 399}, {"pid": 326155, "comm": "h2load", "ticks": 368}, {"pid": 326185, "comm": "rustc", "ticks": 99}, {"pid": 326222, "comm": "rustc", "ticks": 102}, {"pid": 326237, "comm": "rustc", "ticks": 100}]}
+{"time": 1792232303.4361203, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 395}, {"pid": 326155, "comm": "h2load", "ticks": 372}, {"pid": 326185, "comm": "rustc", "ticks": 94}, {"pid": 326222, "comm": "rustc", "ticks": 98}]}
+{"time": 1792232304.4373732, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 255}, {"pid": 325938, "comm": "python", "ticks": 47}, {"pid": 326185, "comm": "rustc", "ticks": 100}]}
+{"time": 1792232305.4421368, "hot": [{"pid": 326185, "comm": "rustc", "ticks": 100}]}
+{"time": 1792232306.443321, "hot": [{"pid": 326185, "comm": "rustc", "ticks": 99}, {"pid": 326418, "comm": "rustc", "ticks": 99}, {"pid": 326452, "comm": "rustc", "ticks": 97}, {"pid": 326483, "comm": "rustc", "ticks": 96}]}
+{"time": 1792232307.4468732, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 15}, {"pid": 326185, "comm": "rustc", "ticks": 102}, {"pid": 326418, "comm": "rustc", "ticks": 92}, {"pid": 326452, "comm": "rustc", "ticks": 100}]}
+{"time": 1792232308.4484353, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 400}, {"pid": 326185, "comm": "rustc", "ticks": 98}, {"pid": 326418, "comm": "rustc", "ticks": 99}, {"pid": 326452, "comm": "rustc", "ticks": 99}, {"pid": 326551, "comm": "h2load", "ticks": 310}]}
+{"time": 1792232309.452702, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 398}, {"pid": 326185, "comm": "rustc", "ticks": 100}, {"pid": 326418, "comm": "rustc", "ticks": 100}, {"pid": 326452, "comm": "rustc", "ticks": 100}, {"pid": 326551, "comm": "h2load", "ticks": 337}]}
+{"time": 1792232310.4545908, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 342}, {"pid": 326185, "comm": "rustc", "ticks": 100}, {"pid": 326418, "comm": "rustc", "ticks": 105}, {"pid": 326452, "comm": "rustc", "ticks": 103}, {"pid": 326599, "comm": "rustc", "ticks": 99}]}
+{"time": 1792232311.4565926, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 398}, {"pid": 326185, "comm": "rustc", "ticks": 99}, {"pid": 326418, "comm": "rustc", "ticks": 98}, {"pid": 326452, "comm": "rustc", "ticks": 99}, {"pid": 326606, "comm": "h2load", "ticks": 309}]}
+{"time": 1792232312.4589775, "hot": [{"pid": 324688, "comm": "candidate-serve", "ticks": 398}, {"pid": 326185, "comm": "rustc", "ticks": 99}, {"pid": 326418, "comm": "rustc", "ticks": 99}, {"pid": 326452, "comm": "rustc", "ticks": 99}, {"pid": 326606, "comm": "h2load", "ticks": 358}]}
+{"time": 1792232313.460153, "hot": [{"pid": 326185, "comm": "rustc", "ticks": 99}, {"pid": 326418, "comm": "rustc", "ticks": 98}, {"pid": 326452, "comm": "rustc", "ticks": 98}]}
+{"time": 1792232314.4613113, "hot": [{"pid": 326185, "comm": "rustc", "ticks": 98}, {"pid": 326452, "comm": "rustc", "ticks": 98}, {"pid": 326695, "comm": "rustc", "ticks": 100}]}
+{"time": 1792232315.4624205, "hot": [{"pid": 326185, "comm": "rustc", "ticks": 96}, {"pid": 326452, "comm": "rustc", "ticks": 98}, {"pid": 326737, "comm": "rustc", "ticks": 93}]}
+{"time": 1792232316.463605, "hot": [{"pid": 326737, "comm": "rustc", "ticks": 99}]}
+{"time": 1792232317.464655, "hot": [{"pid": 326737, "comm": "rustc", "ticks": 100}, {"pid": 326786, "comm": "rustc", "ticks": 97}, {"pid": 326812, "comm": "rustc", "ticks": 95}]}
+{"time": 1792232318.4656959, "hot": [{"pid": 326737, "comm": "rustc", "ticks": 157}, {"pid": 326812, "comm": "rustc", "ticks": 105}, {"pid": 326863, "comm": "rustc", "ticks": 70}]}
+{"time": 1792232319.4666975, "hot": [{"pid": 326863, "comm": "rustc", "ticks": 330}]}
+{"time": 1792232320.4677112, "hot": []}
+{"time": 1792232321.470019, "hot": [{"pid": 326932, "comm": "rustc", "ticks": 179}]}
+{"time": 1792232322.4715188, "hot": []}
+{"time": 1792232323.4727213, "hot": []}
+{"time": 1792232324.473832, "hot": []}
+{"time": 1792232325.4794455, "hot": []}
+{"time": 1792232326.4803987, "hot": []}
+{"time": 1792232327.4837554, "hot": []}
+{"time": 1792232328.48635, "hot": []}
+{"time": 1792232329.4899323, "hot": []}
+{"time": 1792232330.493004, "hot": []}
+{"time": 1792232331.4958787, "hot": []}
+{"time": 1792232332.4976513, "hot": []}
+{"time": 1792232333.4992054, "hot": []}
+{"time": 1792232334.500982, "hot": []}
+{"time": 1792232335.5026653, "hot": []}
+{"time": 1792232336.503677, "hot": []}
+{"time": 1792232337.5047593, "hot": []}
+{"time": 1792232338.5058622, "hot": []}
+{"time": 1792232339.5072973, "hot": []}
+{"time": 1792232340.5083566, "hot": []}
+{"time": 1792232341.5095541, "hot": []}

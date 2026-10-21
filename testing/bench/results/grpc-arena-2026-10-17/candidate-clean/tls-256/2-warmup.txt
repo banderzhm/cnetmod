@@ -1,0 +1,49 @@
+starting benchmark...
+spawning thread #0: 64 total client(s). Timing-based test with 0s of warm-up time and 2s of main duration for measurements.
+spawning thread #1: 64 total client(s). Timing-based test with 0s of warm-up time and 2s of main duration for measurements.
+spawning thread #2: 64 total client(s). Timing-based test with 0s of warm-up time and 2s of main duration for measurements.
+spawning thread #3: 64 total client(s). Timing-based test with 0s of warm-up time and 2s of main duration for measurements.
+Warm-up started for thread #1.
+Warm-up started for thread #2.
+Warm-up started for thread #3.
+Warm-up started for thread #0.
+progress: 9% of clients started
+progress: 18% of clients started
+progress: 28% of clients started
+progress: 37% of clients started
+progress: 46% of clients started
+progress: 56% of clients started
+progress: 65% of clients started
+progress: 75% of clients started
+Warm-up phase is over for thread #3.
+progress: Main benchmark duration is started for thread #843.
+Warm-up phase is over for thread #% of clients started2.
+Main benchmark duration is started for thread #2.
+
+Warm-up phase is over for thread #1.
+Main benchmark duration is started for thread #1.
+progress: 93% of clients started
+Warm-up phase is over for thread #0.
+Main benchmark duration is started for thread #0.
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+Main benchmark duration is over for thread #2. Stopping all clients.
+Stopped all clients for thread #2
+Main benchmark duration is over for thread #3. Stopping all clients.
+Main benchmark duration is over for thread #1. Stopping all clients.
+Stopped all clients for thread #3
+Stopped all clients for thread #1
+Main benchmark duration is over for thread #0. Stopping all clients.
+Stopped all clients for thread #0
+
+finished in 2.07s, 423735.00 req/s, 17.58MB/s
+requests: 847470 total, 873070 started, 847470 done, 847470 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 847470 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 35.15MB (36860365) total, 3.24MB (3396280) headers (space savings 93.83%), 5.66MB (5932290) data
+                     min         max         mean         sd        +/- sd
+time for request:     3.22ms    136.09ms     58.34ms     12.40ms    79.10%
+time for connect:     4.01ms     37.99ms     23.22ms      7.15ms    68.75%
+time to 1st byte:    30.43ms     67.85ms     46.83ms     11.13ms    64.06%
+req/s           :    1391.75     1841.41     1654.29      169.33    53.52%

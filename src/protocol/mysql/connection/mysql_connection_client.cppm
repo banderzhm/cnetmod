@@ -316,6 +316,7 @@ private:
 
     // Read buffer
     std::array<std::uint8_t, 8192> rbuf_{};
+    std::vector<std::uint8_t> small_write_buffer_;
     std::size_t rbuf_pos_ = 0;
     std::size_t rbuf_len_ = 0;
 

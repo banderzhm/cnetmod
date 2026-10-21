@@ -1,0 +1,5 @@
+profile,connections,candidate,baseline,baseline_gain_percent,fastest_peer,peer,target,peer_gain_percent,passed
+unary-grpc,256,5547569,922376,501.4433376410488,cnetmod-grpc-vanilla-certified,5006542,5507197,10.806400905055824,True
+unary-grpc,1024,5243930,587387,792.7555427682261,cnetmod-grpc-vanilla-certified,4720019,5192021,11.09976464077793,True
+unary-grpc-tls,256,5287944,1035955,410.44147670506925,cnetmod-grpc-cardigan-certified,4455897,4901487,18.672940599838817,True
+unary-grpc-tls,1024,4896284,600501,715.3665023039096,cnetmod-grpc-cardigan-certified,3814210,4195631,28.36954441417752,True

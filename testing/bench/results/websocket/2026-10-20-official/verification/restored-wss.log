@@ -1,0 +1,1 @@
+PASS: upgrade, text/binary boundaries, fragmented header, ping, continuation, pipeline and close

@@ -1,0 +1,208 @@
+[info] available CPUs: 32
+[info] load generators: docker mode
+[info] framework: cnetmod-grpc-cardigan-certified (cnetmod-grpc-cardigan-certified, Java)
+[info] subscribed tests: unary-grpc,unary-grpc-tls
+[info] building image: httparena-cnetmod-grpc-cardigan-certified
+[info] skipping system tuning as requested (SKIP_TUNE=true)
+
+==============================================
+=== cnetmod-grpc-cardigan-certified / unary-grpc-tls / 256c (tool=h2load) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] gRPC server ready
+
+[run 1/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+
+2.
+45.
+..
+3557.
+.
+15.
+28. Stopping all clients.
+58. Stopping all clients.
+61. Stopping all clients.
+32
+30. Stopping all clients.
+1. Stopping all clients.
+
+finished in 5.06s, 3872520.00 req/s, 269.61MB/s
+requests: 19362600 total, 19388200 started, 19362600 done, 19362600 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 19362600 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 1.32GB (1413543440) total, 720.16MB (755141400) headers (space savings 40.00%), 129.26MB (135538200) data
+                     min         max         mean         sd        +/- sd
+time for request:      363us    317.65ms      7.27ms     13.45ms    95.81%
+time for connect:     3.13ms    401.15ms     76.84ms     77.36ms    91.80%
+time to 1st byte:    83.43ms    414.64ms    212.30ms     69.20ms    68.36%
+req/s           :    8716.72    23878.39    15121.54     3432.31    65.63%
+[info] CPU 589.0% | Mem 1.6GiB
+
+[run 2/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+60.
+17.
+21.
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+
+58..
+
+.
+. Stopping all clients.
+. Stopping all clients.Main benchmark duration is over for thread #Stopped all clients for thread #50
+
+
+5. Stopping all clients.
+10
+
+finished in 5.08s, 4241000.00 req/s, 295.27MB/s
+requests: 21205000 total, 21230600 started, 21205000 done, 21205000 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 21205000 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 1.44GB (1548045218) total, 788.68MB (826995000) headers (space savings 40.00%), 141.56MB (148435000) data
+                     min         max         mean         sd        +/- sd
+time for request:      261us    526.95ms      5.31ms      6.59ms    92.70%
+time for connect:     3.25ms     40.70ms     12.54ms      6.69ms    78.91%
+time to 1st byte:     8.38ms    179.31ms     30.76ms     17.38ms    68.75%
+req/s           :    9313.25    27633.25    16562.24     4199.87    62.11%
+[info] CPU 798.4% | Mem 1.7GiB
+
+[run 3/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+23.
+19.
+9.
+37.
+35.
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+. Stopping all clients.
+
+finished in 5.07s, 4518280.00 req/s, 314.57MB/s
+requests: 22591400 total, 22617000 started, 22591400 done, 22591400 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 22591400 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 1.54GB (1649257345) total, 840.25MB (881064600) headers (space savings 40.00%), 150.81MB (158139800) data
+                     min         max         mean         sd        +/- sd
+time for request:      319us    264.55ms      5.82ms     10.44ms    94.77%
+time for connect:     2.92ms    102.25ms     12.55ms      9.27ms    90.23%
+time to 1st byte:     5.38ms    186.04ms     25.35ms     21.65ms    92.19%
+req/s           :    4759.28    37659.02    17646.58    11031.90    54.69%
+[info] CPU 910.4% | Mem 1.7GiB
+
+=== Best: 4455897 req/s (CPU: 910.4%, Mem: 1.7GiB) ===
+[info] saved results/unary-grpc-tls/256/cnetmod-grpc-cardigan-certified.json
+httparena-bench-cnetmod-grpc-cardigan-certified
+httparena-bench-cnetmod-grpc-cardigan-certified
+
+==============================================
+=== cnetmod-grpc-cardigan-certified / unary-grpc-tls / 1024c (tool=h2load) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] gRPC server ready
+
+[run 1/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+31.Main benchmark duration is started for thread #16.
+.
+
+41.
+7.
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+
+12
+60. Stopping all clients.
+
+36Stopped all clients for thread #23
+54. Stopping all clients.Main benchmark duration is over for thread #17. Stopping all clients.
+
+
+
+46
+20. Stopping all clients.
+
+finished in 5.13s, 3111055.20 req/s, 216.60MB/s
+requests: 15555276 total, 15657676 started, 15555276 done, 15555276 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 15555276 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 1.06GB (1135608370) total, 578.55MB (606655764) headers (space savings 40.00%), 103.84MB (108886932) data
+                     min         max         mean         sd        +/- sd
+time for request:      515us       1.24s     34.07ms     60.52ms    94.60%
+time for connect:     2.55ms    716.00ms    144.90ms     59.62ms    81.64%
+time to 1st byte:   129.61ms       1.28s    498.48ms     89.60ms    87.60%
+req/s           :    1739.11     4699.30     3036.87      624.86    63.38%
+[info] CPU 1014.6% | Mem 2.5GiB
+
+[run 2/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+34.
+.
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+59. Stopping all clients.
+
+33. Stopping all clients.
+
+finished in 5.18s, 3885220.00 req/s, 270.50MB/s
+requests: 19426100 total, 19528500 started, 19426100 done, 19426100 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 19426100 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 1.32GB (1418192302) total, 722.52MB (757617900) headers (space savings 40.00%), 129.68MB (135982700) data
+                     min         max         mean         sd        +/- sd
+time for request:      386us    346.23ms     18.66ms     22.05ms    93.35%
+time for connect:     3.26ms    200.97ms     64.93ms     55.17ms    72.56%
+time to 1st byte:     5.01ms    495.82ms    176.08ms    118.97ms    63.38%
+req/s           :    2699.22     5555.98     3793.10      545.65    63.48%
+[info] CPU 887.4% | Mem 2.9GiB
+
+[run 3/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+63.
+
+finished in 5.13s, 3913380.00 req/s, 272.46MB/s
+requests: 19566900 total, 19669300 started, 19566900 done, 19566900 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 19566900 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 1.33GB (1428471248) total, 727.76MB (763109100) headers (space savings 40.00%), 130.62MB (136968300) data
+                     min         max         mean         sd        +/- sd
+time for request:      515us    254.19ms     16.91ms     18.25ms    93.36%
+time for connect:     3.20ms    283.54ms     85.93ms     81.61ms    79.49%
+time to 1st byte:    10.27ms    485.96ms    200.68ms    129.92ms    53.71%
+req/s           :    2699.75     5395.68     3820.24      429.83    71.48%
+[info] CPU 854.4% | Mem 3.1GiB
+
+=== Best: 3814210 req/s (CPU: 854.4%, Mem: 3.1GiB) ===
+[info] saved results/unary-grpc-tls/1024/cnetmod-grpc-cardigan-certified.json
+httparena-bench-cnetmod-grpc-cardigan-certified
+httparena-bench-cnetmod-grpc-cardigan-certified
+[info] rebuilding site/data/*.json
+[updated] /root/cnetmod-grpc-20261020/certified/site/data/frameworks.json
+[updated] /root/cnetmod-grpc-20261020/certified/site/data/results/cnetmod-grpc-candidate-certified.json - 4 new, 4 total
+[updated] /root/cnetmod-grpc-20261020/certified/site/data/results/cnetmod-grpc-cardigan-certified.json - 4 new, 4 total
+[updated] /root/cnetmod-grpc-20261020/certified/site/data/results/cnetmod-grpc-control-certified.json - 4 new, 4 total
+[updated] /root/cnetmod-grpc-20261020/certified/site/data/results/cnetmod-grpc-libuvcpp-certified.json - 4 new, 4 total
+[updated] /root/cnetmod-grpc-20261020/certified/site/data/results/cnetmod-grpc-trillium-certified.json - 4 new, 4 total
+[updated] /root/cnetmod-grpc-20261020/certified/site/data/current.json
+[info] done

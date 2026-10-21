@@ -1,0 +1,362 @@
+{
+  "checked_at": "2026-10-20T14:23:51.597795+00:00",
+  "upstream_sha": "81963a7f99ef2eb0fe1b142de1f80232f88d3dab",
+  "scanned_result_files": 174,
+  "grpc_entries": 18,
+  "runtime_sha": "70975f8d1b1939cb21cc1a00115a0c276c298c0f",
+  "comparison": [
+    {
+      "profile": "unary-grpc-256",
+      "candidate": 5547569,
+      "wtx": 3990708,
+      "wtx_target": 4389779,
+      "wtx_gain_percent": 39.01215022497262,
+      "fastest_entry": "vanilla-epoll",
+      "fastest": 7273313,
+      "all_categories_target": 8000645,
+      "all_categories_gain_percent": -23.72706908117388,
+      "ranked_entries": [
+        {
+          "entry": "vanilla-epoll",
+          "rps": 7273313
+        },
+        {
+          "entry": "cardigan",
+          "rps": 7039343
+        },
+        {
+          "entry": "zix",
+          "rps": 7000555
+        },
+        {
+          "entry": "swerver",
+          "rps": 6821807
+        },
+        {
+          "entry": "fib-tuned",
+          "rps": 6594862
+        },
+        {
+          "entry": "nilo",
+          "rps": 6357462
+        },
+        {
+          "entry": "fib",
+          "rps": 6198578
+        },
+        {
+          "entry": "pyronova",
+          "rps": 5257876
+        },
+        {
+          "entry": "wtx",
+          "rps": 3990708
+        },
+        {
+          "entry": "libuvcpp",
+          "rps": 3837633
+        },
+        {
+          "entry": "quarkus-jvm",
+          "rps": 2622540
+        },
+        {
+          "entry": "aspnet-minimal",
+          "rps": 2491232
+        },
+        {
+          "entry": "helidon-production",
+          "rps": 1132242
+        },
+        {
+          "entry": "helidon-tuned",
+          "rps": 1128786
+        },
+        {
+          "entry": "grpc-go",
+          "rps": 720798
+        },
+        {
+          "entry": "trillium",
+          "rps": 690051
+        },
+        {
+          "entry": "trillium-tuned",
+          "rps": 664634
+        },
+        {
+          "entry": "tako",
+          "rps": 578019
+        }
+      ]
+    },
+    {
+      "profile": "unary-grpc-1024",
+      "candidate": 5243930,
+      "wtx": 3620970,
+      "wtx_target": 3983067,
+      "wtx_gain_percent": 44.821139087040216,
+      "fastest_entry": "vanilla-epoll",
+      "fastest": 7196679,
+      "all_categories_target": 7916347,
+      "all_categories_gain_percent": -27.134029459977306,
+      "ranked_entries": [
+        {
+          "entry": "vanilla-epoll",
+          "rps": 7196679
+        },
+        {
+          "entry": "zix",
+          "rps": 7030197
+        },
+        {
+          "entry": "cardigan",
+          "rps": 6900612
+        },
+        {
+          "entry": "swerver",
+          "rps": 6767120
+        },
+        {
+          "entry": "nilo",
+          "rps": 6706912
+        },
+        {
+          "entry": "fib-tuned",
+          "rps": 6699375
+        },
+        {
+          "entry": "fib",
+          "rps": 6199041
+        },
+        {
+          "entry": "pyronova",
+          "rps": 4149704
+        },
+        {
+          "entry": "wtx",
+          "rps": 3620970
+        },
+        {
+          "entry": "libuvcpp",
+          "rps": 3600218
+        },
+        {
+          "entry": "quarkus-jvm",
+          "rps": 2611600
+        },
+        {
+          "entry": "aspnet-minimal",
+          "rps": 2338525
+        },
+        {
+          "entry": "helidon-tuned",
+          "rps": 1155675
+        },
+        {
+          "entry": "helidon-production",
+          "rps": 1145831
+        },
+        {
+          "entry": "grpc-go",
+          "rps": 969718
+        },
+        {
+          "entry": "trillium",
+          "rps": 709412
+        },
+        {
+          "entry": "trillium-tuned",
+          "rps": 652387
+        },
+        {
+          "entry": "tako",
+          "rps": 513618
+        }
+      ]
+    },
+    {
+      "profile": "unary-grpc-tls-256",
+      "candidate": 5287944,
+      "wtx": 3688532,
+      "wtx_target": 4057386,
+      "wtx_gain_percent": 43.361749335508,
+      "fastest_entry": "zix",
+      "fastest": 6962147,
+      "all_categories_target": 7658362,
+      "all_categories_gain_percent": -24.04722278917696,
+      "ranked_entries": [
+        {
+          "entry": "zix",
+          "rps": 6962147
+        },
+        {
+          "entry": "cardigan",
+          "rps": 6951550
+        },
+        {
+          "entry": "pyronova",
+          "rps": 5057301
+        },
+        {
+          "entry": "fib-tuned",
+          "rps": 4331789
+        },
+        {
+          "entry": "fib",
+          "rps": 4246784
+        },
+        {
+          "entry": "wtx",
+          "rps": 3688532
+        },
+        {
+          "entry": "libuvcpp",
+          "rps": 3664147
+        },
+        {
+          "entry": "swerver",
+          "rps": 3552155
+        },
+        {
+          "entry": "quarkus-jvm",
+          "rps": 2633400
+        },
+        {
+          "entry": "nilo",
+          "rps": 2126794
+        },
+        {
+          "entry": "aspnet-minimal",
+          "rps": 2058161
+        },
+        {
+          "entry": "helidon-tuned",
+          "rps": 1004853
+        },
+        {
+          "entry": "helidon-production",
+          "rps": 988037
+        },
+        {
+          "entry": "trillium-tuned",
+          "rps": 784140
+        },
+        {
+          "entry": "trillium",
+          "rps": 760673
+        },
+        {
+          "entry": "grpc-go",
+          "rps": 702758
+        },
+        {
+          "entry": "tako",
+          "rps": 622537
+        }
+      ]
+    },
+    {
+      "profile": "unary-grpc-tls-1024",
+      "candidate": 4896284,
+      "wtx": 3625918,
+      "wtx_target": 3988510,
+      "wtx_gain_percent": 35.035706819624714,
+      "fastest_entry": "zix",
+      "fastest": 6781146,
+      "all_categories_target": 7459261,
+      "all_categories_gain_percent": -27.795626284996665,
+      "ranked_entries": [
+        {
+          "entry": "zix",
+          "rps": 6781146
+        },
+        {
+          "entry": "cardigan",
+          "rps": 6575246
+        },
+        {
+          "entry": "fib-tuned",
+          "rps": 4233517
+        },
+        {
+          "entry": "fib",
+          "rps": 4160362
+        },
+        {
+          "entry": "pyronova",
+          "rps": 4015187
+        },
+        {
+          "entry": "wtx",
+          "rps": 3625918
+        },
+        {
+          "entry": "swerver",
+          "rps": 3614786
+        },
+        {
+          "entry": "libuvcpp",
+          "rps": 3517793
+        },
+        {
+          "entry": "nilo",
+          "rps": 3391337
+        },
+        {
+          "entry": "quarkus-jvm",
+          "rps": 2572680
+        },
+        {
+          "entry": "aspnet-minimal",
+          "rps": 1826316
+        },
+        {
+          "entry": "helidon-production",
+          "rps": 1028364
+        },
+        {
+          "entry": "helidon-tuned",
+          "rps": 1028213
+        },
+        {
+          "entry": "grpc-go",
+          "rps": 928870
+        },
+        {
+          "entry": "trillium-tuned",
+          "rps": 796764
+        },
+        {
+          "entry": "trillium",
+          "rps": 650980
+        },
+        {
+          "entry": "tako",
+          "rps": 508813
+        }
+      ]
+    }
+  ],
+  "interpretation": "Cross-host published-number comparison only; no same-host or official-run acceptance claim.",
+  "source_sha256": {
+    "aspnet-minimal.json": "5f307d3e85e8a42a50f6c39d16c519f1ec9998d10780d9251680e6936b3356a7",
+    "cardigan.json": "beb1d7dc69aff8942a3c0ff7aa37206a7c9b1cfa14414a901918f235aa299ed3",
+    "fib-tuned.json": "363da6d59b6e318a68b35af3ae0778253f3ec5b2a2f9c2bc43ad07e150f512c9",
+    "fib.json": "7a82e63d5f0d5ee41e0349aec980752e4a70b6b362d8f27bf99463f07dbed7ca",
+    "grpc-go.json": "a9004bcb51185c6024ec154e2887fa311f58b1db98595c2492ddeb7d7a86e4d5",
+    "helidon-production.json": "1f0442306ca757371c88b9f181a0a7738872af6057526b70294b2cacfe501a4b",
+    "helidon-tuned.json": "f51bf43cc49b0047a67c67edc91099a85d80ced3fb036392fafda91601d4e207",
+    "libuvcpp.json": "63ebf02514d6eaaee0009c47ff2e9bc2b751aab9b5317fc3f36a91e4d0c139e9",
+    "nilo.json": "ee65416d89e18d2c88c26154dfd3b1fad0b0884b5f256f47183bbd9de4920a4c",
+    "pyronova.json": "64943904aba173c5d67fb9965b1a1b720ef1537a08337df7713743c01f508f57",
+    "quarkus-jvm.json": "6243d00aef9a02768ba5df89870d9ddb669da82545e65094ba990adba6221157",
+    "swerver.json": "8edc3a5cfc1b89ea8cd0c589af8682b885d7b343908ffc97ca16dcb030fa607b",
+    "tako.json": "8803b5f7a3e1d1c7d837c5223863987d7156f24cef8d5b95076268949b137eee",
+    "trillium-tuned.json": "84b62f2b2ce5d02084588ac29cd5ecc3e9746631664aa581c3e706c4f4191d17",
+    "trillium.json": "b35e2a60d57ee40fa320e9e4238e77c2f568be9c774aed078bfc0d0f0b8d86b1",
+    "vanilla-epoll.json": "15a5aa3ad8a6d2be0a0ea928c2a926ce040051b732a6afd5c74af0e03d16a57c",
+    "wtx.json": "749e8bbf0ac5eb5d02fa713e0517898a04facbb73699e7aae715dc5c58a4d9a6",
+    "zix.json": "a6f0bcc10433039ea8707e2a7b9ac817a38f667af1d6cc7640c14296b0728860"
+  }
+}

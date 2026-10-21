@@ -1,0 +1,222 @@
+[
+  {
+    "name": "baseline-untraced-configure",
+    "command": [
+      "cmake",
+      "-S",
+      "/root/cnetmod-compile-20261021/source",
+      "-B",
+      "/root/cnetmod-compile-20261021/baseline",
+      "-G",
+      "Ninja",
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DCMAKE_CXX_COMPILER=/usr/bin/clang++",
+      "-DCMAKE_C_COMPILER=/usr/bin/clang",
+      "-DCMAKE_CXX_FLAGS_RELEASE=-O3 -DNDEBUG",
+      "-DCNETMOD_USE_MOLD=OFF",
+      "-DCNETMOD_USE_MIMALLOC=ON",
+      "-DCNETMOD_ENABLE_HTTP=ON",
+      "-DCNETMOD_ENABLE_GRPC=ON",
+      "-DCNETMOD_ENABLE_POSTGRESQL=ON",
+      "-DCNETMOD_ENABLE_MYSQL=ON",
+      "-DCNETMOD_ENABLE_REDIS=ON",
+      "-DCNETMOD_ENABLE_ORM=OFF",
+      "-DCNETMOD_BUILD_TESTS=ON",
+      "-DCNETMOD_BUILD_EXAMPLES=OFF",
+      "-DCNETMOD_ENABLE_YAML_CONFIGURATION=OFF",
+      "-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld -Wl,--threads=4",
+      "-DCMAKE_JOB_POOLS=compile_link=1",
+      "-DCMAKE_JOB_POOL_LINK=compile_link",
+      "-DPython3_EXECUTABLE=/opt/cnetmod-ci-venv/bin/python"
+    ],
+    "seconds": 27.148761872000023,
+    "user_seconds": 0.559838,
+    "system_seconds": 1.4211019999999999,
+    "returncode": 0
+  },
+  {
+    "name": "baseline-untraced-full",
+    "command": [
+      "cmake",
+      "--build",
+      "/root/cnetmod-compile-20261021/baseline",
+      "--target",
+      "cnetmod_core",
+      "-j4"
+    ],
+    "seconds": 87.56180384599998,
+    "user_seconds": 268.502725,
+    "system_seconds": 29.864583,
+    "returncode": 0
+  },
+  {
+    "name": "baseline-noop",
+    "command": [
+      "cmake",
+      "--build",
+      "/root/cnetmod-compile-20261021/baseline",
+      "--target",
+      "cnetmod_core",
+      "-j4"
+    ],
+    "seconds": 1.6301284920000398,
+    "user_seconds": 0.025539999999978136,
+    "system_seconds": 0.08920699999999826,
+    "returncode": 0
+  },
+  {
+    "name": "candidate-untraced-configure",
+    "command": [
+      "cmake",
+      "-S",
+      "/root/cnetmod-compile-20261021/candidate-source",
+      "-B",
+      "/root/cnetmod-compile-20261021/candidate",
+      "-G",
+      "Ninja",
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DCMAKE_CXX_COMPILER=/usr/bin/clang++",
+      "-DCMAKE_C_COMPILER=/usr/bin/clang",
+      "-DCMAKE_CXX_FLAGS_RELEASE=-O3 -DNDEBUG",
+      "-DCNETMOD_USE_MOLD=OFF",
+      "-DCNETMOD_USE_MIMALLOC=ON",
+      "-DCNETMOD_ENABLE_HTTP=ON",
+      "-DCNETMOD_ENABLE_GRPC=ON",
+      "-DCNETMOD_ENABLE_POSTGRESQL=ON",
+      "-DCNETMOD_ENABLE_MYSQL=ON",
+      "-DCNETMOD_ENABLE_REDIS=ON",
+      "-DCNETMOD_ENABLE_ORM=OFF",
+      "-DCNETMOD_BUILD_TESTS=ON",
+      "-DCNETMOD_BUILD_EXAMPLES=OFF",
+      "-DCNETMOD_ENABLE_YAML_CONFIGURATION=OFF",
+      "-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld -Wl,--threads=4",
+      "-DCMAKE_JOB_POOLS=compile_link=1",
+      "-DCMAKE_JOB_POOL_LINK=compile_link",
+      "-DPython3_EXECUTABLE=/opt/cnetmod-ci-venv/bin/python"
+    ],
+    "seconds": 11.42859823599997,
+    "user_seconds": 0.561442999999997,
+    "system_seconds": 0.5708520000000021,
+    "returncode": 0
+  },
+  {
+    "name": "candidate-untraced-full",
+    "command": [
+      "cmake",
+      "--build",
+      "/root/cnetmod-compile-20261021/candidate",
+      "--target",
+      "cnetmod_core",
+      "-j4"
+    ],
+    "seconds": 66.98295863399994,
+    "user_seconds": 215.87546000000003,
+    "system_seconds": 17.419699999999995,
+    "returncode": 0
+  },
+  {
+    "name": "candidate-noop",
+    "command": [
+      "cmake",
+      "--build",
+      "/root/cnetmod-compile-20261021/candidate",
+      "--target",
+      "cnetmod_core",
+      "-j4"
+    ],
+    "seconds": 1.55290796700001,
+    "user_seconds": 0.03418999999996686,
+    "system_seconds": 0.06099500000000546,
+    "returncode": 0
+  },
+  {
+    "name": "baseline-round1",
+    "command": [
+      "cmake",
+      "--build",
+      "/root/cnetmod-compile-20261021/baseline",
+      "--target",
+      "cnetmod_core",
+      "-j4"
+    ],
+    "seconds": 68.25037500899998,
+    "user_seconds": 215.01700799999998,
+    "system_seconds": 18.672592999999992,
+    "returncode": 0
+  },
+  {
+    "name": "candidate-round1",
+    "command": [
+      "cmake",
+      "--build",
+      "/root/cnetmod-compile-20261021/candidate",
+      "--target",
+      "cnetmod_core",
+      "-j4"
+    ],
+    "seconds": 66.54551384000001,
+    "user_seconds": 210.93018800000004,
+    "system_seconds": 18.586820000000003,
+    "returncode": 0
+  },
+  {
+    "name": "candidate-round2",
+    "command": [
+      "cmake",
+      "--build",
+      "/root/cnetmod-compile-20261021/candidate",
+      "--target",
+      "cnetmod_core",
+      "-j4"
+    ],
+    "seconds": 68.537638087,
+    "user_seconds": 216.96117200000003,
+    "system_seconds": 18.88257800000001,
+    "returncode": 0
+  },
+  {
+    "name": "baseline-round2",
+    "command": [
+      "cmake",
+      "--build",
+      "/root/cnetmod-compile-20261021/baseline",
+      "--target",
+      "cnetmod_core",
+      "-j4"
+    ],
+    "seconds": 70.842655885,
+    "user_seconds": 223.0207049999999,
+    "system_seconds": 19.512029,
+    "returncode": 0
+  },
+  {
+    "name": "baseline-round3",
+    "command": [
+      "cmake",
+      "--build",
+      "/root/cnetmod-compile-20261021/baseline",
+      "--target",
+      "cnetmod_core",
+      "-j4"
+    ],
+    "seconds": 76.97947433499985,
+    "user_seconds": 243.78435200000013,
+    "system_seconds": 22.301437000000007,
+    "returncode": 0
+  },
+  {
+    "name": "candidate-round3",
+    "command": [
+      "cmake",
+      "--build",
+      "/root/cnetmod-compile-20261021/candidate",
+      "--target",
+      "cnetmod_core",
+      "-j4"
+    ],
+    "seconds": 67.92183468500002,
+    "user_seconds": 216.05312000000004,
+    "system_seconds": 19.528985999999975,
+    "returncode": 0
+  }
+]

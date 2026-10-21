@@ -144,6 +144,26 @@ TEST(response_set_body_string)
     ASSERT_EQ(resp.get_header("Content-Length"), std::string_view("6"));
 }
 
+TEST(response_shared_body_reuses_immutable_storage)
+{
+    response resp;
+    auto content = std::make_shared<const std::string>("cached-file");
+    resp.set_shared_body(content);
+    ASSERT_TRUE(resp.shared_body() == content);
+    ASSERT_EQ(resp.body(), std::string_view("cached-file"));
+    ASSERT_EQ(resp.get_header("Content-Length"), std::string_view("11"));
+    ASSERT_TRUE(resp.serialize().ends_with("\r\ncached-file"));
+
+    auto taken = resp.take_shared_body();
+    ASSERT_TRUE(taken == content);
+    ASSERT_FALSE(resp.shared_body());
+
+    resp.set_shared_body(std::move(content));
+    resp.set_body(std::string_view{"replacement"});
+    ASSERT_FALSE(resp.shared_body());
+    ASSERT_EQ(resp.body(), std::string_view{"replacement"});
+}
+
 TEST(response_body_source_is_exclusive_and_sets_length)
 {
     response resp;

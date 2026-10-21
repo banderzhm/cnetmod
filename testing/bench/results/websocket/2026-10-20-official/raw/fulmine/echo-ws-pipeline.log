@@ -1,0 +1,250 @@
+[info] available CPUs: 32
+[info] framework: fulmine (fulmine.js, JS)
+[info] subscribed tests: baseline,latency-1m,latency-10k,latency-500k-8cpu,pipelined,limited-conn,async,json-comp,8gbit,async-db,static-tls,echo-ws,echo-ws-pipeline,echo-ws-limited,json-tls,gateway-64,gateway-h3,production-stack,fortunes
+[info] building image: httparena-fulmine
+[info] skipping system tuning as requested (SKIP_TUNE=true)
+[info] starting postgres sidecar
+[info] postgres ready (seeded)
+
+==============================================
+=== fulmine / echo-ws-pipeline / 512c (tool=gcannon) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] server ready
+
+[run 1/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     512 (8/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency    968us   1.02ms   1.74ms   2.98ms   3.84ms
+
+  42498384 frames sent in 5.00s, 42492640 frames received
+  Throughput: 8.50M req/s
+  Bandwidth:  56.73MB/s
+  WS upgrades: 512
+  WS frames:   42492640
+  Latency samples: 42492640 / 42492640 responses (100.0%)
+[info] CPU 1024.3% | Mem 1.0GiB
+
+[run 2/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     512 (8/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency    525us    318us    846us   4.54ms   8.44ms
+
+  78468416 frames sent in 5.00s, 78466832 frames received
+  Throughput: 15.69M req/s
+  Bandwidth:  104.74MB/s
+  WS upgrades: 512
+  WS frames:   78466832
+  Latency samples: 78466832 / 78466832 responses (100.0%)
+[info] CPU 2019.7% | Mem 1.1GiB
+
+[run 3/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     512 (8/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency    532us    305us    922us   4.67ms   8.81ms
+
+  78390160 frames sent in 5.00s, 78384912 frames received
+  Throughput: 15.67M req/s
+  Bandwidth:  104.64MB/s
+  WS upgrades: 512
+  WS frames:   78384912
+  Latency samples: 78384912 / 78384912 responses (100.0%)
+[info] CPU 2012.8% | Mem 1.0GiB
+
+=== Best: 15693366 req/s (CPU: 2019.7%, Mem: 1.1GiB) ===
+[info] saved results/echo-ws-pipeline/512/fulmine.json
+httparena-bench-fulmine
+httparena-bench-fulmine
+
+==============================================
+=== fulmine / echo-ws-pipeline / 4096c (tool=gcannon) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] server ready
+
+[run 1/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     4096 (64/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency   4.73ms   4.65ms   7.65ms   11.50ms   17.10ms
+
+  69042368 frames sent in 5.00s, 68976832 frames received
+  Throughput: 13.79M req/s
+  Bandwidth:  92.18MB/s
+  WS upgrades: 4096
+  WS frames:   68976832
+  Latency samples: 68976832 / 68976832 responses (100.0%)
+[info] CPU 1812.4% | Mem 1.1GiB
+
+[run 2/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     4096 (64/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency   4.73ms   3.67ms   8.34ms   14.10ms   20.50ms
+
+  69915600 frames sent in 5.00s, 69850064 frames received
+  Throughput: 13.96M req/s
+  Bandwidth:  93.33MB/s
+  WS upgrades: 4096
+  WS frames:   69850064
+  Latency samples: 69850064 / 69850064 responses (100.0%)
+[info] CPU 2040.0% | Mem 1.2GiB
+
+[run 3/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     4096 (64/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency   5.34ms   4.25ms   9.79ms   18.40ms   31.80ms
+
+  62237184 frames sent in 5.00s, 62171648 frames received
+  Throughput: 12.43M req/s
+  Bandwidth:  83.11MB/s
+  WS upgrades: 4096
+  WS frames:   62171648
+  Latency samples: 62171648 / 62171648 responses (100.0%)
+[info] CPU 1882.0% | Mem 1.1GiB
+
+=== Best: 13970012 req/s (CPU: 2040.0%, Mem: 1.2GiB) ===
+[info] saved results/echo-ws-pipeline/4096/fulmine.json
+httparena-bench-fulmine
+httparena-bench-fulmine
+
+==============================================
+=== fulmine / echo-ws-pipeline / 16384c (tool=gcannon) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] server ready
+
+[run 1/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     16384 (256/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency   18.77ms   16.40ms   33.00ms   55.40ms   84.20ms
+
+  69806304 frames sent in 5.00s, 69544160 frames received
+  Throughput: 13.90M req/s
+  Bandwidth:  93.32MB/s
+  WS upgrades: 16384
+  WS frames:   69544160
+  Latency samples: 69544160 / 69544160 responses (100.0%)
+[info] CPU 1797.4% | Mem 1.3GiB
+
+[run 2/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     16384 (256/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency   18.25ms   16.50ms   30.20ms   47.20ms   67.30ms
+
+  72572160 frames sent in 5.00s, 72310016 frames received
+  Throughput: 14.45M req/s
+  Bandwidth:  97.00MB/s
+  WS upgrades: 16384
+  WS frames:   72310016
+  Latency samples: 72310016 / 72310016 responses (100.0%)
+[info] CPU 2058.5% | Mem 1.3GiB
+
+[run 3/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     16384 (256/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency   18.03ms   15.80ms   30.50ms   50.20ms   73.50ms
+
+  73593648 frames sent in 5.01s, 73331504 frames received
+  Throughput: 14.64M req/s
+  Bandwidth:  98.23MB/s
+  WS upgrades: 16384
+  WS frames:   73331504
+  Latency samples: 73331504 / 73331504 responses (100.0%)
+[info] CPU 1996.0% | Mem 1.3GiB
+
+=== Best: 14637026 req/s (CPU: 1996.0%, Mem: 1.3GiB) ===
+[info] saved results/echo-ws-pipeline/16384/fulmine.json
+httparena-bench-fulmine
+httparena-bench-fulmine
+[info] rebuilding site/data/*.json
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/frameworks.json
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-baseline.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-candidate.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/fulmine.js.json - 6 new, 28 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/genhttp-ioxide.json - 8 new, 33 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/current.json
+[info] done
+httparena-postgres

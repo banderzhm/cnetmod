@@ -1,0 +1,49 @@
+starting benchmark...
+spawning thread #0: 256 total client(s). Timing-based test with 0s of warm-up time and 2s of main duration for measurements.
+spawning thread #1: 256 total client(s). Timing-based test with 0s of warm-up time and 2s of main duration for measurements.
+spawning thread #2: 256 total client(s). Timing-based test with 0s of warm-up time and 2s of main duration for measurements.
+spawning thread #3: 256 total client(s). Timing-based test with 0s of warm-up time and 2s of main duration for measurements.
+Warm-up started for thread #3.
+Warm-up started for thread #1.
+Warm-up started for thread #2.
+Warm-up started for thread #0.
+progress: 9% of clients started
+progress: 19% of clients started
+progress: 29% of clients started
+progress: 39% of clients started
+progress: 48% of clients started
+progress: 58% of clients started
+progress: 68% of clients started
+progress: 78% of clients started
+Warm-up phase is over for thread #3.
+Main benchmark duration is started for thread #3.
+Warm-up phase is over for thread #1.
+Main benchmark duration is started for thread #1.
+progress: 87% of clients started
+Warm-up phase is over for thread #2.
+Main benchmark duration is started for thread #2.
+progress: 97% of clients started
+Warm-up phase is over for thread #0.
+Main benchmark duration is started for thread #0.
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+Main benchmark duration is over for thread #3. Stopping all clients.
+Main benchmark duration is over for thread #1. Stopping all clients.
+Stopped all clients for thread #3
+Stopped all clients for thread #1
+Main benchmark duration is over for thread #2. Stopping all clients.
+Stopped all clients for thread #2
+Main benchmark duration is over for thread #0. Stopping all clients.
+Stopped all clients for thread #0
+
+finished in 2.13s, 296613.50 req/s, 10.98MB/s
+requests: 593227 total, 695627 started, 593227 done, 593227 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 593227 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 21.97MB (23034647) total, 2.29MB (2398508) headers (space savings 93.78%), 3.96MB (4152589) data
+                     min         max         mean         sd        +/- sd
+time for request:    39.97ms    414.03ms    298.26ms     52.22ms    72.53%
+time for connect:    13.26ms    153.87ms     78.35ms     37.21ms    62.11%
+time to 1st byte:    81.29ms    238.27ms    191.72ms     29.67ms    67.77%
+req/s           :     268.72      310.40      289.01       14.48    68.46%

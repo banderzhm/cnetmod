@@ -22,6 +22,8 @@ public:
         std::int32_t initial_window = 65'535) noexcept;
     stream(std::uint32_t id, std::int32_t initial_window,
         std::vector<header_field> reusable_headers) noexcept;
+    stream(std::uint32_t id, std::int32_t send_window, std::int32_t receive_window,
+        std::vector<header_field> reusable_headers) noexcept;
     [[nodiscard]] auto id() const noexcept -> std::uint32_t;
     [[nodiscard]] auto state() const noexcept -> stream_state;
     [[nodiscard]] auto receive_headers(std::vector<header_field> fields,
@@ -35,6 +37,7 @@ public:
     [[nodiscard]] auto take_headers() noexcept
         -> std::vector<header_field>;
     [[nodiscard]] auto body() const noexcept -> std::span<const std::byte>;
+    [[nodiscard]] auto take_body() noexcept -> std::vector<std::byte>;
     void attach_body_stream(
         std::shared_ptr<cnetmod::http::request_body_stream> body_stream);
     [[nodiscard]] auto body_stream() const noexcept

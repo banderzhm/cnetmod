@@ -1,0 +1,46 @@
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+Sending build context to Docker daemon  47.62kB
+Step 1/11 : FROM mcr.microsoft.com/dotnet/sdk:11.0 AS build
+ ---> bfabf51e74c5
+Step 2/11 : WORKDIR /src/app
+ ---> Using cache
+ ---> c5bfa5bca734
+Step 3/11 : COPY genhttp.csproj ./
+ ---> 054801c20d0b
+Step 4/11 : RUN dotnet restore --disable-parallel
+ ---> Running in 97e6e05e2e4a
+  Determining projects to restore...
+  Restored /src/app/genhttp.csproj (in 26.99 sec).
+ ---> Removed intermediate container 97e6e05e2e4a
+ ---> 9f6c90325375
+Step 5/11 : COPY . .
+ ---> f425b6f35a33
+Step 6/11 : RUN dotnet publish genhttp.csproj -m:4 -c Release --no-self-contained -o /app
+ ---> Running in bd32bfd1f605
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+/usr/share/dotnet/sdk/11.0.100-rc.2.26504.105/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NET.RuntimeIdentifierInference.targets(385,5): message NETSDK1057: You are using a preview version of .NET. See: https://aka.ms/dotnet-support-policy [/src/app/genhttp.csproj]
+  genhttp -> /src/app/bin/Release/net11.0/genhttp.dll
+  genhttp -> /app/
+ ---> Removed intermediate container bd32bfd1f605
+ ---> 79ceab76cae0
+Step 7/11 : FROM mcr.microsoft.com/dotnet/runtime:11.0
+ ---> 48e6be84d7f4
+Step 8/11 : WORKDIR /app
+ ---> Using cache
+ ---> 1c094bc5f3c3
+Step 9/11 : COPY --from=build /app .
+ ---> 926c4e22066b
+Step 10/11 : EXPOSE 8080 8081 8082 8443 8443/udp
+ ---> Running in 5229f82d0e85
+ ---> Removed intermediate container 5229f82d0e85
+ ---> 9e3fc363d572
+Step 11/11 : ENTRYPOINT ["dotnet", "genhttp.dll"]
+ ---> Running in bed7a212517c
+ ---> Removed intermediate container bed7a212517c
+ ---> 441bfca65a68
+Successfully built 441bfca65a68
+Successfully tagged cnetmod-ws-peer-genhttp-ioxide:20261020

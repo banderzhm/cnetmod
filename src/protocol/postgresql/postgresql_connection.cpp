@@ -1284,7 +1284,28 @@ auto client::read_exact(std::uint8_t* destination, std::size_t length, Cancellat
     std::size_t received{};
     while (received < length)
     {
-        mutable_buffer buffer{destination + received, length - received};
+        if constexpr (!std::same_as<Cancellation, std::nullptr_t>)
+        {
+            if (cancellation->is_cancelled())
+            {
+                disconnect(std::make_error_code(
+                    cancellation->reason() == cancellation_reason::deadline_exceeded
+                        ? std::errc::timed_out : std::errc::operation_canceled));
+                co_return false;
+            }
+        }
+        const auto available = receive_end_ - receive_begin_;
+        if (available != 0)
+        {
+            const auto count = std::min(available, length - received);
+            std::copy_n(receive_buffer_.data() + receive_begin_, count, destination + received);
+            receive_begin_ += count;
+            received += count;
+            continue;
+        }
+        // Read ahead across backend message boundaries, retaining surplus for
+        // the next header. Never wait for the buffer to become full.
+        mutable_buffer buffer{receive_buffer_.data(), receive_buffer_.size()};
         std::expected<std::size_t, std::error_code> part;
 #ifdef CNETMOD_HAS_SSL
         if (ssl_stream_)
@@ -1307,7 +1328,8 @@ auto client::read_exact(std::uint8_t* destination, std::size_t length, Cancellat
             disconnect(part ? std::make_error_code(std::errc::connection_reset) : part.error());
             co_return false;
         }
-        received += *part;
+        receive_begin_ = 0;
+        receive_end_ = *part;
     }
     co_return true;
 }
@@ -1333,6 +1355,7 @@ auto client::read_message(Cancellation cancellation) -> task<std::expected<detai
 
 void client::disconnect(std::error_code error) noexcept
 {
+    receive_begin_ = receive_end_ = 0;
     connected_ = false;
     secure_ = false;
     transaction_failed_ = false;

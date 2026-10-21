@@ -1,0 +1,3 @@
+[2026-10-20 14:46:00.301] [info] [127235916967040] [bench_database.cpp:33] RESULT database=redis mode=pool operations=8703922 seconds=3.000000 ops_per_second=2901306.976
+[ perf record: Woken up 1 times to write data ]
+[ perf record: Captured and wrote 0.198 MB /root/cnetmod-db-20261020/final3/perf-pool-control.data (1499 samples) ]

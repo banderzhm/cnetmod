@@ -158,6 +158,11 @@ export struct quic_level_keys
     // directly. Normal QUIC traffic reuses it for every packet protected by
     // this immutable key generation.
     mutable std::shared_ptr<quic_aead_context> aead_context;
+    // Plain back-reference to the installed aead_context.  A created context
+    // is never replaced for a key generation, and one connection processes
+    // its packets on a single executor, so the hot path can skip the
+    // shared_ptr atomic load that the lazy-install path still requires.
+    mutable const quic_aead_context* aead_context_cached{nullptr};
 
     /// True once a secret has been installed and keys derived
     [[nodiscard]] auto valid() const noexcept -> bool
@@ -182,6 +187,29 @@ export struct application_read_key_candidate
     const quic_level_keys* keys{};
     bool key_phase{};
     application_read_key_kind kind{application_read_key_kind::current};
+};
+
+/// At most three read-key generations can be live (current, next, previous).
+/// A fixed-capacity list keeps the per-packet receive path allocation-free.
+export struct application_read_key_candidate_list
+{
+    std::array<application_read_key_candidate, 3> entries{};
+    std::size_t size{0};
+
+    [[nodiscard]] auto empty() const noexcept -> bool
+    {
+        return size == 0;
+    }
+
+    [[nodiscard]] auto begin() const noexcept
+    {
+        return entries.begin();
+    }
+
+    [[nodiscard]] auto end() const noexcept
+    {
+        return entries.begin() + static_cast<std::ptrdiff_t>(size);
+    }
 };
 
 /// Serialized TLS 1.3 resumption state.  The application owns persistence of
@@ -301,6 +329,16 @@ export [[nodiscard]] auto open_payload(const quic_level_keys& keys,
     std::span<const std::byte> header, std::uint64_t packet_number,
     std::uint32_t path_id = 0)
     -> std::expected<std::vector<std::byte>, std::error_code>;
+
+/// Decrypts a received short-header payload in place. `packet` holds the
+/// unprotected header followed by the ciphertext; plaintext overwrites the
+/// ciphertext region and is returned as a view into the same storage.
+/// BoringSSL permits exactly equal AEAD input and output pointers.
+export [[nodiscard]] auto open_payload_in_place(const quic_level_keys& keys,
+    std::span<std::byte> packet, std::size_t payload_offset,
+    std::span<const std::byte> header, std::uint64_t packet_number,
+    std::uint32_t path_id = 0)
+    -> std::expected<std::span<std::byte>, std::error_code>;
 
 /// Apply/remove RFC 9001 §5.4 header protection in place. `packet_number_offset`
 /// identifies the first protected packet-number byte in the complete packet.
@@ -471,7 +509,7 @@ public:
     /// a received 1-RTT packet.  The previous generation is retained only for
     /// a bounded reordering window after a confirmed peer update.
     [[nodiscard]] auto application_read_key_candidates() const
-        -> std::vector<application_read_key_candidate>;
+        -> application_read_key_candidate_list;
     void confirm_application_read_key(application_read_key_kind kind);
     void discard_expired_application_read_keys(
         std::chrono::steady_clock::time_point now,
@@ -581,6 +619,8 @@ public:
     }
 
 private:
+    // Exercise secret replacement without a public secret-injection API.
+    friend struct quic_crypto_regression_access;
     explicit quic_tls_session(SSL* ssl);
 
     /// Register QUIC method callbacks with BoringSSL

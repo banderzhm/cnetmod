@@ -684,45 +684,109 @@ namespace {
         return request;
     }
 
+    // Materialize cached fields only when the caller adds per-response fields.
+    // Never concatenate complete QPACK sections: their prefixes and dynamic
+    // references belong to different encoding contexts.
+    auto response_header_fields(const http3_response& response)
+        -> std::expected<std::vector<header_field>, std::error_code>
+    {
+        std::vector<header_field> fields;
+        if (response.static_headers)
+        {
+            if (response.status != response.static_headers->status())
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            qpack_decoder decoder;
+            auto decoded = decoder.decode(response.static_headers->encoded());
+            if (!decoded)
+                return std::unexpected(decoded.error());
+            fields = std::move(*decoded);
+        }
+        else
+        {
+            fields.reserve(response.headers.size() + 2U);
+            fields.push_back({":status", std::to_string(response.status)});
+        }
+        for (const auto& [name, value] : response.headers)
+        {
+            if (name.starts_with(':') || std::ranges::equal(name, "transfer-encoding", {},
+                    [](unsigned char character) { return static_cast<char>(std::tolower(character)); },
+                    [](unsigned char character) { return static_cast<char>(std::tolower(character)); }))
+                continue;
+            if (response.static_headers)
+            {
+                const auto existing = std::ranges::find(fields, name, &header_field::name);
+                if (existing != fields.end())
+                {
+                    existing->value = value;
+                    continue;
+                }
+            }
+            fields.push_back({name, value});
+        }
+        return fields;
+    }
+
     auto response_frames(qpack_encoder& encoder, const http3_response& response, stream_id id,
         bool suppress_body = false)
         -> std::expected<byte_buffer, std::error_code>
     {
-        byte_buffer block;
-        if (response.static_headers)
+        // Header encoding runs synchronously on the connection's loop, so the
+        // field list and the encoded block reuse per-thread storage instead
+        // of allocating both for every response.
+        thread_local std::vector<header_field> fields_scratch;
+        thread_local byte_buffer block_scratch;
+        block_scratch.clear();
+        if (response.static_headers && response.headers.empty())
         {
-            if (!response.headers.empty() ||
-                response.status != response.static_headers->status())
+            if (response.status != response.static_headers->status())
                 return std::unexpected(std::make_error_code(std::errc::invalid_argument));
-            block.append(response.static_headers->encoded());
+            block_scratch.append(response.static_headers->encoded());
+        }
+        else if (!response.static_headers)
+        {
+            fields_scratch.clear();
+            std::array<char, 8> status_text{};
+            const auto [status_end, status_error] = std::to_chars(
+                status_text.data(), status_text.data() + status_text.size(), response.status);
+            if (status_error != std::errc{})
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            fields_scratch.push_back({":status",
+                std::string{status_text.data(), static_cast<std::size_t>(status_end - status_text.data())}});
+            for (const auto& [name, value] : response.headers)
+            {
+                if (name.starts_with(':') || std::ranges::equal(name, "transfer-encoding", {},
+                        [](unsigned char character) { return static_cast<char>(std::tolower(character)); },
+                        [](unsigned char character) { return static_cast<char>(std::tolower(character)); }))
+                    continue;
+                fields_scratch.push_back({name, value});
+            }
+            auto encoded = encoder.encode_into(fields_scratch, id, block_scratch);
+            if (!encoded)
+                return std::unexpected(encoded.error());
         }
         else
         {
-            std::vector<header_field> fields;
-            fields.reserve(response.headers.size() + 1U);
-            fields.push_back({":status", std::to_string(response.status)});
-            for (const auto& [name, value] : response.headers)
-                if (!name.starts_with(':') && !std::ranges::equal(name, "transfer-encoding", {}, [](unsigned char character)
-                                                  {
-                                                      return static_cast<char>(std::tolower(character));
-                                                  },
-                                                  [](unsigned char character)
-                                                  {
-                                                      return static_cast<char>(std::tolower(character));
-                                                  }))
-                    fields.push_back({name, value});
-            auto encoded = encoder.encode(fields, id);
+            auto fields = response_header_fields(response);
+            if (!fields)
+                return std::unexpected(fields.error());
+            auto encoded = encoder.encode_into(*fields, id, block_scratch);
             if (!encoded)
                 return std::unexpected(encoded.error());
-            block = std::move(*encoded);
         }
-        auto result = encode_http3_frame(headers_frame{block});
+        const auto& block = block_scratch;
         const auto body = buffered_response_body(response);
         if (!body)
             return std::unexpected(body.error());
+        // Assemble the whole response in one buffer: appending HEADERS/DATA
+        // avoids a temporary frame vector that the previous code copied into
+        // a second allocation whose reserve then reallocated again.
+        byte_buffer result;
+        result.reserve(block.size() + 16U +
+            (suppress_body ? 0U : body->size() + 16U));
+        append_http3_frame(result,
+            static_cast<std::uint64_t>(http3_frame_type::headers), block);
         if (!suppress_body && !body->empty())
         {
-            result.reserve(result.size() + body->size() + 16U);
             append_varint(static_cast<std::uint64_t>(http3_frame_type::data), result);
             append_varint(static_cast<std::uint64_t>(body->size()), result);
             const auto bytes = ::utils::conv::to_bytes(*body);
@@ -750,34 +814,22 @@ namespace {
     auto response_headers_frame(qpack_encoder& encoder, const http3_response& response,
         stream_id id) -> std::expected<byte_buffer, std::error_code>
     {
-        if (response.static_headers)
+        if (response.static_headers && response.body_source)
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        if (response.static_headers && response.headers.empty())
         {
-            if (!response.headers.empty() || response.body_source ||
-                response.status != response.static_headers->status())
+            if (response.status != response.static_headers->status())
                 return std::unexpected(std::make_error_code(std::errc::invalid_argument));
             return encode_http3_frame(headers_frame{response.static_headers->encoded()});
         }
-        std::vector<header_field> fields;
-        fields.reserve(response.headers.size() + 2U);
-        fields.push_back({":status", std::to_string(response.status)});
-        for (const auto& [name, value] : response.headers)
-        {
-            if (name.starts_with(':') || std::ranges::equal(name, "transfer-encoding", {}, [](unsigned char character)
-                                             {
-                                                 return static_cast<char>(std::tolower(character));
-                                             },
-                                             [](unsigned char character)
-                                             {
-                                                 return static_cast<char>(std::tolower(character));
-                                             }))
-                continue;
-            fields.push_back({name, value});
-        }
+        auto fields = response_header_fields(response);
+        if (!fields)
+            return std::unexpected(fields.error());
         if (response.body_source && response.body_source->content_length() &&
             response.headers.find("content-length") == response.headers.end())
-            fields.push_back({"content-length",
+            fields->push_back({"content-length",
                 std::to_string(*response.body_source->content_length())});
-        auto block = encoder.encode(fields, id);
+        auto block = encoder.encode(*fields, id);
         if (!block)
             return std::unexpected(block.error());
         return encode_http3_frame(headers_frame{*block});
@@ -1318,6 +1370,16 @@ http3_server_session::http3_server_session(quic_connection& connection,
     local_settings_.webtransport_max_sessions = local_settings_.enable_webtransport ? 1U : 0U;
 }
 
+auto http3_server_session::completed_header_blocks(stream_id id)
+    -> std::deque<std::vector<header_field>>&
+{
+    // Request parsing only reads and pops completed blocks, so an absent
+    // entry can share one empty scratch deque.  QPACK-blocked blocks are
+    // inserted by the decoder coroutine for that stream id alone.
+    const auto it = completed_headers_.find(id);
+    return it != completed_headers_.end() ? it->second : no_completed_headers_;
+}
+
 auto http3_server_session::configure_local_settings(http3_settings settings) noexcept -> void
 {
     // Datagram and WebTransport settings are derived from the QUIC transport
@@ -1362,7 +1424,14 @@ auto http3_server_session::run() -> task<void>
     }
     while (!closing_ && !conn_.is_closed())
     {
-        auto accepted = co_await conn_.async_accept_stream();
+        // Several streams usually arrive in one packet; take the queued ones
+        // without a coroutine frame per accept.
+        std::expected<stream_id, std::error_code> accepted{std::unexpect,
+            std::make_error_code(std::errc::not_connected)};
+        if (const auto queued = conn_.try_accept_stream())
+            accepted = *queued;
+        else
+            accepted = co_await conn_.async_accept_stream();
         if (!accepted)
             break;
 
@@ -1373,8 +1442,10 @@ auto http3_server_session::run() -> task<void>
         // through spawn() prevents that re-entrant interleaving from dropping
         // the later coroutine before its first receive awaiter is installed.
         // peer_streams_ keeps this session alive until every spawned child
-        // invokes its scope guard.
-        spawn(conn_.context(), service_peer_stream(*accepted));
+        // invokes its scope guard.  The accept loop already runs on the
+        // connection's context, so start the child inline instead of paying
+        // a post-queue allocation and reactor hop for every request stream.
+        spawn_local(conn_.context(), service_peer_stream(*accepted));
     }
     close_qpack_waiters(qpack_waiters_);
     co_await peer_streams_.wait();
@@ -1450,8 +1521,13 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
         const auto read_size = !webtransport_handler_ && wire.readable_bytes() < initial_request_read_size
             ? initial_request_read_size - wire.readable_bytes()
             : stream_read_chunk_size;
-        auto received = co_await conn_.async_recv(
-            id, wire.prepare(stream_classified ? read_size : 1U));
+        const auto destination = wire.prepare(stream_classified ? read_size : 1U);
+        // Request bytes are normally already buffered when this stream is
+        // serviced; read them inline and only fall back to the coroutine path
+        // when the connection state is busy or the read must grant credit.
+        auto immediate = conn_.try_recv(id, destination);
+        auto received = immediate ? std::move(*immediate)
+                                  : co_await conn_.async_recv(id, destination);
         if (!received)
         {
 
@@ -1588,11 +1664,13 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                             request_header_mutex_, std::adopt_lock};
                         parsed = request_from_frames(
                             decoder_, wire.readable_view().first(first->second), id,
-                            completed_headers_[id]);
+                            completed_header_blocks(id));
                         if (parsed)
                         {
-                            auto decoder_flush = co_await flush_qpack_decoder_instructions(
-                                conn_, decoder_, qpack_decoder_stream_);
+                            std::expected<void, std::error_code> decoder_flush{};
+                            if (decoder_.has_pending_decoder_instructions())
+                                decoder_flush = co_await flush_qpack_decoder_instructions(
+                                    conn_, decoder_, qpack_decoder_stream_);
                             if (!decoder_flush)
                                 parsed = std::unexpected(decoder_flush.error());
                         }
@@ -1645,11 +1723,13 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                 cnetmod::async_lock_guard header_guard{
                     request_header_mutex_, std::adopt_lock};
                 parsed_request = request_from_frames(decoder_, wire.readable_view(), id,
-                    completed_headers_[id]);
+                    completed_header_blocks(id));
                 if (parsed_request)
                 {
-                    auto decoder_flush = co_await flush_qpack_decoder_instructions(
-                        conn_, decoder_, qpack_decoder_stream_);
+                    std::expected<void, std::error_code> decoder_flush{};
+                    if (decoder_.has_pending_decoder_instructions())
+                        decoder_flush = co_await flush_qpack_decoder_instructions(
+                            conn_, decoder_, qpack_decoder_stream_);
                     if (!decoder_flush)
                         parsed_request = std::unexpected(decoder_flush.error());
                 }
@@ -1763,11 +1843,13 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                 cnetmod::async_lock_guard header_guard{
                     request_header_mutex_, std::adopt_lock};
                 parsed_request = request_from_frames(decoder_, wire.readable_view(), id,
-                    completed_headers_[id]);
+                    completed_header_blocks(id));
                 if (parsed_request)
                 {
-                    auto decoder_flush = co_await flush_qpack_decoder_instructions(
-                        conn_, decoder_, qpack_decoder_stream_);
+                    std::expected<void, std::error_code> decoder_flush{};
+                    if (decoder_.has_pending_decoder_instructions())
+                        decoder_flush = co_await flush_qpack_decoder_instructions(
+                            conn_, decoder_, qpack_decoder_stream_);
                     if (!decoder_flush)
                         parsed_request = std::unexpected(decoder_flush.error());
                 }
@@ -1868,7 +1950,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                             co_await request_header_mutex_.lock();
                             cnetmod::async_lock_guard header_guard{
                                 request_header_mutex_, std::adopt_lock};
-                            auto& completed_headers = completed_headers_[id];
+                            auto& completed_headers = completed_header_blocks(id);
                             if (!completed_headers.empty())
                             {
                                 fields = std::move(completed_headers.front());
@@ -1878,8 +1960,10 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                                 fields = decoder_.decode(headers->encoded_headers, id);
                             if (fields)
                             {
-                                auto decoder_flush = co_await flush_qpack_decoder_instructions(
-                                    conn_, decoder_, qpack_decoder_stream_);
+                                std::expected<void, std::error_code> decoder_flush{};
+                                if (decoder_.has_pending_decoder_instructions())
+                                    decoder_flush = co_await flush_qpack_decoder_instructions(
+                                        conn_, decoder_, qpack_decoder_stream_);
                                 if (!decoder_flush)
                                     fields = std::unexpected(decoder_flush.error());
                             }

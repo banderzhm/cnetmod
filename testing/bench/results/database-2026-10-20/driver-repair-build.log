@@ -1,0 +1,16 @@
+[0/2] Re-checking globbed directories...
+[1/7] Scanning /root/cnetmod-db-20261020/control-source/testing/database/drivers/postgresql/postgresql_interoperability_driver_main.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-db-20261020/control-source/testing/database/drivers/postgresql/postgresql_interoperability_driver_main.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[2/7] Generating CXX dyndep file testing/database/CMakeFiles/postgresql_interoperability_driver.dir/CXX.dd
+[3/5] Building CXX object testing/database/CMakeFiles/postgresql_interoperability_driver.dir/drivers/postgresql/postgresql_interoperability_driver_main.cpp.o
+[4/5] Linking CXX executable testing/database/postgresql_interoperability_driver
+[0/2] Re-checking globbed directories...
+[1/7] Scanning /mnt/c/Users/25007/.codex/worktrees/c315/cnetmod/testing/database/drivers/postgresql/postgresql_interoperability_driver_main.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/mnt/c/Users/25007/.codex/worktrees/c315/cnetmod/testing/database/drivers/postgresql/postgresql_interoperability_driver_main.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[2/7] Generating CXX dyndep file testing/database/CMakeFiles/postgresql_interoperability_driver.dir/CXX.dd
+[3/5] Building CXX object testing/database/CMakeFiles/postgresql_interoperability_driver.dir/drivers/postgresql/postgresql_interoperability_driver_main.cpp.o
+[4/5] Linking CXX executable testing/database/postgresql_interoperability_driver

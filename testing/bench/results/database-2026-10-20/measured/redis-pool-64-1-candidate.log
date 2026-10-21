@@ -1,0 +1,1 @@
+[2026-10-20 14:43:17.836] [info] [128670494813312] [bench_database.cpp:33] RESULT database=redis mode=pool operations=23631912 seconds=3.000000 ops_per_second=7877303.664

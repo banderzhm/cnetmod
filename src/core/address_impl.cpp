@@ -101,6 +101,15 @@ auto ip_address::to_string() const -> std::string
     return v6_.to_string();
 }
 
+auto ip_address::operator==(const ip_address& other) const noexcept -> bool
+{
+    if (family_ != other.family_)
+        return false;
+    return family_ == address_family::ipv4
+        ? v4_ == other.v4_
+        : v6_ == other.v6_;
+}
+
 // =============================================================================
 // endpoint
 // =============================================================================
@@ -135,6 +144,11 @@ auto endpoint::to_string() const -> std::string
     if (address_.is_v6())
         return std::format("[{}]:{}", address_.to_string(), port_);
     return std::format("{}:{}", address_.to_string(), port_);
+}
+
+auto endpoint::operator==(const endpoint& other) const noexcept -> bool
+{
+    return port_ == other.port_ && address_ == other.address_;
 }
 
 } // namespace cnetmod

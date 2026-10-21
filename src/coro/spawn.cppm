@@ -127,6 +127,25 @@ export void spawn(io_context& ctx, task<void> task_to_run)
 }
 
 /**
+ * @brief Starts a fire-and-forget task without a redundant reactor round-trip.
+ *
+ * Unlike spawn(), which always defers execution through the io_context's post
+ * queue, this entry begins the task inline when the caller already runs on the
+ * target context. Callers must therefore not rely on deferred execution for
+ * re-entrancy protection; use it for per-connection child work that owns its
+ * own lifetime. From any other thread it behaves exactly like spawn().
+ */
+export void spawn_local(io_context& ctx, task<void> task_to_run)
+{
+    [](io_context& context, task<void> inner) -> detached_task
+    {
+        if (!context.running_in_this_thread())
+            co_await detail::detached_post_awaitable{context};
+        co_await std::move(inner);
+    }(ctx, std::move(task_to_run));
+}
+
+/**
  * @brief Dispatches a background task with an explicit failure observer.
  *
  * Exceptions from posting or executing the task are reported once. Exceptions
@@ -175,6 +194,30 @@ void spawn_guarded(io_context& ctx, task<void> task_to_run)
             detail::report_static_spawn_failure<OnError>();
         }
     }(ctx, std::move(task_to_run));
+}
+
+/// Start inline on the owning event loop, otherwise post to it. This is an
+/// explicit dispatch operation; spawn() continues to promise deferred posting.
+export template <auto OnError>
+requires std::invocable<decltype(OnError), std::exception_ptr>
+void dispatch_guarded(io_context& ctx, task<void> task_to_run)
+{
+    if (!ctx.running_in_this_thread())
+    {
+        spawn_guarded<OnError>(ctx, std::move(task_to_run));
+        return;
+    }
+    [](task<void> inner) -> detached_task
+    {
+        try
+        {
+            co_await std::move(inner);
+        }
+        catch (...)
+        {
+            detail::report_static_spawn_failure<OnError>();
+        }
+    }(std::move(task_to_run));
 }
 
 } // namespace cnetmod

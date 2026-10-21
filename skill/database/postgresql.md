@@ -547,6 +547,17 @@ auto main() -> int
 - 不要长时间持有 `pooled_connection`——及时归还以维持池吞吐量
 - 不要在多 worker 场景共享同一个 `connection_pool`——每个 worker 应持有独立池
 
+## 连接池与协议性能路径
+
+有正的借用预算且没有 FIFO 等待者时，`acquire()` 在锁内直接借出已有空闲连接，
+不为即时完成的操作创建超时定时器。没有可用连接、锁竞争、关闭或过期预算仍走原有
+可取消等待路径。普通借还按槽位增量维护 idle/checked-out 快照；扩容、重连和关闭
+仍完整刷新统计。
+
+客户端用每连接 8 KiB 的接收缓冲跨消息预读，不等待缓冲填满。长度上限和消息解析
+仍逐条执行；取消、断线和重连清空未读位置。协程不得并发操作同一客户端。
+协议参考：[PostgreSQL message formats](https://www.postgresql.org/docs/current/protocol-message-formats.html)。
+
 ## 参考示例
 
 - `examples/database/postgresql/postgresql_production_service.cpp` — 生产级服务架构

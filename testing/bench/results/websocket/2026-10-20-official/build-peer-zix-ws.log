@@ -1,0 +1,109 @@
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+Sending build context to Docker daemon   16.9kB
+Step 1/20 : FROM alpine:3.20 AS build
+ ---> d9e853e87e55
+Step 2/20 : ARG RETRY=6
+ ---> Running in ab5a3f932839
+ ---> Removed intermediate container ab5a3f932839
+ ---> 8408f4069e63
+Step 3/20 : ARG TARGETARCH
+ ---> Running in 7164225135dc
+ ---> Removed intermediate container 7164225135dc
+ ---> 2f6faa57eb03
+Step 4/20 : ARG RETRY_DELAY=3
+ ---> Running in 90437d2bff53
+ ---> Removed intermediate container 90437d2bff53
+ ---> 5dc9063a1ff6
+Step 5/20 : ARG TIMEOUT_SEC=180
+ ---> Running in 0043dcf1c0a4
+ ---> Removed intermediate container 0043dcf1c0a4
+ ---> 3ac225f5dbf3
+Step 6/20 : ARG ZIG_VERSION=0.16.0
+ ---> Running in e576e9a7d2a2
+ ---> Removed intermediate container e576e9a7d2a2
+ ---> 59f6142294f5
+Step 7/20 : ARG ZIX_VERSION=0.5.x
+ ---> Running in 82d874297e11
+ ---> Removed intermediate container 82d874297e11
+ ---> 449ecb423408
+Step 8/20 : RUN apk add --no-cache ca-certificates curl git tar xz openssl
+ ---> Running in 02679c9b4fb9
+fetch https://dl-cdn.alpinelinux.org/alpine/v3.20/main/x86_64/APKINDEX.tar.gz
+fetch https://dl-cdn.alpinelinux.org/alpine/v3.20/community/x86_64/APKINDEX.tar.gz
+(1/19) Installing ca-certificates (20260413-r0)
+(2/19) Installing brotli-libs (1.1.0-r2)
+(3/19) Installing c-ares (1.33.1-r0)
+(4/19) Installing libunistring (1.2-r0)
+(5/19) Installing libidn2 (2.3.7-r0)
+(6/19) Installing nghttp2-libs (1.62.1-r0)
+(7/19) Installing libpsl (0.21.5-r1)
+(8/19) Installing zstd-libs (1.5.6-r0)
+(9/19) Installing libcurl (8.14.1-r2)
+(10/19) Installing curl (8.14.1-r2)
+(11/19) Installing libexpat (2.8.1-r0)
+(12/19) Installing pcre2 (10.43-r0)
+(13/19) Installing git (2.45.4-r0)
+(14/19) Installing git-init-template (2.45.4-r0)
+(15/19) Installing openssl (3.3.7-r0)
+(16/19) Installing libacl (2.3.2-r0)
+(17/19) Installing tar (1.35-r2)
+(18/19) Installing xz-libs (5.8.3-r0)
+(19/19) Installing xz (5.8.3-r0)
+Executing busybox-1.36.1-r31.trigger
+Executing ca-certificates-20260413-r0.trigger
+OK: 22 MiB in 33 packages
+ ---> Removed intermediate container 02679c9b4fb9
+ ---> e1b4a7e4272c
+Step 9/20 : WORKDIR /server
+ ---> Running in ccc9e22a0679
+ ---> Removed intermediate container ccc9e22a0679
+ ---> 39cede860878
+Step 10/20 : RUN set -eu;     case "${TARGETARCH:-amd64}" in         amd64) ZIG_ARCH=x86_64 ;;         arm64) ZIG_ARCH=aarch64 ;;         *) echo "unsupported arch: ${TARGETARCH}" >&2; exit 1 ;;     esac;     curl -fSL -m ${TIMEOUT_SEC} "https://ziglang.org/download/${ZIG_VERSION}/zig-${ZIG_ARCH}-linux-${ZIG_VERSION}.tar.xz"         | tar -xJ -C /opt;     mv "/opt/zig-${ZIG_ARCH}-linux-${ZIG_VERSION}" /opt/zig
+ ---> Running in ef5b3d74c3b8
+[91m  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0[0m[91m  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0[0m[91m  0 52.9M    0 98049    0     0  55298      0  0:16:43  0:00:01  0:16:42 55270[0m[91m  2 52.9M    2 1471k    0     0   517k      0  0:01:44  0:00:02  0:01:42  517k[0m[91m  9 52.9M    9 5295k    0     0  1423k      0  0:00:38  0:00:03  0:00:35 1423k[0m[91m 15 52.9M   15 8207k    0     0  1695k      0  0:00:31  0:00:04  0:00:27 1695k[0m[91m 16 52.9M   16 9023k    0     0  1570k      0  0:00:34  0:00:05  0:00:29 1888k[0m[91m 25 52.9M   25 13.3M    0     0  1987k      0  0:00:27  0:00:06  0:00:21 2657k[0m[91m 30 52.9M   30 16.1M    0     0  2105k      0  0:00:25  0:00:07  0:00:18 3008k[0m[91m 34 52.9M   34 18.2M    0     0  2143k      0  0:00:25  0:00:08  0:00:17 2677k[0m[91m 37 52.9M   37 20.0M    0     0  2096k      0  0:00:25  0:00:09  0:00:16 2485k[0m[91m 42 52.9M   42 22.4M    0     0  2135k      0  0:00:25  0:00:10  0:00:15 2785k[0m[91m 47 52.9M   47 25.1M    0     0  2202k      0  0:00:24  0:00:11  0:00:13 2509k[0m[91m 56 52.9M   56 29.7M    0     0  2373k      0  0:00:22  0:00:12  0:00:10 2795k[0m[91m 57 52.9M   57 30.2M    0     0  2226k      0  0:00:24  0:00:13  0:00:11 2365k[0m[91m 58 52.9M   58 31.1M    0     0  2170k      0  0:00:24  0:00:14  0:00:10 2320k[0m[91m 76 52.9M   76 40.3M    0     0  2601k      0  0:00:20  0:00:15  0:00:05 3574k[0m[91m 76 52.9M   76 40.4M    0     0  2462k      0  0:00:21  0:00:16  0:00:05 3056k[0m[91m 90 52.9M   90 48.1M    0     0  2785k      0  0:00:19  0:00:17  0:00:02 3867k[0m[91m100 52.9M  100 52.9M    0     0  2995k      0  0:00:18  0:00:18 --:--:-- 5575k
+[0m ---> Removed intermediate container ef5b3d74c3b8
+ ---> cee189e8d5c3
+Step 11/20 : ENV PATH="/opt/zig:${PATH}"
+ ---> Running in daceffe53e71
+ ---> Removed intermediate container daceffe53e71
+ ---> 0943e6a0d7a0
+Step 12/20 : COPY build.zig ./
+ ---> 057b5ea75e08
+Step 13/20 : COPY build.zig.zon.template ./build.zig.zon
+ ---> aa1e69b822e8
+Step 14/20 : COPY src ./src
+ ---> 22db3cce308d
+Step 15/20 : RUN set -eu;     fetch_zix() {         url="$1"; attempt=1;         while [ "${attempt}" -le "${RETRY}" ]; do             if $(zig fetch --save ${url}); then                 return 0;             fi;             echo "zix: ${url} attempt ${attempt}/${RETRY} failed" >&2;             attempt=$((attempt + 1));             [ "${attempt}" -le "${RETRY}" ] && sleep "${RETRY_DELAY}";         done;         return 1;     };     fetch_zix "git+https://codeberg.org/prothegee/zix#${ZIX_VERSION}"         || { echo "zix: codeberg exhausted ${RETRY} attempts" >&2;     fetch_zix "git+https://github.com/prothegee/zix#${ZIX_VERSION}"; }         || { echo "zix: github exhausted ${RETRY} attempts" >&2; exit 1; }
+ ---> Running in 0074e449fc61
+[91merror: unable to discover remote git server capabilities: HttpConnectionClosing
+[0m[91mzix: git+https://codeberg.org/prothegee/zix#0.5.x attempt 1/6 failed
+[0m[91merror: unable to discover remote git server capabilities: HttpConnectionClosing
+[0m[91mzix: git+https://codeberg.org/prothegee/zix#0.5.x attempt 2/6 failed
+[0m[91merror: unable to discover remote git server capabilities: HttpConnectionClosing
+[0m[91mzix: git+https://codeberg.org/prothegee/zix#0.5.x attempt 3/6 failed
+[0m[91merror: unable to discover remote git server capabilities: HttpConnectionClosing
+[0m[91mzix: git+https://codeberg.org/prothegee/zix#0.5.x attempt 4/6 failed
+[0m[91merror: unable to discover remote git server capabilities: HttpConnectionClosing
+[0m[91mzix: git+https://codeberg.org/prothegee/zix#0.5.x attempt 5/6 failed
+[0m[91merror: unable to discover remote git server capabilities: HttpConnectionClosing
+[0m[91mzix: git+https://codeberg.org/prothegee/zix#0.5.x attempt 6/6 failed
+zix: codeberg exhausted 6 attempts
+[0m[91merror: unable to discover remote git server capabilities: HttpConnectionClosing
+[0m[91mzix: git+https://github.com/prothegee/zix#0.5.x attempt 1/6 failed
+[0m[91merror: unable to discover remote git server capabilities: HttpConnectionClosing
+[0m[91mzix: git+https://github.com/prothegee/zix#0.5.x attempt 2/6 failed
+[0m[91merror: unable to discover remote git server capabilities: HttpConnectionClosing
+[0m[91mzix: git+https://github.com/prothegee/zix#0.5.x attempt 3/6 failed
+[0m[91merror: unable to discover remote git server capabilities: HttpConnectionClosing
+[0m[91mzix: git+https://github.com/prothegee/zix#0.5.x attempt 4/6 failed
+[0m[91merror: unable to discover remote git server capabilities: HttpConnectionClosing
+[0m[91mzix: git+https://github.com/prothegee/zix#0.5.x attempt 5/6 failed
+[0m[91merror: unable to discover remote git server capabilities: HttpConnectionClosing
+[0m[91mzix: git+https://github.com/prothegee/zix#0.5.x attempt 6/6 failed
+zix: github exhausted 6 attempts
+[0mThe command '/bin/sh -c set -eu;     fetch_zix() {         url="$1"; attempt=1;         while [ "${attempt}" -le "${RETRY}" ]; do             if $(zig fetch --save ${url}); then                 return 0;             fi;             echo "zix: ${url} attempt ${attempt}/${RETRY} failed" >&2;             attempt=$((attempt + 1));             [ "${attempt}" -le "${RETRY}" ] && sleep "${RETRY_DELAY}";         done;         return 1;     };     fetch_zix "git+https://codeberg.org/prothegee/zix#${ZIX_VERSION}"         || { echo "zix: codeberg exhausted ${RETRY} attempts" >&2;     fetch_zix "git+https://github.com/prothegee/zix#${ZIX_VERSION}"; }         || { echo "zix: github exhausted ${RETRY} attempts" >&2; exit 1; }' returned a non-zero code: 1

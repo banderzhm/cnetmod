@@ -49,6 +49,11 @@ struct quic_aead_context
     auto operator=(const quic_aead_context&) -> quic_aead_context& = delete;
 
     EVP_AEAD_CTX context;
+    // Header-protection AES-ECB schedule. It is derived from the immutable
+    // hp_key of the same key generation, so it is computed once per key
+    // instead of once per sent or received packet.
+    mutable AES_KEY hp_aes_key{};
+    mutable bool hp_aes_ready{false};
 };
 
 // =============================================================================
@@ -421,6 +426,7 @@ auto quic_tls_session::install_secret(
     // A TLS callback may replace an existing level while retrying a
     // handshake. The cached AEAD precomputation belongs to the old immutable
     // key and must never survive that replacement.
+    keys.aead_context_cached = nullptr;
     std::atomic_store_explicit(&keys.aead_context,
         std::shared_ptr<quic_aead_context>{}, std::memory_order_release);
     keys.cipher_id = cipher_id;
@@ -1261,19 +1267,19 @@ auto quic_tls_session::application_write_key_phase() const noexcept -> bool
 }
 
 auto quic_tls_session::application_read_key_candidates() const
-    -> std::vector<application_read_key_candidate>
+    -> application_read_key_candidate_list
 {
-    std::vector<application_read_key_candidate> candidates;
+    application_read_key_candidate_list candidates{};
     const auto index = level_index(encryption_level::application);
     if (read_keys_[index].valid())
-        candidates.push_back({&read_keys_[index], read_application_key_phase_,
-            application_read_key_kind::current});
+        candidates.entries[candidates.size++] = {&read_keys_[index], read_application_key_phase_,
+            application_read_key_kind::current};
     if (next_read_application_keys_)
-        candidates.push_back({std::addressof(*next_read_application_keys_), !read_application_key_phase_,
-            application_read_key_kind::next});
+        candidates.entries[candidates.size++] = {std::addressof(*next_read_application_keys_), !read_application_key_phase_,
+            application_read_key_kind::next};
     if (previous_read_application_keys_)
-        candidates.push_back({std::addressof(*previous_read_application_keys_), !read_application_key_phase_,
-            application_read_key_kind::previous});
+        candidates.entries[candidates.size++] = {std::addressof(*previous_read_application_keys_), !read_application_key_phase_,
+            application_read_key_kind::previous};
     return candidates;
 }
 
@@ -1328,6 +1334,35 @@ auto quic_tls_session::get_alpn_selected() const noexcept -> std::string_view
 // Header protection (RFC 9001 §5.4)
 // =============================================================================
 
+namespace {
+
+    auto aead_context_for(const quic_level_keys& keys)
+        -> std::expected<const quic_aead_context*, std::error_code>;
+
+    /// Returns the cached AES-ECB schedule used for header protection.
+    /// The schedule is immutable for a key generation, so rebuilding it for
+    /// every packet only repeated AES key expansion work.
+    auto hp_aes_schedule(const quic_level_keys& keys)
+        -> std::expected<const AES_KEY*, std::error_code>
+    {
+        auto context = aead_context_for(keys);
+        if (!context)
+            return std::unexpected(context.error());
+        if (!(*context)->hp_aes_ready)
+        {
+            const auto key_bits = keys.hp_key.size() * CHAR_BIT;
+            if (AES_set_encrypt_key(keys.hp_key.data(),
+                    static_cast<int>(key_bits), &(*context)->hp_aes_key) != 0)
+            {
+                return std::unexpected(make_ssl_error());
+            }
+            (*context)->hp_aes_ready = true;
+        }
+        return std::addressof((*context)->hp_aes_key);
+    }
+
+} // namespace
+
 namespace detail {
 
     /// Compute the 5-byte header protection mask from the sample
@@ -1372,14 +1407,28 @@ namespace detail {
                     std::make_error_code(std::errc::not_supported));
             }
 
-            AES_KEY aes_key;
-            if (AES_set_encrypt_key(keys.hp_key.data(), static_cast<int>(key_bits), &aes_key) != 0)
+            AES_KEY fallback_key;
+            const AES_KEY* aes_key = nullptr;
+            if (keys.aead != nullptr && !keys.aead_key.empty())
             {
-                return std::unexpected(make_ssl_error());
+                auto schedule = hp_aes_schedule(keys);
+                if (!schedule)
+                    return std::unexpected(schedule.error());
+                aes_key = *schedule;
+            }
+            else
+            {
+                // Partial fixtures may carry header-protection material only.
+                if (AES_set_encrypt_key(keys.hp_key.data(),
+                        static_cast<int>(key_bits), &fallback_key) != 0)
+                {
+                    return std::unexpected(make_ssl_error());
+                }
+                aes_key = &fallback_key;
             }
 
             std::array<std::uint8_t, 16> block{};
-            AES_encrypt(sample_u8, block.data(), &aes_key);
+            AES_encrypt(sample_u8, block.data(), aes_key);
             std::copy_n(block.begin(), 5, mask.begin());
         }
 
@@ -1563,29 +1612,38 @@ namespace detail {
 namespace {
 
     auto aead_context_for(const quic_level_keys& keys)
-        -> std::expected<std::shared_ptr<quic_aead_context>, std::error_code>
+        -> std::expected<const quic_aead_context*, std::error_code>
     {
+        // The plain cached pointer is read on every packet.  A context, once
+        // created, is never replaced for a key generation, and one connection
+        // processes its packets on a single executor.
+        if (keys.aead_context_cached != nullptr)
+            return keys.aead_context_cached;
+
         auto cached = std::atomic_load_explicit(&keys.aead_context,
             std::memory_order_acquire);
-        if (cached)
-            return cached;
-
-        auto created = std::make_shared<quic_aead_context>();
-        if (EVP_AEAD_CTX_init(&created->context,
-                static_cast<const EVP_AEAD*>(keys.aead), keys.aead_key.data(),
-                keys.aead_key.size(), keys.tag_len, nullptr) != 1)
+        if (!cached)
         {
-            return std::unexpected(make_ssl_error());
-        }
+            auto created = std::make_shared<quic_aead_context>();
+            if (EVP_AEAD_CTX_init(&created->context,
+                    static_cast<const EVP_AEAD*>(keys.aead), keys.aead_key.data(),
+                    keys.aead_key.size(), keys.tag_len, nullptr) != 1)
+            {
+                return std::unexpected(make_ssl_error());
+            }
 
-        std::shared_ptr<quic_aead_context> expected;
-        if (!std::atomic_compare_exchange_strong_explicit(&keys.aead_context,
-                &expected, created, std::memory_order_release,
-                std::memory_order_acquire))
-        {
-            return expected;
+            std::shared_ptr<quic_aead_context> expected;
+            if (!std::atomic_compare_exchange_strong_explicit(&keys.aead_context,
+                    &expected, created, std::memory_order_release,
+                    std::memory_order_acquire))
+            {
+                cached = std::move(expected);
+            }
+            else
+                cached = std::move(created);
         }
-        return created;
+        keys.aead_context_cached = cached.get();
+        return keys.aead_context_cached;
     }
 
 } // namespace
@@ -1731,6 +1789,38 @@ auto open_payload(const quic_level_keys& keys,
         return std::unexpected(make_ssl_error());
     output.resize(output_length);
     return output;
+}
+
+auto open_payload_in_place(const quic_level_keys& keys,
+    std::span<std::byte> packet, std::size_t payload_offset,
+    std::span<const std::byte> header, std::uint64_t packet_number,
+    std::uint32_t path_id)
+    -> std::expected<std::span<std::byte>, std::error_code>
+{
+    if (!keys.valid() || keys.aead == nullptr || keys.aead_key.empty() ||
+        keys.aead_iv.size() != 12 || payload_offset > packet.size() ||
+        packet.size() - payload_offset < keys.tag_len)
+    {
+        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    }
+    if (packet_number > ((std::uint64_t{1} << 62) - 1))
+        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    const auto nonce = detail::build_nonce(keys.aead_iv, packet_number, path_id);
+    auto context = aead_context_for(keys);
+    if (!context)
+        return std::unexpected(context.error());
+    // Exactly equal in/out pointers are BoringSSL's documented in-place form,
+    // so the ciphertext region is overwritten by the plaintext.
+    auto* const plaintext = reinterpret_cast<std::uint8_t*>(packet.data() + payload_offset);
+    const auto ciphertext_size = packet.size() - payload_offset;
+    std::size_t output_length{};
+    const auto ok = EVP_AEAD_CTX_open(&(*context)->context,
+        plaintext, &output_length, ciphertext_size - keys.tag_len,
+        nonce.data(), nonce.size(), plaintext, ciphertext_size,
+        reinterpret_cast<const std::uint8_t*>(header.data()), header.size());
+    if (ok != 1)
+        return std::unexpected(make_ssl_error());
+    return packet.subspan(payload_offset, output_length);
 }
 
 auto quic_tls_session::encrypt_packet(

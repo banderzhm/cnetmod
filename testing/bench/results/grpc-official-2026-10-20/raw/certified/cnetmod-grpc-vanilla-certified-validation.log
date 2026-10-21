@@ -1,0 +1,13 @@
+=== Validating: cnetmod-grpc-vanilla-certified ===
+[info] Subscribed tests: unary-grpc
+[build] Building Docker image...
+WARNING: Published ports are discarded when using host network mode
+cc6b9ebd8b7b5b29d43202d3c079dac4b33c6da8200a9ae70d150ac55fba119f
+[wait] Waiting for server...
+[ready] Server is up
+[test] unary-grpc endpoint (h2c on :8080)
+  PASS [GetSum over h2c] (a=277 b=541 -> 818)
+  PASS [GetSum over h2c (second random pair)] (a=589 b=242 -> 831)
+
+=== Results: 2 passed, 0 failed ===
+httparena-validate-cnetmod-grpc-vanilla-certified

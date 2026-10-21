@@ -1,0 +1,9 @@
+{
+  "cnetmod-grpc-phase8": {
+    "image": "sha256:00927a80f5df771408bc7a3fbd0531f084e8a02aec1251b041ecacd7163dc11e",
+    "source_base": "eb33c7529f4202810d7f240459322e6f3f26cf46",
+    "source_patch_sha256": "78540a73800b53210cd666abeac2f34699c9e217b9fbe7ce390cca8b10b4c107",
+    "binary_sha256": "7fe1de52cae3ae4bf86e1b1b3d15d90e1edde12a75e72993c2566b7fd74599cf",
+    "runtime": "32 workers; default batch8 CQ256; no affinity; synchronous owner-loop connection credit"
+  }
+}

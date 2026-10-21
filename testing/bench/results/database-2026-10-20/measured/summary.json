@@ -1,0 +1,266 @@
+[
+  {
+    "database": "postgresql",
+    "mode": "pool",
+    "capacity": 1,
+    "rounds": {
+      "control": [
+        2987437.656,
+        2989938.344,
+        3008684.817
+      ],
+      "candidate": [
+        9591258.975,
+        9670337.923,
+        9578601.475
+      ]
+    },
+    "median": {
+      "control": 2989938.344,
+      "candidate": 9591258.975
+    },
+    "gain_percent": 220.7845069530303
+  },
+  {
+    "database": "postgresql",
+    "mode": "pool",
+    "capacity": 64,
+    "rounds": {
+      "control": [
+        2177456.981,
+        2166431.186,
+        2167549.305
+      ],
+      "candidate": [
+        9645646.801,
+        9638656.082,
+        9612697.41
+      ]
+    },
+    "median": {
+      "control": 2167549.305,
+      "candidate": 9638656.082
+    },
+    "gain_percent": 344.67990000347413
+  },
+  {
+    "database": "mysql",
+    "mode": "pool",
+    "capacity": 1,
+    "rounds": {
+      "control": [
+        3332185.02,
+        3312547.822,
+        3312533.774
+      ],
+      "candidate": [
+        10833972.921,
+        10851798.044,
+        10829259.773
+      ]
+    },
+    "median": {
+      "control": 3312547.822,
+      "candidate": 10833972.921
+    },
+    "gain_percent": 227.05861177451098
+  },
+  {
+    "database": "mysql",
+    "mode": "pool",
+    "capacity": 64,
+    "rounds": {
+      "control": [
+        3238128.441,
+        3296504.477,
+        3299263.491
+      ],
+      "candidate": [
+        10818077.088,
+        10639024.954,
+        10891347.561
+      ]
+    },
+    "median": {
+      "control": 3296504.477,
+      "candidate": 10818077.088
+    },
+    "gain_percent": 228.16812971068808
+  },
+  {
+    "database": "redis",
+    "mode": "pool",
+    "capacity": 1,
+    "rounds": {
+      "control": [
+        2992988.153,
+        2970648.617,
+        2984007.948
+      ],
+      "candidate": [
+        7936947.767,
+        7958006.671,
+        7974102.414
+      ]
+    },
+    "median": {
+      "control": 2984007.948,
+      "candidate": 7958006.671
+    },
+    "gain_percent": 166.68852126663305
+  },
+  {
+    "database": "redis",
+    "mode": "pool",
+    "capacity": 64,
+    "rounds": {
+      "control": [
+        2913771.379,
+        2923951.382,
+        2903850.979
+      ],
+      "candidate": [
+        7877303.664,
+        7974155.859,
+        8029443.956
+      ]
+    },
+    "median": {
+      "control": 2913771.379,
+      "candidate": 7974155.859
+    },
+    "gain_percent": 173.6712947512276
+  },
+  {
+    "database": "postgresql",
+    "mode": "query",
+    "capacity": 1,
+    "rounds": {
+      "control": [
+        7487.157,
+        8015.297,
+        8103.155
+      ],
+      "candidate": [
+        9609.552,
+        7915.123,
+        9011.543
+      ]
+    },
+    "median": {
+      "control": 8015.297,
+      "candidate": 9011.543
+    },
+    "gain_percent": 12.4293086082774
+  },
+  {
+    "database": "postgresql",
+    "mode": "rows",
+    "capacity": 1,
+    "rounds": {
+      "control": [
+        2977.788,
+        2853.847,
+        2669.594
+      ],
+      "candidate": [
+        5250.85,
+        5711.854,
+        5682.26
+      ]
+    },
+    "median": {
+      "control": 2853.847,
+      "candidate": 5682.26
+    },
+    "gain_percent": 99.10878193540158
+  },
+  {
+    "database": "mysql",
+    "mode": "query",
+    "capacity": 1,
+    "rounds": {
+      "control": [
+        22.738,
+        22.696,
+        22.747
+      ],
+      "candidate": [
+        8165.966,
+        7656.619,
+        7122.653
+      ]
+    },
+    "median": {
+      "control": 22.738,
+      "candidate": 7656.619
+    },
+    "gain_percent": 33573.22983551763
+  },
+  {
+    "database": "mysql",
+    "mode": "reset",
+    "capacity": 1,
+    "rounds": {
+      "control": [
+        23.056,
+        23.07,
+        23.078
+      ],
+      "candidate": [
+        5333.579,
+        6216.732,
+        3503.359
+      ]
+    },
+    "median": {
+      "control": 23.07,
+      "candidate": 5333.579
+    },
+    "gain_percent": 23019.11140008669
+  },
+  {
+    "database": "redis",
+    "mode": "query",
+    "capacity": 1,
+    "rounds": {
+      "control": [
+        7451.188,
+        7815.918,
+        8371.366
+      ],
+      "candidate": [
+        9935.571,
+        9049.507,
+        8975.336
+      ]
+    },
+    "median": {
+      "control": 7815.918,
+      "candidate": 9049.507
+    },
+    "gain_percent": 15.78303405946684
+  },
+  {
+    "database": "redis",
+    "mode": "batch",
+    "capacity": 1,
+    "rounds": {
+      "control": [
+        8835.747,
+        8068.072,
+        9124.434
+      ],
+      "candidate": [
+        8738.188,
+        8544.6,
+        8850.583
+      ]
+    },
+    "median": {
+      "control": 8835.747,
+      "candidate": 8738.188
+    },
+    "gain_percent": -1.1041398084395082
+  }
+]

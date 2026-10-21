@@ -10,6 +10,7 @@ public:
     [[nodiscard]] auto available() const noexcept -> std::int32_t;
     [[nodiscard]] auto consume(std::uint32_t bytes) noexcept -> bool;
     [[nodiscard]] auto increase(std::uint32_t bytes) noexcept -> bool;
+    [[nodiscard]] auto adjust(std::int64_t delta) noexcept -> bool;
 
 private:
     std::int32_t value_;

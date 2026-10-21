@@ -1,0 +1,19 @@
+Test project /root/cnetmod-db-20261020/control-build
+    Start 21: test_redis
+1/5 Test #21: test_redis .......................   Passed    1.34 sec
+    Start 22: test_redis_template
+2/5 Test #22: test_redis_template ..............   Passed    1.12 sec
+    Start 26: test_mysql_pool
+3/5 Test #26: test_mysql_pool ..................   Passed    0.27 sec
+    Start 27: test_postgresql_transport
+4/5 Test #27: test_postgresql_transport ........   Passed    0.03 sec
+    Start 29: test_redis_tls
+5/5 Test #29: test_redis_tls ...................   Passed    0.66 sec
+
+100% tests passed out of 5
+
+Label Time Summary:
+mysql    =   0.27 sec*proc (1 test)
+pool     =   0.27 sec*proc (1 test)
+
+Total Test time (real) =   3.43 sec

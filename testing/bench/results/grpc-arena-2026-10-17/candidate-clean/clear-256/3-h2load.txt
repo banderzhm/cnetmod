@@ -1,0 +1,46 @@
+starting benchmark...
+spawning thread #0: 64 total client(s). Timing-based test with 0s of warm-up time and 5s of main duration for measurements.
+spawning thread #1: 64 total client(s). Timing-based test with 0s of warm-up time and 5s of main duration for measurements.
+spawning thread #2: 64 total client(s). Timing-based test with 0s of warm-up time and 5s of main duration for measurements.
+spawning thread #3: 64 total client(s). Timing-based test with 0s of warm-up time and 5s of main duration for measurements.
+Warm-up started for thread #2.
+Warm-up started for thread #0.
+Warm-up started for thread #3.
+progress: 9% of clients started
+Warm-up started for thread #1.
+progress: 18% of clients started
+progress: 28% of clients started
+progress: 37% of clients started
+progress: 46% of clients started
+progress: 56% of clients started
+progress: 65% of clients started
+progress: 75% of clients started
+Warm-up phase is over for thread #2.
+Main benchmark duration is started for thread #2.
+progress: 84% of clients started
+Warm-up phase is over for thread #3.
+Main benchmark duration is started for thread #3.
+progress: 93% of clients started
+Warm-up phase is over for thread #1.
+Main benchmark duration is started for thread #1.
+Warm-up phase is over for thread #0.
+Main benchmark duration is started for thread #0.
+Application protocol: h2c
+Main benchmark duration is over for thread #Main benchmark duration is over for thread #23. Stopping all clients.. Stopping all clients.
+
+Stopped all clients for thread #3
+Stopped all clients for thread #2
+Main benchmark duration is over for thread #1. Stopping all clients.
+Stopped all clients for thread #1
+Main benchmark duration is over for thread #0. Stopping all clients.
+Stopped all clients for thread #0
+
+finished in 5.09s, 373619.60 req/s, 14.02MB/s
+requests: 1868098 total, 1893698 started, 1868098 done, 1868098 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 1868098 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 70.11MB (73517676) total, 7.13MB (7478792) headers (space savings 93.84%), 12.47MB (13076686) data
+                     min         max         mean         sd        +/- sd
+time for request:     1.53ms    115.81ms     65.97ms     12.24ms    71.10%
+time for connect:      567us      7.78ms      3.84ms      1.73ms    61.72%
+time to 1st byte:     2.84ms     40.20ms     18.90ms      8.97ms    73.44%
+req/s           :    1186.57     1804.15     1459.18      203.39    49.61%

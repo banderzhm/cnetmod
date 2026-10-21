@@ -285,8 +285,10 @@ TEST(redis_cancellable_exchange_handles_fragments_errors_and_total_budget)
 
 TEST(redis_cmd_preserves_fragmented_bulk_parser_state)
 {
-    for (const bool aggregate : {false, true})
+    for (const unsigned shape : {0U, 1U, 2U})
     {
+        const bool aggregate = shape != 0;
+        const bool nested = shape == 2;
         cnetmod::net_init network;
         auto io = cnetmod::make_io_context();
         auto listener = cnetmod::socket::create(cnetmod::address_family::ipv4,
@@ -320,7 +322,7 @@ TEST(redis_cmd_preserves_fragmented_bulk_parser_state)
             std::array<char, 128> command{};
             (void)co_await cnetmod::async_read(*io, *peer,
                 cnetmod::mutable_buffer{command.data(), command.size()});
-            const auto prefix = aggregate
+            const auto prefix = nested ? std::format("*2\r\n*1\r\n${}\r\n", payload.size()) : aggregate
                 ? std::format("*1\r\n${}\r\n", payload.size())
                 : std::format("${}\r\n", payload.size());
             (void)co_await cnetmod::async_write_all(*io, *peer,
@@ -333,7 +335,7 @@ TEST(redis_cmd_preserves_fragmented_bulk_parser_state)
             const auto tail = std::string_view{payload}.substr(first.size());
             (void)co_await cnetmod::async_write_all(*io, *peer,
                 cnetmod::const_buffer{tail.data(), tail.size()});
-            constexpr std::string_view terminator = "\r\n";
+            const std::string_view terminator = nested ? "\r\n:9\r\n" : "\r\n";
             (void)co_await cnetmod::async_write_all(*io, *peer,
                 cnetmod::const_buffer{terminator.data(), terminator.size()});
             finish();
@@ -351,10 +353,14 @@ TEST(redis_cmd_preserves_fragmented_bulk_parser_state)
                 auto response = co_await connection.cmd({"GET", "fragmented"});
                 if (response)
                 {
-                    const auto index = aggregate ? 1U : 0U;
+                    const auto index = nested ? 2U : aggregate ? 1U : 0U;
                     verified = response->size() > index &&
                         response->at(index).value == payload &&
                         connection.is_reusable();
+                    if (nested)
+                        verified = verified && response->size() == 4 &&
+                            response->back().as_integer() == 9 &&
+                            response->at(2).depth == 2 && response->back().depth == 1;
                 }
             }
             finish();
@@ -715,6 +721,13 @@ TEST(redis_pool_never_reissues_a_closed_returned_lease)
             }
             auto* original = &lease->get();
             *lease = pooled_connection{};
+            cnetmod::cancel_token cancelled;
+            cancelled.cancel();
+            auto rejected_ready = co_await pool.async_get_connection(cancelled);
+            ASSERT_FALSE(rejected_ready.has_value());
+            if (!rejected_ready)
+                ASSERT_EQ(rejected_ready.error(), std::make_error_code(std::errc::operation_canceled));
+            ASSERT_EQ(pool.idle_count(), 1U);
             auto reused = pool.try_get_connection();
             if (!reused || &reused->get() != original || !reused->get().is_open())
             {

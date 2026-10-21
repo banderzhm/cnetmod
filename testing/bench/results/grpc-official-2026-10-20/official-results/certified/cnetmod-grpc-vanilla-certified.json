@@ -1,0 +1,43 @@
+{
+  "framework": "cnetmod-grpc-vanilla-certified",
+  "results": {
+    "unary-grpc-1024": {
+      "framework": "cnetmod-grpc-vanilla-certified",
+      "language": "V",
+      "rps": 4720019,
+      "avg_latency": "13.43ms",
+      "p99_latency": "179.17ms",
+      "cpu": "898.6%",
+      "memory": "539MiB",
+      "connections": 1024,
+      "threads": 64,
+      "duration": "5s",
+      "pipeline": 1,
+      "bandwidth": "434.98MB/s",
+      "reconnects": 0,
+      "status_2xx": 24260900,
+      "status_3xx": 0,
+      "status_4xx": 0,
+      "status_5xx": 0
+    },
+    "unary-grpc-256": {
+      "framework": "cnetmod-grpc-vanilla-certified",
+      "language": "V",
+      "rps": 5006542,
+      "avg_latency": "4.27ms",
+      "p99_latency": "47.69ms",
+      "cpu": "941.9%",
+      "memory": "155MiB",
+      "connections": 256,
+      "threads": 64,
+      "duration": "5s",
+      "pipeline": 1,
+      "bandwidth": "456.89MB/s",
+      "reconnects": 0,
+      "status_2xx": 25483300,
+      "status_3xx": 0,
+      "status_4xx": 0,
+      "status_5xx": 0
+    }
+  }
+}

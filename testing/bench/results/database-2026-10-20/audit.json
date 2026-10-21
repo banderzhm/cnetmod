@@ -1,0 +1,26 @@
+[
+  {
+    "group": "excluded-initial-auth",
+    "reason": "Incomplete matrix: first MySQL plaintext full caching_sha2 authentication required TLS. Fixture repaired with official TLS-client cache bootstrap for both entries."
+  },
+  {
+    "group": "excluded-initial-hello",
+    "reason": "Incomplete matrix: old uncancellable Redis HELLO aggregate decoder left trailing data on Redis 8. Both entries now use their shared cancellable connect API before timing."
+  },
+  {
+    "group": "previous-candidate",
+    "reason": "Complete exploratory candidate bb253cee matrix: Redis pipeline +0.50%, single command -4.51%. Superseded by 21e84d9f whole-pipeline coroutine optimization; no previous peaks reused."
+  },
+  {
+    "group": "live-initial",
+    "reason": "Release driver checks succeeded; ASan found a pre-existing temporary coroutine-lambda lifetime error in PostgreSQL test driver main. Fixed in 3f39afb5 and all real-server checks repeated in live."
+  },
+  {
+    "group": "validation initial build",
+    "reason": "Existing test_application_integrations lacked a direct cnetmod.coro.spawn import in this selected configuration. Explicit import added, then Release and sanitizers passed."
+  },
+  {
+    "group": "source parity first check",
+    "reason": "Initial byte comparison did not normalize committed CRLF. Final comparison explicitly normalizes CRLF to LF and matches all 939 runtime source files for each measured entry."
+  }
+]

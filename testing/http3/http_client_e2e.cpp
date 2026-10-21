@@ -159,6 +159,18 @@ auto run_http_semantics(cnetmod::io_context& context, std::uint16_t port,
     auto get = co_await client.get(url("/get"));
     require_response(state, get, 200, "get-ok", "GET");
 
+    for (const auto path : {"/cached-extra-buffered", "/cached-extra-shared"})
+    {
+        const auto extra = co_await client.get(url(path));
+        if (require_response(state, extra, 200, "asset-ok", "cached headers with middleware") &&
+            (extra->get_header("content-type") != "application/custom" ||
+                extra->get_header("content-length") != "8" ||
+                extra->get_header("x-asset") != "cached" ||
+                extra->get_header("set-cookie") != "session=abc; Secure" ||
+                extra->get_header("access-control-allow-origin") != "https://example.test"))
+            state.fail("cached response lost or duplicated middleware fields");
+    }
+
     auto buffered_large = co_await client.get(url("/buffered-large"));
     const std::string large_body(300U * 1024U, 'x');
     require_response(state, buffered_large, 200, large_body,

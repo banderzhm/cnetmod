@@ -49,6 +49,10 @@ public:
 
     auto set_body(std::string body) -> response&;
 
+    /// Reuse immutable buffered content without copying it into every
+    /// response. The storage remains alive until the transport consumes it.
+    auto set_shared_body(std::shared_ptr<const std::string> body) -> response&;
+
     auto set_body_preserve_headers(std::string body) -> response&;
 
     /// Install a pull-based response body. The transport consumes the source
@@ -126,10 +130,24 @@ public:
     [[nodiscard]] auto header_count() const noexcept -> std::size_t;
     [[nodiscard]] auto take_trailers() noexcept -> header_map;
     [[nodiscard]] auto take_body() noexcept -> std::string;
+    [[nodiscard]] auto shared_body() const noexcept
+        -> const std::shared_ptr<const std::string>&;
+    [[nodiscard]] auto take_shared_body() noexcept
+        -> std::shared_ptr<const std::string>;
     [[nodiscard]] auto body_source() const noexcept
         -> const std::shared_ptr<response_body_source>&;
     [[nodiscard]] auto take_body_source() noexcept
         -> std::shared_ptr<response_body_source>;
+
+    /// Attach a fully encoded HTTP/2 header block for a fixed response shape.
+    /// Transports may send it verbatim instead of rebuilding and re-encoding
+    /// the status line and fields for every request.
+    auto set_preencoded_h2_headers(
+        std::shared_ptr<const preencoded_header_block> block) -> response&;
+    [[nodiscard]] auto preencoded_h2_headers() const noexcept
+        -> const std::shared_ptr<const preencoded_header_block>&;
+    [[nodiscard]] auto take_preencoded_h2_headers() noexcept
+        -> std::shared_ptr<const preencoded_header_block>;
 
     [[nodiscard]] auto get_header(std::string_view key) const -> std::string_view;
 
@@ -146,6 +164,12 @@ public:
     /// used by HTTP/1 pipelining to submit several ordered responses with one
     /// kernel write while keeping serialize_to()'s replacement semantics.
     void append_serialized_to(std::string& output) const;
+    /// Append the status line and header block only, leaving body() for the
+    /// caller to transmit from its own storage (gather writes of large or
+    /// shared bodies). `reserve_extra` sizes the reservation for bytes the
+    /// caller will append afterwards.
+    void append_serialized_headers_to(std::string& output,
+        std::size_t reserve_extra = 0) const;
 
     /// Install a fixed-width, server-generated IMF-fixdate without allocating
     /// a header-map value. A later explicit `set_header("Date", ...)` retains
@@ -184,7 +208,9 @@ private:
     mutable bool headers_snapshot_valid_{};
     header_map trailers_;
     std::string body_;
+    std::shared_ptr<const std::string> shared_body_;
     std::shared_ptr<response_body_source> body_source_;
+    std::shared_ptr<const preencoded_header_block> preencoded_h2_headers_;
     std::array<char, 29U> cached_date_header_{};
     bool has_cached_date_header_ = false;
 };

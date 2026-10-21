@@ -31,12 +31,14 @@ auto invoke(http::authorization_options options, matched_endpoint endpoint,
     http::response response;
     http::header_map headers;
     http::route_params params;
+    // The router normally owns the endpoint; here it lives for the call.
+    std::shared_ptr<http::endpoint> described;
     if (endpoint)
     {
-        auto described = std::make_shared<http::endpoint>();
+        described = std::make_shared<http::endpoint>();
         described->pattern = "/resource";
         described->metadata = std::move(*endpoint);
-        params.matched = std::move(described);
+        params.matched = described.get();
     }
     http::request_context request{*io, peer, "GET", "/resource", headers, {},
         response, std::move(params)};

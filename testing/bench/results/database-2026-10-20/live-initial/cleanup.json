@@ -1,0 +1,17 @@
+[
+  {
+    "database": "redis",
+    "id": "05645f16c61de89882a2d2e828e00506bca61f941d8032ca184788ece154f8ab",
+    "stop_returncode": 0
+  },
+  {
+    "database": "mysql",
+    "id": "2f54fb7343438c74e342c1418971c0202f8ca8dd7c78f6eabc165aed909752bd",
+    "stop_returncode": 0
+  },
+  {
+    "database": "postgresql",
+    "id": "d6823df4a193e21f59eaa0e036f7a1afcf0027d9acdde1e3c1915a636539fd3f",
+    "stop_returncode": 0
+  }
+]

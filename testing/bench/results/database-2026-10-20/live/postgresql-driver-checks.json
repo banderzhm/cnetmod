@@ -1,0 +1,74 @@
+[
+  {
+    "build": "release",
+    "tls_mode": "disable",
+    "marker_bytes": 29,
+    "passed": true
+  },
+  {
+    "build": "release",
+    "tls_mode": "disable",
+    "marker_bytes": 13010,
+    "passed": true
+  },
+  {
+    "build": "release",
+    "tls_mode": "require",
+    "marker_bytes": 29,
+    "passed": true
+  },
+  {
+    "build": "release",
+    "tls_mode": "require",
+    "marker_bytes": 13010,
+    "passed": true
+  },
+  {
+    "build": "release",
+    "tls_mode": "verify-full",
+    "marker_bytes": 29,
+    "passed": true
+  },
+  {
+    "build": "release",
+    "tls_mode": "verify-full",
+    "marker_bytes": 13010,
+    "passed": true
+  },
+  {
+    "build": "asan",
+    "tls_mode": "disable",
+    "marker_bytes": 29,
+    "passed": true
+  },
+  {
+    "build": "asan",
+    "tls_mode": "disable",
+    "marker_bytes": 13010,
+    "passed": true
+  },
+  {
+    "build": "asan",
+    "tls_mode": "require",
+    "marker_bytes": 29,
+    "passed": true
+  },
+  {
+    "build": "asan",
+    "tls_mode": "require",
+    "marker_bytes": 13010,
+    "passed": true
+  },
+  {
+    "build": "asan",
+    "tls_mode": "verify-full",
+    "marker_bytes": 29,
+    "passed": true
+  },
+  {
+    "build": "asan",
+    "tls_mode": "verify-full",
+    "marker_bytes": 13010,
+    "passed": true
+  }
+]

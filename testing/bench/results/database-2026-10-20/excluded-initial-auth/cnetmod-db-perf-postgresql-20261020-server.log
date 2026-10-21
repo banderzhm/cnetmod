@@ -1,0 +1,55 @@
+The files belonging to this database system will be owned by user "postgres".
+This user must also own the server process.
+
+The database cluster will be initialized with locale "en_US.utf8".
+The default database encoding has accordingly been set to "UTF8".
+The default text search configuration will be set to "english".
+
+Data page checksums are enabled.
+
+fixing permissions on existing directory /var/lib/postgresql/18/docker ... ok
+creating subdirectories ... ok
+selecting dynamic shared memory implementation ... posix
+selecting default "max_connections" ... 100
+selecting default "shared_buffers" ... 128MB
+selecting default time zone ... Etc/UTC
+creating configuration files ... ok
+running bootstrap script ... ok
+performing post-bootstrap initialization ... ok
+syncing data to disk ... ok
+
+
+Success. You can now start the database server using:
+
+    pg_ctl -D /var/lib/postgresql/18/docker -l logfile start
+
+waiting for server to start....2026-10-20 14:23:19.861 UTC [65] LOG:  starting PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+2026-10-20 14:23:19.864 UTC [65] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-10-20 14:23:19.873 UTC [71] LOG:  database system was shut down at 2026-10-20 14:23:18 UTC
+2026-10-20 14:23:19.879 UTC [65] LOG:  database system is ready to accept connections
+ done
+server started
+CREATE DATABASE
+
+
+/usr/local/bin/docker-entrypoint.sh: ignoring /docker-entrypoint-initdb.d/*
+
+waiting for server to shut down....2026-10-20 14:23:20.026 UTC [65] LOG:  received fast shutdown request
+2026-10-20 14:23:20.028 UTC [65] LOG:  aborting any active transactions
+2026-10-20 14:23:20.029 UTC [65] LOG:  background worker "logical replication launcher" (PID 74) exited with exit code 1
+2026-10-20 14:23:20.030 UTC [69] LOG:  shutting down
+2026-10-20 14:23:20.032 UTC [69] LOG:  checkpoint starting: shutdown immediate
+2026-10-20 14:23:20.395 UTC [69] LOG:  checkpoint complete: wrote 943 buffers (5.8%), wrote 3 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.012 s, sync=0.341 s, total=0.366 s; sync files=303, longest=0.004 s, average=0.002 s; distance=4352 kB, estimate=4352 kB; lsn=0/1BA1C18, redo lsn=0/1BA1C18
+2026-10-20 14:23:20.405 UTC [65] LOG:  database system is shut down
+ done
+server stopped
+
+PostgreSQL init process complete; ready for start up.
+
+initdb: warning: enabling "trust" authentication for local connections
+initdb: hint: You can change this by editing pg_hba.conf or using the option -A, or --auth-local and --auth-host, the next time you run initdb.
+2026-10-20 14:23:20.447 UTC [1] LOG:  starting PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+2026-10-20 14:23:20.448 UTC [1] LOG:  listening on IPv4 address "127.0.0.1", port 15432
+2026-10-20 14:23:20.458 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.15432"
+2026-10-20 14:23:20.465 UTC [87] LOG:  database system was shut down at 2026-10-20 14:23:20 UTC
+2026-10-20 14:23:20.469 UTC [1] LOG:  database system is ready to accept connections

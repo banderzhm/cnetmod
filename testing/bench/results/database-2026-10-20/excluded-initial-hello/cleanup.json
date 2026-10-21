@@ -1,0 +1,17 @@
+[
+  {
+    "name": "cnetmod-db-perf-redis-20261020",
+    "id": "ff099f1a8864199e6e0871450e05a00c148e68e6782308662669fca066bbee9a",
+    "stop_returncode": 0
+  },
+  {
+    "name": "cnetmod-db-perf-mysql-20261020",
+    "id": "59ef0a4a96b627cd8042aa86acb800503f6345da428eadb72031f73fead41337",
+    "stop_returncode": 0
+  },
+  {
+    "name": "cnetmod-db-perf-postgresql-20261020",
+    "id": "de00d537f00297636cf20462e058f6157a0a6ea1242ede64aa7d96569741aa2a",
+    "stop_returncode": 0
+  }
+]

@@ -120,18 +120,77 @@ namespace detail {
         {"x-frame-options", "sameorigin"},
     }};
 
-    using static_name_index = cnetmod::flat_map<std::string_view,
-        std::vector<std::uint16_t>, std::less<>>;
+    // Open-addressed name index over the static table. Every encoded and
+    // decoded field probes it, so it replaces an ordered map (a string
+    // comparison per binary-search step) with one hash and usually one probe.
+    // Each distinct name owns a contiguous run of its wire indices, kept in
+    // ascending order so the first entry is the canonical name reference.
+    struct static_name_index
+    {
+        static constexpr std::size_t slot_count = 256U;
+        static constexpr std::uint8_t empty = 0xffU;
+        struct name_run
+        {
+            std::string_view name;
+            std::uint8_t first{};
+            std::uint8_t count{};
+        };
+        std::array<std::uint8_t, slot_count> slots{};
+        std::array<name_run, static_table.size()> runs{};
+        std::array<std::uint8_t, static_table.size()> wire_indices{};
+        std::size_t run_count{};
+
+        [[nodiscard]] static constexpr auto hash(std::string_view text) noexcept -> std::size_t
+        {
+            std::uint32_t value = 2166136261U;
+            for (const auto character : text)
+                value = (value ^ static_cast<unsigned char>(character)) * 16777619U;
+            return value;
+        }
+
+        [[nodiscard]] auto find(std::string_view name) const noexcept -> const name_run*
+        {
+            for (auto slot = hash(name) & (slot_count - 1U);; slot = (slot + 1U) & (slot_count - 1U))
+            {
+                const auto run = slots[slot];
+                if (run == empty)
+                    return nullptr;
+                if (runs[run].name == name)
+                    return &runs[run];
+            }
+        }
+
+        [[nodiscard]] auto indices(const name_run& run) const noexcept
+            -> std::span<const std::uint8_t>
+        {
+            return {wire_indices.data() + run.first, run.count};
+        }
+    };
 
     [[nodiscard]] auto static_entries_by_name() -> const static_name_index&
     {
         static const auto index = []
         {
             static_name_index result;
-            result.reserve(static_table.size());
-            for (std::uint16_t wire_index{};
-                wire_index < static_table.size(); ++wire_index)
-                result[static_table[wire_index].name].push_back(wire_index);
+            result.slots.fill(static_name_index::empty);
+            std::size_t next_index{};
+            for (std::uint16_t wire_index{}; wire_index < static_table.size(); ++wire_index)
+            {
+                const auto name = static_table[wire_index].name;
+                if (result.find(name) != nullptr)
+                    continue;
+                auto& run = result.runs[result.run_count];
+                run.name = name;
+                run.first = static_cast<std::uint8_t>(next_index);
+                for (std::uint16_t candidate = wire_index; candidate < static_table.size(); ++candidate)
+                    if (static_table[candidate].name == name)
+                        result.wire_indices[next_index++] = static_cast<std::uint8_t>(candidate);
+                run.count = static_cast<std::uint8_t>(next_index - run.first);
+                auto slot = static_name_index::hash(name) & (static_name_index::slot_count - 1U);
+                while (result.slots[slot] != static_name_index::empty)
+                    slot = (slot + 1U) & (static_name_index::slot_count - 1U);
+                result.slots[slot] = static_cast<std::uint8_t>(result.run_count++);
+            }
             return result;
         }();
         return index;
@@ -183,18 +242,35 @@ namespace detail {
         }
     }
 
-    auto append_string(byte_buffer& out, std::string_view s) -> void
+    auto append_string(byte_buffer& out, std::string_view s,
+        std::vector<std::byte>& scratch) -> void
     {
-        auto huffman = cnetmod::http::v2::huffman_encode(s);
-        if (huffman.size() < s.size())
+        // The caller owns a reusable scratch buffer: huffman_encode() clears
+        // and reserves it, so a repeated header value no longer allocates a
+        // temporary vector for every field.
+        cnetmod::http::v2::huffman_encode(s, scratch);
+        if (scratch.size() < s.size())
         {
-            append_int(out, 0x80U, 7, huffman.size());
-            out.insert(out.end(), huffman.begin(), huffman.end());
+            append_int(out, 0x80U, 7, scratch.size());
+            out.insert(out.end(), scratch.begin(), scratch.end());
             return;
         }
         append_int(out, 0, 7, s.size());
-        for (const auto c : s)
-            out.push_back(static_cast<std::byte>(static_cast<unsigned char>(c)));
+        out.insert(out.end(),
+            reinterpret_cast<const std::byte*>(s.data()),
+            reinterpret_cast<const std::byte*>(s.data()) + s.size());
+    }
+
+    /// Huffman-decodes into a reused scratch string and returns an exactly
+    /// sized copy. Decoding straight into the result reserves twice the
+    /// encoded length, which pushes typical short header values out of the
+    /// small-string buffer and onto the heap.
+    auto huffman_string(byte_view encoded) -> std::expected<std::string, std::error_code>
+    {
+        thread_local std::string scratch;
+        if (auto decoded = cnetmod::http::v2::huffman_decode(encoded, scratch); !decoded)
+            return std::unexpected(decoded.error());
+        return std::string{scratch};
     }
 
     auto read_string(byte_view& in) -> std::expected<std::string, std::error_code>
@@ -207,7 +283,7 @@ namespace detail {
             return std::unexpected(error());
         if (huffman)
         {
-            auto result = cnetmod::http::v2::huffman_decode(in.first(*n));
+            auto result = huffman_string(in.first(*n));
             in = in.subspan(*n);
             return result;
         }
@@ -316,25 +392,40 @@ namespace detail {
         return std::unexpected(error());
     }
 
-    auto exact(std::string_view n, std::string_view v) -> std::optional<std::uint16_t>
+    /// Static-table references for one field, from a single index probe.
+    struct static_match
+    {
+        std::optional<std::uint16_t> exact;
+        std::optional<std::uint16_t> name;
+    };
+
+    auto match_static(std::string_view n, std::string_view v) -> static_match
     {
         const auto& index = static_entries_by_name();
-        const auto entries = index.find(n);
-        if (entries == index.end())
-            return std::nullopt;
-        for (const auto wire_index : entries->second)
+        const auto* run = index.find(n);
+        if (run == nullptr)
+            return {};
+        static_match result{.name = index.indices(*run).front()};
+        for (const auto wire_index : index.indices(*run))
             if (static_table[wire_index].value == v)
-                return wire_index;
-        return std::nullopt;
+            {
+                result.exact = wire_index;
+                break;
+            }
+        return result;
+    }
+
+    auto exact(std::string_view n, std::string_view v) -> std::optional<std::uint16_t>
+    {
+        return match_static(n, v).exact;
     }
 
     auto name(std::string_view n) -> std::optional<std::uint16_t>
     {
         const auto& index = static_entries_by_name();
-        const auto entries = index.find(n);
-        return entries == index.end() || entries->second.empty()
-            ? std::nullopt
-            : std::optional{entries->second.front()};
+        const auto* run = index.find(n);
+        return run == nullptr ? std::nullopt
+                              : std::optional<std::uint16_t>{index.indices(*run).front()};
     }
 
     struct dynamic_entry
@@ -461,6 +552,9 @@ struct qpack_encoder::impl
     // including sections whose entries are already known to the decoder.
     cnetmod::flat_map<std::uint64_t, std::deque<std::uint64_t>> outstanding_streams;
     byte_buffer pending_decoder_stream_input;
+    // Reused by append_string() so header values do not allocate a
+    // temporary Huffman buffer per field.
+    std::vector<std::byte> string_scratch;
 };
 
 struct qpack_decoder::impl
@@ -497,6 +591,57 @@ void qpack_encoder::set_max_blocked_streams(std::uint64_t maximum) noexcept
     impl_->max_blocked_streams = maximum;
 }
 
+namespace detail {
+    /// Appends a field section that references the static table only. This is
+    /// the complete encoding whenever the dynamic table is disabled: Required
+    /// Insert Count and Delta Base are zero and each field costs one index probe.
+    void append_static_section(byte_buffer& out, std::span<const header_field> headers,
+        std::vector<std::byte>& scratch)
+    {
+        out.reserve(out.size() + 2U + headers.size() * 16U);
+        append_int(out, 0, 8, 0U);
+        append_int(out, 0, 7, 0U);
+        for (const auto& h : headers)
+        {
+            const auto match = match_static(h.name, h.value);
+            if (match.exact)
+                append_int(out, 0xc0U, 6, *match.exact);
+            else if (match.name)
+            {
+                append_int(out, 0x50U, 4, *match.name);
+                append_string(out, h.value, scratch);
+            }
+            else
+            {
+                append_int(out, 0x20U, 3, h.name.size());
+                for (const auto c : h.name)
+                    out.push_back(static_cast<std::byte>(static_cast<unsigned char>(c)));
+                append_string(out, h.value, scratch);
+            }
+        }
+    }
+} // namespace detail
+
+auto qpack_encoder::encode_into(std::span<const header_field> headers,
+    std::uint64_t stream_id, byte_buffer& out) -> std::expected<void, std::error_code>
+{
+    if (impl_->max_table_capacity == 0U)
+    {
+        if (impl_->capacity_update_pending)
+        {
+            detail::append_int(impl_->pending_encoder_instructions, 0x20U, 5, 0U);
+            impl_->capacity_update_pending = false;
+        }
+        detail::append_static_section(out, headers, impl_->string_scratch);
+        return {};
+    }
+    auto encoded = encode(headers, stream_id);
+    if (!encoded)
+        return std::unexpected(encoded.error());
+    out.insert(out.end(), encoded->begin(), encoded->end());
+    return {};
+}
+
 auto qpack_encoder::encode(std::span<const header_field> headers, std::uint64_t stream_id)
     -> std::expected<byte_buffer, std::error_code>
 {
@@ -504,6 +649,12 @@ auto qpack_encoder::encode(std::span<const header_field> headers, std::uint64_t 
     {
         detail::append_int(impl_->pending_encoder_instructions, 0x20U, 5, impl_->max_table_capacity);
         impl_->capacity_update_pending = false;
+    }
+    if (impl_->max_table_capacity == 0U)
+    {
+        byte_buffer out;
+        detail::append_static_section(out, headers, impl_->string_scratch);
+        return out;
     }
 
     struct representation
@@ -525,42 +676,55 @@ auto qpack_encoder::encode(std::span<const header_field> headers, std::uint64_t 
             if (const auto static_name = detail::name(h.name))
             {
                 detail::append_int(impl_->pending_encoder_instructions, 0xc0U, 6, *static_name);
-                detail::append_string(impl_->pending_encoder_instructions, h.value);
+                detail::append_string(impl_->pending_encoder_instructions, h.value,
+                    impl_->string_scratch);
             }
             else
             {
                 detail::append_int(impl_->pending_encoder_instructions, 0x40U, 5, h.name.size());
                 for (const auto c : h.name)
                     impl_->pending_encoder_instructions.push_back(static_cast<std::byte>(static_cast<unsigned char>(c)));
-                detail::append_string(impl_->pending_encoder_instructions, h.value);
+                detail::append_string(impl_->pending_encoder_instructions, h.value,
+                    impl_->string_scratch);
             }
             (void)impl_->dynamic_table.insert(h);
         }
     }
     // Finish insertions before retaining table-entry pointers: a later field
     // can evict an earlier field in this same section when capacity is small.
+    const bool dynamic_enabled = impl_->max_table_capacity != 0U;
     std::uint64_t required{};
     for (const auto& h : headers)
     {
         const bool sensitive = is_sensitive_header(h.name);
-        representations.push_back({&h, sensitive ? nullptr : impl_->dynamic_table.exact(h.name, h.value), sensitive ? nullptr : impl_->dynamic_table.by_name(h.name)});
+        // With no dynamic table capacity every lookup would hash a name that
+        // can never be present, so the default static-only configuration
+        // skips them entirely.
+        representations.push_back({&h,
+            (dynamic_enabled && !sensitive) ? impl_->dynamic_table.exact(h.name, h.value) : nullptr,
+            (dynamic_enabled && !sensitive) ? impl_->dynamic_table.by_name(h.name) : nullptr});
         const auto& representation = representations.back();
         if (representation.exact_dynamic)
             required = std::max(required, representation.exact_dynamic->absolute);
         else if (!detail::exact(h.name, h.value) && representation.name_dynamic)
             required = std::max(required, representation.name_dynamic->absolute);
     }
-    const auto blocked_streams = std::ranges::count_if(impl_->outstanding_streams, [this](const auto& stream)
-        {
-            return std::ranges::any_of(stream.second, [this](auto required)
+    bool may_reference_dynamic = required <= impl_->acknowledged_insert_count;
+    if (!may_reference_dynamic)
+    {
+        const auto blocked_streams = std::ranges::count_if(impl_->outstanding_streams, [this](const auto& stream)
             {
-                return required > impl_->acknowledged_insert_count;
+                return std::ranges::any_of(stream.second, [this](auto required)
+                {
+                    return required > impl_->acknowledged_insert_count;
+                });
             });
-        });
-    const bool may_reference_dynamic = required <= impl_->acknowledged_insert_count || std::cmp_less(blocked_streams, impl_->max_blocked_streams);
+        may_reference_dynamic = std::cmp_less(blocked_streams, impl_->max_blocked_streams);
+    }
     if (!may_reference_dynamic)
         required = 0U;
     byte_buffer out;
+    out.reserve(32U + headers.size() * 16U);
     detail::append_int(out, 0, 8, detail::encode_required_insert_count(required, impl_->max_table_capacity));
     detail::append_int(out, 0, 7, 0U);
     for (const auto& representation : representations)
@@ -575,19 +739,19 @@ auto qpack_encoder::encode(std::span<const header_field> headers, std::uint64_t 
         else if (required != 0U && representation.name_dynamic != nullptr)
         {
             detail::append_int(out, 0x40U, 4, required - representation.name_dynamic->absolute);
-            detail::append_string(out, h.value);
+            detail::append_string(out, h.value, impl_->string_scratch);
         }
         else if (const auto i = detail::name(h.name))
         {
             detail::append_int(out, 0x50U, 4, *i);
-            detail::append_string(out, h.value);
+            detail::append_string(out, h.value, impl_->string_scratch);
         }
         else
         {
             detail::append_int(out, 0x20U, 3, h.name.size());
             for (auto c : h.name)
                 out.push_back(static_cast<std::byte>(static_cast<unsigned char>(c)));
-            detail::append_string(out, h.value);
+            detail::append_string(out, h.value, impl_->string_scratch);
         }
     }
     if (required != 0U)
@@ -882,11 +1046,10 @@ auto qpack_decoder::decode(byte_view in, std::uint64_t stream_id)
     }
     // A header representation occupies at least one byte, so the encoded
     // block size is a safe upper bound for the number of decoded fields.
-    // Reserve a modest common-case capacity up front: this is the per-request
-    // HTTP/3 hot path and avoids the geometric vector growth for ordinary
-    // pseudo-header blocks without over-reserving unusually large requests.
+    // Reserve the common HTTP/3 request shape up front; ordinary requests
+    // carry five to seven pseudo/application fields.
     std::vector<header_field> out;
-    out.reserve(std::min<std::size_t>(in.size(), 16U));
+    out.reserve(std::min<std::size_t>(in.size(), 8U));
     while (!in.empty())
     {
         auto f = std::to_integer<std::uint8_t>(in.front());
@@ -944,7 +1107,7 @@ auto qpack_decoder::decode(byte_view in, std::uint64_t stream_id)
             std::string name;
             if (huffman)
             {
-                auto decoded = cnetmod::http::v2::huffman_decode(in.first(*n));
+                auto decoded = detail::huffman_string(in.first(*n));
                 if (!decoded)
                     return std::unexpected(decoded.error());
                 name = std::move(*decoded);
@@ -1016,6 +1179,11 @@ auto qpack_decoder::get_dynamic_table_size() const noexcept -> std::size_t
 auto qpack_decoder::take_decoder_instructions() -> byte_buffer
 {
     return std::exchange(impl_->pending_decoder_instructions, {});
+}
+
+auto qpack_decoder::has_pending_decoder_instructions() const noexcept -> bool
+{
+    return !impl_->pending_decoder_instructions.empty();
 }
 
 auto qpack_decoder::take_completed_header_blocks() -> std::vector<qpack_decoded_header_block>

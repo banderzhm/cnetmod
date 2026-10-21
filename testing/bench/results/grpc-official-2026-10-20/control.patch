@@ -1,0 +1,154 @@
+diff --git a/src/protocol/http/server/http_server.cpp b/src/protocol/http/server/http_server.cpp
+index 3ccafac3..f3154eda 100644
+--- a/src/protocol/http/server/http_server.cpp
++++ b/src/protocol/http/server/http_server.cpp
+@@ -604,6 +604,7 @@ struct server::connection_registration
+     server& owner;
+     socket& client;
+     cancel_token cancellation;
++    cancel_token write_cancellation;
+     connection_registration* previous{};
+     connection_registration* next{};
+ 
+@@ -618,6 +619,7 @@ struct server::connection_registration
+         if (owner.connections_aborted_)
+         {
+             cancellation.cancel();
++            write_cancellation.cancel();
+             client.shutdown_both();
+         }
+     }
+@@ -827,6 +829,7 @@ void server::abort_connections() noexcept
+         // there after the terminal receive completion; this avoids destroying a
+         // worker-loop registration from the control loop.
+         connection->cancellation.cancel();
++        connection->write_cancellation.cancel();
+         connection->client.shutdown_both();
+     }
+ }
+@@ -1092,7 +1095,7 @@ auto server::handle_connection(socket client, io_context& io,
+ 
+         if (ssl.get_alpn_selected() == "h2")
+         {
+-            co_await handle_h2_tls(client, io, ssl, registration.cancellation);
++            co_await handle_h2_tls(client, io, ssl, registration.cancellation, registration.write_cancellation);
+         }
+         else
+         {
+@@ -1149,7 +1152,7 @@ auto server::handle_connection(socket client, io_context& io,
+         (void)client.apply_options({.non_blocking = false, .no_delay = true});
+ 
+         co_await handle_h2(client, io, {peek_buf->data(), peek_len},
+-            registration.cancellation);
++            registration.cancellation, registration.write_cancellation);
+         co_return;
+     }
+ 
+@@ -1327,17 +1330,18 @@ auto server::make_h2_sync_handler(io_context& io, socket& client)
+ }
+ 
+ auto server::handle_h2(socket& client, io_context& io,
+-    std::span<const std::byte> initial, cancel_token& cancellation) -> task<void>
++    std::span<const std::byte> initial, cancel_token& cancellation,
++    cancel_token& write_cancellation) -> task<void>
+ {
+     auto reader = [&io, &client, &cancellation](mutable_buffer buffer)
+         -> task<std::expected<std::size_t, std::error_code>>
+     {
+         co_return co_await async_read(io, client, buffer, cancellation);
+     };
+-    auto writer = [&io, &client, &cancellation](const_buffer buffer)
++    auto writer = [&io, &client, &write_cancellation](const_buffer buffer)
+         -> task<std::expected<void, std::error_code>>
+     {
+-        co_return co_await async_write_all(io, client, buffer, cancellation);
++        co_return co_await async_write_all(io, client, buffer, write_cancellation);
+     };
+     v2::session session(io, client, make_h2_streaming_handler(io, client), {},
+         std::move(reader), std::move(writer),
+@@ -1778,7 +1782,7 @@ auto server::handle_h1_clear(socket& client, io_context& io,
+ // =============================================================================
+ 
+ auto server::handle_h2_tls(socket& client, io_context& io, ssl_stream& ssl,
+-    cancel_token& cancellation) -> task<void>
++    cancel_token& cancellation, cancel_token& write_cancellation) -> task<void>
+ {
+     auto reader = [&ssl, &cancellation](mutable_buffer buffer)
+         -> task<std::expected<std::size_t, std::error_code>>
+@@ -1786,10 +1790,10 @@ auto server::handle_h2_tls(socket& client, io_context& io, ssl_stream& ssl,
+         co_return co_await ssl.async_read(buffer, cancellation);
+     };
+     auto writer =
+-        [&ssl, &cancellation](
++        [&ssl, &write_cancellation](
+             const_buffer buffer) -> task<std::expected<void, std::error_code>>
+     {
+-        co_return co_await ssl.async_write_all(buffer, cancellation);
++        co_return co_await ssl.async_write_all(buffer, write_cancellation);
+     };
+     v2::session session(io, client, make_h2_streaming_handler(io, client), {},
+         std::move(reader), std::move(writer),
+diff --git a/src/protocol/http/server/http_server.cppm b/src/protocol/http/server/http_server.cppm
+index 33e4e7e1..0855de73 100644
+--- a/src/protocol/http/server/http_server.cppm
++++ b/src/protocol/http/server/http_server.cppm
+@@ -191,7 +191,7 @@ private:
+ 
+     auto handle_h2(socket& client, io_context& io,
+         std::span<const std::byte> initial,
+-        cancel_token& cancellation) -> task<void>;
++        cancel_token& cancellation, cancel_token& write_cancellation) -> task<void>;
+ 
+     auto make_h2_streaming_handler(io_context& io, socket& client)
+         -> v2::borrowed_streaming_server_handler;
+@@ -202,7 +202,7 @@ private:
+     auto handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
+         cancel_token& cancellation) -> task<void>;
+     auto handle_h2_tls(socket& client, io_context& io, ssl_stream& ssl,
+-        cancel_token& cancellation) -> task<void>;
++        cancel_token& cancellation, cancel_token& write_cancellation) -> task<void>;
+ #endif
+ 
+     auto execute_chain(request_context& ctx, handler_fn& handler,
+diff --git a/testing/bench/grpc_arena_server.cpp b/testing/bench/grpc_arena_server.cpp
+index 15f0c8ca..f0a8f5e0 100644
+--- a/testing/bench/grpc_arena_server.cpp
++++ b/testing/bench/grpc_arena_server.cpp
+@@ -2,6 +2,7 @@
+ 
+ import std;
+ import cnetmod.core.net_init;
++import cnetmod.core.socket;
+ import cnetmod.core.log;
+ import cnetmod.coro.task;
+ import cnetmod.coro.spawn;
+@@ -69,7 +70,10 @@ auto main(int argc, char** argv) -> int
+         logger::shutdown();
+         return 2;
+     }
+-    cn::server_context context{workers, workers};
++    const auto* affinity_value = std::getenv("CNETMOD_GRPC_PIN_WORKERS");
++    const bool pin_workers = affinity_value && std::string_view{affinity_value} == "1";
++    cn::server_context context{workers, workers,
++        {.enabled = pin_workers, .auto_assign_workers = pin_workers}};
+     grpc::service_router service;
+     service.add_unary("benchmark.BenchmarkService", "GetSum", get_sum);
+     cn::http::router router;
+@@ -107,7 +111,7 @@ auto main(int argc, char** argv) -> int
+         return 3;
+     }
+ #endif
+-    auto listening = server.listen("127.0.0.1", port);
++    auto listening = server.listen("::", port, {.ipv6_only = false});
+     if (!listening)
+     {
+         logger::error{"listen failed: {}", listening.error().message()};
+@@ -115,7 +119,7 @@ auto main(int argc, char** argv) -> int
+         return 4;
+     }
+     cn::spawn(context.accept_io(), server.run());
+-    logger::info{"READY port={} workers={} tls={}", port, workers, argc == 5};
++    logger::info{"READY port={} workers={} tls={} pin_workers={}", port, workers, argc == 5, pin_workers};
+     context.run();
+     logger::shutdown();
+     return 0;

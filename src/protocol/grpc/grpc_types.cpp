@@ -4,12 +4,26 @@ import std;
 
 namespace cnetmod::grpc {
 namespace {
+    auto is_metadata_name(std::string_view name) noexcept -> bool
+    {
+        if (name.starts_with(':'))
+            return false;
+        constexpr std::array<std::string_view, 5> protocol_names{
+            "content-type", "content-length", "te", "grpc-status", "grpc-message"};
+        const http::case_insensitive_less less;
+        for (const auto reserved : protocol_names)
+            if (name.size() == reserved.size() && (name == reserved || (!less(name, reserved) && !less(reserved, name))))
+                return false;
+        return true;
+    }
+
     auto lower(std::string_view text) -> std::string
     {
         std::string out(text);
         std::ranges::transform(out, out.begin(), [](unsigned char c)
             {
-                return static_cast<char>(std::tolower(c));
+                return static_cast<char>(c >= 'A' && c <= 'Z' ? c + 32
+                    : c < 128 ? c : std::tolower(c));
             });
         return out;
     }
@@ -41,14 +55,9 @@ namespace {
     auto header_find(const http::header_map& headers, std::string_view name)
         -> std::string_view
     {
-        if (auto it = headers.find(std::string(name)); it != headers.end())
+        // header_map already has a transparent ASCII-insensitive comparator.
+        if (auto it = headers.find(name); it != headers.end())
             return it->second;
-        const auto lname = lower(name);
-        if (auto it = headers.find(lname); it != headers.end())
-            return it->second;
-        for (const auto& [key, value] : headers)
-            if (lower(key) == lname)
-                return value;
         return {};
     }
 
@@ -295,12 +304,9 @@ auto metadata_from_headers(const http::header_map& headers) -> metadata
     metadata out;
     for (const auto& [key, value] : headers)
     {
-        auto name = lower(key);
-        if (name.starts_with(":") || name == "content-type" ||
-            name == "content-length" || name == "te" || name == "grpc-status" ||
-            name == "grpc-message")
+        if (!is_metadata_name(key))
             continue;
-        out.emplace(std::move(name), value);
+        out.emplace(lower(key), value);
     }
     return out;
 }
@@ -309,6 +315,24 @@ auto header_value(const http::header_map& headers, std::string_view name)
     -> std::string_view
 {
     return header_find(headers, name);
+}
+
+auto metadata_from_headers(std::span<const http::request_header_view> headers) -> metadata
+{
+    metadata out;
+    for (const auto& header : headers)
+    {
+        if (!is_metadata_name(header.name))
+            continue;
+        auto name = lower(header.name);
+        // Match header_map materialization: the last case-insensitive duplicate
+        // replaces its predecessor. Metadata retains its normal owning lifetime.
+        if (auto found = out.find(name); found != out.end())
+            found->second = header.value;
+        else
+            out.emplace(std::move(name), header.value);
+    }
+    return out;
 }
 
 auto metadata_value(const metadata& md, std::string_view name)
@@ -322,6 +346,33 @@ auto metadata_wire_size(const metadata& md) noexcept -> std::size_t
     std::size_t total{};
     for (const auto& [key, value] : md)
         total += key.size() + value.size() + 4;
+    return total;
+}
+
+auto metadata_wire_size(std::span<const http::request_header_view> headers) -> std::size_t
+{
+    // Small borrowed sets avoid allocation; larger sets keep map complexity.
+    if (headers.size() > 32)
+        return metadata_wire_size(metadata_from_headers(headers));
+    std::size_t total{};
+    const http::case_insensitive_less less;
+    for (std::size_t index = 0; index < headers.size(); ++index)
+    {
+        if (!is_metadata_name(headers[index].name))
+            continue;
+        bool replaced = false;
+        for (std::size_t next = index + 1; next < headers.size(); ++next)
+            if (headers[index].name.size() == headers[next].name.size() &&
+                (headers[index].name == headers[next].name ||
+                    (!less(headers[index].name, headers[next].name) &&
+                        !less(headers[next].name, headers[index].name))))
+            {
+                replaced = true;
+                break;
+            }
+        if (!replaced)
+            total += headers[index].name.size() + headers[index].value.size() + 4;
+    }
     return total;
 }
 
@@ -373,6 +424,23 @@ auto timeout_from_headers(const http::header_map& headers)
     auto value = parse_timeout_value(text);
     return value ? std::chrono::duration_cast<std::chrono::milliseconds>(*value)
                  : std::chrono::milliseconds{};
+}
+
+auto timeout_from_headers(std::span<const http::request_header_view> headers)
+    -> std::chrono::milliseconds
+{
+    const http::case_insensitive_less less;
+    for (std::size_t index = headers.size(); index != 0; --index)
+    {
+        const auto& header = headers[index - 1];
+        if (header.name.size() == 12 && (header.name == "grpc-timeout" || (!less(header.name, "grpc-timeout") && !less("grpc-timeout", header.name))))
+        {
+            auto value = parse_timeout_value(header.value);
+            return value ? std::chrono::duration_cast<std::chrono::milliseconds>(*value)
+                         : std::chrono::milliseconds{};
+        }
+    }
+    return {};
 }
 
 auto format_timeout(std::chrono::milliseconds timeout) -> std::string

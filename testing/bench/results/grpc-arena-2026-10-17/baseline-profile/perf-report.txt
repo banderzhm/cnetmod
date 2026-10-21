@@ -1,0 +1,61 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 15K of event 'cpu-clock'
+# Event count (approx.): 31739478704
+#
+#
+     6.00%  baseline-server  baseline-server    [.] operator new[](unsigned long)
+     3.91%  baseline-server  baseline-server    [.] mi_theap_malloc_zero_aligned_at_overalloc(mi_theap_s*, unsigned long, unsigned long, unsigned long, bool, mi_page_s**)
+     3.62%  baseline-server  baseline-server    [.] cnetmod::detail::run_task_group_child@cnetmod.coro.task_group(std::__1::shared_ptr<cnetmod::detail::task_group_state@cnetmod.coro.task_group>, std::__1::shared_ptr<cnetmod::cancel_token@cnetmod.coro.cancel>, std::__1::function<cnetmod::task@cnetmod.coro.task<std::__1::expected<void, std::__1::error_code> > (cnetmod::cancel_token@cnetmod.coro.cancel&)>) [clone .resume]
+     2.86%  baseline-server  [kernel.kallsyms]  [k] clear_page_erms
+     2.71%  baseline-server  [kernel.kallsyms]  [k] __pv_queued_spin_lock_slowpath
+     2.38%  baseline-server  [kernel.kallsyms]  [k] _raw_spin_unlock_irqrestore
+     1.86%  baseline-server  baseline-server    [.] operator delete[](void*)
+     1.83%  baseline-server  baseline-server    [.] cnetmod::detail::run_task_group_child@cnetmod.coro.task_group(std::__1::shared_ptr<cnetmod::detail::task_group_state@cnetmod.coro.task_group>, std::__1::shared_ptr<cnetmod::cancel_token@cnetmod.coro.cancel>, std::__1::function<cnetmod::task@cnetmod.coro.task<std::__1::expected<void, std::__1::error_code> > (cnetmod::cancel_token@cnetmod.coro.cancel&)>) [clone .destroy]
+     1.76%  baseline-server  baseline-server    [.] cnetmod::http::v2::session@cnetmod.protocol.http.v2.session::write_response(unsigned int, cnetmod::http::v2::server_response@cnetmod.protocol.http.v2.session, cnetmod::cancel_token@cnetmod.coro.cancel&) [clone .resume]
+     1.43%  baseline-server  [kernel.kallsyms]  [k] do_syscall_64
+     1.38%  baseline-server  baseline-server    [.] unsigned long std::__1::__hash_table<std::__1::__hash_value_type<unsigned int, cnetmod::http::v2::stream@cnetmod.protocol.http.v2.stream>, std::__1::__unordered_map_hasher<unsigned int, std::__1::pair<unsigned int const, cnetmod::http::v2::stream@cnetmod.protocol.http.v2.stream>, std::__1::hash<unsigned int>, std::__1::equal_to<unsigned int> >, std::__1::__unordered_map_equal<unsigned int, std::__1::pair<unsigned int const, cnetmod::http::v2::stream@cnetmod.protocol.http.v2.stream>, std::__1::equal_to<unsigned int>, std::__1::hash<unsigned int> >, std::__1::pmr::polymorphic_allocator<std::__1::pair<unsigned int const, cnetmod::http::v2::stream@cnetmod.protocol.http.v2.stream> > >::__erase_unique<unsigned int>(unsigned int const&)
+     1.33%  baseline-server  baseline-server    [.] cnetmod::io_context@cnetmod.io.io_context::drain_post_queue()
+     1.27%  baseline-server  baseline-server    [.] cnetmod::http::v2::session@cnetmod.protocol.http.v2.session::write_outbound_locked() [clone .resume]
+     1.23%  baseline-server  baseline-server    [.] cnetmod::http::v2::session@cnetmod.protocol.http.v2.session::return_flow_credit(unsigned int, unsigned long) [clone .resume]
+     1.21%  baseline-server  baseline-server    [.] cnetmod::async_lock_guard@cnetmod.coro.mutex::~async_lock_guard()
+     1.14%  baseline-server  libc.so.6          [.] 0x00000000000a0952
+     1.10%  baseline-server  baseline-server    [.] _mi_malloc_generic(mi_theap_s*, unsigned long, unsigned long, mi_page_s**)
+     1.09%  baseline-server  baseline-server    [.] void std::__1::pmr::polymorphic_allocator<std::__1::__hash_node<std::__1::__hash_value_type<unsigned int, cnetmod::http::v2::stream@cnetmod.protocol.http.v2.stream>, void*> >::destroy[abi:nqe220108]<std::__1::pair<unsigned int const, cnetmod::http::v2::stream@cnetmod.protocol.http.v2.stream> >(std::__1::pair<unsigned int const, cnetmod::http::v2::stream@cnetmod.protocol.http.v2.stream>*)
+     1.04%  baseline-server  [kernel.kallsyms]  [k] __alloc_skb
+     1.03%  baseline-server  baseline-server    [.] cnetmod::channel@cnetmod.coro.channel<cnetmod::byte_buffer@cnetmod.core.buffer>::recv_awaitable::await_ready()
+     1.02%  baseline-server  libc++.so.1.0      [.] std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >::~basic_string()
+     1.02%  baseline-server  baseline-server    [.] aligned_alloc
+     1.02%  baseline-server  baseline-server    [.] cnetmod::http::v2::session@cnetmod.protocol.http.v2.session::queue_response(unsigned int, cnetmod::http::v2::server_response@cnetmod.protocol.http.v2.session)
+     1.01%  baseline-server  libc.so.6          [.] tolower
+     0.95%  baseline-server  baseline-server    [.] cnetmod::http::server@cnetmod.protocol.http::make_h2_streaming_handler(cnetmod::io_context@cnetmod.io.io_context&, cnetmod::socket@cnetmod.core.socket&)::{lambda(cnetmod::http::v2::server_request@cnetmod.protocol.http.v2.session&, cnetmod::cancel_token@cnetmod.coro.cancel&)#1}::operator()(cnetmod::http::v2::server_request@cnetmod.protocol.http.v2.session&, cnetmod::cancel_token@cnetmod.coro.cancel&) const [clone .resume]
+     0.92%  baseline-server  [kernel.kallsyms]  [k] selinux_socket_sendmsg
+     0.91%  baseline-server  baseline-server    [.] cnetmod::task_group@cnetmod.coro.task_group::run(std::__1::function<cnetmod::task@cnetmod.coro.task<std::__1::expected<void, std::__1::error_code> > (cnetmod::cancel_token@cnetmod.coro.cancel&)>)
+     0.85%  baseline-server  baseline-server    [.] cnetmod::http::v2::header_compression@cnetmod.protocol.http.v2.header_compression::find(std::__1::basic_string_view<char, std::__1::char_traits<char> >, std::__1::basic_string_view<char, std::__1::char_traits<char> >, bool) const
+     0.83%  baseline-server  baseline-server    [.] cnetmod::http::v2::huffman_decode@cnetmod.protocol.http.v2.huffman(std::__1::span<std::byte const, 18446744073709551615ul>, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >&)::{lambda(char*, unsigned long)#1}::operator()(char*, unsigned long) const
+     0.81%  baseline-server  [kernel.kallsyms]  [k] _copy_from_iter
+     0.75%  baseline-server  baseline-server    [.] cnetmod::spawn_guarded@cnetmod.coro.spawn<cnetmod::task_group@cnetmod.coro.task_group::run(std::__1::function<cnetmod::task@cnetmod.coro.task<std::__1::expected<void, std::__1::error_code> > (cnetmod::cancel_token@cnetmod.coro.cancel&)>)::{lambda(std::exception_ptr)#1}>(cnetmod::io_context@cnetmod.io.io_context&, cnetmod::task@cnetmod.coro.task<void>, cnetmod::task_group@cnetmod.coro.task_group::run(std::__1::function<cnetmod::task@cnetmod.coro.task<std::__1::expected<void, std::__1::error_code> > (cnetmod::cancel_token@cnetmod.coro.cancel&)>)::{lambda(std::exception_ptr)#1})::{lambda(cnetmod::io_context@cnetmod.io.io_context&, cnetmod::task@cnetmod.coro.task<void>, cnetmod::task_group@cnetmod.coro.task_group::run(std::__1::function<cnetmod::task@cnetmod.coro.task<std::__1::expected<void, std::__1::error_code> > (cnetmod::cancel_token@cnetmod.coro.cancel&)>)::{lambda(std::exception_ptr)#1})#1}::operator()(cnetmod::io_context@cnetmod.io.io_context&, cnetmod::task@cnetmod.coro.task<void>, cnetmod::task_group@cnetmod.coro.task_group::run(std::__1::function<cnetmod::task@cnetmod.coro.task<std::__1::expected<void, std::__1::error_code> > (cnetmod::cancel_token@cnetmod.coro.cancel&)>)::{lambda(std::exception_ptr)#1}) const [clone .resume]
+     0.73%  baseline-server  baseline-server    [.] cnetmod::http::v2::header_compression@cnetmod.protocol.http.v2.header_compression::encode(std::__1::span<cnetmod::http::v2::header_field@cnetmod.protocol.http.v2.header_compression const, 18446744073709551615ul>, std::__1::vector<std::byte, std::__1::allocator<std::byte> >&)
+     0.69%  baseline-server  baseline-server    [.] mi_page_queue_remove(mi_page_queue_s*, mi_page_s*)
+     0.68%  baseline-server  baseline-server    [.] cnetmod::async_write@cnetmod.executor.async_op(cnetmod::io_context@cnetmod.io.io_context&, cnetmod::socket@cnetmod.core.socket&, cnetmod::const_buffer@cnetmod.core.buffer, cnetmod::cancel_token@cnetmod.coro.cancel&) [clone .resume]
+     0.64%  baseline-server  baseline-server    [.] cnetmod::http::case_insensitive_less@cnetmod.protocol.http.semantics::operator()(std::__1::basic_string_view<char, std::__1::char_traits<char> >, std::__1::basic_string_view<char, std::__1::char_traits<char> >) const
+     0.64%  baseline-server  [kernel.kallsyms]  [k] fget
+     0.61%  baseline-server  baseline-server    [.] mi_free_small
+     0.61%  baseline-server  [kernel.kallsyms]  [k] tcp_sendmsg_locked
+     0.60%  baseline-server  baseline-server    [.] cnetmod::post_awaitable@cnetmod.io.io_context::await_suspend(std::__1::coroutine_handle<void>)
+     0.57%  baseline-server  baseline-server    [.] cnetmod::http::v2::session@cnetmod.protocol.http.v2.session::start_streaming_request(unsigned int)
+     0.54%  baseline-server  baseline-server    [.] cnetmod::http::v2::session@cnetmod.protocol.http.v2.session::start_streaming_request(unsigned int)::{lambda(cnetmod::cancel_token@cnetmod.coro.cancel&)#1}::operator()(cnetmod::cancel_token@cnetmod.coro.cancel&) [clone .resume]
+     0.52%  baseline-server  [kernel.kallsyms]  [k] __nf_conntrack_find_get
+     0.52%  baseline-server  [kernel.kallsyms]  [k] fdget_pos
+     0.52%  baseline-server  baseline-server    [.] cnetmod::cancel_token@cnetmod.coro.cancel::is_cancelled() const
+     0.47%  baseline-server  [kernel.kallsyms]  [k] _copy_to_iter
+     0.44%  baseline-server  baseline-server    [.] cnetmod::http::v2::session@cnetmod.protocol.http.v2.session::validate_headers(std::__1::span<cnetmod::http::v2::header_field@cnetmod.protocol.http.v2.header_compression const, 18446744073709551615ul>) const
+     0.44%  baseline-server  baseline-server    [.] cnetmod::http::server@cnetmod.protocol.http::handle_h2(cnetmod::socket@cnetmod.core.socket&, cnetmod::io_context@cnetmod.io.io_context&, std::__1::span<std::byte const, 18446744073709551615ul>, cnetmod::cancel_token@cnetmod.coro.cancel&)::{lambda(cnetmod::const_buffer@cnetmod.core.buffer)#1}::operator()(cnetmod::const_buffer@cnetmod.core.buffer) const [clone .resume]
+     0.42%  baseline-server  baseline-server    [.] std::__1::__function::__func<cnetmod::http::v2::session@cnetmod.protocol.http.v2.session::start_streaming_request(unsigned int)::{lambda(cnetmod::cancel_token@cnetmod.coro.cancel&)#1}, cnetmod::task@cnetmod.coro.task<std::__1::expected<void, std::__1::error_code> > (cnetmod::cancel_token@cnetmod.coro.cancel&)>::~__func()
+     0.40%  baseline-server  baseline-server    [.] cnetmod::concurrent_containers::exclusive_latch_guard@cnetmod.utils.concurrent_containers.atomic_rw_latch::exclusive_latch_guard(cnetmod::concurrent_containers::atomic_rw_latch@cnetmod.utils.concurrent_containers.atomic_rw_latch&)
+#
+# (Tip: System-wide collection from all CPUs: perf record -a)
+#

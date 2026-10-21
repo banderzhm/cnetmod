@@ -1,0 +1,184 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+# symbol: _raw_spin_unlock_irqrestore
+#
+# Total Lost Samples: 0
+#
+# Samples: 153K of event 'cpu-clock'
+# Event count (approx.): 154089263643
+#
+# Overhead  Command          Shared Object
+# ........  ...............  .................
+#
+    14.04%  bench_ws_server  [kernel.kallsyms]
+            |
+             --14.04%--0x7701d897c80c
+                       0x7701d88f40a2
+                       void* std::__1::__thread_proxy[abi:nqe220108]<std::__1::tuple<std::__1::unique_ptr<std::__1::__thread_struct, std::__1::default_delete<std::__1::__thread_struct> >, cnetmod::server_context@cnetmod.executor.pool::run()::{lambda()#1}> >(void*)
+                       cnetmod::io_uring_context@cnetmod.io.platform.io_uring::run()
+                       |
+                       |--9.15%--cnetmod::io_uring_context@cnetmod.io.platform.io_uring::run_one_impl(bool)
+                       |          |
+                       |          |--6.00%--cnetmod::async_write@cnetmod.executor.async_op(cnetmod::io_context@cnetmod.io.io_context&, cnetmod::socket@cnetmod.core.socket&, cnetmod::const_buffer@cnetmod.core.buffer) [clone .resume]
+                       |          |          0x7701d8d5f734
+                       |          |          entry_SYSCALL_64_after_hwframe
+                       |          |          do_syscall_64
+                       |          |          x64_sys_call
+                       |          |          __x64_sys_io_uring_enter
+                       |          |          __do_sys_io_uring_enter
+                       |          |          io_submit_sqes
+                       |          |          |
+                       |          |           --5.85%--io_issue_sqe
+                       |          |                     __io_issue_sqe
+                       |          |                     io_send
+                       |          |                     sock_sendmsg
+                       |          |                     inet_sendmsg
+                       |          |                     tcp_sendmsg
+                       |          |                     tcp_sendmsg_locked
+                       |          |                     |
+                       |          |                      --5.85%--tcp_push
+                       |          |                                __tcp_push_pending_frames
+                       |          |                                tcp_write_xmit
+                       |          |                                |
+                       |          |                                 --5.82%--__tcp_transmit_skb
+                       |          |                                           ip_queue_xmit
+                       |          |                                           __ip_queue_xmit
+                       |          |                                           ip_local_out
+                       |          |                                           ip_output
+                       |          |                                           ip_finish_output
+                       |          |                                           __ip_finish_output
+                       |          |                                           ip_finish_output2
+                       |          |                                           __dev_queue_xmit
+                       |          |                                           |
+                       |          |                                            --5.61%--__local_bh_enable_ip
+                       |          |                                                      do_softirq.part.0
+                       |          |                                                      __do_softirq
+                       |          |                                                      handle_softirqs
+                       |          |                                                      net_rx_action
+                       |          |                                                      __napi_poll
+                       |          |                                                      process_backlog
+                       |          |                                                      __netif_receive_skb
+                       |          |                                                      __netif_receive_skb_one_core
+                       |          |                                                      ip_rcv
+                       |          |                                                      ip_local_deliver
+                       |          |                                                      ip_local_deliver_finish
+                       |          |                                                      ip_protocol_deliver_rcu
+                       |          |                                                      tcp_v4_rcv
+                       |          |                                                      tcp_v4_do_rcv
+                       |          |                                                      tcp_rcv_established
+                       |          |                                                      |
+                       |          |                                                       --5.50%--tcp_data_ready
+                       |          |                                                                 sock_def_readable
+                       |          |                                                                 __wake_up_sync_key
+                       |          |                                                                 _raw_spin_unlock_irqrestore
+                       |          |
+                       |           --3.10%--cnetmod::async_read@cnetmod.executor.async_op(cnetmod::io_context@cnetmod.io.io_context&, cnetmod::socket@cnetmod.core.socket&, cnetmod::mutable_buffer@cnetmod.core.buffer) [clone .resume]
+                       |                     0x7701d8d5f734
+                       |                     entry_SYSCALL_64_after_hwframe
+                       |                     do_syscall_64
+                       |                     x64_sys_call
+                       |                     __x64_sys_io_uring_enter
+                       |                     __do_sys_io_uring_enter
+                       |                     io_submit_sqes
+                       |                     |
+                       |                      --2.99%--io_issue_sqe
+                       |                                __io_issue_sqe
+                       |                                io_send
+                       |                                sock_sendmsg
+                       |                                inet_sendmsg
+                       |                                tcp_sendmsg
+                       |                                tcp_sendmsg_locked
+                       |                                tcp_push
+                       |                                __tcp_push_pending_frames
+                       |                                tcp_write_xmit
+                       |                                |
+                       |                                 --2.99%--__tcp_transmit_skb
+                       |                                           ip_queue_xmit
+                       |                                           __ip_queue_xmit
+                       |                                           ip_local_out
+                       |                                           ip_output
+                       |                                           ip_finish_output
+                       |                                           __ip_finish_output
+                       |                                           ip_finish_output2
+                       |                                           __dev_queue_xmit
+                       |                                           |
+                       |                                            --2.89%--__local_bh_enable_ip
+                       |                                                      do_softirq.part.0
+                       |                                                      __do_softirq
+                       |                                                      handle_softirqs
+                       |                                                      net_rx_action
+                       |                                                      __napi_poll
+                       |                                                      process_backlog
+                       |                                                      __netif_receive_skb
+                       |                                                      __netif_receive_skb_one_core
+                       |                                                      ip_rcv
+                       |                                                      ip_local_deliver
+                       |                                                      ip_local_deliver_finish
+                       |                                                      ip_protocol_deliver_rcu
+                       |                                                      tcp_v4_rcv
+                       |                                                      tcp_v4_do_rcv
+                       |                                                      tcp_rcv_established
+                       |                                                      |
+                       |                                                       --2.84%--tcp_data_ready
+                       |                                                                 sock_def_readable
+                       |                                                                 __wake_up_sync_key
+                       |                                                                 _raw_spin_unlock_irqrestore
+                       |
+                        --4.89%--0x7701d8d5f734
+                                  |
+                                   --4.89%--entry_SYSCALL_64_after_hwframe
+                                             do_syscall_64
+                                             x64_sys_call
+                                             __x64_sys_io_uring_enter
+                                             __do_sys_io_uring_enter
+                                             io_submit_sqes
+                                             |
+                                              --4.69%--io_issue_sqe
+                                                        __io_issue_sqe
+                                                        io_send
+                                                        sock_sendmsg
+                                                        inet_sendmsg
+                                                        tcp_sendmsg
+                                                        tcp_sendmsg_locked
+                                                        tcp_push
+                                                        __tcp_push_pending_frames
+                                                        tcp_write_xmit
+                                                        |
+                                                         --4.69%--__tcp_transmit_skb
+                                                                   ip_queue_xmit
+                                                                   __ip_queue_xmit
+                                                                   ip_local_out
+                                                                   ip_output
+                                                                   ip_finish_output
+                                                                   __ip_finish_output
+                                                                   ip_finish_output2
+                                                                   __dev_queue_xmit
+                                                                   |
+                                                                    --4.50%--__local_bh_enable_ip
+                                                                              do_softirq.part.0
+                                                                              __do_softirq
+                                                                              handle_softirqs
+                                                                              net_rx_action
+                                                                              |
+                                                                               --4.50%--__napi_poll
+                                                                                         process_backlog
+                                                                                         __netif_receive_skb
+                                                                                         __netif_receive_skb_one_core
+                                                                                         ip_rcv
+                                                                                         ip_local_deliver
+                                                                                         ip_local_deliver_finish
+                                                                                         ip_protocol_deliver_rcu
+                                                                                         tcp_v4_rcv
+                                                                                         tcp_v4_do_rcv
+                                                                                         tcp_rcv_established
+                                                                                         |
+                                                                                          --4.45%--tcp_data_ready
+                                                                                                    sock_def_readable
+                                                                                                    __wake_up_sync_key
+                                                                                                    _raw_spin_unlock_irqrestore
+
+
+
+#
+# (Tip: Show current config key-value pairs: perf config --list)
+#

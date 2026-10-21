@@ -1,0 +1,196 @@
+[info] available CPUs: 32
+[info] load generators: docker mode
+[info] framework: cnetmod-grpc-control-native (cnetmod-grpc-control-native, C++)
+[info] subscribed tests: unary-grpc,unary-grpc-tls
+[info] building image: httparena-cnetmod-grpc-control-native
+[info] skipping system tuning as requested (SKIP_TUNE=true)
+
+==============================================
+=== cnetmod-grpc-control-native / unary-grpc-tls / 256c (tool=h2load) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] gRPC server ready
+
+[run 1/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+21.
+34.
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+30.
+58.
+.
+27.
+. Stopping all clients.
+24Stopped all clients for thread #61
+12. Stopping all clients.
+23. Stopping all clients.
+
+20. Stopping all clients.
+22
+
+finished in 5.07s, 849647.60 req/s, 35.60MB/s
+requests: 4248238 total, 4273838 started, 4248238 done, 4248238 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 4248238 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 178.01MB (186656524) total, 16.21MB (16999352) headers (space savings 93.84%), 28.36MB (29737666) data
+                     min         max         mean         sd        +/- sd
+time for request:      634us    144.67ms     29.44ms     16.05ms    70.34%
+time for connect:     1.81ms     50.25ms     16.67ms      9.76ms    73.05%
+time to 1st byte:     3.39ms     76.06ms     29.49ms     16.02ms    71.88%
+req/s           :    1862.45     7004.56     3317.03     1255.16    71.48%
+[info] CPU 1406.3% | Mem 1.4GiB
+
+[run 2/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+5.
+22.
+26.
+2.
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+32. Stopping all clients.
+
+finished in 5.09s, 886868.80 req/s, 37.06MB/s
+requests: 4434344 total, 4459944 started, 4434344 done, 4434344 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 4434344 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 185.32MB (194321248) total, 16.92MB (17743776) headers (space savings 93.84%), 29.60MB (31040408) data
+                     min         max         mean         sd        +/- sd
+time for request:      601us    175.31ms     28.27ms     16.10ms    71.19%
+time for connect:     2.18ms     66.90ms     11.74ms      9.52ms    87.50%
+time to 1st byte:     7.08ms    114.83ms     24.45ms     15.05ms    83.20%
+req/s           :    1755.04     8782.73     3465.75     1487.03    73.44%
+[info] CPU 1590.3% | Mem 1.2GiB
+
+[run 3/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+
+2.
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+10.Main benchmark duration is started for thread #45.
+
+46. Stopping all clients.
+
+35. Stopping all clients.
+
+finished in 5.11s, 868126.60 req/s, 36.09MB/s
+requests: 4340633 total, 4366233 started, 4340633 done, 4340633 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 4340633 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 180.45MB (189218092) total, 16.56MB (17368932) headers (space savings 93.84%), 28.98MB (30384431) data
+                     min         max         mean         sd        +/- sd
+time for request:      587us    184.43ms     28.40ms     16.70ms    75.01%
+time for connect:     2.87ms     57.78ms     13.82ms      9.51ms    84.38%
+time to 1st byte:     7.09ms     77.13ms     26.36ms     15.06ms    77.34%
+req/s           :    1501.73     8761.42     3390.33     1169.29    69.14%
+[info] CPU 1434.7% | Mem 1.5GiB
+
+=== Best: 871187 req/s (CPU: 1590.3%, Mem: 1.2GiB) ===
+[info] saved results/unary-grpc-tls/256/cnetmod-grpc-control-native.json
+httparena-bench-cnetmod-grpc-control-native
+httparena-bench-cnetmod-grpc-control-native
+
+==============================================
+=== cnetmod-grpc-control-native / unary-grpc-tls / 1024c (tool=h2load) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] gRPC server ready
+
+[run 1/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+13.
+progress: Main benchmark duration is started for thread #31.
+6% of clients started
+44.
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+43Stopped all clients for thread #30
+
+47. Stopping all clients.
+39. Stopping all clients.
+52. Stopping all clients.
+22. Stopping all clients.
+
+finished in 5.15s, 542958.40 req/s, 22.78MB/s
+requests: 2714792 total, 2817192 started, 2714792 done, 2714792 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 2714792 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 113.90MB (119435246) total, 10.38MB (10884768) headers (space savings 93.83%), 18.12MB (19003544) data
+                     min         max         mean         sd        +/- sd
+time for request:      623us    739.40ms    175.25ms     88.73ms    73.87%
+time for connect:     3.30ms    265.14ms     73.71ms     56.74ms    77.05%
+time to 1st byte:     7.76ms    399.53ms    148.76ms     84.40ms    58.20%
+req/s           :     277.39     1132.15      529.13      184.02    54.79%
+[info] CPU 1273.4% | Mem 1.1GiB
+
+[run 2/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+56.
+60.
+61
+10. Stopping all clients.
+
+finished in 5.19s, 561136.80 req/s, 23.55MB/s
+requests: 2805684 total, 2908084 started, 2805684 done, 2805684 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 2805684 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 117.77MB (123493707) total, 10.73MB (11248336) headers (space savings 93.83%), 18.73MB (19639788) data
+                     min         max         mean         sd        +/- sd
+time for request:      870us    673.08ms    166.10ms     86.59ms    70.15%
+time for connect:     2.68ms    356.66ms     72.59ms     75.48ms    82.23%
+time to 1st byte:     9.05ms    468.70ms    169.73ms    116.91ms    64.75%
+req/s           :     280.12     1154.50      547.25      209.06    63.77%
+[info] CPU 1295.3% | Mem 1.2GiB
+
+[run 3/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+13.
+59.
+42.
+progress: Warm-up phase is over for thread #46.
+6% of clients started
+10.
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+27. Stopping all clients.
+59. Stopping all clients.
+
+finished in 5.19s, 522370.80 req/s, 21.95MB/s
+requests: 2611854 total, 2714254 started, 2611854 done, 2611854 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 2611854 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 109.75MB (115080991) total, 9.99MB (10473016) headers (space savings 93.83%), 17.44MB (18282978) data
+                     min         max         mean         sd        +/- sd
+time for request:      830us    572.75ms    176.17ms     88.02ms    71.82%
+time for connect:     1.94ms    290.52ms     70.38ms     69.54ms    80.66%
+time to 1st byte:     3.83ms    358.91ms    157.65ms     98.28ms    53.32%
+req/s           :     257.48     1158.89      510.16      177.23    59.47%
+[info] CPU 1393.5% | Mem 1.3GiB
+
+=== Best: 540594 req/s (CPU: 1295.3%, Mem: 1.2GiB) ===
+[info] saved results/unary-grpc-tls/1024/cnetmod-grpc-control-native.json
+httparena-bench-cnetmod-grpc-control-native
+httparena-bench-cnetmod-grpc-control-native
+[info] rebuilding site/data/*.json
+[updated] /root/cnetmod-grpc-20261020/wtx-control-recheck/site/data/frameworks.json
+[updated] /root/cnetmod-grpc-20261020/wtx-control-recheck/site/data/results/cnetmod-grpc-control-native.json - 4 new, 4 total
+[updated] /root/cnetmod-grpc-20261020/wtx-control-recheck/site/data/current.json
+[info] done

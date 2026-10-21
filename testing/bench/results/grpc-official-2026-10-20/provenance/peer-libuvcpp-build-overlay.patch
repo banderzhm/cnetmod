@@ -1,0 +1,47 @@
+--- official/libuvcpp/Dockerfile
++++ local/libuvcpp/Dockerfile
+@@ -30,6 +30,8 @@
+ # runtime stage.
+ 
+ FROM ubuntu:24.04 AS build
++COPY bootstrap-ca.pem /etc/ssl/certs/ca-certificates.crt
++RUN sed -i -E 's|http://(archive.ubuntu.com/ubuntu\|security.ubuntu.com/ubuntu)|https://mirrors.tuna.tsinghua.edu.cn/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+ 
+ ENV DEBIAN_FRONTEND=noninteractive
+ 
+@@ -206,7 +208,7 @@
+ ARG OPENSSL_VERSION=3.5.0
+ 
+ # `make` is here for OpenSSL, and only for OpenSSL: `./Configure` writes a
+-# Makefile whatever generator the project uses, so the `make -j"$(nproc)"` two
++# Makefile whatever generator the project uses, so the `make -j"4"` two
+ # steps down needs it, and `ninja-build` next to it does not stand in for it.
+ # The release workflow's linux legs do not list `make` and do not need to --
+ # they run on a GitHub-hosted image, which has build-essential already. A bare
+@@ -248,7 +250,7 @@
+     tar xzf /tmp/openssl.tar.gz -C /opt/openssl-src --strip-components=1; \
+     cd /opt/openssl-src; \
+     ./Configure --prefix=/opt/openssl --libdir=lib no-shared no-tests -fPIC; \
+-    make -j"$(nproc)"; \
++    make -j"4"; \
+     make install_sw; \
+     /opt/openssl/bin/openssl version; \
+     nm --defined-only /opt/openssl/lib/libssl.a \
+@@ -298,7 +300,7 @@
+         -DOPENSSL_USE_STATIC_LIBS=ON \
+         -DOPENSSL_ROOT_DIR=/opt/openssl \
+         -DCMAKE_DISABLE_FIND_PACKAGE_ZLIB=ON \
+- && cmake --build build --parallel "$(nproc)" \
++ && cmake --build build --parallel "4" \
+  && cmake --install build
+ 
+ # The entry itself. `-pthread` because libuv is inside the library and the
+@@ -312,6 +314,8 @@
+         -pthread
+ 
+ FROM ubuntu:24.04
++COPY bootstrap-ca.pem /etc/ssl/certs/ca-certificates.crt
++RUN sed -i -E 's|http://(archive.ubuntu.com/ubuntu\|security.ubuntu.com/ubuntu)|https://mirrors.tuna.tsinghua.edu.cn/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+ 
+ # libstdc++ for the entry's own objects, libpq5 for the one shared library the
+ # build above could not absorb. apt pulls in libpq's transitive closure

@@ -1,0 +1,59 @@
+{
+  "Ref": "docker.io/library/rust:1.98-bookworm@sha256:c49256cbe5ea0188bc658a689500d70c41eb51f009a7a7be209caf60a944f3ec",
+  "Descriptor": {
+    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "digest": "sha256:c49256cbe5ea0188bc658a689500d70c41eb51f009a7a7be209caf60a944f3ec",
+    "size": 1940,
+    "platform": {
+      "architecture": "amd64",
+      "os": "linux"
+    }
+  },
+  "Raw": "ewogICJzY2hlbWFWZXJzaW9uIjogMiwKICAibWVkaWFUeXBlIjogImFwcGxpY2F0aW9uL3ZuZC5vY2kuaW1hZ2UubWFuaWZlc3QudjEranNvbiIsCiAgImNvbmZpZyI6IHsKICAgICJtZWRpYVR5cGUiOiAiYXBwbGljYXRpb24vdm5kLm9jaS5pbWFnZS5jb25maWcudjEranNvbiIsCiAgICAiZGlnZXN0IjogInNoYTI1NjoyNmQ0MTk5M2IxZjJmNzhkYmQwMTAxNjBiODNiMDZiMGEzOGUxN2I1N2EyNjllOWJmMGJlN2YyMDc4MDczZjk4IiwKICAgICJzaXplIjogNDU0NgogIH0sCiAgImxheWVycyI6IFsKICAgIHsKICAgICAgIm1lZGlhVHlwZSI6ICJhcHBsaWNhdGlvbi92bmQub2NpLmltYWdlLmxheWVyLnYxLnRhcitnemlwIiwKICAgICAgImRpZ2VzdCI6ICJzaGEyNTY6ZWFhYzcwYzY4YWJkZjZmZmFjZjZkZTEwZDMxZWQ5ZGU0ODEzNTA1ZDFhNzk0ZWI3MzkzY2IyN2ZjZWI2MjRhNiIsCiAgICAgICJzaXplIjogNDg1MDM0NDAKICAgIH0sCiAgICB7CiAgICAgICJtZWRpYVR5cGUiOiAiYXBwbGljYXRpb24vdm5kLm9jaS5pbWFnZS5sYXllci52MS50YXIrZ3ppcCIsCiAgICAgICJkaWdlc3QiOiAic2hhMjU2OjdiMmRlMjQyM2ViZDlkMzI5MDg4MzE3NWMwZTQ2ZGNjZDZkZTk1NWIwOGU2ZTlhNWJkMjA5MDllM2ZhY2UyNDAiLAogICAgICAic2l6ZSI6IDI0MDU2MDc3CiAgICB9LAogICAgewogICAgICAibWVkaWFUeXBlIjogImFwcGxpY2F0aW9uL3ZuZC5vY2kuaW1hZ2UubGF5ZXIudjEudGFyK2d6aXAiLAogICAgICAiZGlnZXN0IjogInNoYTI1Njo4MTU3ODQxMGRmMTY5MzgwZWZlYzQ5MWJmZGM2MGE3ZTU4NmQ0YjQ4ZWY0YzBhZWI5YjZmZjA4NTgxMmQ5YTdkIiwKICAgICAgInNpemUiOiA2NDQyNDI3MQogICAgfSwKICAgIHsKICAgICAgIm1lZGlhVHlwZSI6ICJhcHBsaWNhdGlvbi92bmQub2NpLmltYWdlLmxheWVyLnYxLnRhcitnemlwIiwKICAgICAgImRpZ2VzdCI6ICJzaGEyNTY6ZGU5ZThkMGEwMDcxNzFjYWM1N2Q2NDNhMzk4MjkwMmQ0NTQzMWNkODYwNDAwZWVhNTVlMThkZjc1ZmMwYjEyYSIsCiAgICAgICJzaXplIjogMjExNzA3ODE4CiAgICB9LAogICAgewogICAgICAibWVkaWFUeXBlIjogImFwcGxpY2F0aW9uL3ZuZC5vY2kuaW1hZ2UubGF5ZXIudjEudGFyK2d6aXAiLAogICAgICAiZGlnZXN0IjogInNoYTI1Njo0NzQ5NTE4OWIzNjE5NjE1MzYxYmYxYmE1NGE3MDNiMmE0NGNiN2Q3Njc1N2FlMWNkNmE3N2Q0Zjg0NWJkMzU3IiwKICAgICAgInNpemUiOiAyMTM4MzkzNDcKICAgIH0KICBdLAogICJhbm5vdGF0aW9ucyI6IHsKICAgICJjb20uZG9ja2VyLm9mZmljaWFsLWltYWdlcy5iYXNoYnJldy5hcmNoIjogImFtZDY0IiwKICAgICJvcmcub3BlbmNvbnRhaW5lcnMuaW1hZ2UuYmFzZS5kaWdlc3QiOiAic2hhMjU2OjY3MmFhZWRjZmVjOTg3NzQzMDhlOTAyYWU1OTI2OTdiYzM0YjA1ZDU4ZjYyMTA0MDE1Y2YzNTExZjU4ZTMxOGEiLAogICAgIm9yZy5vcGVuY29udGFpbmVycy5pbWFnZS5iYXNlLm5hbWUiOiAiYnVpbGRwYWNrLWRlcHM6Ym9va3dvcm0iLAogICAgIm9yZy5vcGVuY29udGFpbmVycy5pbWFnZS5jcmVhdGVkIjogIjIwMjYtMDktMTlUMDM6NDA6NDBaIiwKICAgICJvcmcub3BlbmNvbnRhaW5lcnMuaW1hZ2UucmV2aXNpb24iOiAiNGRjNTIwOWY1ZTcyMGEzZDZiNWViMzM2Y2FiYjY5YTQyNGE4MjJjMSIsCiAgICAib3JnLm9wZW5jb250YWluZXJzLmltYWdlLnNvdXJjZSI6ICJodHRwczovL2dpdGh1Yi5jb20vcnVzdC1sYW5nL2RvY2tlci1ydXN0LmdpdCM0ZGM1MjA5ZjVlNzIwYTNkNmI1ZWIzMzZjYWJiNjlhNDI0YTgyMmMxOnN0YWJsZS9ib29rd29ybSIsCiAgICAib3JnLm9wZW5jb250YWluZXJzLmltYWdlLnVybCI6ICJodHRwczovL2h1Yi5kb2NrZXIuY29tL18vcnVzdCIsCiAgICAib3JnLm9wZW5jb250YWluZXJzLmltYWdlLnZlcnNpb24iOiAiMS1ib29rd29ybSIKICB9Cn0=",
+  "OCIManifest": {
+    "schemaVersion": 2,
+    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "config": {
+      "mediaType": "application/vnd.oci.image.config.v1+json",
+      "digest": "sha256:26d41993b1f2f78dbd010160b83b06b0a38e17b57a269e9bf0be7f2078073f98",
+      "size": 4546
+    },
+    "layers": [
+      {
+        "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:eaac70c68abdf6ffacf6de10d31ed9de4813505d1a794eb7393cb27fceb624a6",
+        "size": 48503440
+      },
+      {
+        "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:7b2de2423ebd9d3290883175c0e46dccd6de955b08e6e9a5bd20909e3face240",
+        "size": 24056077
+      },
+      {
+        "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:81578410df169380efec491bfdc60a7e586d4b48ef4c0aeb9b6ff085812d9a7d",
+        "size": 64424271
+      },
+      {
+        "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:de9e8d0a007171cac57d643a3982902d45431cd860400eea55e18df75fc0b12a",
+        "size": 211707818
+      },
+      {
+        "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:47495189b3619615361bf1ba54a703b2a44cb7d76757ae1cd6a77d4f845bd357",
+        "size": 213839347
+      }
+    ],
+    "annotations": {
+      "com.docker.official-images.bashbrew.arch": "amd64",
+      "org.opencontainers.image.base.digest": "sha256:672aaedcfec98774308e902ae592697bc34b05d58f62104015cf3511f58e318a",
+      "org.opencontainers.image.base.name": "buildpack-deps:bookworm",
+      "org.opencontainers.image.created": "2026-09-19T03:40:40Z",
+      "org.opencontainers.image.revision": "4dc5209f5e720a3d6b5eb336cabb69a424a822c1",
+      "org.opencontainers.image.source": "https://github.com/rust-lang/docker-rust.git#4dc5209f5e720a3d6b5eb336cabb69a424a822c1:stable/bookworm",
+      "org.opencontainers.image.url": "https://hub.docker.com/_/rust",
+      "org.opencontainers.image.version": "1-bookworm"
+    }
+  }
+}

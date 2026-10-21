@@ -1,0 +1,2061 @@
+-- 
+-- Architecture: x64 (64 bit)
+-- Use the C++ compiler to compile (MI_USE_CXX=ON)
+-- Override standard malloc (MI_OVERRIDE=ON)
+-- Disable assertion checks (MI_DEBUG=OFF)
+-- Disable detailed statistics (MI_STATS=OFF)
+-- Disable profiling (MI_PROFILE=OFF)
+-- Enable full transparent huge pages support, where purging avoids splitting huge pages (MI_ALLOW_THP=FULL)
+-- 
+-- Library name     : mimalloc
+-- Version          : 3.5.3
+-- Build type       : release
+-- C++ Compiler     : /usr/sbin/clang++
+-- Compiler flags   : -Wall;-Wextra;-Wpedantic;-Wno-deprecated;-Wno-unknown-pragmas;-fvisibility=hidden;-Wno-static-in-inline;-mno-outline;-ftls-model=initial-exec;-fno-builtin-malloc
+-- Compiler defines : NDEBUG=1;MI_GUARDED=0;MI_STATS=0;MI_PROFILE=0;MI_DEFAULT_ALLOW_THP=2;MI_HAS_EXECINFOH=1;MI_CMAKE_BUILD_TYPE=release;MI_BUILD_RELEASE
+-- Link libraries   : pthread;rt;atomic
+-- Build targets    : static;object
+-- 
+-- Memory allocator: bundled mimalloc 3.5.3
+-- Auto-detected libc++ paths:
+--   Module directory: /usr/share/libc++/v1
+--   Header directory: /usr/include/c++/v1
+-- Using BoringSSL from submodule: /root/cnetmod-grpc-20261020/control-source/3rdparty/boringssl
+-- BoringSSL: Building static libraries
+-- BoringSSL: Assembly optimizations enabled
+-- LLVM FileCheck Found: /usr/sbin/FileCheck
+-- Google Benchmark version: v1.9.5, normalized to 1.9.5
+-- BoringSSL submodule targets found: ssl, crypto
+-- BoringSSL TLS enabled - QUIC support not requested
+-- I/O backend: io_uring (Linux)
+-- I/O backend: epoll (Linux)
+-- ==========================================
+-- Project: cnetmod v2.1.0
+-- C++ Standard: C++23
+-- Compiler: Clang 23.1.3
+-- Build Type: Release
+-- Platform: Linux
+-- Standard Library Modules: /usr/share/libc++/v1
+-- Linker: mold (high-performance)
+-- Memory Allocator: mimalloc (high-performance)
+-- ==========================================
+-- 
+-- Performance Optimizations Enabled:
+--   mold linker: 10-20x faster linking
+--   mimalloc: 2-3x faster memory allocation
+-- 
+-- Configuring done (14.3s)
+-- Generating done (1.9s)
+-- Build files have been written to: /root/cnetmod-grpc-20261020/control-build
+[0/2] Re-checking globbed directories...
+[1/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/buffer_pool_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/buffer_pool_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[2/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/buffer_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/buffer_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[3/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/address_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/address_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[4/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/error_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/error_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[5/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/crash_dump_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/crash_dump_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[6/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/net_init_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/net_init_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[7/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/file_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/file_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[8/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/log_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/log_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[9/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/process.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/process.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[10/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/serial_port_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/serial_port_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[11/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/socket_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/socket_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[12/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/time.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/time.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[13/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/awaitable_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/awaitable_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[14/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/cancel_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/cancel_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[15/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/circuit_breaker_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/circuit_breaker_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[16/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/mutex_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/mutex_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[17/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/rate_limiter.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/rate_limiter.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[18/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/semaphore_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/semaphore_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[19/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/shared_mutex_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/shared_mutex_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[20/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/task_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/task_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[21/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/dtls_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/dtls_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[22/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/timer_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/timer_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[23/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/wait_group_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/wait_group_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[24/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/database/common/datetime.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/database/common/datetime.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[25/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/executor/async_op.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/executor/async_op.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[26/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/executor/platform/epoll_async_op.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/executor/platform/epoll_async_op.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[27/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/executor/scheduler.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/executor/scheduler.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[28/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/ssl_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/ssl_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[29/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/io/io_context_factory.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/io/io_context_factory.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[30/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/ssl_ktls.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/ssl_ktls.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[31/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/io/io_context_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/io/io_context_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[32/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/io/platform/epoll_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/io/platform/epoll_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[33/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/io/platform/io_uring_buffer_ring.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/io/platform/io_uring_buffer_ring.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[34/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/io/platform/io_uring_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/io/platform/io_uring_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[35/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/io/platform/io_uring_multishot_recv.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/io/platform/io_uring_multishot_recv.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[36/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/io/platform/io_uring_recv_service.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/io/platform/io_uring_recv_service.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[37/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/impl/udp_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/impl/udp_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[38/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/impl/tcp_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/impl/tcp_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[39/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/charconv_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/charconv_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[40/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/hmac_sha256.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/hmac_sha256.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[41/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/executor/platform/io_uring_async_op.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/executor/platform/io_uring_async_op.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[42/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/json/json.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/json/json.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[43/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/converter_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/converter_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[44/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/sha256.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/sha256.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[45/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/error.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/error.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[46/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/metric.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/metric.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[47/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/metric_aggregation.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/metric_aggregation.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[48/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/security/jwt.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/security/jwt.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[49/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/operation_scope.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/operation_scope.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[50/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/tracing.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/tracing.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[51/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/executor/server_context_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/executor/server_context_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[52/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/cnetmod_utils.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/cnetmod_utils.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[53/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[54/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/buffer.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/buffer.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[55/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/buffer_pool.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/buffer_pool.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[56/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/security/password.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/security/password.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[57/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/dtls.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/dtls.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[58/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/error.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/error.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[59/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/lazy.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/lazy.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[60/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/address.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/address.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[61/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/crash_dump.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/crash_dump.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[62/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/log.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/log.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[63/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/log_config.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/log_config.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[64/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/net_init.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/net_init.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[65/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/process.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/process.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[66/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/file.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/file.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[67/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/time.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/time.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[68/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[69/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/serial_port.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/serial_port.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[70/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/socket.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/socket.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[71/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/awaitable.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/awaitable.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[72/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/bridge.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/bridge.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[73/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/cancel.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/cancel.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[74/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/channel.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/channel.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[75/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/circuit_breaker.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/circuit_breaker.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[76/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/mutex.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/mutex.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[77/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/retry.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/retry.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[78/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/rate_limiter.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/rate_limiter.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[79/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/semaphore.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/semaphore.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[80/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/shared_mutex.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/shared_mutex.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[81/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/spawn.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/spawn.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[82/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/striped_mutex.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/striped_mutex.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[83/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/task.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/task.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[84/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/task_group.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/task_group.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[85/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/timer.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/timer.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[86/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/database/common/database.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/database/common/database.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[87/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/wait_group.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/wait_group.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[88/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/database/common/datetime.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/database/common/datetime.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[89/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/database/common/sql_parameters.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/database/common/sql_parameters.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[90/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/executor.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/executor.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[91/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/database/common/sql_query_data.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/database/common/sql_query_data.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[92/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/executor/pool.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/executor/pool.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[93/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/executor/scheduler.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/executor/scheduler.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[94/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/executor/async_op.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/executor/async_op.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[95/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/io.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/io.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[96/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/io/io_operation.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/io/io_operation.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[97/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/io/io_context.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/io/io_context.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[98/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/io/platform/epoll.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/io/platform/epoll.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[99/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/io/platform/io_uring.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/io/platform/io_uring.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[100/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/io/platform/io_uring_buffer_ring.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/io/platform/io_uring_buffer_ring.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[101/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/ssl.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/ssl.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[102/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/tcp.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/tcp.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[103/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/udp.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/udp.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[104/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/charconv.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/charconv.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[105/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/application_result.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/application_result.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[106/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/io/platform/io_uring_multishot_recv.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/io/platform/io_uring_multishot_recv.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[107/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/atomic_rw_latch.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/atomic_rw_latch.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[108/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/atomic_hash_map.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/atomic_hash_map.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[109/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/bounded_mpmc_queue.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/bounded_mpmc_queue.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[110/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/concurrent_skip_list.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/concurrent_skip_list.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[111/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/concurrent_vector.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/concurrent_vector.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[112/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/copy_on_write_value.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/copy_on_write_value.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[113/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/slot_latch_hash_map.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/slot_latch_hash_map.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[114/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/striped_accumulator.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/striped_accumulator.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[115/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/striped_hash_map.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/striped_hash_map.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[116/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/flat_map.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/flat_map.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[117/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/hmac_sha256.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/hmac_sha256.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[118/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/json/helpers.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/json/helpers.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[119/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/json/json.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/json/json.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[120/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/security/jwt.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/security/jwt.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[121/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/security/password.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/security/password.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[122/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/security/security.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/security/security.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[123/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/sha256.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/sha256.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[124/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/io/platform/io_uring_recv_service.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/io/platform/io_uring_recv_service.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[125/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/metric.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/metric.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[126/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/error.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/error.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[127/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/operation_result.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/operation_result.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[128/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/metric_aggregation.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/metric_aggregation.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[129/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/tracing.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/tracing.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[130/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/operation_scope.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/operation_scope.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[131/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/dns_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/dns_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[132/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/converter.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/converter.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[133/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/cnetmod_utils.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/cnetmod_utils.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[134/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[135/684] Scanning /usr/share/libc++/v1/std.compat.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/usr/share/libc++/v1/std.compat.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[136/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/buffer.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/buffer.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[137/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/address.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/address.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[138/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/buffer_pool.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/buffer_pool.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[139/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/dtls.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/dtls.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[140/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/crash_dump.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/crash_dump.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[141/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/error.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/error.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[142/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/lazy.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/lazy.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[143/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/file.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/file.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[144/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/log.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/log.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[145/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/log_config.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/log_config.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[146/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/net_init.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/net_init.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[147/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/process.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/process.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[148/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/serial_port.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/serial_port.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[149/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/socket.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/socket.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[150/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/time.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/time.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[151/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[152/684] Scanning /usr/share/libc++/v1/std.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/usr/share/libc++/v1/std.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[153/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/awaitable.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/awaitable.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[154/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/bridge.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/bridge.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[155/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/cancel.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/cancel.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[156/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/channel.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/channel.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[157/684] Scanning /root/cnetmod-grpc-20261020/control-source/3rdparty/json/src/modules/json.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/3rdparty/json/src/modules/json.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[158/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/mutex.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/mutex.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[159/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/circuit_breaker.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/circuit_breaker.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[160/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/retry.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/retry.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[161/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/rate_limiter.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/rate_limiter.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[162/684] Generating CXX dyndep file CMakeFiles/cnetmod_runtime.dir/CXX.dd
+[163/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/shared_mutex.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/shared_mutex.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[164/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/semaphore.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/semaphore.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[165/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/spawn.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/spawn.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[166/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/striped_mutex.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/striped_mutex.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[167/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/task.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/task.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[168/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/task_group.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/task_group.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[169/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/timer.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/timer.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[170/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/coro/wait_group.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/coro/wait_group.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[171/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/database/common/datetime.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/database/common/datetime.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[172/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/database/common/database.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/database/common/database.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[173/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/database/common/sql_parameters.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/database/common/sql_parameters.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[174/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/database/common/sql_query_data.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/database/common/sql_query_data.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[175/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/executor.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/executor.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[176/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/executor/async_op.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/executor/async_op.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[177/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/executor/scheduler.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/executor/scheduler.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[178/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/executor/pool.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/executor/pool.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[179/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/io.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/io.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[180/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/io/io_operation.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/io/io_operation.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[181/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/io/io_context.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/io/io_context.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[182/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/ssl.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/ssl.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[183/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/io/platform/epoll.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/io/platform/epoll.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[184/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/io/platform/io_uring.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/io/platform/io_uring.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[185/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/io/platform/io_uring_buffer_ring.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/io/platform/io_uring_buffer_ring.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[186/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/io/platform/io_uring_multishot_recv.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/io/platform/io_uring_multishot_recv.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[187/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/tcp.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/tcp.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[188/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/udp.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/udp.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[189/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/atomic_hash_map.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/atomic_hash_map.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[190/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/io/platform/io_uring_recv_service.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/io/platform/io_uring_recv_service.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[191/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/application_result.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/application_result.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[192/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/charconv.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/charconv.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[193/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/concurrent_skip_list.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/concurrent_skip_list.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[194/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/atomic_rw_latch.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/atomic_rw_latch.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[195/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/bounded_mpmc_queue.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/bounded_mpmc_queue.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[196/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/concurrent_vector.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/concurrent_vector.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[197/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/striped_accumulator.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/striped_accumulator.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[198/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/copy_on_write_value.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/copy_on_write_value.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[199/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/slot_latch_hash_map.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/slot_latch_hash_map.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[200/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/striped_hash_map.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/concurrentContainers/striped_hash_map.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[201/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/json/helpers.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/json/helpers.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[202/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/hmac_sha256.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/hmac_sha256.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[203/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/flat_map.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/flat_map.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[204/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/security/password.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/security/password.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[205/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/json/json.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/json/json.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[206/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/security/jwt.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/security/jwt.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[207/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/security/security.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/security/security.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[208/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/sha256.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/sha256.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[209/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/metric.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/metric.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[210/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/error.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/error.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[211/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/metric_aggregation.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/metric_aggregation.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[212/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/operation_result.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/operation_result.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[213/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/core/dns_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/core/dns_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[214/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/operation_scope.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/operation_scope.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[215/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/tracing.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/application/monitoring/core/tracing.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[216/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/utils/converter.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/utils/converter.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[217/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/client/client_pool.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/client/client_pool.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[218/684] Scanning /usr/share/libc++/v1/std.compat.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/usr/share/libc++/v1/std.compat.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[219/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/client/http_client.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/client/http_client.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[220/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_builder.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_builder.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[221/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_content_type.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_content_type.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[222/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/client/cookie.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/client/cookie.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[223/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_disposition.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_disposition.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[224/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_form.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_form.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[225/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_url.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_url.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[226/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/sse.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/sse.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[227/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/sse_stream.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/sse_stream.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[228/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/swagger.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/swagger.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[229/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/swagger_ui.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/swagger_ui.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[230/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_parser.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_parser.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[231/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/message/http_response.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/message/http_response.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[232/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/message/http_semantics.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/message/http_semantics.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[233/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/authorization.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/authorization.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[234/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/utils.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/utils.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[235/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_access_log.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_access_log.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[236/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_cache.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_cache.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[237/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_cors.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_cors.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[238/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_compress.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_compress.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[239/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_graceful_shutdown.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_graceful_shutdown.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[240/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_ip_filter.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_ip_filter.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[241/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_metrics.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_metrics.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[242/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_rate_limiter.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_rate_limiter.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[243/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_request_id.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_request_id.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[244/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_upload.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_upload.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[245/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_recover.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_recover.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[246/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/ip_firewall.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/ip_firewall.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[247/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/tracing.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/tracing.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[248/684] Scanning /usr/share/libc++/v1/std.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/usr/share/libc++/v1/std.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[249/684] Scanning /root/cnetmod-grpc-20261020/control-source/3rdparty/json/src/modules/json.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/3rdparty/json/src/modules/json.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[250/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/server/router.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/server/router.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[251/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v1/http_v1_parser_buffered.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v1/http_v1_parser_buffered.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[252/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v1/http_v1_parser.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v1/http_v1_parser.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[253/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/flow_control.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/flow_control.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[254/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/header_compression.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/header_compression.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[255/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/http_v2_frame.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/http_v2_frame.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[256/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/huffman.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/huffman.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[257/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/settings.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/settings.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[258/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/session.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/session.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[259/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/stream.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/stream.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[260/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[261/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/client/client_pool.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/client/client_pool.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[262/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/client/cookie.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/client/cookie.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[263/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/application_result.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/application_result.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[264/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/client/http_client.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/client/http_client.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[265/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_content_type.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_content_type.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[266/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[267/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_builder.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_builder.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[268/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_parser.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_parser.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[269/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_disposition.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_disposition.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[270/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_form.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_form.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[271/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_url.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_url.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[272/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/sse.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/sse.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[273/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/swagger.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/swagger.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[274/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/utils.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/utils.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[275/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/message/http_response.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/message/http_response.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[276/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/swagger_ui.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/swagger_ui.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[277/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/message/request.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/message/request.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[278/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/access_log.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/access_log.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[279/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/message/semantics.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/message/semantics.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[280/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/authorization.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/authorization.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[281/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/body_limit.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/body_limit.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[282/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/cache_store.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/cache_store.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[283/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/cors.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/cors.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[284/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/compress.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/compress.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[285/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/health_check.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/health_check.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[286/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_cache.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_cache.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[287/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/ip_firewall.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/ip_firewall.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[288/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/ip_filter.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/ip_filter.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[289/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/graceful_shutdown.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/graceful_shutdown.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[290/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/server/http_server.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/server/http_server.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[291/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/metrics.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/metrics.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[292/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/jwt_auth.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/jwt_auth.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[293/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/middleware.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/middleware.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[294/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/rate_limiter.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/rate_limiter.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[295/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/recover.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/recover.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[296/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/request_id.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/request_id.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[297/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/timeout.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/timeout.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[298/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/tracing.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/tracing.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[299/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/upload.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/upload.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[300/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/server/http_server.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/server/http_server.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[301/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/server/router.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/server/router.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[302/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v1/http_v1_parser.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v1/http_v1_parser.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[303/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/header_compression.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/header_compression.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[304/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/flow_control.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/flow_control.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[305/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/http_v2_frame.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/http_v2_frame.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[306/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/session.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/session.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[307/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/settings.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/settings.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[308/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/huffman.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/huffman.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[309/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/stream.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/stream.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[310/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/circuit_breaker.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/circuit_breaker.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[311/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/admission.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/admission.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[312/684] Generating CXX dyndep file 'CMakeFiles/cnetmod_runtime@synth_0.dir/CXX.dd'
+[313/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/endpoint.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/endpoint.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[314/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/discovery.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/discovery.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[315/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[316/684] Generating CXX dyndep file CMakeFiles/cnetmod_http.dir/CXX.dd
+[317/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/client/cookie.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/client/cookie.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[318/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/client/client_pool.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/client/client_pool.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[319/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/client/http_client.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/client/http_client.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[320/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/application_result.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/application_result.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[321/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[322/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_builder.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_builder.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[323/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_parser.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_parser.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[324/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_content_type.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_content_type.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[325/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_disposition.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_disposition.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[326/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_form.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_form.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[327/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/sse.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/sse.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[328/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_url.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/multipart_url.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[329/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/swagger.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/swagger.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[330/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/swagger_ui.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/swagger_ui.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[331/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/message/http_response.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/message/http_response.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[332/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/utils.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/extension/utils.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[333/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/message/request.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/message/request.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[334/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/message/semantics.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/message/semantics.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[335/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/cache_store.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/cache_store.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[336/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/access_log.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/access_log.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[337/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/authorization.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/authorization.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[338/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/body_limit.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/body_limit.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[339/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/health_check.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/health_check.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[340/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/compress.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/compress.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[341/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/cors.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/cors.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[342/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/ip_filter.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/ip_filter.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[343/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_cache.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/http_cache.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[344/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/ip_firewall.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/ip_firewall.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[345/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/jwt_auth.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/jwt_auth.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[346/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/metrics.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/metrics.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[347/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/middleware.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/middleware.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[348/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/request_id.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/request_id.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[349/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/rate_limiter.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/rate_limiter.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[350/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/recover.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/recover.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[351/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/graceful_shutdown.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/graceful_shutdown.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[352/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/tracing.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/tracing.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[353/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/timeout.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/timeout.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[354/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/upload.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/middleware/upload.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[355/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/server/http_server.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/server/http_server.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[356/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/server/router.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/server/router.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[357/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v1/http_v1_parser.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v1/http_v1_parser.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[358/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/flow_control.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/flow_control.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[359/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/header_compression.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/header_compression.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[360/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/http_v2_frame.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/http_v2_frame.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[361/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/huffman.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/huffman.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[362/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/session.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/session.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[363/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/settings.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/settings.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[364/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/governed_client.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/governed_client.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[365/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/stream.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/http/v2/stream.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[366/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/load_balancer.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/load_balancer.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[367/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/observability.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/observability.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[368/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_client.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_client.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[369/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/retry.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/retry.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[370/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/server_policy.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/server_policy.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[371/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_reflection.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_reflection.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[372/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_health.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_health.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[373/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_proto.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_proto.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[374/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_server.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_server.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[375/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_streaming.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_streaming.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[376/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_types.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_types.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[377/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[378/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/circuit_breaker.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/circuit_breaker.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[379/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/admission.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/admission.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[380/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/discovery.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/discovery.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[381/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/endpoint.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/endpoint.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[382/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/governed_client.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/governed_client.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[383/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/load_balancer.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/load_balancer.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[384/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/observability.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/observability.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[385/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/retry.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/retry.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[386/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/server_policy.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/server_policy.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[387/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_client.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_client.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[388/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_codec.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_codec.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[389/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_health.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_health.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[390/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_proto.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_proto.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[391/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_reflection.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_reflection.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[392/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_server.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_server.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[393/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_streaming.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_streaming.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[394/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_types.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_types.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[395/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_codec.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_codec.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[396/684] Generating CXX dyndep file 'CMakeFiles/cnetmod_http@synth_0.dir/CXX.dd'
+[397/684] Generating CXX dyndep file CMakeFiles/cnetmod_grpc.dir/CXX.dd
+[398/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/admission.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/admission.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[399/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[400/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/circuit_breaker.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/circuit_breaker.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[401/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/discovery.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/discovery.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[402/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/governed_client.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/governed_client.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[403/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/endpoint.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/endpoint.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[404/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/load_balancer.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/load_balancer.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[405/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/observability.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/observability.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[406/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/retry.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/retry.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[407/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/server_policy.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/governance/server_policy.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[408/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_codec.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_codec.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[409/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_client.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_client.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[410/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_proto.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_proto.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[411/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_health.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_health.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[412/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_server.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_server.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[413/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_reflection.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_reflection.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[414/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_types.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_types.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[415/684] Scanning /root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_streaming.cppm for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/src/protocol/grpc/grpc_streaming.cppm':
+warning: argument unused during compilation: '-stdlib=libc++'
+[416/684] Generating CXX dyndep file 'CMakeFiles/cnetmod_grpc@synth_0.dir/CXX.dd'
+[417/684] Scanning /root/cnetmod-grpc-20261020/control-source/testing/bench/grpc_arena_server.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-grpc-20261020/control-source/testing/bench/grpc_arena_server.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[418/684] Generating CXX dyndep file testing/bench/CMakeFiles/grpc_arena_server.dir/CXX.dd
+[419/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/converter.cppm.o
+[420/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/10ff5efdd56b.bmi'
+[421/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/converter_impl.cpp.o
+[422/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/3rdparty/json/src/modules/json.cppm.o
+[423/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/usr/share/libc++/v1/std.cppm.o
+[424/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/buffer.cppm.o
+[425/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/crash_dump.cppm.o
+[426/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/address.cppm.o
+[427/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/error.cppm.o
+[428/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/buffer_impl.cpp.o
+[429/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/error_impl.cpp.o
+[430/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/file.cppm.o
+[431/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/file_impl.cpp.o
+[432/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/lazy.cppm.o
+[433/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/log_config.cppm.o
+[434/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/log.cppm.o
+[435/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/net_init.cppm.o
+[436/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/net_init_impl.cpp.o
+[437/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/process.cppm.o
+[438/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/address_impl.cpp.o
+[439/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/crash_dump_impl.cpp.o
+[440/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/serial_port.cppm.o
+[441/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/6c31c4049402.bmi'
+[442/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/time.cppm.o
+[443/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/time.cpp.o
+[444/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/socket.cppm.o
+[445/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/awaitable.cppm.o
+[446/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/serial_port_impl.cpp.o
+[447/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/awaitable_impl.cpp.o
+[448/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/io/io_context.cppm.o
+[449/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/process.cpp.o
+[450/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/channel.cppm.o
+[451/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/io/io_context_impl.cpp.o
+[452/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/mutex.cppm.o
+[453/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/semaphore.cppm.o
+[454/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/socket_impl.cpp.o
+[455/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/mutex_impl.cpp.o
+[456/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/semaphore_impl.cpp.o
+[457/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/shared_mutex.cppm.o
+[458/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/striped_mutex.cppm.o
+[459/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/wait_group.cppm.o
+[460/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/shared_mutex_impl.cpp.o
+[461/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/task.cppm.o
+[462/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/executor/scheduler.cppm.o
+[463/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/wait_group_impl.cpp.o
+[464/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/executor/scheduler.cpp.o
+[465/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/spawn.cppm.o
+[466/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/task_impl.cpp.o
+[467/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/io/io_operation.cppm.o
+[468/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/io.cppm.o
+[469/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/protocol/tcp.cppm.o
+[470/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/executor/pool.cppm.o
+[471/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/io/platform/epoll.cppm.o
+[472/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/protocol/impl/tcp_impl.cpp.o
+[473/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/bridge.cppm.o
+[474/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/io/platform/epoll_impl.cpp.o
+[475/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/protocol/udp.cppm.o
+[476/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/application_result.cppm.o
+[477/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/charconv.cppm.o
+[478/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/io/platform/io_uring.cppm.o
+[479/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/charconv_impl.cpp.o
+[480/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/io/io_context_factory.cpp.o
+[481/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/database/common/sql_query_data.cppm.o
+[482/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/database/common/datetime.cppm.o
+[483/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/database/common/datetime.cpp.o
+[484/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/database/common/sql_parameters.cppm.o
+[485/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/database/common/database.cppm.o
+[486/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/io/platform/io_uring_buffer_ring.cppm.o
+[487/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/concurrentContainers/atomic_hash_map.cppm.o
+[488/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/io/platform/io_uring_buffer_ring.cpp.o
+[489/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/io/platform/io_uring_multishot_recv.cppm.o
+[490/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/concurrentContainers/atomic_rw_latch.cppm.o
+[491/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/cancel.cppm.o
+[492/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/cancel_impl.cpp.o
+[493/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/io/platform/io_uring_impl.cpp.o
+[494/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/io/platform/io_uring_multishot_recv.cpp.o
+[495/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/circuit_breaker.cppm.o
+[496/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/rate_limiter.cppm.o
+[497/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/circuit_breaker_impl.cpp.o
+[498/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/rate_limiter.cpp.o
+[499/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/concurrentContainers/bounded_mpmc_queue.cppm.o
+[500/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/io/platform/io_uring_recv_service.cppm.o
+[501/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/io/platform/io_uring_recv_service.cpp.o
+[502/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/buffer_pool.cppm.o
+[503/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/buffer_pool_impl.cpp.o
+[504/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/ssl.cppm.o
+[505/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/dtls.cppm.o
+[506/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/executor/async_op.cppm.o
+[507/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/concurrentContainers/concurrent_skip_list.cppm.o
+[508/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/log_impl.cpp.o
+[509/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/dtls_impl.cpp.o
+[510/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/ssl_impl.cpp.o
+[511/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/executor/platform/epoll_async_op.cpp.o
+[512/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/executor/async_op.cpp.o
+[513/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/executor/server_context_impl.cpp.o
+[514/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/protocol/impl/udp_impl.cpp.o
+[515/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/executor.cppm.o
+[516/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/concurrentContainers/concurrent_vector.cppm.o
+[517/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/timer.cppm.o
+[518/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/concurrentContainers/copy_on_write_value.cppm.o
+[519/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/retry.cppm.o
+[520/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/timer_impl.cpp.o
+[521/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/ssl_ktls.cpp.o
+[522/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/concurrentContainers/slot_latch_hash_map.cppm.o
+[523/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/concurrentContainers/striped_accumulator.cppm.o
+[524/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/concurrentContainers/striped_hash_map.cppm.o
+[525/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/flat_map.cppm.o
+[526/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/hmac_sha256.cppm.o
+[527/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/json/helpers.cppm.o
+[528/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/cnetmod_utils.cppm.o
+[529/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro/task_group.cppm.o
+[530/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/coro.cppm.o
+[531/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/security/jwt.cppm.o
+[532/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/security/password.cppm.o
+[533/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/json/json.cppm.o
+[534/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/hmac_sha256.cpp.o
+[535/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/security/password.cpp.o
+[536/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/security/security.cppm.o
+[537/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/sha256.cppm.o
+[538/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/security/jwt.cpp.o
+[539/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/executor/platform/io_uring_async_op.cpp.o
+[540/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/application/monitoring/core/metric.cppm.o
+[541/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/application/monitoring/core/metric.cpp.o
+[542/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/application/monitoring/core/metric_aggregation.cppm.o
+[543/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/sha256.cpp.o
+[544/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/application/monitoring/core/operation_result.cppm.o
+[545/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/application/monitoring/core/error.cppm.o
+[546/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/application/monitoring/core/error.cpp.o
+[547/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/application/monitoring/core/tracing.cppm.o
+[548/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/utils/json/json.cpp.o
+[549/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/application/monitoring/core/tracing.cpp.o
+[550/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/application/monitoring/core/operation_scope.cppm.o
+[551/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/application/monitoring/core/operation_scope.cpp.o
+[552/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/client/cookie.cppm.o
+[553/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart_builder.cppm.o
+[554/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart_content_type.cppm.o
+[555/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart_disposition.cppm.o
+[556/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart_url.cppm.o
+[557/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/application/monitoring/core/metric_aggregation.cpp.o
+[558/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/cache_store.cppm.o
+[559/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v2/flow_control.cppm.o
+[560/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v2/flow_control.cpp.o
+[561/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/message/semantics.cppm.o
+[562/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v2/header_compression.cppm.o
+[563/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart_form.cppm.o
+[564/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/usr/share/libc++/v1/std.compat.cppm.o
+[565/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart_parser.cppm.o
+[566/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart.cppm.o
+[567/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/message/http_response.cppm.o
+[568/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/application_result.cppm.o
+[569/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/sse.cppm.o
+[570/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v1/http_v1_parser.cppm.o
+[571/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v2/http_v2_frame.cppm.o
+[572/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v2/http_v2_frame.cpp.o
+[573/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v2/huffman.cppm.o
+[574/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/message/request.cppm.o
+[575/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v2/header_compression.cpp.o
+[576/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/server/router.cppm.o
+[577/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core/dns_impl.cpp.o
+[578/775] Building CXX object CMakeFiles/cnetmod_runtime.dir/src/core.cppm.o
+[579/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/swagger.cppm.o
+[580/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/swagger_ui.cppm.o
+[581/775] Linking CXX static library libcnetmod_runtime.a
+[582/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/message/http_semantics.cpp.o
+[583/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/utils.cppm.o
+[584/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v2/settings.cppm.o
+[585/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v2/stream.cppm.o
+[586/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/governance/admission.cppm.o
+[587/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v2/settings.cpp.o
+[588/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v2/session.cppm.o
+[589/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v2/stream.cpp.o
+[590/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/client/http_client.cppm.o
+[591/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/server/http_server.cppm.o
+[592/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v2/huffman.cpp.o
+[593/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/governance/circuit_breaker.cppm.o
+[594/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http.cppm.o
+[595/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/governance/circuit_breaker.cpp.o
+[596/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/governance/admission.cpp.o
+[597/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v2/session.cpp.o
+[598/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/client/cookie.cpp.o
+[599/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart_builder.cpp.o
+[600/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart_content_type.cpp.o
+[601/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart_disposition.cpp.o
+[602/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart_url.cpp.o
+[603/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/sse.cpp.o
+[604/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart_form.cpp.o
+[605/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/sse_stream.cpp.o
+[606/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/multipart_parser.cpp.o
+[607/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/utils.cpp.o
+[608/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/swagger_ui.cpp.o
+[609/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/message/http_response.cpp.o
+[610/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/client/http_client.cpp.o
+/root/cnetmod-grpc-20261020/control-source/src/protocol/http/client/http_client.cpp:1777:19: warning: unused variable 'http3_peer_port' [-Wunused-variable]
+ 1777 |     std::uint16_t http3_peer_port{};
+      |                   ^~~~~~~~~~~~~~~
+1 warning generated.
+[611/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/extension/swagger.cpp.o
+[612/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v1/http_v1_parser_buffered.cpp.o
+[613/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/client/client_pool.cppm.o
+[614/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v1/http_v1_parser.cpp.o
+[615/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/access_log.cppm.o
+[616/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/client/client_pool.cpp.o
+[617/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/authorization.cppm.o
+[618/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_access_log.cpp.o
+[619/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/authorization.cpp.o
+[620/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/compress.cppm.o
+[621/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/body_limit.cppm.o
+[622/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/cors.cppm.o
+[623/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/server/router.cpp.o
+[624/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_cors.cpp.o
+[625/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/graceful_shutdown.cppm.o
+[626/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_graceful_shutdown.cpp.o
+[627/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_compress.cpp.o
+[628/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/ip_filter.cppm.o
+[629/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_cache.cppm.o
+[630/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/health_check.cppm.o
+[631/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/ip_firewall.cppm.o
+[632/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/server/http_server.cpp.o
+[633/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_cache.cpp.o
+[634/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/jwt_auth.cppm.o
+[635/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/metrics.cppm.o
+[636/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/rate_limiter.cppm.o
+[637/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_ip_filter.cpp.o
+[638/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/recover.cppm.o
+[639/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/ip_firewall.cpp.o
+[640/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/request_id.cppm.o
+[641/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_request_id.cpp.o
+[642/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/timeout.cppm.o
+[643/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_rate_limiter.cpp.o
+[644/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/tracing.cppm.o
+[645/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/upload.cppm.o
+[646/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_recover.cpp.o
+[647/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/tracing.cpp.o
+[648/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/middleware.cppm.o
+[649/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/governance/endpoint.cppm.o
+[650/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/governance/endpoint.cpp.o
+[651/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/governance/observability.cppm.o
+[652/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/governance/discovery.cppm.o
+[653/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/governance/discovery.cpp.o
+[654/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/governance/load_balancer.cppm.o
+[655/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_metrics.cpp.o
+[656/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/governance/observability.cpp.o
+[657/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/10e407bc64d6.bmi'
+[658/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_types.cppm.o
+[659/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/bd012f4f8485.bmi'
+[660/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/governance/load_balancer.cpp.o
+[661/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/governance/server_policy.cppm.o
+[662/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/governance/retry.cppm.o
+[663/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/governance/retry.cpp.o
+[664/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/governance/server_policy.cpp.o
+[665/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_client.cppm.o
+[666/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_codec.cppm.o
+[667/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/governance/governed_client.cppm.o
+[668/775] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/middleware/http_upload.cpp.o
+[669/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_types.cpp.o
+[670/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_proto.cppm.o
+[671/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/governance/governed_client.cpp.o
+[672/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_server.cppm.o
+[673/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_client.cpp.o
+[674/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_codec.cpp.o
+[675/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_health.cppm.o
+[676/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_reflection.cppm.o
+[677/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_proto.cpp.o
+[678/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_streaming.cppm.o
+[679/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_server.cpp.o
+[680/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc.cppm.o
+[681/775] Linking CXX static library libcnetmod_http.a
+[682/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/e3575c581e7e.bmi'
+[683/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/475c2704a19b.bmi'
+[684/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/063d4a96535a.bmi'
+[685/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_health.cpp.o
+[686/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_streaming.cpp.o
+[687/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/e53acdc96fad.bmi'
+[688/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/9d6a19c4ed37.bmi'
+[689/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/7a432798590d.bmi'
+[690/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/001a2992a6d1.bmi'
+[691/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/8ac3f8d059aa.bmi'
+[692/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/8bf9a3adfd43.bmi'
+[693/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/4892e5b13d33.bmi'
+[694/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/85c95fd20ce3.bmi'
+[695/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/66d1c4066e5d.bmi'
+[696/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/5b203fb658d7.bmi'
+[697/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/6cb6587f3f77.bmi'
+[698/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/ceabe676fc75.bmi'
+[699/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/f8d6d801ee9a.bmi'
+[700/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/7feb16df688a.bmi'
+[701/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/d22c0613f5fd.bmi'
+[702/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/df3566bce6ab.bmi'
+[703/775] Building CXX object CMakeFiles/cnetmod_grpc.dir/src/protocol/grpc/grpc_reflection.cpp.o
+[704/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/54a6f3310437.bmi'
+[705/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/713ea35ccb51.bmi'
+[706/775] Linking CXX static library libcnetmod_grpc.a
+[707/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/5288caa903ee.bmi'
+[708/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/386449fd3d9d.bmi'
+[709/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/434f16739b17.bmi'
+[710/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/71d04076b077.bmi'
+[711/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/f77bd3f4a2e6.bmi'
+[712/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/51f317ce2035.bmi'
+[713/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/d809460f125a.bmi'
+[714/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/c4d5783b6126.bmi'
+[715/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/175cdbc260d6.bmi'
+[716/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/49185d47e88e.bmi'
+[717/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/7da76bb8cdfa.bmi'
+[718/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/d56a5be28cdd.bmi'
+[719/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/d7b1bf393d30.bmi'
+[720/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/1d2285a493d6.bmi'
+[721/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/84336356ffed.bmi'
+[722/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/eb50b011c3db.bmi'
+[723/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/b31f3bc8ce12.bmi'
+[724/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/340cf59f78ce.bmi'
+[725/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/3199b655a9c9.bmi'
+[726/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/b570be710a76.bmi'
+[727/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/296c38587a93.bmi'
+[728/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/9377928e91ba.bmi'
+[729/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/925ac454ac2f.bmi'
+[730/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/4c2134791e27.bmi'
+[731/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/65fda784398b.bmi'
+[732/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/41580c6b036f.bmi'
+[733/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/0bb23762e894.bmi'
+[734/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/fcbfd6682647.bmi'
+[735/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/74d03b988692.bmi'
+[736/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/0f06a63ff412.bmi'
+[737/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/6da5ab15cb65.bmi'
+[738/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/62c1132dab9b.bmi'
+[739/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/e7e2625d6b21.bmi'
+[740/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/d8e04d8104f8.bmi'
+[741/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/cb0bb31e6344.bmi'
+[742/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/5ebd9e5179a0.bmi'
+[743/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/ad92d1cf813b.bmi'
+[744/775] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/235c96381467.bmi'
+[745/775] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/69135b87a835.bmi'
+[746/775] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/898ac00515a4.bmi'
+[747/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/d4984bed9034.bmi'
+[748/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/df9d761e85f8.bmi'
+[749/775] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/9f570d68d408.bmi'
+[750/775] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/26f589be2296.bmi'
+[751/775] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/6c0814f86b14.bmi'
+[752/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/164ec45918cd.bmi'
+[753/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/3b623fa7648b.bmi'
+[754/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/1630fd3558b4.bmi'
+[755/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/1613133e65b2.bmi'
+[756/775] Building CXX object 'CMakeFiles/cnetmod_runtime@synth_0.dir/0f47925a062c.bmi'
+[757/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/a172387b9417.bmi'
+[758/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/b073af444377.bmi'
+[759/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/fe2ef0c96dbd.bmi'
+[760/775] Building CXX object 'CMakeFiles/cnetmod_http@synth_0.dir/2a5a04d63685.bmi'
+[761/775] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/0f234e060e5c.bmi'
+[762/775] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/478ef729b66e.bmi'
+[763/775] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/ec76a7d54767.bmi'
+[764/775] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/bd931bb5da42.bmi'
+[765/775] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/3d46362c49e6.bmi'
+[766/775] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/cac8fbf8d155.bmi'
+[767/775] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/910101232d6c.bmi'
+[768/775] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/39d10f2bcf51.bmi'
+[769/775] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/be53165f7aed.bmi'
+[770/775] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/5cbc746bd0ca.bmi'
+[771/775] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/d865214f2d42.bmi'
+[772/775] Building CXX object 'CMakeFiles/cnetmod_grpc@synth_0.dir/db26a559299d.bmi'
+[773/775] Building CXX object testing/bench/CMakeFiles/grpc_arena_server.dir/grpc_arena_server.cpp.o
+[774/775] Linking CXX executable testing/bench/grpc_arena_server

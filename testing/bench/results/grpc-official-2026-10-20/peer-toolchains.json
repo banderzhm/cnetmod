@@ -1,0 +1,60 @@
+{
+  "trillium": {
+    "base_image": "rust:1.98-bookworm",
+    "base_id": "sha256:c49256cbe5ea0188bc658a689500d70c41eb51f009a7a7be209caf60a944f3ec",
+    "repo_digests": [
+      "docker.1ms.run/library/rust@sha256:c49256cbe5ea0188bc658a689500d70c41eb51f009a7a7be209caf60a944f3ec",
+      "rust@sha256:c49256cbe5ea0188bc658a689500d70c41eb51f009a7a7be209caf60a944f3ec"
+    ],
+    "rootfs": {
+      "Type": "layers",
+      "Layers": [
+        "sha256:737d268d6aa353999a322965e8e9874052e8e73359ae648db6e84a9cf8c7d3a3",
+        "sha256:4d8c2ccf9393033def9eeba57fbe0134a871e39af44c68678192ffa39d60d046",
+        "sha256:a3c6ba7097931456badcfd4f54b267116c7195ebc3ab37e8150e3fcddecd178d",
+        "sha256:8e889e4fbbc14e8b9594834d1a5393d08b201edf84433726fbcc79de794008a1",
+        "sha256:fe37c81947988aeff980259ac9c8fc2cac4c3868e803e8f3aa2176e1e1480095"
+      ]
+    },
+    "version": "rustc 1.98.1 (48a229cea 2026-09-01)\n",
+    "version_exit_code": 0
+  },
+  "cardigan": {
+    "base_image": "eclipse-temurin:26-jre",
+    "base_id": "sha256:c7c9e2d412999f6a99d3cd987ed95ce55d9d52e2dcaf8577a9b495077d825c78",
+    "repo_digests": [
+      "eclipse-temurin@sha256:c7c9e2d412999f6a99d3cd987ed95ce55d9d52e2dcaf8577a9b495077d825c78"
+    ],
+    "rootfs": {
+      "Type": "layers",
+      "Layers": [
+        "sha256:edf698db7561f9f53f2b22b9d417f9fde0be95175736b6954c7ef917c7114cb1",
+        "sha256:6be3abfee1446ddfb97160837ec6ea1edec87a006b73a02dca2bae5de070302e",
+        "sha256:c60d3565a7baaeb4751377f7a6f1c192651a2f9670c57db3ae1b1b9329526043",
+        "sha256:9456b9b8ca156ce958bd27f88fe71e604a7fa9d96ed9f3721c8d605386f7ed73",
+        "sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef",
+        "sha256:7b859595e5087040223ffee241dd071e39a1edf70ab9e019caf7082217fafc93"
+      ]
+    },
+    "version": "openjdk 26.0.2.1 2026-08-18\nOpenJDK Runtime Environment Temurin-26.0.2.1+1 (build 26.0.2.1+1)\nOpenJDK 64-Bit Server VM Temurin-26.0.2.1+1 (build 26.0.2.1+1, mixed mode, sharing)\n",
+    "version_exit_code": 0
+  },
+  "helidon-production": {
+    "base_image": "container-registry.oracle.com/java/jdk-no-fee-term:27",
+    "base_id": "sha256:01de4136f638dbfcb372e7df9c4bf63b117a326b63450c0446473dbf8566cf35",
+    "repo_digests": [
+      "container-registry.oracle.com/java/jdk-no-fee-term@sha256:01de4136f638dbfcb372e7df9c4bf63b117a326b63450c0446473dbf8566cf35"
+    ],
+    "rootfs": {
+      "Type": "layers",
+      "Layers": [
+        "sha256:029474adafe2d0b99874dbe1bbf3dd5483e653927757a687580ac588667e33b1",
+        "sha256:107a43613ab78d58920500dc9dedfa53bb774c2726f5d6034c025f4715379a2a",
+        "sha256:d150eb1e62e506579e372a0a1a480278bdc303c9855636b78ff4588a7a5c4839",
+        "sha256:a3322a5664eeb3cacc4a17d4bf9b9d7764ba28aa8115269dd1a7bba7731e77de"
+      ]
+    },
+    "version": "java 27 2026-09-15\nJava(TM) SE Runtime Environment (build 27+35-2325)\nJava HotSpot(TM) 64-Bit Server VM (build 27+35-2325, mixed mode, sharing)\n",
+    "version_exit_code": 0
+  }
+}

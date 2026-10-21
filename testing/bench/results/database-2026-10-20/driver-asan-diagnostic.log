@@ -1,0 +1,61 @@
+=================================================================
+==44656==ERROR: AddressSanitizer: stack-use-after-scope on address 0x7225ea3f1178 at pc 0x633fba17955b bp 0x7ffe67e64840 sp 0x7ffe67e64838
+READ of size 8 at 0x7225ea3f1178 thread T0
+    #0 0x633fba17955a in main::$_0::operator()() const (.resume) /mnt/c/Users/25007/.codex/worktrees/c315/cnetmod/testing/database/drivers/postgresql/postgresql_interoperability_driver_main.cpp:31:62
+    #1 0x633fba36ac11 in std::__1::coroutine_handle<void>::resume[abi:nqe220108]() const /usr/include/c++/v1/__coroutine/coroutine_handle.h:69:5
+    #2 0x633fba36ac11 in cnetmod::detail::resume_detached_post@cnetmod.coro.spawn(void*) /mnt/c/Users/25007/.codex/worktrees/c315/cnetmod/src/coro/spawn.cppm:47:19
+    #3 0x633fba2e7a38 in cnetmod::post_node@cnetmod.io.io_context::dispatch() /mnt/c/Users/25007/.codex/worktrees/c315/cnetmod/src/io/io_context_impl.cpp
+    #4 0x633fba2e7a38 in cnetmod::io_context@cnetmod.io.io_context::drain_post_queue() /mnt/c/Users/25007/.codex/worktrees/c315/cnetmod/src/io/io_context_impl.cpp:98:15
+    #5 0x633fba2e9fb7 in cnetmod::io_uring_context@cnetmod.io.platform.io_uring::run_one_impl(bool) /mnt/c/Users/25007/.codex/worktrees/c315/cnetmod/src/io/platform/io_uring_impl.cpp:327:28
+    #6 0x633fba2e915c in cnetmod::io_uring_context@cnetmod.io.platform.io_uring::run() /mnt/c/Users/25007/.codex/worktrees/c315/cnetmod/src/io/platform/io_uring_impl.cpp:76:9
+    #7 0x633fba178cee in main /mnt/c/Users/25007/.codex/worktrees/c315/cnetmod/testing/database/drivers/postgresql/postgresql_interoperability_driver_main.cpp:34:14
+    #8 0x7625ee227780  (/usr/lib/libc.so.6+0x27780) (BuildId: 503200d7fda94a5dc6058d7e0694e5d1dcb2e372)
+    #9 0x7625ee2278b8 in __libc_start_main (/usr/lib/libc.so.6+0x278b8) (BuildId: 503200d7fda94a5dc6058d7e0694e5d1dcb2e372)
+    #10 0x633fba07f364 in _start (/root/cnetmod-grpc-20261020/asan-build/testing/database/postgresql_interoperability_driver+0x488364) (BuildId: da0a67d0c1343e39ab7972b12e170e8c978598f0)
+
+Address 0x7225ea3f1178 is located in stack of thread T0 at offset 4472 in frame
+    #0 0x633fba178587 in main /mnt/c/Users/25007/.codex/worktrees/c315/cnetmod/testing/database/drivers/postgresql/postgresql_interoperability_driver_main.cpp:12
+
+  This frame has 7 object(s):
+    [32, 56) 'request' (line 16)
+    [96, 4192) 'buffer' (line 17)
+    [4320, 4321) 'network' (line 25)
+    [4336, 4344) 'context' (line 26)
+    [4368, 4392) 'response' (line 27)
+    [4432, 4440) 'agg.tmp'
+    [4464, 4488) 'ref.tmp' (line 28) <== Memory access at offset 4472 is inside this variable
+HINT: this may be a false positive if your program uses some custom stack unwind mechanism, swapcontext or vfork
+      (longjmp and C++ exceptions *are* supported)
+SUMMARY: AddressSanitizer: stack-use-after-scope /mnt/c/Users/25007/.codex/worktrees/c315/cnetmod/testing/database/drivers/postgresql/postgresql_interoperability_driver_main.cpp:31:62 in main::$_0::operator()() const (.resume)
+Shadow bytes around the buggy address:
+  0x7225ea3f0e80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7225ea3f0f00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7225ea3f0f80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x7225ea3f1000: 00 00 00 00 00 00 00 00 00 00 00 00 f2 f2 f2 f2
+  0x7225ea3f1080: f2 f2 f2 f2 f2 f2 f2 f2 f2 f2 f2 f2 01 f2 00 f2
+=>0x7225ea3f1100: f2 f2 00 00 00 f2 f2 f2 f2 f2 00 f2 f2 f2 f8[f8]
+  0x7225ea3f1180: f8 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3
+  0x7225ea3f1200: f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3
+  0x7225ea3f1280: f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3
+  0x7225ea3f1300: f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3
+  0x7225ea3f1380: f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3 f3
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==44656==ABORTING

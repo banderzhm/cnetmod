@@ -154,32 +154,73 @@ private:
         bool retransmission_alias{};
     };
 
-    using sent_packet_map = std::map<std::uint64_t, sent_packet>;
-
-    struct packet_node_cache
+    class sent_packet_store
     {
-        packet_node_cache() = default;
-        packet_node_cache(const packet_node_cache&) noexcept;
-        auto operator=(const packet_node_cache&) noexcept -> packet_node_cache&;
-        packet_node_cache(packet_node_cache&& other) noexcept;
-        auto operator=(packet_node_cache&& other) noexcept -> packet_node_cache&;
-        auto clear() noexcept -> void;
+    public:
+        sent_packet_store() = default;
+        sent_packet_store(const sent_packet_store&) = default;
+        auto operator=(const sent_packet_store&) -> sent_packet_store& = default;
+        sent_packet_store(sent_packet_store&& other) noexcept;
+        auto operator=(sent_packet_store&& other) noexcept -> sent_packet_store&;
 
-        std::array<sent_packet_map::node_type, 64U> nodes;
-        std::size_t size{};
+        auto insert(std::uint64_t packet_number, sent_packet packet) -> void;
+        [[nodiscard]] auto find(std::uint64_t packet_number) noexcept -> sent_packet*;
+        [[nodiscard]] auto find(std::uint64_t packet_number) const noexcept
+            -> const sent_packet*;
+        auto erase(std::uint64_t packet_number) noexcept -> void;
+        auto clear() noexcept -> void;
+        auto release() noexcept -> void;
+
+        template <class Function>
+        auto for_each(Function&& function) -> void
+        {
+            for (auto& slot : slots_)
+            {
+                if (slot.packet)
+                    function(slot.packet_number, *slot.packet);
+            }
+            for (auto& [packet_number, packet] : overflow_)
+                function(packet_number, packet);
+        }
+
+        template <class Function>
+        auto for_each(Function&& function) const -> void
+        {
+            for (const auto& slot : slots_)
+            {
+                if (slot.packet)
+                    function(slot.packet_number, *slot.packet);
+            }
+            for (const auto& [packet_number, packet] : overflow_)
+                function(packet_number, packet);
+        }
+
+        [[nodiscard]] auto ordered_packet_numbers() const
+            -> std::vector<std::uint64_t>;
+
+    private:
+        struct packet_slot
+        {
+            std::uint64_t packet_number{};
+            std::optional<sent_packet> packet;
+        };
+
+        static constexpr std::size_t initial_capacity{64U};
+        [[nodiscard]] auto slot_index(std::uint64_t packet_number) const noexcept
+            -> std::size_t;
+        [[nodiscard]] auto ensure_available(std::uint64_t packet_number) -> bool;
+        auto grow() -> void;
+
+        std::vector<packet_slot> slots_;
+        std::map<std::uint64_t, sent_packet> overflow_;
+        std::size_t primary_size_{};
     };
 
     static constexpr std::size_t packet_number_space_count{3U};
     [[nodiscard]] static auto space_index(pn_space space) noexcept -> std::size_t;
-    auto insert_sent_packet(pn_space space, std::uint64_t packet_number,
-        sent_packet packet) -> void;
-    auto recycle_sent_packet(pn_space space, sent_packet_map::iterator packet) noexcept
-        -> sent_packet_map::iterator;
-
     loss_detector detector_;
     congestion_controller congestion_;
-    std::array<sent_packet_map, packet_number_space_count> sent_packets_;
-    std::array<packet_node_cache, packet_number_space_count> cached_nodes_;
+    std::array<sent_packet_store, packet_number_space_count> sent_packets_;
     std::array<std::size_t, packet_number_space_count> alias_counts_{};
 };
 

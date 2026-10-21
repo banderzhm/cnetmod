@@ -1,0 +1,461 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="23"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="4"
+	timestamp="2026-10-21T12:49:31"
+	>
+	<testcase name="test_charconv" classname="test_charconv" time="0.00174446" status="run">
+		<properties/>
+		<system-out>[==========] Running 3 test(s).
+[ RUN      ] character_conversion_requires_complete_input
+[       OK ] character_conversion_requires_complete_input
+[ RUN      ] character_conversion_reports_invalid_and_out_of_range_values
+[       OK ] character_conversion_reports_invalid_and_out_of_range_values
+[ RUN      ] character_conversion_formats_floating_point_portably
+[       OK ] character_conversion_formats_floating_point_portably
+[==========] 3 test(s) ran.
+[  PASSED  ] 3 test(s).
+</system-out>
+	</testcase>
+	<testcase name="test_converter" classname="test_converter" time="0.00117308" status="run">
+		<properties/>
+		<system-out>[==========] Running 2 test(s).
+[ RUN      ] converter_module_exposes_standard_types_and_binary_views
+[       OK ] converter_module_exposes_standard_types_and_binary_views
+[ RUN      ] converter_module_preserves_register_and_crc_interoperability
+[       OK ] converter_module_preserves_register_and_crc_interoperability
+[==========] 2 test(s) ran.
+[  PASSED  ] 2 test(s).
+</system-out>
+	</testcase>
+	<testcase name="test_json_template" classname="test_json_template" time="0.00355507" status="run">
+		<properties/>
+		<system-out>[==========] Running 5 test(s).
+[ RUN      ] framework_document_is_the_default_json_codec
+[       OK ] framework_document_is_the_default_json_codec
+[ RUN      ] framework_document_null_lookup_and_numeric_equality_are_stable
+[       OK ] framework_document_null_lookup_and_numeric_equality_are_stable
+[ RUN      ] framework_document_uses_native_parser_boundaries
+[       OK ] framework_document_uses_native_parser_boundaries
+[ RUN      ] framework_json_codec_enforces_schema_and_preserves_aggregate_values
+[       OK ] framework_json_codec_enforces_schema_and_preserves_aggregate_values
+[ RUN      ] json_template_offloads_and_honours_cancellation
+[       OK ] json_template_offloads_and_honours_cancellation
+[==========] 5 test(s) ran.
+[  PASSED  ] 5 test(s).
+</system-out>
+	</testcase>
+	<testcase name="test_application_integrations" classname="test_application_integrations" time="0.65039" status="run">
+		<properties/>
+		<system-out>[==========] Running 27 test(s).
+[ RUN      ] application_transport_shutdown_honors_precancellation
+[       OK ] application_transport_shutdown_honors_precancellation
+[ RUN      ] postgresql_service_probe_times_out_discards_and_recovers
+[       OK ] postgresql_service_probe_times_out_discards_and_recovers
+[ RUN      ] postgresql_service_stop_deadline_does_not_cancel_another_close_owner
+[       OK ] postgresql_service_stop_deadline_does_not_cancel_another_close_owner
+[ RUN      ] postgresql_query_cancellation_discards_waiting_session
+[       OK ] postgresql_query_cancellation_discards_waiting_session
+[ RUN      ] postgresql_reconnect_does_not_close_an_active_handshake
+[       OK ] postgresql_reconnect_does_not_close_an_active_handshake
+[ RUN      ] postgresql_authentication_disconnect_preserves_transport_error
+[       OK ] postgresql_authentication_disconnect_preserves_transport_error
+[ RUN      ] postgresql_authentication_cancellation_closes_waiting_transport
+[       OK ] postgresql_authentication_cancellatio...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_task_group" classname="test_task_group" time="0.0029351" status="run">
+		<properties/>
+		<system-out>[==========] Running 3 test(s).
+[ RUN      ] task_group_first_error_cancels_and_joins_children
+[       OK ] task_group_first_error_cancels_and_joins_children
+[ RUN      ] task_group_deadline_cancels_and_joins_children
+[       OK ] task_group_deadline_cancels_and_joins_children
+[ RUN      ] task_group_reuses_retired_children_and_cancels_only_live_operations
+[       OK ] task_group_reuses_retired_children_and_cancels_only_live_operations
+[==========] 3 test(s) ran.
+[  PASSED  ] 3 test(s).
+</system-out>
+	</testcase>
+	<testcase name="test_task" classname="test_task" time="0.0446366" status="run">
+		<properties/>
+		<system-out>[==========] Running 34 test(s).
+[ RUN      ] task_int_basic
+[       OK ] task_int_basic
+[ RUN      ] task_coroutine_frames_are_cache_line_aligned
+[       OK ] task_coroutine_frames_are_cache_line_aligned
+[ RUN      ] task_string_basic
+[       OK ] task_string_basic
+[ RUN      ] task_void_basic
+[       OK ] task_void_basic
+[ RUN      ] task_chained_await
+[       OK ] task_chained_await
+[ RUN      ] task_exception_propagation
+[       OK ] task_exception_propagation
+[ RUN      ] task_void_exception_propagation
+[       OK ] task_void_exception_propagation
+[ RUN      ] task_move_semantics
+[       OK ] task_move_semantics
+[ RUN      ] task_empty_await_is_deterministic
+[       OK ] task_empty_await_is_deterministic
+[ RUN      ] sync_wait_waits_for_asynchronous_completion
+[       OK ] sync_wait_waits_for_asynchronous_completion
+[ RUN      ] starts_on_starts_task_on_target_io_context
+[       OK ] starts_on_starts_task_on_target_io_context
+[ RUN      ] io_context_current_tracks_the_dispatching_loop
+[       OK ] io_con...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_stream_write" classname="test_stream_write" time="0.0128996" status="run">
+		<properties/>
+		<system-out>[2026-10-21 04:49:32.556] [info] [128866626037760] [test_stream_write.cpp:253] stream partial writes, backpressure, cancellation and closed peer passed
+</system-out>
+	</testcase>
+	<testcase name="test_channel" classname="test_channel" time="0.00150479" status="run">
+		<properties/>
+		<system-out>[==========] Running 10 test(s).
+[ RUN      ] channel_single_send_recv
+[       OK ] channel_single_send_recv
+[ RUN      ] channel_buffered_multiple
+[       OK ] channel_buffered_multiple
+[ RUN      ] channel_close_returns_nullopt
+[       OK ] channel_close_returns_nullopt
+[ RUN      ] channel_is_closed
+[       OK ] channel_is_closed
+[ RUN      ] channel_close_idempotent
+[       OK ] channel_close_idempotent
+[ RUN      ] channel_string_type
+[       OK ] channel_string_type
+[ RUN      ] channel_close_with_buffered_data
+[       OK ] channel_close_with_buffered_data
+[ RUN      ] channel_large_capacity
+[       OK ] channel_large_capacity
+[ RUN      ] channel_concurrent_producer_consumer
+[       OK ] channel_concurrent_producer_consumer
+[ RUN      ] channel_move_only_type
+[       OK ] channel_move_only_type
+[==========] 10 test(s) ran.
+[  PASSED  ] 10 test(s).
+</system-out>
+	</testcase>
+	<testcase name="test_mutex" classname="test_mutex" time="0.00133821" status="run">
+		<properties/>
+		<system-out>[==========] Running 12 test(s).
+[ RUN      ] mutex_try_lock_unlocked
+[       OK ] mutex_try_lock_unlocked
+[ RUN      ] mutex_try_lock_locked
+[       OK ] mutex_try_lock_locked
+[ RUN      ] mutex_try_lock_after_unlock
+[       OK ] mutex_try_lock_after_unlock
+[ RUN      ] mutex_coro_lock_unlock
+[       OK ] mutex_coro_lock_unlock
+[ RUN      ] mutex_lock_guard_basic
+[       OK ] mutex_lock_guard_basic
+[ RUN      ] mutex_lock_guard_move
+[       OK ] mutex_lock_guard_move
+[ RUN      ] mutex_lock_guard_release
+[       OK ] mutex_lock_guard_release
+[ RUN      ] mutex_sequential_lock
+[       OK ] mutex_sequential_lock
+[ RUN      ] mutex_when_all_contention
+[       OK ] mutex_when_all_contention
+[ RUN      ] striped_async_mutex_serializes_the_same_business_key
+[       OK ] striped_async_mutex_serializes_the_same_business_key
+[ RUN      ] mutex_lock_guard_exception_safety
+[       OK ] mutex_lock_guard_exception_safety
+[ RUN      ] mutex_many_sequential_cycles
+[       OK ] mutex_many_sequential_cycles
+[==========] 12 t...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_semaphore" classname="test_semaphore" time="0.0012871" status="run">
+		<properties/>
+		<system-out>[==========] Running 9 test(s).
+[ RUN      ] sem_initial_count
+[       OK ] sem_initial_count
+[ RUN      ] sem_try_acquire_available
+[       OK ] sem_try_acquire_available
+[ RUN      ] sem_try_acquire_exhausted
+[       OK ] sem_try_acquire_exhausted
+[ RUN      ] sem_release_increases_count
+[       OK ] sem_release_increases_count
+[ RUN      ] sem_acquire_then_release
+[       OK ] sem_acquire_then_release
+[ RUN      ] sem_multiple_acquire_release
+[       OK ] sem_multiple_acquire_release
+[ RUN      ] sem_coro_acquire_immediate
+[       OK ] sem_coro_acquire_immediate
+[ RUN      ] sem_sequential_contention
+[       OK ] sem_sequential_contention
+[ RUN      ] sem_concurrent_access_when_all
+[       OK ] sem_concurrent_access_when_all
+[==========] 9 test(s) ran.
+[  PASSED  ] 9 test(s).
+</system-out>
+	</testcase>
+	<testcase name="test_wait_group" classname="test_wait_group" time="0.00125911" status="run">
+		<properties/>
+		<system-out>[==========] Running 8 test(s).
+[ RUN      ] wg_initial_count_zero
+[       OK ] wg_initial_count_zero
+[ RUN      ] wg_add_increases_count
+[       OK ] wg_add_increases_count
+[ RUN      ] wg_done_decreases_count
+[       OK ] wg_done_decreases_count
+[ RUN      ] wg_wait_already_zero
+[       OK ] wg_wait_already_zero
+[ RUN      ] wg_add_done_then_wait
+[       OK ] wg_add_done_then_wait
+[ RUN      ] wg_concurrent_done_and_wait
+[       OK ] wg_concurrent_done_and_wait
+[ RUN      ] wg_add_incremental
+[       OK ] wg_add_incremental
+[ RUN      ] wg_multiple_add_values
+[       OK ] wg_multiple_add_values
+[==========] 8 test(s) ran.
+[  PASSED  ] 8 test(s).
+</system-out>
+	</testcase>
+	<testcase name="test_shared_mutex" classname="test_shared_mutex" time="0.00121849" status="run">
+		<properties/>
+		<system-out>[==========] Running 12 test(s).
+[ RUN      ] rw_try_lock_free
+[       OK ] rw_try_lock_free
+[ RUN      ] rw_try_lock_while_write_locked
+[       OK ] rw_try_lock_while_write_locked
+[ RUN      ] rw_try_lock_after_write_unlock
+[       OK ] rw_try_lock_after_write_unlock
+[ RUN      ] rw_coro_write_lock_unlock
+[       OK ] rw_coro_write_lock_unlock
+[ RUN      ] rw_coro_read_lock_unlock
+[       OK ] rw_coro_read_lock_unlock
+[ RUN      ] rw_multiple_readers_sequential
+[       OK ] rw_multiple_readers_sequential
+[ RUN      ] rw_multiple_readers_concurrent
+[       OK ] rw_multiple_readers_concurrent
+[ RUN      ] rw_sequential_write
+[       OK ] rw_sequential_write
+[ RUN      ] rw_unique_lock_guard_basic
+[       OK ] rw_unique_lock_guard_basic
+[ RUN      ] rw_shared_lock_guard_basic
+[       OK ] rw_shared_lock_guard_basic
+[ RUN      ] rw_unique_lock_guard_move
+[       OK ] rw_unique_lock_guard_move
+[ RUN      ] rw_shared_lock_guard_release
+[       OK ] rw_shared_lock_guard_release
+[==========] 12 test(s) ran.
+[  PASSE...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_http_compress" classname="test_http_compress" time="0.00193718" status="run">
+		<properties/>
+		<system-out>[==========] Running 7 test(s).
+[ RUN      ] compression_honors_explicit_gzip_rejection
+[       OK ] compression_honors_explicit_gzip_rejection
+[ RUN      ] compression_accepts_case_insensitive_gzip_with_quality
+[       OK ] compression_accepts_case_insensitive_gzip_with_quality
+[ RUN      ] compression_accepts_minimum_positive_quality
+[       OK ] compression_accepts_minimum_positive_quality
+[ RUN      ] compression_rejects_invalid_quality_syntax
+[       OK ] compression_rejects_invalid_quality_syntax
+[ RUN      ] compression_uses_wildcard_when_gzip_is_not_explicit
+[       OK ] compression_uses_wildcard_when_gzip_is_not_explicit
+[ RUN      ] compression_merges_vary_and_publishes_measurements
+[       OK ] compression_merges_vary_and_publishes_measurements
+[ RUN      ] compression_does_not_dispatch_cancelled_request
+[       OK ] compression_does_not_dispatch_cancelled_request
+[==========] 7 test(s) ran.
+[  PASSED  ] 7 test(s).
+</system-out>
+	</testcase>
+	<testcase name="test_http_parser" classname="test_http_parser" time="0.00513385" status="run">
+		<properties/>
+		<system-out>[==========] Running 27 test(s).
+[ RUN      ] request_parser_transfers_headers_without_losing_parsed_state
+[       OK ] request_parser_transfers_headers_without_losing_parsed_state
+[ RUN      ] request_parser_simple_get
+[       OK ] request_parser_simple_get
+[ RUN      ] request_parser_http_1_0
+[       OK ] request_parser_http_1_0
+[ RUN      ] request_parser_header_views_support_common_and_custom_names
+[       OK ] request_parser_header_views_support_common_and_custom_names
+[ RUN      ] request_parser_duplicate_headers_preserve_legacy_joining
+[       OK ] request_parser_duplicate_headers_preserve_legacy_joining
+[ RUN      ] request_parser_all_common_header_slots_are_addressable
+[       OK ] request_parser_all_common_header_slots_are_addressable
+[ RUN      ] request_parser_fragmented_headers_keep_stable_views
+[       OK ] request_parser_fragmented_headers_keep_stable_views
+[ RUN      ] request_parser_post_with_body
+[       OK ] request_parser_post_with_body
+[ RUN      ] request_parser_incremental
+[       OK ] ...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_http2_hpack" classname="test_http2_hpack" time="0.00164593" status="run">
+		<properties/>
+		<system-out>[==========] Running 6 test(s).
+[ RUN      ] hpack_huffman_rfc_example
+[       OK ] hpack_huffman_rfc_example
+[ RUN      ] hpack_huffman_all_byte_symbols_roundtrip
+[       OK ] hpack_huffman_all_byte_symbols_roundtrip
+[ RUN      ] hpack_dynamic_table_and_huffman_roundtrip
+[       OK ] hpack_dynamic_table_and_huffman_roundtrip
+[ RUN      ] hpack_rejects_invalid_huffman_padding
+[       OK ] hpack_rejects_invalid_huffman_padding
+[ RUN      ] hpack_repeated_stateless_blocks_own_their_decoded_fields
+[       OK ] hpack_repeated_stateless_blocks_own_their_decoded_fields
+[ RUN      ] hpack_repeated_blocks_preserve_dynamic_table_operations
+[       OK ] hpack_repeated_blocks_preserve_dynamic_table_operations
+[==========] 6 test(s) ran.
+[  PASSED  ] 6 test(s).
+</system-out>
+	</testcase>
+	<testcase name="test_http2_stream" classname="test_http2_stream" time="0.139903" status="run">
+		<properties/>
+		<system-out>[==========] Running 11 test(s).
+[ RUN      ] http2_server_dispatches_sync_router_handlers
+[       OK ] http2_server_dispatches_sync_router_handlers
+[ RUN      ] http2_abort_retires_parallel_request_read_and_backpressured_response_write
+[       OK ] http2_abort_retires_parallel_request_read_and_backpressured_response_write
+[ RUN      ] http2_send_window_adjustments_allow_negative_credit_without_overflow
+[       OK ] http2_send_window_adjustments_allow_negative_credit_without_overflow
+[ RUN      ] http2_pending_responses_obey_stream_and_connection_send_windows
+[       OK ] http2_pending_responses_obey_stream_and_connection_send_windows
+[ RUN      ] http2_streams_deliver_interleaved_bodies_and_return_consumed_credit
+[       OK ] http2_streams_deliver_interleaved_bodies_and_return_consumed_credit
+[ RUN      ] http2_borrowed_consumers_batch_credit_without_returning_unconsumed_bytes
+[       OK ] http2_borrowed_consumers_batch_credit_without_returning_unconsumed_bytes
+[ RUN      ] http2_borrowed_handler_is_not_disp...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_grpc" classname="test_grpc" time="0.00707428" status="run">
+		<properties/>
+		<system-out>[==========] Running 24 test(s).
+[ RUN      ] grpc_frame_roundtrip
+[       OK ] grpc_frame_roundtrip
+[ RUN      ] grpc_stream_decoder_handles_partial_frames
+[       OK ] grpc_stream_decoder_handles_partial_frames
+[ RUN      ] grpc_stream_decoder_rejects_oversized_incomplete_frame
+[       OK ] grpc_stream_decoder_rejects_oversized_incomplete_frame
+[ RUN      ] grpc_message_stream_decoder_emits_complete_messages_only
+[       OK ] grpc_message_stream_decoder_emits_complete_messages_only
+[ RUN      ] grpc_service_path
+[       OK ] grpc_service_path
+[ RUN      ] grpc_status_response_uses_trailers
+[       OK ] grpc_status_response_uses_trailers
+[ RUN      ] grpc_health_codec_roundtrip
+[       OK ] grpc_health_codec_roundtrip
+[ RUN      ] grpc_compressed_frames_are_rejected_without_opt_in
+[       OK ] grpc_compressed_frames_are_rejected_without_opt_in
+[ RUN      ] grpc_gzip_frame_roundtrip
+[       OK ] grpc_gzip_frame_roundtrip
+[ RUN      ] grpc_brotli_frame_roundtrip
+[       OK ] grpc_brotli_frame_roundtrip
+[ RUN  ...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_grpc_proto" classname="test_grpc_proto" time="0.00158567" status="run">
+		<properties/>
+		<system-out>[==========] Running 3 test(s).
+[ RUN      ] grpc_proto_wire_matches_known_python_oracle_vector
+[       OK ] grpc_proto_wire_matches_known_python_oracle_vector
+[ RUN      ] grpc_proto_schema_parses_messages_and_streaming_service
+[       OK ] grpc_proto_schema_parses_messages_and_streaming_service
+[ RUN      ] proto_visitor_borrows_bytes_and_matches_owning_decoding
+[       OK ] proto_visitor_borrows_bytes_and_matches_owning_decoding
+[==========] 3 test(s) ran.
+[  PASSED  ] 3 test(s).
+</system-out>
+	</testcase>
+	<testcase name="test_redis" classname="test_redis" time="1.3571" status="run">
+		<properties/>
+		<system-out>[==========] Running 22 test(s).
+[ RUN      ] redis_dynamic_request_rejects_empty_and_counts_commands
+[       OK ] redis_dynamic_request_rejects_empty_and_counts_commands
+[ RUN      ] redis_cluster_rejects_nonzero_database_before_network_io
+[       OK ] redis_cluster_rejects_nonzero_database_before_network_io
+[ RUN      ] redis_cluster_hash_tags_support_safe_multi_key_commands
+[       OK ] redis_cluster_hash_tags_support_safe_multi_key_commands
+[ RUN      ] redis_pool_stop_joins_a_stalled_authentication_task
+[       OK ] redis_pool_stop_joins_a_stalled_authentication_task
+[ RUN      ] redis_connect_deadline_cancels_hello_auth_and_select
+[       OK ] redis_connect_deadline_cancels_hello_auth_and_select
+[ RUN      ] redis_cancellable_exchange_handles_fragments_errors_and_total_budget
+[       OK ] redis_cancellable_exchange_handles_fragments_errors_and_total_budget
+[ RUN      ] redis_cmd_preserves_fragmented_bulk_parser_state
+[       OK ] redis_cmd_preserves_fragmented_bulk_parser_state
+[ RUN      ] redis_failed...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_redis_template" classname="test_redis_template" time="1.10677" status="run">
+		<properties/>
+		<system-out>[==========] Running 9 test(s).
+[ RUN      ] redis_template_distributed_lock_uses_owner_checked_atomic_scripts
+[       OK ] redis_template_distributed_lock_uses_owner_checked_atomic_scripts
+[ RUN      ] redis_template_distributed_lock_waits_with_bounded_retry
+[       OK ] redis_template_distributed_lock_waits_with_bounded_retry
+[ RUN      ] redis_template_normalizes_values_collections_scans_pipeline_and_spans
+[       OK ] redis_template_normalizes_values_collections_scans_pipeline_and_spans
+[ RUN      ] redis_template_cancellation_discards_partial_connection_and_recovers
+[       OK ] redis_template_cancellation_discards_partial_connection_and_recovers
+[ RUN      ] redis_template_unreachable_pool_respects_pool_timeout
+[       OK ] redis_template_unreachable_pool_respects_pool_timeout
+[ RUN      ] redis_template_silent_server_respects_operation_timeout
+[       OK ] redis_template_silent_server_respects_operation_timeout
+[ RUN      ] redis_template_scan_limit_fails_before_returning_partial_results
+[       OK ] r...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_mysql_pool" classname="test_mysql_pool" time="0.274211" status="run">
+		<properties>
+			<property name="cmake_labels" value="mysql;pool"/>
+		</properties>
+		<system-out>[==========] Running 5 test(s).
+[ RUN      ] mysql_pool_reset_timeout_reconnects_and_serves_waiting_borrower
+[       OK ] mysql_pool_reset_timeout_reconnects_and_serves_waiting_borrower
+[ RUN      ] mysql_pool_stop_cancels_pending_session_reset
+[       OK ] mysql_pool_stop_cancels_pending_session_reset
+[ RUN      ] mysql_pool_rejects_malformed_reset_responses_before_reuse
+[       OK ] mysql_pool_rejects_malformed_reset_responses_before_reuse
+[ RUN      ] mysql_pool_reconnects_after_server_rejects_session_reset
+[       OK ] mysql_pool_reconnects_after_server_rejects_session_reset
+[ RUN      ] mysql_small_and_multipart_packet_writes_preserve_bytes_and_sequence
+[       OK ] mysql_small_and_multipart_packet_writes_preserve_bytes_and_sequence
+[==========] 5 test(s) ran.
+[  PASSED  ] 5 test(s).
+</system-out>
+	</testcase>
+	<testcase name="test_postgresql_transport" classname="test_postgresql_transport" time="0.0303919" status="run">
+		<properties/>
+		<system-out>[==========] Running 1 test(s).
+[ RUN      ] postgresql_coalesced_fragmented_messages_and_pool_accounting
+[       OK ] postgresql_coalesced_fragmented_messages_and_pool_accounting
+[==========] 1 test(s) ran.
+[  PASSED  ] 1 test(s).
+</system-out>
+	</testcase>
+	<testcase name="test_redis_tls" classname="test_redis_tls" time="0.649112" status="run">
+		<properties/>
+		<system-out>[==========] Running 2 test(s).
+[ RUN      ] redis_tls_probe_timeout_and_reconnection_preserve_session_isolation
+[       OK ] redis_tls_probe_timeout_and_reconnection_preserve_session_isolation
+[ RUN      ] redis_tls_connection_deadline_interrupts_a_stalled_handshake
+[       OK ] redis_tls_connection_deadline_interrupts_a_stalled_handshake
+[==========] 2 test(s) ran.
+[  PASSED  ] 2 test(s).
+</system-out>
+	</testcase>
+</testsuite>

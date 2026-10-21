@@ -13,6 +13,16 @@ import cnetmod.utils.flat_map;
 
 namespace cnetmod::http {
 
+/// Infer the response media type for a file extension. The extension may
+/// include its leading dot.
+export auto guess_mime_type(std::string_view extension) noexcept
+    -> std::string_view;
+
+/// Return whether an Accept-Encoding field permits `encoding`. Matching is
+/// ASCII case-insensitive and an explicit q=0 disables the coding.
+export auto accepts_content_encoding(std::string_view header,
+    std::string_view encoding) noexcept -> bool;
+
 // =============================================================================
 // Request Body Streaming
 // =============================================================================
@@ -469,6 +479,15 @@ export struct case_insensitive_less
 
 export using header_map =
     cnetmod::flat_map<std::string, std::string, case_insensitive_less>;
+
+/// A complete, self-contained HPACK header block for one fixed status and
+/// field set.  It is encoded without dynamic-table references, so a cached
+/// block can be replayed verbatim on any connection.
+export struct preencoded_header_block
+{
+    int status{};
+    std::vector<std::byte> block;
+};
 
 /// Non-owning request header used by protocol adapters. The referenced bytes
 /// must outlive request_context; headers() materializes ownership only when a

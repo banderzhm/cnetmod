@@ -1,0 +1,1 @@
+[2026-10-20 14:35:32.669] [info] [140313901472896] [bench_database.cpp:33] RESULT database=mysql mode=pool operations=6719197 seconds=3.000000 ops_per_second=2239732.174

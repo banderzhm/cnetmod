@@ -200,7 +200,14 @@ auto connection_pool::async_get_connection(cnetmod::deadline value)
 auto connection_pool::async_get_connection(cancel_token& token)
     -> task<std::expected<pooled_connection, std::error_code>>
 {
-    return with_timeout(ctx_, params_.pool_timeout,
+    if (!token.is_cancelled() && !stop_requested_.load(std::memory_order_acquire) &&
+        params_.pool_timeout > std::chrono::steady_clock::duration::zero())
+    {
+        auto ready = try_get_connection();
+        if (ready || ready.error() != make_error_code(std::errc::resource_unavailable_try_again))
+            co_return std::move(ready);
+    }
+    co_return co_await with_timeout(ctx_, params_.pool_timeout,
         async_get_connection_impl(token), token);
 }
 

@@ -1,0 +1,1 @@
+[2026-10-20 14:37:39.346] [info] [130670137900160] [bench_database.cpp:33] RESULT database=mysql mode=reset operations=69 seconds=3.000263 ops_per_second=22.998

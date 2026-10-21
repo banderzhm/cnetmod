@@ -1,0 +1,27 @@
+{
+  "command": [
+    "docker",
+    "run",
+    "-d",
+    "--rm",
+    "--name",
+    "cnetmod-grpc-postgres-20261020",
+    "--network",
+    "host",
+    "--tmpfs",
+    "/var/lib/postgresql:rw,size=2g",
+    "-e",
+    "POSTGRES_USER=bench",
+    "-e",
+    "POSTGRES_PASSWORD=bench",
+    "-e",
+    "POSTGRES_DB=benchmark",
+    "-v",
+    "/var/tmp/cnetmod-grpc-official/data/pgdb-seed.sql:/docker-entrypoint-initdb.d/seed.sql:ro",
+    "postgres:18",
+    "-c",
+    "max_connections=256"
+  ],
+  "image": "sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+  "seed_sha256": "f020c2c6851ea1c53cd1b90c94baadd5645b2fc3e4caed5b0daf71a61bff9e21"
+}

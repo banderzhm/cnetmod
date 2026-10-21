@@ -7,6 +7,21 @@ import cnetmod.protocol.http;
 
 using namespace cnetmod::http;
 
+TEST(request_parser_transfers_headers_without_losing_parsed_state)
+{
+    request_parser parser(32);
+    const std::string raw = "GET /ws HTTP/1.1\r\nHost: localhost\r\nX-Value: first\r\nX-Value: second\r\n\r\n";
+    ASSERT_TRUE(parser.consume(raw.data(), raw.size()).has_value());
+    auto owned = parser.take_headers();
+    ASSERT_EQ(owned.at("X-Value"), std::string("first, second"));
+    ASSERT_EQ(parser.get_header("Host"), std::string_view("localhost"));
+    ASSERT_EQ(parser.get_header("X-Value"), std::string_view("first, second"));
+    ASSERT_EQ(parser.headers().at("Host"), std::string("localhost"));
+    ASSERT_TRUE(parser.ready());
+    parser.reset();
+    ASSERT_EQ(owned.at("Host"), std::string("localhost"));
+}
+
 // =============================================================================
 // request_parser — Basic GET
 // =============================================================================
@@ -235,6 +250,54 @@ TEST(request_parser_preserves_pipelined_requests)
     ASSERT_TRUE(parser.ready());
     ASSERT_EQ(parser.uri(), std::string_view("/third"));
     ASSERT_FALSE(parser.has_buffered_data());
+    ASSERT_FALSE(parser.reset_for_next_message());
+}
+
+TEST(request_parser_parses_long_pipelined_batches_in_place)
+{
+    // Enough requests to cross the in-place compaction threshold, each with a
+    // custom header (rebased offsets) and every third one with a body, plus a
+    // final request split across two reads.
+    request_parser parser;
+    std::string batch;
+    constexpr int count = 400;
+    for (int index = 0; index < count; ++index)
+    {
+        batch += std::format("{} /item/{} HTTP/1.1\r\nHost: localhost\r\nX-Index: {}\r\n",
+            index % 3 == 0 ? "POST" : "GET", index, index);
+        if (index % 3 == 0)
+            batch += std::format("Content-Length: {}\r\n\r\nbody{}", 4 + std::to_string(index).size(), index);
+        else
+            batch += "\r\n";
+    }
+    const std::string tail = "GET /last HTTP/1.1\r\nHost: localhost\r\nX-Index: last\r\n\r\n";
+    batch += tail.substr(0, 20);
+
+    ASSERT_TRUE(parser.consume(batch.data(), batch.size()).has_value());
+    for (int index = 0; index < count; ++index)
+    {
+        if (index != 0)
+        {
+            ASSERT_TRUE(parser.reset_for_next_message());
+            ASSERT_TRUE(parser.consume_buffered().has_value());
+        }
+        ASSERT_TRUE(parser.ready());
+        ASSERT_EQ(parser.method(), std::string_view(index % 3 == 0 ? "POST" : "GET"));
+        ASSERT_EQ(parser.uri(), std::string_view(std::format("/item/{}", index)));
+        ASSERT_EQ(parser.get_header("Host"), std::string_view("localhost"));
+        ASSERT_EQ(parser.get_header("X-Index"), std::string_view(std::to_string(index)));
+        if (index % 3 == 0)
+            ASSERT_EQ(parser.body(), std::string_view(std::format("body{}", index)));
+        else
+            ASSERT_TRUE(parser.body().empty());
+    }
+    ASSERT_TRUE(parser.reset_for_next_message());
+    ASSERT_TRUE(parser.consume_buffered().has_value());
+    ASSERT_FALSE(parser.ready());
+    ASSERT_TRUE(parser.consume(tail.data() + 20, tail.size() - 20).has_value());
+    ASSERT_TRUE(parser.ready());
+    ASSERT_EQ(parser.uri(), std::string_view("/last"));
+    ASSERT_EQ(parser.get_header("X-Index"), std::string_view("last"));
     ASSERT_FALSE(parser.reset_for_next_message());
 }
 
@@ -472,6 +535,29 @@ TEST(roundtrip_response_serialize_parse)
     ASSERT_EQ(p.status_code(), 200);
     ASSERT_EQ(p.get_header("Server"), std::string_view("cnetmod"));
     ASSERT_EQ(p.body(), std::string_view("OK"));
+}
+
+TEST(upgrade_parser_preserves_binary_tail)
+{
+    const std::string tail{"\x82\x03\x00\x01\xff", 5};
+    request_parser request;
+    const auto header = std::string{"GET /ws HTTP/1.1\r\nHost: localhost\r\n\r\n"};
+    ASSERT_TRUE(request.consume(header.data(), 7).has_value());
+    ASSERT_TRUE(request.take_buffered_data().empty());
+    const auto rest = header.substr(7) + tail;
+    ASSERT_TRUE(request.consume(rest.data(), rest.size()).has_value());
+    ASSERT_TRUE(request.ready());
+    ASSERT_EQ(request.take_buffered_data(), tail);
+    ASSERT_TRUE(request.take_buffered_data().empty());
+    ASSERT_EQ(request.get_header("Host"), std::string_view{"localhost"});
+
+    response_parser response;
+    const auto raw = std::string{"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n\r\n"} + tail;
+    ASSERT_TRUE(response.consume(raw.data(), raw.size()).has_value());
+    ASSERT_TRUE(response.ready());
+    ASSERT_EQ(response.take_buffered_data(), tail);
+    ASSERT_TRUE(response.take_buffered_data().empty());
+    ASSERT_EQ(response.get_header("Upgrade"), std::string_view{"websocket"});
 }
 
 RUN_TESTS()

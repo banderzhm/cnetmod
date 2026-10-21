@@ -91,12 +91,11 @@ auto io_uring_context::poll() -> std::size_t
 void io_uring_context::stop()
 {
     stopped_.store(true, std::memory_order_relaxed);
-    if (auto* sqe = ::io_uring_get_sqe(&ring_))
-    {
-        ::io_uring_prep_nop(sqe);
-        ::io_uring_sqe_set_data(sqe, nullptr);
-        ::io_uring_submit(&ring_);
-    }
+    // Never touch the ring from the stopping thread: stop() is callable from
+    // outside the reactor, and a future SINGLE_ISSUER ring rejects foreign
+    // submissions. The wake pipe is safe from any thread and the loop
+    // re-checks stopped() after every wakeup.
+    wake();
 }
 
 auto io_uring_context::stopped() const noexcept -> bool

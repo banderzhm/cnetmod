@@ -100,4 +100,49 @@ service EchoService {
               static_cast<int>(call_kind::bidi_streaming));
 }
 
+TEST(proto_visitor_borrows_bytes_and_matches_owning_decoding)
+{
+    byte_buffer input;
+    proto::append_uint64(input, 1, 300);
+    proto::append_string(input, 2, "abc");
+    proto::append_key(input, 3, proto::wire_type::fixed32);
+    input.insert(input.end(), {std::byte{1}, std::byte{2}, std::byte{3}, std::byte{4}});
+    proto::append_key(input, 4, proto::wire_type::fixed64);
+    input.insert(input.end(), 8, std::byte{1});
+    std::vector<proto::field_view> views;
+    ASSERT_TRUE(proto::visit_message(input, [&](const proto::field_view& view)
+        {
+            views.push_back(view);
+        }).has_value());
+    const auto owned = proto::decode_message(input);
+    ASSERT_TRUE(owned.has_value());
+    ASSERT_EQ(views.size(), std::size_t{4});
+    ASSERT_EQ(views[0].varint_value, std::uint64_t{300});
+    ASSERT_EQ(views[2].fixed32_value, std::uint32_t{0x04030201});
+    ASSERT_EQ(views[3].fixed64_value, std::uint64_t{0x0101010101010101});
+    for (std::size_t index = 0; index < views.size(); ++index)
+    {
+        ASSERT_EQ(views[index].number, (*owned)[index].number);
+        ASSERT_TRUE(views[index].type == (*owned)[index].type);
+        ASSERT_TRUE(std::ranges::equal(views[index].bytes, (*owned)[index].bytes));
+    }
+    const auto offset = static_cast<std::size_t>(views[1].bytes.data() - input.data());
+    input[offset] = std::byte{'z'};
+    ASSERT_TRUE(views[1].bytes.front() == std::byte{'z'});
+    ASSERT_TRUE((*owned)[1].bytes.front() == std::byte{'a'});
+    std::size_t prefix{};
+    const byte_buffer malformed{std::byte{8}, std::byte{1}, std::byte{16}, std::byte{128}};
+    ASSERT_FALSE(proto::visit_message(malformed, [&](const proto::field_view&)
+        {
+            ++prefix;
+        }).has_value());
+    ASSERT_EQ(prefix, std::size_t{1});
+    ASSERT_FALSE(proto::decode_message(malformed).has_value());
+    auto invalid_tag = proto::encode_varint(std::uint64_t{1} << 32);
+    invalid_tag.push_back(std::byte{1});
+    ASSERT_FALSE(proto::visit_message(invalid_tag, [](const proto::field_view&) {}).has_value());
+    ASSERT_FALSE(proto::decode_message(invalid_tag).has_value());
+    ASSERT_FALSE(proto::visit_message({}, {}).has_value());
+}
+
 RUN_TESTS()

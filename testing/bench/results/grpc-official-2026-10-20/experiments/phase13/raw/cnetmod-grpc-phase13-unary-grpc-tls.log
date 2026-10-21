@@ -1,0 +1,214 @@
+[info] available CPUs: 32
+[info] load generators: docker mode
+[info] framework: cnetmod-grpc-phase13 (cnetmod-grpc-phase13, C++)
+[info] subscribed tests: unary-grpc,unary-grpc-tls
+[info] building image: httparena-cnetmod-grpc-phase13
+[info] skipping system tuning as requested (SKIP_TUNE=true)
+
+==============================================
+=== cnetmod-grpc-phase13 / unary-grpc-tls / 256c (tool=h2load) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] gRPC server ready
+
+[run 1/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+.
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+.
+25.
+24.
+61Main benchmark duration is started for thread #33.
+.
+15.
+38.
+47.
+37. Stopping all clients.Stopped all clients for thread #48
+
+29. Stopping all clients.
+45. Stopping all clients.
+
+39. Stopping all clients.
+15. Stopping all clients.
+
+finished in 5.09s, 4427600.00 req/s, 161.01MB/s
+requests: 22138000 total, 22163600 started, 22138000 done, 22138000 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 22138000 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 805.04MB (844142164) total, 84.46MB (88558400) headers (space savings 93.85%), 147.79MB (154966000) data
+                     min         max         mean         sd        +/- sd
+time for request:      262us     76.30ms      4.77ms      4.71ms    88.15%
+time for connect:     2.83ms     96.14ms     37.36ms     21.45ms    53.13%
+time to 1st byte:     6.43ms     99.66ms     48.67ms     24.70ms    57.42%
+req/s           :   12760.88    25220.92    17288.05     2681.69    62.11%
+[info] CPU 816.6% | Mem 323MiB
+
+[run 2/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+47.
+
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+12. Stopping all clients.
+4. Stopping all clients.
+29. Stopping all clients.
+23. Stopping all clients.
+50. Stopping all clients.
+47. Stopping all clients.Stopped all clients for thread #54
+45. Stopping all clients.
+36. Stopping all clients.
+
+. Stopping all clients.
+. Stopping all clients.Main benchmark duration is over for thread #
+24. Stopping all clients.
+
+finished in 5.08s, 4885880.00 req/s, 177.67MB/s
+requests: 24429400 total, 24455000 started, 24429400 done, 24429400 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 24429400 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 888.36MB (931513246) total, 93.20MB (97724000) headers (space savings 93.85%), 163.08MB (171005800) data
+                     min         max         mean         sd        +/- sd
+time for request:      274us     50.73ms      4.72ms      4.29ms    87.78%
+time for connect:     2.98ms     62.20ms     11.82ms      7.75ms    83.98%
+time to 1st byte:     5.36ms     68.73ms     22.51ms     13.82ms    84.38%
+req/s           :   13805.53    28207.09    19075.49     3735.26    61.33%
+[info] CPU 930.8% | Mem 325MiB
+
+[run 3/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+5.
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+61.
+57.
+33.
+33. Stopping all clients.
+48. Stopping all clients.
+
+finished in 5.10s, 4555500.00 req/s, 165.66MB/s
+requests: 22777500 total, 22803100 started, 22777500 done, 22777500 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 22777500 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 828.29MB (868526299) total, 86.90MB (91116400) headers (space savings 93.85%), 152.06MB (159442500) data
+                     min         max         mean         sd        +/- sd
+time for request:      299us     61.05ms      4.66ms      4.33ms    87.63%
+time for connect:     2.84ms     36.62ms     12.52ms      6.23ms    71.88%
+time to 1st byte:     3.84ms     45.05ms     19.25ms      8.13ms    74.61%
+req/s           :   12438.63    25223.36    17788.50     3273.32    59.38%
+[info] CPU 950.4% | Mem 324MiB
+
+=== Best: 4808937 req/s (CPU: 930.8%, Mem: 325MiB) ===
+[info] saved results/unary-grpc-tls/256/cnetmod-grpc-phase13.json
+httparena-bench-cnetmod-grpc-phase13
+httparena-bench-cnetmod-grpc-phase13
+
+==============================================
+=== cnetmod-grpc-phase13 / unary-grpc-tls / 1024c (tool=h2load) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] gRPC server ready
+
+[run 1/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+
+21.
+.
+54.
+progress: Main benchmark duration is started for thread #75% of clients started
+3.
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+24. Stopping all clients.
+57. Stopping all clients.
+20. Stopping all clients.
+27. Stopping all clients.
+
+finished in 5.12s, 4662520.00 req/s, 169.56MB/s
+requests: 23312600 total, 23415000 started, 23312600 done, 23312600 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 23312600 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 847.81MB (888990334) total, 88.95MB (93276000) headers (space savings 93.84%), 155.63MB (163188200) data
+                     min         max         mean         sd        +/- sd
+time for request:      206us    218.65ms     12.56ms     12.43ms    90.37%
+time for connect:     2.75ms    260.94ms     86.62ms     66.73ms    68.16%
+time to 1st byte:     9.92ms    323.48ms    155.65ms     84.94ms    58.89%
+req/s           :    3008.20    10260.33     4547.15     1203.06    69.43%
+[info] CPU 795.4% | Mem 490MiB
+
+[run 2/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+.
+.Main benchmark duration is started for thread #53.
+
+4.
+48.
+51.
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+
+finished in 5.21s, 4744800.00 req/s, 172.55MB/s
+requests: 23724000 total, 23826400 started, 23724000 done, 23724000 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 23724000 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 862.77MB (904677016) total, 90.52MB (94921600) headers (space savings 93.84%), 158.37MB (166068000) data
+                     min         max         mean         sd        +/- sd
+time for request:      427us    259.17ms     12.51ms     10.81ms    82.35%
+time for connect:     2.49ms    334.79ms     78.44ms     77.97ms    81.45%
+time to 1st byte:     8.74ms    384.82ms    145.14ms    108.25ms    55.47%
+req/s           :    2736.22    10060.46     4627.24     1643.93    77.64%
+[info] CPU 918.7% | Mem 500MiB
+
+[run 3/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+
+.
+% of clients startedMain benchmark duration is started for thread #42.
+39.
+
+28.
+progress: Warm-up phase is over for thread #6830.
+% of clients startedWarm-up phase is over for thread #25.
+
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+44. Stopping all clients.
+20. Stopping all clients.
+
+25. Stopping all clients.
+
+finished in 5.18s, 4516540.00 req/s, 164.25MB/s
+requests: 22582700 total, 22685100 started, 22582700 done, 22582700 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 22582700 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 821.27MB (861159247) total, 86.17MB (90356400) headers (space savings 93.84%), 150.76MB (158078900) data
+                     min         max         mean         sd        +/- sd
+time for request:      615us    267.02ms     13.35ms     11.26ms    74.57%
+time for connect:     2.41ms    325.08ms     78.55ms     80.13ms    81.35%
+time to 1st byte:     8.48ms    358.80ms    163.53ms    105.07ms    56.84%
+req/s           :    2953.96    12312.84     4401.96     1842.02    87.70%
+[info] CPU 903.0% | Mem 534MiB
+
+=== Best: 4553550 req/s (CPU: 918.7%, Mem: 500MiB) ===
+[info] saved results/unary-grpc-tls/1024/cnetmod-grpc-phase13.json
+httparena-bench-cnetmod-grpc-phase13
+httparena-bench-cnetmod-grpc-phase13
+[info] rebuilding site/data/*.json
+[updated] /root/cnetmod-grpc-20261020/phase13/site/data/frameworks.json
+[updated] /root/cnetmod-grpc-20261020/phase13/site/data/results/cnetmod-grpc-phase13.json - 4 new, 4 total
+[updated] /root/cnetmod-grpc-20261020/phase13/site/data/current.json
+[info] done

@@ -1,0 +1,9 @@
+{
+  "cnetmod-grpc-phase10": {
+    "image": "sha256:caae39f8449cd903a0ecfcc6600ac7e7d2933d13ca52cdd3fcbb11193e227ac4",
+    "source_base": "eb33c7529f4202810d7f240459322e6f3f26cf46",
+    "source_patch_sha256": "1dcf6d601d35bc35a627e6a4983624efb5359dd4d546c811c016e391e893d6eb",
+    "binary_sha256": "fb6b04935f17e89756ddd6a748fd9db81b2f14779975cc18ef642100cd5de4a5",
+    "runtime": "32 workers; default batch8 CQ256; no affinity; native ThinLTO; compile jobs4, link pool1 and backend threads4"
+  }
+}

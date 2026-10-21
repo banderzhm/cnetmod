@@ -585,6 +585,17 @@ auto main() -> int
 - 不要在 `with_params` 中混合手动与自动格式化
 - 不要在多 worker 场景使用单 `connection_pool`——应使用 `sharded_connection_pool`
 
+## 连接池与协议性能路径
+
+`async_get_connection()` 在正的池等待预算下优先尝试已有空闲连接，避免即时借用
+创建定时器；FIFO 等待者、争用和耗尽仍使用原有等待路径。默认归还仍执行 session
+reset。只有明确可复用当前 session 的调用方才使用 `return_without_reset()`；基准须
+把无 reset 的借还与默认 reset 分开报告。
+
+小于等于 4096 字节的包正文与四字节包头合并写入，每连接复用写缓冲。大包仍走原有
+分包路径，保留序列号及最大包长度恰好整倍数时的空终止包。参考：
+[MySQL packets](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_basic_packets.html)。
+
 ## 参考示例
 
 - `examples/database/mysql/mysql_crud.cpp` — 完整 CRUD、Prepared Statement、Pipeline

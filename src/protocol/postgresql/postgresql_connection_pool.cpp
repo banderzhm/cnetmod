@@ -171,6 +171,20 @@ auto connection_pool::warm_up(cancel_token& cancellation)
 
 auto connection_pool::acquire() -> task<std::expected<pooled_connection, std::error_code>>
 {
+    // An available lease cannot time out while a timer is being installed.
+    // Preserve the FIFO queue and the existing expired-budget slow path.
+    if (options_.acquire_timeout > std::chrono::milliseconds::zero() && state_mutex_.try_lock())
+    {
+        async_lock_guard guard{state_mutex_, std::adopt_lock};
+        if (!closing_ && waiters_.empty())
+            for (std::size_t index = 0; index < slots_.size(); ++index)
+                if (slots_[index].connection && !slots_[index].in_use && !slots_[index].discard)
+                {
+                    slots_[index].in_use = true;
+                    refresh_slot_snapshot_locked(index);
+                    co_return pooled_connection(this, index, slots_[index].connection.get());
+                }
+    }
     cancel_token cancellation;
     auto result = co_await with_timeout(context_, options_.acquire_timeout,
         acquire(cancellation), cancellation);
@@ -191,7 +205,7 @@ auto connection_pool::acquire(cancel_token& cancellation)
         if (!slots_[i].in_use && !slots_[i].discard)
         {
             slots_[i].in_use = true;
-            refresh_snapshots_locked();
+            refresh_slot_snapshot_locked(i);
             co_return pooled_connection(this, i, slots_[i].connection.get());
         }
     for (std::size_t i = 0; i < slots_.size(); ++i)
@@ -409,7 +423,7 @@ void connection_pool::release_locked(std::size_t slot_index, bool discard) noexc
                 reconnect_dispatch_error_ = make_error_code(std::errc::io_error);
             }
         }
-        refresh_snapshots_locked();
+        refresh_slot_snapshot_locked(slot_index);
         return;
     }
     while (!waiters_.empty())
@@ -429,14 +443,14 @@ void connection_pool::release_locked(std::size_t slot_index, bool discard) noexc
         if (!slots_[slot_index].discard && !closing_)
         {
             *pending->result = pooled_connection(this, slot_index, slots_[slot_index].connection.get());
-            refresh_snapshots_locked();
+            refresh_slot_snapshot_locked(slot_index);
             post_waiter(*pending);
             return;
         }
         post_waiter(*pending);
     }
     slots_[slot_index].in_use = false;
-    refresh_snapshots_locked();
+    refresh_slot_snapshot_locked(slot_index);
 }
 
 auto connection_pool::reconnect_discarded_slot(std::size_t slot_index, cancel_token& cancellation)
@@ -687,6 +701,11 @@ auto connection_pool::waiter_count() const noexcept -> std::size_t
 
 void connection_pool::refresh_snapshots_locked() noexcept
 {
+    for (auto& entry : slots_)
+    {
+        entry.snapshot_idle = entry.connection && !entry.in_use && !entry.discard;
+        entry.snapshot_checked_out = entry.connection && entry.in_use;
+    }
     size_snapshot_.store(slots_.size(), std::memory_order_release);
     idle_snapshot_.store(std::ranges::count_if(slots_, [](const slot& entry)
                              {
@@ -698,6 +717,30 @@ void connection_pool::refresh_snapshots_locked() noexcept
                                         return entry.connection && entry.in_use;
                                     }),
         std::memory_order_release);
+    waiter_snapshot_.store(waiters_.size(), std::memory_order_release);
+}
+
+void connection_pool::refresh_slot_snapshot_locked(std::size_t index) noexcept
+{
+    auto& entry = slots_[index];
+    const bool idle = entry.connection && !entry.in_use && !entry.discard;
+    const bool checked_out = entry.connection && entry.in_use;
+    if (idle != entry.snapshot_idle)
+    {
+        if (idle)
+            idle_snapshot_.fetch_add(1, std::memory_order_release);
+        else
+            idle_snapshot_.fetch_sub(1, std::memory_order_release);
+        entry.snapshot_idle = idle;
+    }
+    if (checked_out != entry.snapshot_checked_out)
+    {
+        if (checked_out)
+            checked_out_snapshot_.fetch_add(1, std::memory_order_release);
+        else
+            checked_out_snapshot_.fetch_sub(1, std::memory_order_release);
+        entry.snapshot_checked_out = checked_out;
+    }
     waiter_snapshot_.store(waiters_.size(), std::memory_order_release);
 }
 
