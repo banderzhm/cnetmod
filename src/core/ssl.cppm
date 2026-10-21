@@ -3,8 +3,9 @@ module;
 #include <cnetmod/config.hpp>
 
 #ifdef CNETMOD_HAS_SSL
-    #include <openssl/bio.h>
-    #include <openssl/ssl.h>
+    // The interface only exposes opaque SSL/SSL_CTX pointers. Keep the full
+    // TLS API and its textual C++ dependencies in implementation units.
+    #include <openssl/base.h>
 #endif
 
 export module cnetmod.core.ssl;
