@@ -284,6 +284,16 @@ public:
     [[nodiscard]] auto scope() const noexcept -> const request_scope&;
     void text(int status_code, std::string_view text_body);
     void json(int status_code, std::string_view json_body);
+    /// Takes ownership of an already-serialized body instead of copying it.
+    /// Constrained to std::string rvalues so literals and views keep using
+    /// the string_view overload without ambiguity.
+    template <class Body>
+    requires std::same_as<Body, std::string>
+    void json(int status_code, Body&& json_body)
+    {
+        json_owned(status_code, std::move(json_body));
+    }
+    void json_owned(int status_code, std::string json_body);
     void html(int status_code, std::string_view html_body);
     void redirect(std::string_view location, int code = 302);
     void not_found();

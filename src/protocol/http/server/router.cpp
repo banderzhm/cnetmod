@@ -468,6 +468,13 @@ void request_context::json(int s, std::string_view b)
     resp_.set_body(std::string(b));
 }
 
+void request_context::json_owned(int s, std::string b)
+{
+    resp_.set_status(s);
+    resp_.set_header("Content-Type", "application/json; charset=utf-8");
+    resp_.set_body(std::move(b));
+}
+
 void request_context::html(int s, std::string_view b)
 {
     resp_.set_status(s);

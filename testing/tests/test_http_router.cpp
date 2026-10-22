@@ -3,10 +3,39 @@
 #include "test_framework.hpp"
 
 import std;
+import cnetmod.core.socket;
 import cnetmod.coro.task;
+import cnetmod.io.io_context;
 import cnetmod.protocol.http;
 
 using namespace cnetmod::http;
+
+TEST(request_context_json_moves_owned_bodies_and_copies_views)
+{
+    auto io = cnetmod::make_io_context();
+    cnetmod::socket socket;
+    header_map headers;
+    response output;
+    request_context request{*io, socket, "GET", "/", headers, {}, output, {}};
+
+    // A literal and a named string resolve to the copying overload.
+    request.json(status::ok, R"({"a":1})");
+    ASSERT_EQ(output.body(), std::string_view{R"({"a":1})"});
+    const std::string named = R"({"b":2})";
+    request.json(status::ok, named);
+    ASSERT_EQ(output.body(), std::string_view{R"({"b":2})"});
+    ASSERT_EQ(named, std::string{R"({"b":2})"});
+
+    // An rvalue string hands its storage over instead of being copied.
+    std::string owned(4096, 'x');
+    const auto* storage = owned.data();
+    request.json(status::created, std::move(owned));
+    ASSERT_EQ(output.status_code(), status::created);
+    ASSERT_EQ(output.body().size(), 4096U);
+    ASSERT_EQ(output.body().data(), storage);
+    ASSERT_EQ(output.get_header("Content-Type"),
+        std::string_view{"application/json; charset=utf-8"});
+}
 
 // Helper: create a dummy handler that sets a marker
 static auto make_handler(std::string marker) -> handler_fn

@@ -45,10 +45,10 @@ namespace detail {
     public:
         explicit json_writer(std::size_t initial = 256U)
         {
-            out_.resize(initial);
-            data_ = out_.data();
-            capacity_ = out_.size();
+            resize_uninitialized(initial);
         }
+
+        [[nodiscard]] auto size() const noexcept -> std::size_t { return size_; }
 
         void reserve(std::size_t extra)
         {
@@ -89,7 +89,15 @@ namespace detail {
     private:
         void grow(std::size_t extra)
         {
-            out_.resize(std::max(capacity_ * 2U, size_ + extra));
+            resize_uninitialized(std::max(capacity_ * 2U, size_ + extra));
+        }
+
+        // Only bytes below size_ are ever read, so the spare capacity need
+        // not be zero-filled first.
+        void resize_uninitialized(std::size_t capacity)
+        {
+            out_.resize_and_overwrite(capacity,
+                [](char*, std::size_t count) noexcept { return count; });
             data_ = out_.data();
             capacity_ = out_.size();
         }
@@ -1448,9 +1456,14 @@ namespace detail {
     [[nodiscard]] auto write_direct(const T& value, bool emit_nulls)
         -> std::expected<std::string, std::error_code>
     {
-        json_writer out{512U};
+        // Successive documents of one type are usually of similar size, so
+        // start from the last size this thread produced instead of growing
+        // from a small buffer through several reallocations.
+        thread_local std::size_t last_size = 512U;
+        json_writer out{std::max<std::size_t>(512U, last_size + last_size / 8U)};
         if (auto written = write_value(out, value, emit_nulls); !written)
             return std::unexpected(written.error());
+        last_size = out.size();
         return std::move(out).take();
     }
 } // namespace detail
