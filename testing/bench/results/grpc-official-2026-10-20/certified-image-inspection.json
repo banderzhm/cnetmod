@@ -1,0 +1,370 @@
+[
+  {
+    "Architecture": "amd64",
+    "Config": {
+      "Entrypoint": [
+        "/bin/sh",
+        "/run-grpc.sh"
+      ],
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ]
+    },
+    "Created": "2026-10-20T10:56:31.954861059Z",
+    "Descriptor": {
+      "digest": "sha256:3603984a4421526c51c4c2a62c2d8bc9b18cc755a37a583b7452026e6d43731c",
+      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+      "size": 762
+    },
+    "Id": "sha256:3603984a4421526c51c4c2a62c2d8bc9b18cc755a37a583b7452026e6d43731c",
+    "Metadata": {
+      "LastTagTime": "2026-10-20T11:09:16.00372265Z"
+    },
+    "Os": "linux",
+    "Parent": "sha256:b6e663b5e749a4fba6f33dbd07062bfa25cdb61af6ddb21e6d0e4e18201acc97",
+    "RepoDigests": [
+      "cnetmod-grpc-control@sha256:3603984a4421526c51c4c2a62c2d8bc9b18cc755a37a583b7452026e6d43731c",
+      "httparena-cnetmod-grpc-control-certified@sha256:3603984a4421526c51c4c2a62c2d8bc9b18cc755a37a583b7452026e6d43731c"
+    ],
+    "RepoTags": [
+      "cnetmod-grpc-control:20261020",
+      "httparena-cnetmod-grpc-control-certified:latest"
+    ],
+    "RootFS": {
+      "Layers": [
+        "sha256:60f27f92c99bae3c9c5c8040bcccba20ef5da6126d8b12122043ccd62a9fc43d",
+        "sha256:1d22ab9486f39d208fc30528027a8f16214c79761732a0890ce457eaa314e1c4"
+      ],
+      "Type": "layers"
+    },
+    "Size": 121841956
+  },
+  {
+    "Architecture": "amd64",
+    "Config": {
+      "Entrypoint": [
+        "/bin/sh",
+        "/run-grpc.sh"
+      ],
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ]
+    },
+    "Created": "2026-10-20T11:08:33.453667514Z",
+    "Descriptor": {
+      "digest": "sha256:28bb61eb463da0f6184faaf9bf52acf1a62bb8baef9ac3c2b867ea58b0f76b45",
+      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+      "size": 762
+    },
+    "Id": "sha256:28bb61eb463da0f6184faaf9bf52acf1a62bb8baef9ac3c2b867ea58b0f76b45",
+    "Metadata": {
+      "LastTagTime": "2026-10-20T11:11:08.511309617Z"
+    },
+    "Os": "linux",
+    "Parent": "sha256:b6e663b5e749a4fba6f33dbd07062bfa25cdb61af6ddb21e6d0e4e18201acc97",
+    "RepoDigests": [
+      "cnetmod-grpc-verified@sha256:28bb61eb463da0f6184faaf9bf52acf1a62bb8baef9ac3c2b867ea58b0f76b45",
+      "httparena-cnetmod-grpc-candidate-certified@sha256:28bb61eb463da0f6184faaf9bf52acf1a62bb8baef9ac3c2b867ea58b0f76b45"
+    ],
+    "RepoTags": [
+      "cnetmod-grpc-verified:20261020",
+      "httparena-cnetmod-grpc-candidate-certified:latest"
+    ],
+    "RootFS": {
+      "Layers": [
+        "sha256:60f27f92c99bae3c9c5c8040bcccba20ef5da6126d8b12122043ccd62a9fc43d",
+        "sha256:229c20afe7dbce03eb0b20793e26fb9ae0279daafeb0e4fc5523321011b70396"
+      ],
+      "Type": "layers"
+    },
+    "Size": 121983234
+  },
+  {
+    "Architecture": "amd64",
+    "Config": {
+      "Cmd": [
+        "/server"
+      ],
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+        "8080/tcp": {},
+        "8081/tcp": {},
+        "8082/tcp": {},
+        "8443/tcp": {},
+        "8443/udp": {}
+      },
+      "Labels": {
+        "org.opencontainers.image.version": "24.04"
+      }
+    },
+    "Created": "2026-10-20T17:52:04.797710655+08:00",
+    "Descriptor": {
+      "digest": "sha256:e7072e438709a2d9c442b67eec6f7348260085e32d00b249efb479a80a075b83",
+      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+      "size": 1635
+    },
+    "Id": "sha256:e7072e438709a2d9c442b67eec6f7348260085e32d00b249efb479a80a075b83",
+    "Metadata": {
+      "LastTagTime": "2026-10-20T11:12:59.278502291Z"
+    },
+    "Os": "linux",
+    "Parent": "sha256:c84ff1a677c7c83acbbb2037bbf92a2c7e1e0733919b0e3078587e52d066af80",
+    "RepoDigests": [
+      "cnetmod-grpc-peer-libuvcpp@sha256:e7072e438709a2d9c442b67eec6f7348260085e32d00b249efb479a80a075b83",
+      "httparena-cnetmod-grpc-libuvcpp-certified@sha256:e7072e438709a2d9c442b67eec6f7348260085e32d00b249efb479a80a075b83",
+      "httparena-cnetmod-grpc-peer-libuvcpp-20261020@sha256:e7072e438709a2d9c442b67eec6f7348260085e32d00b249efb479a80a075b83"
+    ],
+    "RepoTags": [
+      "cnetmod-grpc-peer-libuvcpp:20261020",
+      "httparena-cnetmod-grpc-libuvcpp-certified:latest",
+      "httparena-cnetmod-grpc-peer-libuvcpp-20261020:latest"
+    ],
+    "RootFS": {
+      "Layers": [
+        "sha256:d81fb2a7c6ee3be05fdefaa7fd223be219c1ab172083ec1b994c3ecda33ac0a8",
+        "sha256:edebd74fd97c677e394fcbe42864d0def14a39f2dc34abcc090ae4f883f121c6",
+        "sha256:3808d8c7b43adb7a2bddd670ba5e25e7920ea3381928f1d7e1961895acff88c6",
+        "sha256:2d2d30dbe0f86a7c0666e81cb43a0e86874e2f33bb2d8e8792d01dfd2d0a6c35",
+        "sha256:318bfed704f1d530acefa8813d4a825772cd9312cd7eff27e476b41984d419d2",
+        "sha256:d722fcfe0f5ceb79e546ef402ed6f76de41bc4acd7cc1bc62dedaf3b8174434d"
+      ],
+      "Type": "layers"
+    },
+    "Size": 140674125
+  },
+  {
+    "Architecture": "amd64",
+    "Config": {
+      "Cmd": [
+        "/server"
+      ],
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+        "8080/tcp": {},
+        "8081/tcp": {},
+        "8443/tcp": {},
+        "8443/udp": {}
+      }
+    },
+    "Created": "2026-10-20T18:53:50.086860326+08:00",
+    "Descriptor": {
+      "digest": "sha256:5b445863b892f0911cf646d76b5eff29a581729b8acbdb1c3aea7a416979fefb",
+      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+      "size": 756
+    },
+    "Id": "sha256:5b445863b892f0911cf646d76b5eff29a581729b8acbdb1c3aea7a416979fefb",
+    "Metadata": {
+      "LastTagTime": "2026-10-20T11:15:17.26682073Z"
+    },
+    "Os": "linux",
+    "Parent": "sha256:6ef44339cb4a952699aa6da8f244f5133fef9655f2abfdb994a4ad093a3a26ee",
+    "RepoDigests": [
+      "cnetmod-grpc-peer-trillium@sha256:5b445863b892f0911cf646d76b5eff29a581729b8acbdb1c3aea7a416979fefb",
+      "httparena-cnetmod-grpc-trillium-certified@sha256:5b445863b892f0911cf646d76b5eff29a581729b8acbdb1c3aea7a416979fefb"
+    ],
+    "RepoTags": [
+      "cnetmod-grpc-peer-trillium:20261020",
+      "httparena-cnetmod-grpc-trillium-certified:latest"
+    ],
+    "RootFS": {
+      "Layers": [
+        "sha256:e58989146fcec76699871403b9897b5c014af1ccd85f5a9300a215e7975525d7",
+        "sha256:fa2f516ce1b0c98b5acff8a9e9ce24172153d7cd8f3e7dd31955f6d8dfd37c11"
+      ],
+      "Type": "layers"
+    },
+    "Size": 130665086
+  },
+  {
+    "Architecture": "amd64",
+    "Config": {
+      "Entrypoint": [
+        "java",
+        "--enable-preview",
+        "--enable-native-access=ALL-UNNAMED",
+        "--add-opens",
+        "java.base/java.lang=ALL-UNNAMED",
+        "--add-modules",
+        "jdk.incubator.vector",
+        "-Xms512m",
+        "-Xmx2g",
+        "-XX:MaxInlineSize=150",
+        "-XX:FreqInlineSize=600",
+        "-Dcardigan.tls.handshake.max.pending.per.loop=256",
+        "-cp",
+        "/app/cardigan-httparena.jar:/app/lib/*",
+        "dev.cardigan.httparena.HttpArenaMain"
+      ],
+      "Env": [
+        "PATH=/opt/java/openjdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "JAVA_HOME=/opt/java/openjdk",
+        "LANG=en_US.UTF-8",
+        "LANGUAGE=en_US:en",
+        "LC_ALL=en_US.UTF-8",
+        "JAVA_VERSION=jdk-26.0.2.1+1"
+      ],
+      "ExposedPorts": {
+        "8080/tcp": {},
+        "8081/tcp": {},
+        "8082/tcp": {},
+        "8443/tcp": {}
+      },
+      "Labels": {
+        "org.opencontainers.image.created": "2026-10-06T21:25:30.040262+00:00",
+        "org.opencontainers.image.description": "The Ubuntu container image maintained by Canonical\n\nUbuntu is a Debian-based Linux operating system that runs from the desktop to the cloud, to all your internet connected things.\nIt is the world's most popular operating system across public clouds and OpenStack clouds.\nIt is the number one platform for containers; from Docker to Kubernetes to LXD, Ubuntu can run your containers at scale.\nFast, secure and simple, Ubuntu powers millions of PCs worldwide.\n",
+        "org.opencontainers.image.title": "ubuntu",
+        "org.opencontainers.image.version": "26.04"
+      },
+      "WorkingDir": "/app"
+    },
+    "Created": "2026-10-20T18:56:02.599389098+08:00",
+    "Descriptor": {
+      "digest": "sha256:72bbf56b1ab41066309118195524380de8cf95aedbb861a41e87e66e7bd8eee5",
+      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+      "size": 2486
+    },
+    "Id": "sha256:72bbf56b1ab41066309118195524380de8cf95aedbb861a41e87e66e7bd8eee5",
+    "Metadata": {
+      "LastTagTime": "2026-10-20T10:56:02.718743018Z"
+    },
+    "Os": "linux",
+    "Parent": "sha256:7ab2b7b5abe32468d5095ec911caffcf91065aa633507e262f4f59cccd56a063",
+    "RepoDigests": [
+      "cnetmod-grpc-peer-cardigan@sha256:72bbf56b1ab41066309118195524380de8cf95aedbb861a41e87e66e7bd8eee5"
+    ],
+    "RepoTags": [
+      "cnetmod-grpc-peer-cardigan:20261020"
+    ],
+    "RootFS": {
+      "Layers": [
+        "sha256:edf698db7561f9f53f2b22b9d417f9fde0be95175736b6954c7ef917c7114cb1",
+        "sha256:6be3abfee1446ddfb97160837ec6ea1edec87a006b73a02dca2bae5de070302e",
+        "sha256:c60d3565a7baaeb4751377f7a6f1c192651a2f9670c57db3ae1b1b9329526043",
+        "sha256:9456b9b8ca156ce958bd27f88fe71e604a7fa9d96ed9f3721c8d605386f7ed73",
+        "sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef",
+        "sha256:7b859595e5087040223ffee241dd071e39a1edf70ab9e019caf7082217fafc93",
+        "sha256:e93f3fe54d12627c66b5b333a37214dfbfa8c02abb447687bc440b3d75bc65ae",
+        "sha256:ea3e318925696a4fd17ee7e3677ae5ca52f987e2c7120653e328825b2964dd7f",
+        "sha256:6640acc9107131603870ba30873e0e00c765972a78ef7ff2eda23ef132caed9a",
+        "sha256:16e8162936256171928148b5abbd7ff4db5dacb54325d39b8d987280a12c592a"
+      ],
+      "Type": "layers"
+    },
+    "Size": 481967894
+  },
+  {
+    "Architecture": "amd64",
+    "Config": {
+      "Cmd": [
+        "/bin/sh",
+        "-c",
+        "VANILLA_WORKERS=${VANILLA_WORKERS:-$(nproc)} exec /server"
+      ],
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+        "8080/tcp": {},
+        "8081/tcp": {},
+        "8082/tcp": {}
+      }
+    },
+    "Created": "2026-10-20T11:54:52.845709443+08:00",
+    "Descriptor": {
+      "digest": "sha256:cd9f30c7784909af002767867ce3f17f82e400543d8581835649560775add62b",
+      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+      "size": 1412
+    },
+    "Id": "sha256:cd9f30c7784909af002767867ce3f17f82e400543d8581835649560775add62b",
+    "Metadata": {
+      "LastTagTime": "2026-10-20T09:57:39.223995876Z"
+    },
+    "Os": "linux",
+    "Parent": "sha256:8aba94b85785598eb917f1806b357007a2ba953b1139a843e747404c13d2b043",
+    "RepoDigests": [
+      "cnetmod-ws-peer-vanilla-epoll@sha256:cd9f30c7784909af002767867ce3f17f82e400543d8581835649560775add62b",
+      "httparena-cnetmod-grpc-peer-vanilla-epoll-20261020@sha256:cd9f30c7784909af002767867ce3f17f82e400543d8581835649560775add62b"
+    ],
+    "RepoTags": [
+      "cnetmod-ws-peer-vanilla-epoll:20261020",
+      "httparena-cnetmod-grpc-peer-vanilla-epoll-20261020:latest"
+    ],
+    "RootFS": {
+      "Layers": [
+        "sha256:75bbc6c906935bef75c0bf6168204f4641277e1d5aa83b71ca7f586f605ad3d2",
+        "sha256:6198a9c0aad8abc20077f4ce77286af3de83e9d4d33a9b00e46e98cb881d1401",
+        "sha256:01ec3a2d243077ecf79129bc6593adb279494290285f1ae6a046a86f99f9ae72",
+        "sha256:3161425a0e5d956361c06f232722d50b6e3a6c44cdb08044d389ca5496eabc0b",
+        "sha256:e5eaac8977b8dd9d1f5597f4a885896d1551fb5e6e9087a008d275670e185aed"
+      ],
+      "Type": "layers"
+    },
+    "Size": 130667278
+  },
+  {
+    "Architecture": "amd64",
+    "Config": {
+      "Entrypoint": [
+        "java",
+        "-jar",
+        "app.jar"
+      ],
+      "Env": [
+        "PATH=/usr/java/jdk-27/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "LANG=en_US.UTF-8",
+        "JAVA_HOME=/usr/java/jdk-27"
+      ],
+      "ExposedPorts": {
+        "8080/tcp": {},
+        "8081/tcp": {},
+        "8082/tcp": {},
+        "8443/tcp": {}
+      },
+      "Labels": {
+        "io.buildah.version": "1.39.4"
+      },
+      "Shell": [
+        "/bin/bash",
+        "-o",
+        "pipefail",
+        "-c"
+      ],
+      "WorkingDir": "/app"
+    },
+    "Created": "2026-10-20T19:08:05.046493308+08:00",
+    "Descriptor": {
+      "digest": "sha256:b7e2b2eababe2f306212733395fbcf093a7a2d4ac1376c306dff9f8dc5df4974",
+      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+      "size": 1871
+    },
+    "Id": "sha256:b7e2b2eababe2f306212733395fbcf093a7a2d4ac1376c306dff9f8dc5df4974",
+    "Metadata": {
+      "LastTagTime": "2026-10-20T11:08:05.162695786Z"
+    },
+    "Os": "linux",
+    "Parent": "sha256:92ac3d823cedaa2bc46604923265eef8275aa23818b93c321477b2b1ad7b0aed",
+    "RepoDigests": [
+      "cnetmod-grpc-peer-helidon-production@sha256:b7e2b2eababe2f306212733395fbcf093a7a2d4ac1376c306dff9f8dc5df4974"
+    ],
+    "RepoTags": [
+      "cnetmod-grpc-peer-helidon-production:20261020"
+    ],
+    "RootFS": {
+      "Layers": [
+        "sha256:029474adafe2d0b99874dbe1bbf3dd5483e653927757a687580ac588667e33b1",
+        "sha256:107a43613ab78d58920500dc9dedfa53bb774c2726f5d6034c025f4715379a2a",
+        "sha256:d150eb1e62e506579e372a0a1a480278bdc303c9855636b78ff4588a7a5c4839",
+        "sha256:a3322a5664eeb3cacc4a17d4bf9b9d7764ba28aa8115269dd1a7bba7731e77de",
+        "sha256:78eac0b8c42b9c852a3b2c10fa467fdd6b8425b85809f0a2103e30d32e9f8101",
+        "sha256:24130ad6f5fcc10d0e236e332159b9977bee7d75eb338254046956a5823922c7",
+        "sha256:8a0c7a0960e687203cbdfc6b14353a3332adc01070276b8835c82198e31cea29"
+      ],
+      "Type": "layers"
+    },
+    "Size": 1097248508
+  }
+]

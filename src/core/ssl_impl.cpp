@@ -15,6 +15,10 @@ module;
 #if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_PLATFORM_WINDOWS)
     #include <wincrypt.h>
 #endif
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_PLATFORM_LINUX)
+    #include <cerrno>
+    #include <sys/socket.h>
+#endif
 
 module cnetmod.core.ssl;
 
@@ -142,6 +146,288 @@ namespace {
         co_return co_await async_wait_readable(context, socket, token);
     }
     #endif
+
+    // Byte FIFO backing the transport BIOs of ssl_stream. The library memory
+    // BIO zeroes its whole capacity on every BIO_reset and memmoves the unread
+    // tail after every partial BIO_read; for a stream that flushes large
+    // responses that is a full extra pass over each record. This queue only
+    // moves offsets, keeps its capacity across flushes and compacts lazily.
+    // It carries TLS ciphertext, so no cleansing is required on release.
+    class byte_queue
+    {
+    public:
+        byte_queue() = default;
+        byte_queue(const byte_queue&) = delete;
+        auto operator=(const byte_queue&) -> byte_queue& = delete;
+
+        ~byte_queue()
+        {
+            ::operator delete(data_, std::nothrow);
+        }
+
+        [[nodiscard]] auto readable() const noexcept -> std::span<const std::byte>
+        {
+            return {data_ + begin_, end_ - begin_};
+        }
+
+        auto append(const std::byte* bytes, std::size_t size) noexcept -> bool
+        {
+            if (size > capacity_ - end_ && !make_room(size))
+                return false;
+            std::memcpy(data_ + end_, bytes, size);
+            end_ += size;
+            return true;
+        }
+
+        auto read(std::byte* out, std::size_t size) noexcept -> std::size_t
+        {
+            const auto count = std::min(size, end_ - begin_);
+            std::memcpy(out, data_ + begin_, count);
+            consume(count);
+            return count;
+        }
+
+        /// Socket the owner may write to directly; null keeps every record
+        /// queued. The handle is read at each write, never cached, so a
+        /// closed socket whose descriptor number was reused is not written.
+        const cnetmod::socket* direct_socket = nullptr;
+
+        void consume(std::size_t size) noexcept
+        {
+            begin_ += std::min(size, end_ - begin_);
+            if (begin_ != end_)
+                return;
+            begin_ = end_ = 0;
+            // Keep the storage for the next record batch, but do not let one
+            // unusually large response pin its peak footprint per connection.
+            if (capacity_ > retained_capacity)
+            {
+                ::operator delete(data_, std::nothrow);
+                data_ = nullptr;
+                capacity_ = 0;
+            }
+        }
+
+    private:
+        static constexpr std::size_t retained_capacity = 256U * 1024U;
+
+        auto make_room(std::size_t size) noexcept -> bool
+        {
+            const auto used = end_ - begin_;
+            if (size > std::numeric_limits<std::size_t>::max() - used)
+                return false;
+            const auto required = used + size;
+            if (required <= capacity_ && begin_ >= used)
+            {
+                // Compact only when the unread bytes are no larger than the
+                // consumed prefix, so the move stays amortized and disjoint.
+                std::memcpy(data_, data_ + begin_, used);
+                begin_ = 0;
+                end_ = used;
+                return true;
+            }
+            auto capacity = std::max<std::size_t>(capacity_, 16U * 1024U);
+            while (capacity < required)
+                capacity = capacity > std::numeric_limits<std::size_t>::max() / 2U
+                    ? required
+                    : capacity * 2U;
+            auto* grown = static_cast<std::byte*>(::operator new(capacity, std::nothrow));
+            if (grown == nullptr)
+                return false;
+            if (used != 0)
+                std::memcpy(grown, data_ + begin_, used);
+            ::operator delete(data_, std::nothrow);
+            data_ = grown;
+            capacity_ = capacity;
+            begin_ = 0;
+            end_ = used;
+            return true;
+        }
+
+        std::byte* data_ = nullptr;
+        std::size_t begin_ = 0;
+        std::size_t end_ = 0;
+        std::size_t capacity_ = 0;
+    };
+
+    auto queue_of(BIO* bio) noexcept -> byte_queue*
+    {
+        return static_cast<byte_queue*>(BIO_get_data(bio));
+    }
+
+    auto queue_bio_create(BIO* bio) -> int
+    {
+        auto* queue = new (std::nothrow) byte_queue;
+        if (queue == nullptr)
+            return 0;
+        BIO_set_data(bio, queue);
+        BIO_set_init(bio, 1);
+        return 1;
+    }
+
+    auto queue_bio_destroy(BIO* bio) -> int
+    {
+        delete queue_of(bio);
+        BIO_set_data(bio, nullptr);
+        return 1;
+    }
+
+    /// Records at least this large are sent from the BIO, together with
+    /// whatever is queued ahead of them: the ciphertext then crosses to the
+    /// kernel once instead of being copied into the queue first. Smaller
+    /// records keep batching so one gathered write carries a burst of frames.
+    constexpr std::size_t direct_send_threshold = 8U * 1024U;
+
+    auto queue_bio_write(BIO* bio, const char* in, int size) -> int
+    {
+        BIO_clear_retry_flags(bio);
+        if (size <= 0)
+            return 0;
+        auto* const queue = queue_of(bio);
+        auto bytes = reinterpret_cast<const std::byte*>(in);
+        auto count = static_cast<std::size_t>(size);
+        #if defined(CNETMOD_PLATFORM_LINUX)
+        // The stream serializes SSL_write and the flush that follows it, and
+        // the queue is sent first below, so the order of bytes on the wire is
+        // preserved.
+        if (queue->direct_socket != nullptr && count >= direct_send_threshold &&
+            queue->direct_socket->is_open())
+        {
+            // Records queued ahead of this one (typically a small HTTP/2
+            // HEADERS record) go out in the same call, in order, followed by
+            // this record straight from the caller's buffer.
+            const auto queued = queue->readable();
+            iovec vectors[2];
+            vectors[0] = {const_cast<std::byte*>(queued.data()), queued.size()};
+            vectors[1] = {const_cast<std::byte*>(bytes), count};
+            msghdr message{};
+            message.msg_iov = vectors;
+            message.msg_iovlen = 2;
+            const auto sent = ::sendmsg(
+                static_cast<int>(queue->direct_socket->native_handle()), &message,
+                MSG_DONTWAIT | MSG_NOSIGNAL);
+            if (sent > 0)
+            {
+                auto remaining = static_cast<std::size_t>(sent);
+                const auto from_queue = std::min(remaining, queued.size());
+                queue->consume(from_queue);
+                remaining -= from_queue;
+                bytes += remaining;
+                count -= remaining;
+            }
+            // EAGAIN or an error: queue the record; the asynchronous write
+            // that follows reports a real socket failure.
+        }
+        #endif
+        if (count == 0)
+            return size;
+        return queue->append(bytes, count) ? size : -1;
+    }
+
+    auto queue_bio_read(BIO* bio, char* out, int size) -> int
+    {
+        BIO_clear_retry_flags(bio);
+        if (size <= 0)
+            return 0;
+        const auto count = queue_of(bio)->read(
+            reinterpret_cast<std::byte*>(out), static_cast<std::size_t>(size));
+        if (count != 0)
+            return static_cast<int>(count);
+        // Same contract as a memory BIO with eof_return -1: an empty queue
+        // means "no ciphertext yet", surfaced to SSL as SSL_ERROR_WANT_READ.
+        BIO_set_retry_read(bio);
+        return -1;
+    }
+
+    auto queue_bio_ctrl(BIO* bio, int command, long, void*) -> long
+    {
+        switch (command)
+        {
+        case BIO_CTRL_PENDING:
+            return static_cast<long>(queue_of(bio)->readable().size());
+        case BIO_CTRL_WPENDING:
+            return 0;
+        case BIO_CTRL_FLUSH:
+            return 1;
+        default:
+            return 0;
+        }
+    }
+
+    struct queue_bio_registration
+    {
+        BIO_METHOD* method = nullptr;
+        int type = 0;
+    };
+
+    auto queue_bio() noexcept -> const queue_bio_registration&
+    {
+        static const queue_bio_registration registration = []() noexcept
+        {
+            const auto index = BIO_get_new_index();
+            // A private type number lets the stream recognise its own BIOs;
+            // without one the fallback memory BIO path stays in use.
+            if (index <= 0)
+                return queue_bio_registration{};
+            const int type = index | BIO_TYPE_SOURCE_SINK;
+            auto* created = BIO_meth_new(type, "cnetmod-queue");
+            if (created == nullptr)
+                return queue_bio_registration{};
+            if (BIO_meth_set_create(created, queue_bio_create) != 1 ||
+                BIO_meth_set_destroy(created, queue_bio_destroy) != 1 ||
+                BIO_meth_set_write(created, queue_bio_write) != 1 ||
+                BIO_meth_set_read(created, queue_bio_read) != 1 ||
+                BIO_meth_set_ctrl(created, queue_bio_ctrl) != 1)
+            {
+                BIO_meth_free(created);
+                return queue_bio_registration{};
+            }
+            return queue_bio_registration{created, type};
+        }();
+        return registration;
+    }
+
+    auto is_queue_bio(BIO* bio) noexcept -> bool
+    {
+        const auto& registration = queue_bio();
+        return registration.method != nullptr && bio != nullptr &&
+            BIO_method_type(bio) == registration.type;
+    }
+
+    auto new_transport_bio() noexcept -> BIO*
+    {
+        if (const auto* method = queue_bio().method)
+        {
+            if (auto* bio = BIO_new(method))
+                return bio;
+        }
+        return BIO_new(BIO_s_mem());
+    }
+
+    /// Ciphertext waiting in the outbound transport BIO.
+    auto pending_output(BIO* bio) noexcept -> std::span<const std::byte>
+    {
+        if (is_queue_bio(bio))
+            return queue_of(bio)->readable();
+        char* data = nullptr;
+        const auto size = BIO_get_mem_data(bio, &data);
+        return size <= 0
+            ? std::span<const std::byte>{}
+            : std::span<const std::byte>{reinterpret_cast<const std::byte*>(data),
+                  static_cast<std::size_t>(size)};
+    }
+
+    /// Drop `size` flushed bytes from the outbound transport BIO.
+    auto consume_output(BIO* bio, std::size_t size) noexcept -> bool
+    {
+        if (is_queue_bio(bio))
+        {
+            queue_of(bio)->consume(size);
+            return true;
+        }
+        // A memory BIO cannot drop a prefix; callers flush it completely.
+        return BIO_reset(bio) == 1;
+    }
 
 } // namespace
 
@@ -597,9 +883,13 @@ ssl_stream::ssl_stream(ssl_context& context, io_context& io, socket& socket)
             BIO_free(wbio_);
     }
     #endif
-    rbio_ = BIO_new(BIO_s_mem());
-    wbio_ = BIO_new(BIO_s_mem());
+    rbio_ = new_transport_bio();
+    wbio_ = new_transport_bio();
     SSL_set_bio(ssl_, rbio_, wbio_);
+    #if defined(CNETMOD_PLATFORM_LINUX)
+    if (is_queue_bio(wbio_))
+        queue_of(wbio_)->direct_socket = std::addressof(sock_);
+    #endif
 }
 
 ssl_stream::~ssl_stream()
@@ -1076,6 +1366,65 @@ auto ssl_stream::async_write_all(const_buffer buffer, cancel_token& token)
     co_return {};
 }
 
+auto ssl_stream::async_write_gather(std::span<const const_buffer> buffers,
+    cancel_token& token) -> task<std::expected<void, std::error_code>>
+{
+    if (kernel_tls_active_ || direct_socket_bio_)
+    {
+        // The kernel (or the socket BIO) already frames each write.
+        for (const auto& buffer : buffers)
+        {
+            auto written = co_await async_write_all(buffer, token);
+            if (!written)
+                co_return written;
+        }
+        co_return std::expected<void, std::error_code>{};
+    }
+
+    co_await engine_mutex_.lock();
+    std::size_t index = 0;
+    std::size_t offset = 0;
+    // A memory/queue BIO accepts every record, so SSL_write either consumes
+    // the whole chunk or reports a real error. Seal everything first.
+    while (index < buffers.size())
+    {
+        const auto& buffer = buffers[index];
+        const auto remaining = buffer.size - offset;
+        if (remaining == 0)
+        {
+            ++index;
+            offset = 0;
+            continue;
+        }
+        const auto chunk = static_cast<int>(std::min<std::size_t>(remaining,
+            static_cast<std::size_t>(std::numeric_limits<int>::max())));
+        const int ret = SSL_write(ssl_,
+            static_cast<const std::byte*>(buffer.data) + offset, chunk);
+        if (ret <= 0)
+            break;
+        offset += static_cast<std::size_t>(ret);
+    }
+    auto flushed = co_await flush_wbio(token);
+    engine_mutex_.unlock();
+    if (!flushed)
+        co_return std::unexpected(flushed.error());
+    // Anything SSL could not seal in one pass (renegotiation-style retries or
+    // a fatal error) takes the general path, which reports the error.
+    for (; index < buffers.size(); ++index, offset = 0)
+    {
+        const auto& buffer = buffers[index];
+        if (buffer.size <= offset)
+            continue;
+        auto written = co_await async_write_all(
+            const_buffer{static_cast<const std::byte*>(buffer.data) + offset,
+                buffer.size - offset},
+            token);
+        if (!written)
+            co_return written;
+    }
+    co_return std::expected<void, std::error_code>{};
+}
+
 template <typename Cancellation>
 auto ssl_stream::shutdown_impl(Cancellation cancellation)
     -> task<std::expected<void, std::error_code>>
@@ -1249,15 +1598,14 @@ auto ssl_stream::flush_wbio()
     #ifdef CNETMOD_PLATFORM_WINDOWS
     for (;;)
     {
-        char* encrypted = nullptr;
-        const auto pending = BIO_get_mem_data(wbio_, &encrypted);
-        if (pending <= 0)
+        const auto pending = pending_output(wbio_);
+        if (pending.empty())
             break;
         auto written = co_await cnetmod::async_write_all(
-            io_ctx_, sock_, const_buffer{encrypted, static_cast<std::size_t>(pending)});
+            io_ctx_, sock_, const_buffer{pending.data(), pending.size()});
         if (!written)
             co_return std::unexpected(written.error());
-        if (BIO_reset(wbio_) != 1)
+        if (!consume_output(wbio_, pending.size()))
             co_return std::unexpected(make_ssl_error(SSL_ERROR_SSL));
     }
     co_return {};
@@ -1277,20 +1625,18 @@ auto ssl_stream::flush_wbio(cancel_token& token)
     }
     for (;;)
     {
-        char* encrypted = nullptr;
-        const auto pending = BIO_get_mem_data(wbio_, &encrypted);
-        if (pending <= 0)
+        const auto pending = pending_output(wbio_);
+        if (pending.empty())
         {
             break;
         }
         auto written = co_await cnetmod::async_write_all(
-            io_ctx_, sock_,
-            const_buffer{encrypted, static_cast<std::size_t>(pending)}, token);
+            io_ctx_, sock_, const_buffer{pending.data(), pending.size()}, token);
         if (!written)
         {
             co_return std::unexpected(written.error());
         }
-        if (BIO_reset(wbio_) != 1)
+        if (!consume_output(wbio_, pending.size()))
         {
             co_return std::unexpected(make_ssl_error(SSL_ERROR_SSL));
         }

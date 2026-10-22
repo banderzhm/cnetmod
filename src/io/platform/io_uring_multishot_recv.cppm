@@ -65,6 +65,9 @@ public:
 
     auto async_next() -> task<std::expected<io_uring_received_buffer, std::error_code>>;
     auto async_stop() -> task<std::expected<void, std::error_code>>;
+    /// Append completed receives that were queued before async_stop() settled.
+    /// Call only after async_stop(); this consumes and releases every buffer.
+    void append_buffered_data(std::string& output);
 
 private:
     friend class io_uring_received_buffer;

@@ -13,12 +13,51 @@ import :stream;
 
 namespace cnetmod::quic {
 
+auto quic_stream::impl::in_order_bytes::append(std::span<const std::byte> bytes) -> void
+{
+    if (bytes.empty())
+        return;
+    if (end + bytes.size() > capacity())
+    {
+        const auto live = size();
+        if (live + bytes.size() <= capacity() && begin >= live)
+        {
+            // Compact only when the consumed prefix outweighs the unread
+            // bytes, so a slow reader costs amortised O(1) per byte.
+            std::memmove(data(), data() + begin, live);
+        }
+        else
+        {
+            std::vector<std::byte> grown(std::max(capacity() * 2U, live + bytes.size()));
+            std::memcpy(grown.data(), data() + begin, live);
+            heap = std::move(grown);
+        }
+        begin = 0U;
+        end = live;
+    }
+    std::memcpy(data() + end, bytes.data(), bytes.size());
+    end += bytes.size();
+}
+
+auto quic_stream::impl::in_order_bytes::consume(std::size_t count) noexcept -> void
+{
+    begin += count;
+    if (begin == end)
+        begin = end = 0U;
+}
+
+auto quic_stream::impl::in_order_bytes::clear() noexcept -> void
+{
+    begin = end = 0U;
+    heap.clear();
+    heap.shrink_to_fit();
+}
+
 // =============================================================================
 // quic_stream Implementation
 // =============================================================================
 
 quic_stream::quic_stream(stream_id id, quic_role owner, bool bidirectional)
-    : impl_(std::make_unique<impl>())
 {
     impl_->id_ = id;
     impl_->owner_ = owner;
@@ -26,6 +65,14 @@ quic_stream::quic_stream(stream_id id, quic_role owner, bool bidirectional)
 }
 
 quic_stream::~quic_stream() = default;
+
+auto quic_stream::reset(stream_id id, quic_role owner, bool bidirectional) noexcept -> void
+{
+    impl_.state = impl{};
+    impl_->id_ = id;
+    impl_->owner_ = owner;
+    impl_->bidirectional_ = bidirectional;
+}
 
 auto quic_stream::init() -> void
 {
@@ -142,7 +189,7 @@ auto quic_stream::apply_receive_state(mutable_buffer buf)
         return std::size_t{0};
     }
 
-    if (impl.receive_buffer_.empty())
+    if (!impl.has_buffered_data())
     {
         if (impl.state_ == stream_state::half_closed_remote)
         {
@@ -160,7 +207,7 @@ auto quic_stream::apply_receive_state(mutable_buffer buf)
         // Notify sender that window has opened
     }
     if (impl.final_size_ && *impl.final_size_ == impl.next_expected_offset_ &&
-        impl.receive_buffer_.empty())
+        !impl.has_buffered_data())
     {
         impl.state_ = impl.state_ == stream_state::half_closed_local
             ? stream_state::closed
@@ -202,6 +249,15 @@ void quic_stream::extend_receive_limit(std::uint64_t maximum) noexcept
 auto quic_stream::deliver_contiguous_data(mutable_buffer buf) -> std::size_t
 {
     std::size_t copied{};
+    if (!impl_->in_order_.empty())
+    {
+        auto& bytes = impl_->in_order_;
+        const auto count = std::min(buf.size, bytes.size());
+        std::memcpy(buf.data, bytes.data() + bytes.begin, count);
+        bytes.consume(count);
+        impl_->next_expected_offset_ += count;
+        return count;
+    }
     while (copied < buf.size)
     {
         auto it = impl_->receive_buffer_.find(impl_->next_expected_offset_);
@@ -238,8 +294,8 @@ auto quic_stream::deliver_contiguous_data(mutable_buffer buf) -> std::size_t
 auto quic_stream::drain_receive_buffer() -> task<void>
 {
     // Deliver any contiguous data at current offset
-    if (!impl_->receive_buffer_.empty() &&
-        impl_->receive_buffer_.begin()->first == impl_->next_expected_offset_)
+    if (!impl_->in_order_.empty() || (!impl_->receive_buffer_.empty() &&
+        impl_->receive_buffer_.begin()->first == impl_->next_expected_offset_))
     {
         // Buffer full enough, notify waiting reads
         co_return;
@@ -317,11 +373,31 @@ auto quic_stream::push_received(std::uint64_t offset,
     {
         if (state.final_size_ &&
             *state.final_size_ == state.next_expected_offset_ &&
-            state.receive_buffer_.empty())
+            !state.has_buffered_data())
             state.state_ = state.state_ == stream_state::half_closed_local
                 ? stream_state::closed
                 : stream_state::half_closed_remote;
         return {};
+    }
+    // In-order data with no gap before it is appended without per-frame
+    // allocation. Anything else takes the general reassembly path below.
+    if (state.receive_buffer_.empty() &&
+        offset == state.next_expected_offset_ + state.in_order_.size())
+    {
+        state.in_order_.append(data);
+        state.highest_received_offset_ = std::max(state.highest_received_offset_, end);
+        if (state.state_ != stream_state::half_closed_local)
+            state.state_ = stream_state::open;
+        return {};
+    }
+    if (!state.in_order_.empty())
+    {
+        // Out-of-order or overlapping data: move the unread in-order bytes
+        // into the reassembly map as one segment so overlap checks see them.
+        auto& bytes = state.in_order_;
+        state.receive_buffer_.try_emplace(state.next_expected_offset_,
+            bytes.data() + bytes.begin, bytes.data() + bytes.end);
+        bytes.clear();
     }
     if (offset < state.next_expected_offset_)
     {
@@ -371,7 +447,7 @@ auto quic_stream::push_received(std::uint64_t offset,
     if (state.state_ != stream_state::half_closed_local)
         state.state_ = stream_state::open;
     if (state.final_size_ && *state.final_size_ == state.next_expected_offset_ &&
-        state.receive_buffer_.empty())
+        !state.has_buffered_data())
         state.state_ = state.state_ == stream_state::half_closed_local
             ? stream_state::closed
             : stream_state::half_closed_remote;
@@ -391,6 +467,7 @@ auto quic_stream::reset_remote(std::uint64_t final_size)
     state.final_size_ = final_size;
     state.highest_received_offset_ = final_size;
     state.next_expected_offset_ = final_size;
+    state.in_order_.clear();
     state.receive_buffer_.clear();
     state.state_ = state.state_ == stream_state::closed ||
             state.state_ == stream_state::half_closed_local
@@ -410,6 +487,7 @@ void quic_stream::stop_local() noexcept
 void quic_stream::abandon_receive() noexcept
 {
     impl_->receive_abandoned_ = true;
+    impl_->in_order_.clear();
     impl_->receive_buffer_.clear();
     if (impl_->final_size_)
         close_remote();
@@ -432,7 +510,8 @@ auto quic_stream::is_readable() const noexcept -> bool
     if (impl_->state_ == stream_state::closed ||
         impl_->state_ == stream_state::half_closed_remote)
         return true;
-    return impl_->receive_buffer_.contains(impl_->next_expected_offset_);
+    return !impl_->in_order_.empty() ||
+        impl_->receive_buffer_.contains(impl_->next_expected_offset_);
 }
 
 auto quic_stream::is_writable() const noexcept -> bool

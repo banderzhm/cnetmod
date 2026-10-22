@@ -1,0 +1,25 @@
+{
+  "heavy_work_complete": true,
+  "test_token": "released",
+  "released_utc": "2026-10-20T14:55:04.832605+00:00",
+  "runtime_sha": "21e84d9f796080d6c0ffba222c2f4f47ece722de",
+  "remaining_owned_containers": [],
+  "known_native_keepalive_632_stopped": true,
+  "live_cleanup": [
+    {
+      "database": "redis",
+      "id": "ee03b8db2bb376d8f8bad5cebdb9d57d3d335b7d331b3a3ed12fcab456cf5983",
+      "stop_returncode": 0
+    },
+    {
+      "database": "mysql",
+      "id": "5bf5f1fddee192ca4adc5737befa7754bebbd8a0a0435b60733fa79e1f4c29af",
+      "stop_returncode": 0
+    },
+    {
+      "database": "postgresql",
+      "id": "04ec6f6c00dcc6b8b09b7b1755b8624f8c6b9413564e77114b4dd5330ce206ee",
+      "stop_returncode": 0
+    }
+  ]
+}

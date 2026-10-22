@@ -1,7 +1,8 @@
 #include "test_framework.hpp"
 
-import cnetmod.protocol.http.v3.qpack;
 import std;
+import cnetmod.core.buffer;
+import cnetmod.protocol.http.v3.qpack;
 
 namespace {
 using cnetmod::http::v3::header_field;
@@ -166,6 +167,31 @@ TEST(qpack_static_section_has_zero_required_insert_count_after_dynamic_use)
     ASSERT_TRUE(block.has_value());
     // RFC 9204 section 2.1.2 requires zero when no dynamic entry is referenced.
     ASSERT_EQ(std::to_integer<unsigned>(block->front()), 0U);
+}
+
+TEST(qpack_encoder_local_table_limit_keeps_peer_capacity_unused)
+{
+    // The peer decoder allows a table; a zero local limit must keep every
+    // section static and emit no insert instructions.
+    qpack_encoder encoder{4096U};
+    encoder.set_local_table_limit(0U);
+    encoder.set_max_table_capacity(4096U);
+    qpack_decoder decoder{4096U};
+    const auto headers = fields({{":status", "200"},
+        {"content-type", "text/plain"}, {"x-custom", "value"}});
+    for (std::uint64_t stream = 0U; stream < 12U; stream += 4U)
+    {
+        cnetmod::byte_buffer block;
+        ASSERT_TRUE(encoder.encode_into(headers, stream, block).has_value());
+        ASSERT_EQ(std::to_integer<unsigned>(block.view().front()), 0U);
+        const auto decoded = decoder.decode(block.view(), stream);
+        ASSERT_TRUE(decoded.has_value());
+        ASSERT_EQ(decoded->size(), headers.size());
+        ASSERT_EQ((*decoded)[2].value, std::string{"value"});
+    }
+    const auto instructions = encoder.take_encoder_instructions();
+    ASSERT_TRUE(decoder.process_encoder_instructions(instructions).has_value());
+    ASSERT_EQ(decoder.get_dynamic_table_size(), 0U);
 }
 
 TEST(qpack_small_table_does_not_evict_an_insert_in_the_same_section)

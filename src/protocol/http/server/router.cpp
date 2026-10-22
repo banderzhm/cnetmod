@@ -347,6 +347,12 @@ auto request_context::uri() const noexcept -> std::string_view
     return uri_;
 }
 
+auto request_context::borrowed_header_views() const noexcept
+    -> std::span<const request_header_view>
+{
+    return header_views_;
+}
+
 auto request_context::headers() const -> const header_map&
 {
     if (parser_)
@@ -410,7 +416,7 @@ auto request_context::get_header(std::string_view key) const
     }
     const case_insensitive_less less;
     for (const auto header : header_views_)
-        if (!less(header.name, key) && !less(key, header.name))
+        if (header.name.size() == key.size() && (header.name == key || (!less(header.name, key) && !less(key, header.name))))
             return header.value;
     return {};
 }
@@ -428,7 +434,7 @@ auto request_context::wildcard() const noexcept -> std::string_view
 
 auto request_context::endpoint() const noexcept -> const http::endpoint*
 {
-    return params_.matched.get();
+    return params_.matched;
 }
 
 auto request_context::params() const noexcept -> const route_params&
@@ -460,6 +466,13 @@ void request_context::json(int s, std::string_view b)
     resp_.set_status(s);
     resp_.set_header("Content-Type", "application/json; charset=utf-8");
     resp_.set_body(std::string(b));
+}
+
+void request_context::json_owned(int s, std::string b)
+{
+    resp_.set_status(s);
+    resp_.set_header("Content-Type", "application/json; charset=utf-8");
+    resp_.set_body(std::move(b));
 }
 
 void request_context::html(int s, std::string_view b)
@@ -687,6 +700,33 @@ auto request_context::raw_socket() noexcept -> socket&
     return sock_;
 }
 
+void request_context::upgrade_connection(connection_upgrade_handler handler)
+{
+    if (!handler)
+        throw std::invalid_argument("connection upgrade handler must not be empty");
+    if (!connection_upgrade_enabled_ || body_stream_)
+        throw std::logic_error("this request transport cannot upgrade connections");
+    extended().connection_upgrade = std::move(handler);
+}
+
+auto request_context::can_upgrade_connection() const noexcept -> bool
+{
+    return connection_upgrade_enabled_ && !body_stream_;
+}
+
+void request_context::enable_connection_upgrade() noexcept
+{
+    connection_upgrade_enabled_ = true;
+}
+
+auto request_context::take_connection_upgrade()
+    -> connection_upgrade_handler
+{
+    auto* state = extended_if();
+    return state ? std::move(state->connection_upgrade)
+                 : connection_upgrade_handler{};
+}
+
 auto request_context::peer_address() const -> std::string
 {
     auto remote = sock_.remote_endpoint();
@@ -903,7 +943,7 @@ auto router::add_route(std::optional<http_method> m, std::string_view p,
     e.score = detail::route_specificity(e.segments, !m, order);
     if (stat)
     {
-        exact_index_[detail::method_path_key(m, canonical)].push_back(idx);
+        exact_index_[canonical].push_back(idx);
         static_exact_indices_.push_back(idx);
     }
     else if (first)
@@ -932,20 +972,16 @@ auto router::find_exact(http_method m, std::string_view p) const
         }
         return best;
     }
-    auto find = [&](std::optional<http_method> x)
+    const auto it = exact_index_.find(p);
+    if (it == exact_index_.end())
+        return nullptr;
+    for (const auto i : it->second)
     {
-        auto it = exact_index_.find(detail::method_path_key(x, p));
-        if (it == exact_index_.end())
-            return;
-        for (auto i : it->second)
-        {
-            auto& e = entries_[i];
-            if (!best || detail::better_score(e.score, best->score))
-                best = &e;
-        }
-    };
-    find(m);
-    find({});
+        const auto& e = entries_[i];
+        if ((!e.method || *e.method == m) &&
+            (!best || detail::better_score(e.score, best->score)))
+            best = &e;
+    }
     return best;
 }
 
@@ -988,7 +1024,7 @@ auto router::match_borrowed(http_method m, std::string_view p) const
 {
     const auto matched = [](const route_entry& entry, route_params params)
     {
-        params.matched = entry.described;
+        params.matched = entry.described.get();
         return borrowed_match_result{&entry, std::move(params)};
     };
     if (auto x = find_exact(m, p))

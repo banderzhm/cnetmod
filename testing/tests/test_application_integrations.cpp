@@ -3,6 +3,7 @@
 #include <cnetmod/config.hpp>
 
 import std;
+import cnetmod.coro.spawn;
 import cnetmod.json;
 import cnetmod.application;
 #ifdef CNETMOD_HAS_PROTOCOL_GRPC

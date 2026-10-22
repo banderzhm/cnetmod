@@ -285,8 +285,10 @@ TEST(redis_cancellable_exchange_handles_fragments_errors_and_total_budget)
 
 TEST(redis_cmd_preserves_fragmented_bulk_parser_state)
 {
-    for (const bool aggregate : {false, true})
+    for (const unsigned shape : {0U, 1U, 2U})
     {
+        const bool aggregate = shape != 0;
+        const bool nested = shape == 2;
         cnetmod::net_init network;
         auto io = cnetmod::make_io_context();
         auto listener = cnetmod::socket::create(cnetmod::address_family::ipv4,
@@ -320,7 +322,7 @@ TEST(redis_cmd_preserves_fragmented_bulk_parser_state)
             std::array<char, 128> command{};
             (void)co_await cnetmod::async_read(*io, *peer,
                 cnetmod::mutable_buffer{command.data(), command.size()});
-            const auto prefix = aggregate
+            const auto prefix = nested ? std::format("*2\r\n*1\r\n${}\r\n", payload.size()) : aggregate
                 ? std::format("*1\r\n${}\r\n", payload.size())
                 : std::format("${}\r\n", payload.size());
             (void)co_await cnetmod::async_write_all(*io, *peer,
@@ -333,7 +335,7 @@ TEST(redis_cmd_preserves_fragmented_bulk_parser_state)
             const auto tail = std::string_view{payload}.substr(first.size());
             (void)co_await cnetmod::async_write_all(*io, *peer,
                 cnetmod::const_buffer{tail.data(), tail.size()});
-            constexpr std::string_view terminator = "\r\n";
+            const std::string_view terminator = nested ? "\r\n:9\r\n" : "\r\n";
             (void)co_await cnetmod::async_write_all(*io, *peer,
                 cnetmod::const_buffer{terminator.data(), terminator.size()});
             finish();
@@ -351,10 +353,14 @@ TEST(redis_cmd_preserves_fragmented_bulk_parser_state)
                 auto response = co_await connection.cmd({"GET", "fragmented"});
                 if (response)
                 {
-                    const auto index = aggregate ? 1U : 0U;
+                    const auto index = nested ? 2U : aggregate ? 1U : 0U;
                     verified = response->size() > index &&
                         response->at(index).value == payload &&
                         connection.is_reusable();
+                    if (nested)
+                        verified = verified && response->size() == 4 &&
+                            response->back().as_integer() == 9 &&
+                            response->at(2).depth == 2 && response->back().depth == 1;
                 }
             }
             finish();
@@ -560,6 +566,119 @@ TEST(redis_pool_shutdown_drains_waiters_and_rejects_new_borrowers)
         ASSERT_TRUE(outcomes[index] == std::errc::operation_canceled);
 }
 
+TEST(redis_pool_waiters_resume_promptly_when_borrowers_exceed_capacity)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    auto listener = cnetmod::socket::create(cnetmod::address_family::ipv4,
+        cnetmod::socket_type::stream);
+    ASSERT_TRUE(listener.has_value());
+    ASSERT_TRUE(listener->bind(cnetmod::endpoint{
+                                   cnetmod::ipv4_address::loopback(), 0})
+            .has_value());
+    ASSERT_TRUE(listener->listen().has_value());
+    auto endpoint = listener->local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+
+    constexpr std::size_t capacity = 2;
+    constexpr int borrowers = 8;
+    constexpr int iterations = 100;
+    connection_pool pool{*io,
+        {.host = "127.0.0.1",
+            .port = endpoint->port(),
+            .resp3 = false,
+            .initial_size = capacity,
+            .max_size = capacity,
+            .connect_timeout = std::chrono::seconds{2},
+            .pool_timeout = std::chrono::seconds{2},
+            .ping_interval = std::chrono::hours{1}}};
+
+    // Each accepted session answers one reply per received command.
+    auto session = [&](cnetmod::socket peer) -> cnetmod::task<void>
+    {
+        std::array<char, 256> buffer{};
+        constexpr std::string_view reply = "+OK\r\n";
+        for (;;)
+        {
+            auto received = co_await cnetmod::async_read(*io, peer,
+                cnetmod::mutable_buffer{buffer.data(), buffer.size()});
+            if (!received || *received == 0U)
+                co_return;
+            const auto commands = static_cast<std::size_t>(std::ranges::count(
+                std::string_view{buffer.data(), *received}, '*'));
+            for (std::size_t index = 0; index < commands; ++index)
+                if (!co_await cnetmod::async_write_all(*io, peer,
+                        cnetmod::const_buffer{reply.data(), reply.size()}))
+                    co_return;
+        }
+    };
+    auto server = [&]() -> cnetmod::task<void>
+    {
+        for (std::size_t index = 0; index < capacity; ++index)
+        {
+            auto peer = co_await cnetmod::async_accept(*io, *listener);
+            if (!peer)
+                co_return;
+            cnetmod::spawn(*io, session(std::move(*peer)));
+        }
+    };
+    int completed = 0;
+    int failures = 0;
+    int finished = 0;
+    auto borrower = [&]() -> cnetmod::task<void>
+    {
+        for (int index = 0; index < iterations; ++index)
+        {
+            auto lease = co_await pool.async_get_connection();
+            if (!lease)
+            {
+                ++failures;
+                continue;
+            }
+            auto reply = co_await lease->get().cmd({"GET", "key"});
+            if (reply)
+                ++completed;
+            else
+                ++failures;
+        }
+        ++finished;
+    };
+    bool run_finished = false;
+    auto runner = [&]() -> cnetmod::task<void>
+    {
+        co_await pool.async_run();
+        run_finished = true;
+    };
+    std::chrono::steady_clock::duration elapsed{};
+    auto exercise = [&]() -> cnetmod::task<void>
+    {
+        while (pool.idle_count() < capacity)
+            co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{1});
+        const auto started = std::chrono::steady_clock::now();
+        for (int index = 0; index < borrowers; ++index)
+            cnetmod::spawn(*io, borrower());
+        while (finished < borrowers)
+            co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{1});
+        elapsed = std::chrono::steady_clock::now() - started;
+        co_await pool.cancel();
+        while (!run_finished)
+            co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{1});
+        listener->close();
+        io->stop();
+    };
+
+    cnetmod::spawn(*io, server());
+    cnetmod::spawn(*io, runner());
+    cnetmod::spawn(*io, exercise());
+    io->run();
+
+    ASSERT_EQ(failures, 0);
+    ASSERT_EQ(completed, borrowers * iterations);
+    // 800 loopback exchanges, most of them through the waiter queue, take a
+    // few milliseconds. A per-wakeup stall shows up as seconds.
+    ASSERT_TRUE(elapsed < std::chrono::milliseconds{500});
+}
+
 TEST(redis_lazy_pool_services_a_borrower_queued_before_run)
 {
     cnetmod::net_init network;
@@ -715,6 +834,13 @@ TEST(redis_pool_never_reissues_a_closed_returned_lease)
             }
             auto* original = &lease->get();
             *lease = pooled_connection{};
+            cnetmod::cancel_token cancelled;
+            cancelled.cancel();
+            auto rejected_ready = co_await pool.async_get_connection(cancelled);
+            ASSERT_FALSE(rejected_ready.has_value());
+            if (!rejected_ready)
+                ASSERT_EQ(rejected_ready.error(), std::make_error_code(std::errc::operation_canceled));
+            ASSERT_EQ(pool.idle_count(), 1U);
             auto reused = pool.try_get_connection();
             if (!reused || &reused->get() != original || !reused->get().is_open())
             {

@@ -1,0 +1,9 @@
+{
+  "cnetmod-grpc-accepted2": {
+    "image": "sha256:53fdd406d64f2fa0f01a6b512ceddeabd78ea148a1f3a9fd10a34d8161db274c",
+    "source_sha": "70975f8d1b1939cb21cc1a00115a0c276c298c0f",
+    "source_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "binary_sha256": "5602f5c35c24ec03feb27d7d6021afd0b47c4c16b706da84cc2de0b6220a01de",
+    "runtime": "16 individually pinned workers; server CPUs0-15; client CPUs16-31; native ThinLTO FP; default batch8 CQ256; compile jobs4, link pool1 and backend threads4"
+  }
+}

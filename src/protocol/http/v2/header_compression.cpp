@@ -223,6 +223,7 @@ void header_compression::evict()
 
 void header_compression::insert(entry item)
 {
+    decoded_block_.clear();
     const auto bytes = item.name.size() + item.value.size() + 32;
     if (bytes > dynamic_table_limit_)
     {
@@ -254,20 +255,23 @@ auto header_compression::find(std::string_view name, std::string_view value,
     const auto common = common_static_index(name, value, exact);
     if (common.index != 0)
         return common.index;
+    for (std::size_t i = 0; i < dynamic_table_.size(); ++i)
+        if (dynamic_table_[i].name == name &&
+            (!exact || dynamic_table_[i].value == value))
+            return static_cast<std::uint32_t>(std::size(static_table) + i);
+    // Repeated application fields normally live in the connection's small
+    // dynamic table. Avoid scanning all 61 static entries on every trailer.
     if (!common.known_name)
         for (std::uint32_t i = 1; i < std::size(static_table); ++i)
             if (static_table[i].name == name &&
                 (!exact || static_table[i].value == value))
                 return i;
-    for (std::size_t i = 0; i < dynamic_table_.size(); ++i)
-        if (dynamic_table_[i].name == name &&
-            (!exact || dynamic_table_[i].value == value))
-            return static_cast<std::uint32_t>(std::size(static_table) + i);
     return 0;
 }
 
 void header_compression::set_dynamic_table_limit(std::size_t bytes)
 {
+    decoded_block_.clear();
     dynamic_table_limit_ = bytes;
     evict();
 }
@@ -291,6 +295,11 @@ auto header_compression::decode_into(std::span<const std::byte> block,
     Container& output)
     -> std::expected<void, std::error_code>
 {
+    if (!decoded_block_.empty() && std::ranges::equal(block, decoded_block_))
+    {
+        output.assign(decoded_fields_.begin(), decoded_fields_.end());
+        return {};
+    }
     // Header blocks are measured in encoded bytes, not field count. Reserving
     // one element per byte substantially over-allocates the ordinary 4-8 field
     // request. Eight covers the common request while retaining capacity in the
@@ -306,6 +315,7 @@ auto header_compression::decode_into(std::span<const std::byte> block,
     };
     std::size_t offset = 0;
     bool can_resize = true;
+    bool changes_table = false;
     while (offset < block.size())
     {
         const auto first = std::to_integer<std::uint8_t>(block[offset]);
@@ -324,6 +334,7 @@ auto header_compression::decode_into(std::span<const std::byte> block,
         }
         if ((first & 0xe0) == 0x20)
         {
+            changes_table = true;
             if (!can_resize)
                 return std::unexpected(std::make_error_code(std::errc::protocol_error));
             auto size = decode_integer(block, offset, 5);
@@ -334,6 +345,7 @@ auto header_compression::decode_into(std::span<const std::byte> block,
         }
         can_resize = false;
         const bool incremental = (first & 0xc0) == 0x40;
+        changes_table = changes_table || incremental;
         const bool sensitive = (first & 0xf0) == 0x10;
         auto index = decode_integer(block, offset, incremental ? 6 : 4);
         if (!index)
@@ -359,7 +371,42 @@ auto header_compression::decode_into(std::span<const std::byte> block,
             insert({field.name, field.value});
     }
     output.resize(output_size);
+    if (!changes_table)
+        remember_decoded_block(block, {output.data(), output.size()});
     return {};
+}
+
+void header_compression::remember_decoded_block(std::span<const std::byte> block,
+    std::span<const header_field> fields)
+{
+    // A single bounded entry per connection direction. Stateful blocks must
+    // always execute their table operations; insert/resize invalidates this
+    // memo so dynamic indices can never refer to a previous table generation.
+    if (block.empty() || block.size() > 512 || fields.size() > 16)
+        return;
+    std::size_t bytes{};
+    for (const auto& field : fields)
+    {
+        const auto equals_ascii = [&](std::string_view name)
+        {
+            return std::ranges::equal(field.name, name, [](unsigned char a, unsigned char b)
+                {
+                    return (a >= 'A' && a <= 'Z' ? a + ('a' - 'A') : a) == b;
+                });
+        };
+        if (field.sensitive || equals_ascii("authorization") ||
+            equals_ascii("proxy-authorization") || equals_ascii("cookie") ||
+            equals_ascii("set-cookie"))
+            return;
+        if (field.name.size() > 4096 - bytes)
+            return;
+        bytes += field.name.size();
+        if (field.value.size() > 4096 - bytes)
+            return;
+        bytes += field.value.size();
+    }
+    decoded_fields_.assign(fields.begin(), fields.end());
+    decoded_block_.assign(block.begin(), block.end());
 }
 
 auto header_compression::decode(std::span<const std::byte> block,
@@ -393,7 +440,11 @@ auto header_compression::encode(std::span<const header_field> fields,
             encode_integer(output, exact, 7, 0x80);
             continue;
         }
-        const auto indexed = !field.sensitive && field.name != "authorization" &&
+        // With no dynamic-table capacity the block must not ask the peer to
+        // insert either: a shared, connection-independent block cannot shift
+        // another encoder's indices. Emit literal-without-indexing instead.
+        const auto indexed = dynamic_table_limit_ != 0U &&
+            !field.sensitive && field.name != "authorization" &&
             field.name != "cookie" && field.name != "set-cookie";
         const auto name = find(field.name, {}, false);
         encode_integer(output, name, indexed ? 6 : 4,

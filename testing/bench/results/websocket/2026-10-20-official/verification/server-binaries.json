@@ -1,0 +1,5 @@
+{
+  "baseline/bench_ws_server": "3b58a8483036c8bbbed85533eeec583e2f5aeb82c0f8b21aeebb69d31eb04863",
+  "candidate/bench_ws_server": "6fd1e1680358c358e77df5d39618d5d9e218d3bd8d266f95850d5283d0598099",
+  "build/testing/bench/bench_ws_server": "3b58a8483036c8bbbed85533eeec583e2f5aeb82c0f8b21aeebb69d31eb04863"
+}

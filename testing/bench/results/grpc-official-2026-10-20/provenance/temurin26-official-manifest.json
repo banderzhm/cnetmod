@@ -1,0 +1,64 @@
+{
+  "Ref": "docker.io/library/eclipse-temurin:26-jre@sha256:29bf04be41c6657015cf0d772e44a0d2dd5d56da2541ae0ca1de08486ad9ee3f",
+  "Descriptor": {
+    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "digest": "sha256:29bf04be41c6657015cf0d772e44a0d2dd5d56da2541ae0ca1de08486ad9ee3f",
+    "size": 2134,
+    "platform": {
+      "architecture": "amd64",
+      "os": "linux"
+    }
+  },
+  "Raw": "ewogICJzY2hlbWFWZXJzaW9uIjogMiwKICAibWVkaWFUeXBlIjogImFwcGxpY2F0aW9uL3ZuZC5vY2kuaW1hZ2UubWFuaWZlc3QudjEranNvbiIsCiAgImNvbmZpZyI6IHsKICAgICJtZWRpYVR5cGUiOiAiYXBwbGljYXRpb24vdm5kLm9jaS5pbWFnZS5jb25maWcudjEranNvbiIsCiAgICAiZGlnZXN0IjogInNoYTI1Njo2MTA1NmIyMWEzZmY5ZjY5Njc4NDdlNzNhYTFhZWQ3OTQ0ZjNhMTczZGM1YjRmZDg5OWM2OGRmZjFkZGU4NDA0IiwKICAgICJzaXplIjogOTAyNQogIH0sCiAgImxheWVycyI6IFsKICAgIHsKICAgICAgIm1lZGlhVHlwZSI6ICJhcHBsaWNhdGlvbi92bmQub2NpLmltYWdlLmxheWVyLnYxLnRhcitnemlwIiwKICAgICAgImRpZ2VzdCI6ICJzaGEyNTY6NDM1YmY1YzIwNjk0Yzk5ZGQ1YTk4NzdlNThlMjRiMjZhMjIwN2ZjZjhjNjkyYTNjM2NlM2M4Njc3NzBhNWI0MSIsCiAgICAgICJzaXplIjogNDIxNDkxMTcKICAgIH0sCiAgICB7CiAgICAgICJtZWRpYVR5cGUiOiAiYXBwbGljYXRpb24vdm5kLm9jaS5pbWFnZS5sYXllci52MS50YXIrZ3ppcCIsCiAgICAgICJkaWdlc3QiOiAic2hhMjU2OmQ5ZDUxMWQxOWExOWViZGVkYTUyMGUwNzUyZjE4NGQ0NTc5MDVjN2EzMTBkZjViNzQ4ZDEzM2E1MTI3NGVjZDQiLAogICAgICAic2l6ZSI6IDM5MQogICAgfSwKICAgIHsKICAgICAgIm1lZGlhVHlwZSI6ICJhcHBsaWNhdGlvbi92bmQub2NpLmltYWdlLmxheWVyLnYxLnRhcitnemlwIiwKICAgICAgImRpZ2VzdCI6ICJzaGEyNTY6NDVmYmUwY2U1MGVjOGU5MTdmNzJiYTEzZDE1Y2I2ZDdhNGRiNjZhYjE1NDkwYjE3MzQ3MTFjYTE3MTA4ZTYzMSIsCiAgICAgICJzaXplIjogMTIxNTM2NjgKICAgIH0sCiAgICB7CiAgICAgICJtZWRpYVR5cGUiOiAiYXBwbGljYXRpb24vdm5kLm9jaS5pbWFnZS5sYXllci52MS50YXIrZ3ppcCIsCiAgICAgICJkaWdlc3QiOiAic2hhMjU2OjBkZWU2OTMzZWZiNzgyYWQ1OGEwY2Y3Y2RmODhkMTg2ZmM3YTZkZTNkYWY1NzkzYTVlYThlZjU2MjMxYzg1ZGMiLAogICAgICAic2l6ZSI6IDY0NjAwODk4CiAgICB9LAogICAgewogICAgICAibWVkaWFUeXBlIjogImFwcGxpY2F0aW9uL3ZuZC5vY2kuaW1hZ2UubGF5ZXIudjEudGFyK2d6aXAiLAogICAgICAiZGlnZXN0IjogInNoYTI1Njo0ZjRmYjcwMGVmNTQ0NjFjZmEwMjU3MWFlMGRiOWEwZGMxZTBjZGI1NTc3NDg0YTZkNzVlNjhkYzM4ZThhY2MxIiwKICAgICAgInNpemUiOiAzMgogICAgfSwKICAgIHsKICAgICAgIm1lZGlhVHlwZSI6ICJhcHBsaWNhdGlvbi92bmQub2NpLmltYWdlLmxheWVyLnYxLnRhcitnemlwIiwKICAgICAgImRpZ2VzdCI6ICJzaGEyNTY6N2I0YTgyZjZlMjZiNGZhNGMzZDBkZDFjYzcxNjI5YTk0ZjA5MTY0MTc3NjliNDUwZDFiMjQwN2ViNWNiYjIwMSIsCiAgICAgICJzaXplIjogMjQ2NAogICAgfQogIF0sCiAgImFubm90YXRpb25zIjogewogICAgImNvbS5kb2NrZXIub2ZmaWNpYWwtaW1hZ2VzLmJhc2hicmV3LmFyY2giOiAiYW1kNjQiLAogICAgIm9yZy5vcGVuY29udGFpbmVycy5pbWFnZS5iYXNlLmRpZ2VzdCI6ICJzaGEyNTY6NDI1Mjc2NDlkYmM0ZjkxOTdhNjA3M2Y0MjZmNDg4Y2JmZjBlOWNjOWYyYWZjZTMyZDkxYzM4M2U0ODc1NjM0YSIsCiAgICAib3JnLm9wZW5jb250YWluZXJzLmltYWdlLmJhc2UubmFtZSI6ICJ1YnVudHU6MjYuMDQiLAogICAgIm9yZy5vcGVuY29udGFpbmVycy5pbWFnZS5jcmVhdGVkIjogIjIwMjYtMTAtMTdUMDA6MjA6MTRaIiwKICAgICJvcmcub3BlbmNvbnRhaW5lcnMuaW1hZ2UucmV2aXNpb24iOiAiNTExZjkzNTZkYzRkNTA5MzJhMGE1ZjhjZmIwZjg3ZWQxYWVmNGYwNyIsCiAgICAib3JnLm9wZW5jb250YWluZXJzLmltYWdlLnNvdXJjZSI6ICJodHRwczovL2dpdGh1Yi5jb20vYWRvcHRpdW0vY29udGFpbmVycy5naXQjNTExZjkzNTZkYzRkNTA5MzJhMGE1ZjhjZmIwZjg3ZWQxYWVmNGYwNzoyNi9qcmUvdWJ1bnR1L3Jlc29sdXRlIiwKICAgICJvcmcub3BlbmNvbnRhaW5lcnMuaW1hZ2UudXJsIjogImh0dHBzOi8vaHViLmRvY2tlci5jb20vXy9lY2xpcHNlLXRlbXVyaW4iLAogICAgIm9yZy5vcGVuY29udGFpbmVycy5pbWFnZS52ZXJzaW9uIjogIjI2LjAuMi4xXzEtanJlLXJlc29sdXRlIgogIH0KfQ==",
+  "OCIManifest": {
+    "schemaVersion": 2,
+    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "config": {
+      "mediaType": "application/vnd.oci.image.config.v1+json",
+      "digest": "sha256:61056b21a3ff9f6967847e73aa1aed7944f3a173dc5b4fd899c68dff1dde8404",
+      "size": 9025
+    },
+    "layers": [
+      {
+        "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:435bf5c20694c99dd5a9877e58e24b26a2207fcf8c692a3c3ce3c867770a5b41",
+        "size": 42149117
+      },
+      {
+        "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:d9d511d19a19ebdeda520e0752f184d457905c7a310df5b748d133a51274ecd4",
+        "size": 391
+      },
+      {
+        "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:45fbe0ce50ec8e917f72ba13d15cb6d7a4db66ab15490b1734711ca17108e631",
+        "size": 12153668
+      },
+      {
+        "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:0dee6933efb782ad58a0cf7cdf88d186fc7a6de3daf5793a5ea8ef56231c85dc",
+        "size": 64600898
+      },
+      {
+        "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1",
+        "size": 32
+      },
+      {
+        "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:7b4a82f6e26b4fa4c3d0dd1cc71629a94f0916417769b450d1b2407eb5cbb201",
+        "size": 2464
+      }
+    ],
+    "annotations": {
+      "com.docker.official-images.bashbrew.arch": "amd64",
+      "org.opencontainers.image.base.digest": "sha256:42527649dbc4f9197a6073f426f488cbff0e9cc9f2afce32d91c383e4875634a",
+      "org.opencontainers.image.base.name": "ubuntu:26.04",
+      "org.opencontainers.image.created": "2026-10-17T00:20:14Z",
+      "org.opencontainers.image.revision": "511f9356dc4d50932a0a5f8cfb0f87ed1aef4f07",
+      "org.opencontainers.image.source": "https://github.com/adoptium/containers.git#511f9356dc4d50932a0a5f8cfb0f87ed1aef4f07:26/jre/ubuntu/resolute",
+      "org.opencontainers.image.url": "https://hub.docker.com/_/eclipse-temurin",
+      "org.opencontainers.image.version": "26.0.2.1_1-jre-resolute"
+    }
+  }
+}

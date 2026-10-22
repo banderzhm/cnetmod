@@ -1,0 +1,50 @@
+diff --git a/testing/bench/bench_database.cpp b/testing/bench/bench_database.cpp
+index bc68f4e1..71c2d249 100644
+--- a/testing/bench/bench_database.cpp
++++ b/testing/bench/bench_database.cpp
+@@ -109,8 +109,15 @@ auto mysql(cn::io_context& io, std::string mode, unsigned seconds,
+         cn::task_group background{io};
+         require(background.run([&](cn::cancel_token&) -> cn::task<std::expected<void, std::error_code>> { co_await pool.async_run(); co_return std::expected<void, std::error_code>{}; }),
+             "MySQL pool start failed");
+-        while (pool.idle_count() != capacity)
++        const auto warmup_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
++        while (pool.idle_count() != capacity && std::chrono::steady_clock::now() < warmup_deadline)
+             co_await cn::async_sleep(io, std::chrono::milliseconds(1));
++        if (pool.idle_count() != capacity)
++        {
++            co_await pool.cancel();
++            (void)co_await background.join();
++            require(false, "MySQL pool warmup timed out");
++        }
+         co_await measure("mysql", mode, seconds, [&]() -> cn::task<void>
+         {
+             auto lease = co_await pool.async_get_connection();
+@@ -148,8 +155,15 @@ auto redis(cn::io_context& io, std::string mode, unsigned seconds,
+         cn::task_group background{io};
+         require(background.run([&](cn::cancel_token&) -> cn::task<std::expected<void, std::error_code>> { co_await pool.async_run(); co_return std::expected<void, std::error_code>{}; }),
+             "Redis pool start failed");
+-        while (pool.idle_count() != capacity)
++        const auto warmup_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
++        while (pool.idle_count() != capacity && std::chrono::steady_clock::now() < warmup_deadline)
+             co_await cn::async_sleep(io, std::chrono::milliseconds(1));
++        if (pool.idle_count() != capacity)
++        {
++            co_await pool.cancel();
++            (void)co_await background.join();
++            require(false, "Redis pool warmup timed out");
++        }
+         co_await measure("redis", mode, seconds, [&]() -> cn::task<void>
+         {
+             auto lease = co_await pool.async_get_connection();
+@@ -162,8 +176,9 @@ auto redis(cn::io_context& io, std::string mode, unsigned seconds,
+         co_return;
+     }
+     db::client connection{io};
+-    auto ready = co_await connection.connect({.port = 16379});
+-    require(ready.has_value(), ready ? "" : ready.error());
++    cn::cancel_token connect_token;
++    auto ready = co_await connection.connect({.port = 16379}, connect_token);
++    require(ready.has_value(), ready ? "" : ready.error().message());
+     db::request batch;
+     const auto commands = mode == "batch" ? 64U : 1U;
+     for (unsigned i = 0; i < commands; ++i)

@@ -1,0 +1,30 @@
+DIAG bad=0 worker=22 conn=4 gen=77 bytes=129 state=0 header_len=129 status=0 completed=0
+DIAG bad=1 worker=32 conn=4 gen=58 bytes=129 state=0 header_len=129 status=0 completed=0
+DIAG bad=2 worker=31 conn=0 gen=49 bytes=129 state=0 header_len=129 status=0 completed=0
+DIAG bad=3 worker=34 conn=3 gen=100 bytes=129 state=0 header_len=129 status=0 completed=0
+DIAG bad=4 worker=11 conn=0 gen=115 bytes=129 state=0 header_len=129 status=0 completed=0
+DIAG bad=5 worker=1 conn=1 gen=101 bytes=129 state=0 header_len=129 status=0 completed=0
+DIAG bad=6 worker=37 conn=6 gen=74 bytes=129 state=0 header_len=129 status=0 completed=0
+DIAG bad=7 worker=37 conn=5 gen=148 bytes=129 state=0 header_len=129 status=0 completed=0
+DIAG upgrade_parse=81 inflight_underflow=0
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     512 (8/thread)
+  Pipeline:  1
+  Req/conn:  10
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency    269us    167us    553us   1.81ms   3.99ms
+
+  7273750 frames sent in 5.00s, 7273601 frames received
+  Throughput: 1.45M req/s
+  Bandwidth:  27.60MB/s
+  WS upgrades: 734650
+  WS frames:   7273601
+  Latency samples: 7273601 / 7273601 responses (100.0%)
+  Reconnects: 727377
+  Errors: connect 0, read 81, timeout 0

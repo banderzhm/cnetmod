@@ -1,0 +1,26 @@
+[
+  {
+    "file": "meta.json",
+    "official_sha256": "d0d5ccda47e568c84adfc00c8bfb575f9c72ef6c7aaaa08e6bb29fc3a80a8eba",
+    "cached_build_sha256": "d0d5ccda47e568c84adfc00c8bfb575f9c72ef6c7aaaa08e6bb29fc3a80a8eba",
+    "equal": true
+  },
+  {
+    "file": "mbedtls-rsa-sign-cache.patch",
+    "official_sha256": "644e08c89e6d94532a9b500e1c930c60b285d5d9d0419c276b7151a29ea28ae6",
+    "cached_build_sha256": "644e08c89e6d94532a9b500e1c930c60b285d5d9d0419c276b7151a29ea28ae6",
+    "equal": true
+  },
+  {
+    "file": "main.v",
+    "official_sha256": "730a64f1df487b38b49f6ed81ac5ca617150a7f74c6befb6e6b57cc8ce714b19",
+    "cached_build_sha256": "730a64f1df487b38b49f6ed81ac5ca617150a7f74c6befb6e6b57cc8ce714b19",
+    "equal": true
+  },
+  {
+    "file": ".gitignore",
+    "official_sha256": "d91eddb44a677acdba54bb1380d88c930faf002cf409d013f9df5a82e7f2e6d2",
+    "cached_build_sha256": "d91eddb44a677acdba54bb1380d88c930faf002cf409d013f9df5a82e7f2e6d2",
+    "equal": true
+  }
+]

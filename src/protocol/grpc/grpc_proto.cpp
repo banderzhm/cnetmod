@@ -5,7 +5,7 @@ import cnetmod.core.error;
 
 namespace cnetmod::grpc::proto {
 namespace {
-    auto protocol_error() -> std::expected<std::vector<field>, std::error_code>
+    auto protocol_error() -> std::unexpected<std::error_code>
     {
         return std::unexpected(make_error_code(std::errc::protocol_error));
     }
@@ -351,6 +351,17 @@ void append_key(byte_buffer& out, std::uint32_t number, wire_type type)
 void append_uint64(byte_buffer& out, std::uint32_t number,
     std::uint64_t value)
 {
+    const auto key = static_cast<std::uint64_t>(number) << 3;
+    const auto key_size = static_cast<std::size_t>((std::bit_width(key | 1U) + 6) / 7);
+    const auto value_size = static_cast<std::size_t>((std::bit_width(value | 1U) + 6) / 7);
+    const auto required = out.size() + key_size + value_size;
+    if (required > out.capacity())
+    {
+        const auto grown = out.capacity() <= out.max_size() / 2
+            ? out.capacity() * 2
+            : out.max_size();
+        out.reserve(std::max(required, grown));
+    }
     append_key(out, number, wire_type::varint);
     put_varint(out, value);
 }
@@ -386,17 +397,19 @@ void append_string(byte_buffer& out, std::uint32_t number,
         {reinterpret_cast<const std::byte*>(value.data()), value.size()});
 }
 
-auto decode_message(std::span<const std::byte> data)
-    -> std::expected<std::vector<field>, std::error_code>
+auto visit_message(std::span<const std::byte> data,
+    const std::function<void(const field_view&)>& visitor)
+    -> std::expected<void, std::error_code>
 {
-    std::vector<field> out;
+    if (!visitor)
+        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
     std::size_t pos{};
     while (pos < data.size())
     {
         auto key = read_varint(data, pos);
-        if (!key || *key >> 3 == 0)
+        if (!key || *key >> 3 == 0 || *key >> 3 > 0x1fffffffU)
             return protocol_error();
-        field f{.number = static_cast<std::uint32_t>(*key >> 3),
+        field_view f{.number = static_cast<std::uint32_t>(*key >> 3),
             .type = static_cast<wire_type>(*key & 7)};
         if (f.type == wire_type::varint)
         {
@@ -420,8 +433,7 @@ auto decode_message(std::span<const std::byte> data)
             auto length = read_varint(data, pos);
             if (!length || *length > data.size() - pos)
                 return protocol_error();
-            f.bytes.assign(data.begin() + static_cast<std::ptrdiff_t>(pos),
-                data.begin() + static_cast<std::ptrdiff_t>(pos + *length));
+            f.bytes = data.subspan(pos, static_cast<std::size_t>(*length));
             pos += static_cast<std::size_t>(*length);
         }
         else if (f.type == wire_type::fixed32)
@@ -436,8 +448,24 @@ auto decode_message(std::span<const std::byte> data)
         }
         else
             return protocol_error();
-        out.push_back(std::move(f));
+        visitor(f);
     }
+    return {};
+}
+
+auto decode_message(std::span<const std::byte> data)
+    -> std::expected<std::vector<field>, std::error_code>
+{
+    std::vector<field> out;
+    auto decoded = visit_message(data, [&](const field_view& view)
+        {
+            field owned{.number = view.number, .type = view.type, .varint_value = view.varint_value, .fixed64_value = view.fixed64_value, .fixed32_value = view.fixed32_value};
+            if (!view.bytes.empty())
+                owned.bytes.assign(view.bytes.begin(), view.bytes.end());
+            out.push_back(std::move(owned));
+        });
+    if (!decoded)
+        return std::unexpected(decoded.error());
     return out;
 }
 

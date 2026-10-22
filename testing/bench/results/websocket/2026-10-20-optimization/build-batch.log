@@ -1,0 +1,81 @@
+[0/2] Re-checking globbed directories...
+-- GLOB mismatch!
+The following files were added:
+  +/root/cnetmod-ws-20261020/source/src/protocol/http/v1/http_v1_parser_buffered.cpp
+[1/2] Re-running CMake...
+-- Found mold linker: /usr/sbin/mold
+-- Configured to use mold linker with Clang
+-- 
+-- Architecture: x64 (64 bit)
+-- Use the C++ compiler to compile (MI_USE_CXX=ON)
+-- Override standard malloc (MI_OVERRIDE=ON)
+-- Disable assertion checks (MI_DEBUG=OFF)
+-- Disable detailed statistics (MI_STATS=OFF)
+-- Disable profiling (MI_PROFILE=OFF)
+-- Enable full transparent huge pages support, where purging avoids splitting huge pages (MI_ALLOW_THP=FULL)
+-- 
+-- Library name     : mimalloc
+-- Version          : 3.5.3
+-- Build type       : release
+-- C++ Compiler     : /usr/sbin/clang++
+-- Compiler flags   : -Wall;-Wextra;-Wno-deprecated;-Wno-unknown-pragmas;-fvisibility=hidden;-ftls-model=initial-exec;-fno-builtin-malloc
+-- Compiler defines : NDEBUG=1;MI_GUARDED=0;MI_STATS=0;MI_PROFILE=0;MI_DEFAULT_ALLOW_THP=2;MI_HAS_EXECINFOH=1;MI_CMAKE_BUILD_TYPE=release;MI_BUILD_RELEASE
+-- Link libraries   : pthread;rt;atomic
+-- Build targets    : static;object
+-- 
+-- Memory allocator: bundled mimalloc 3.5.3
+-- Auto-detected libc++ paths:
+--   Module directory: /usr/share/libc++/v1
+--   Header directory: /usr/include/c++/v1
+-- Using BoringSSL from submodule: /root/cnetmod-ws-20261020/source/3rdparty/boringssl
+-- BoringSSL: Building static libraries
+-- BoringSSL: Assembly optimizations enabled
+-- LLVM FileCheck Found: /usr/sbin/FileCheck
+-- Google Benchmark version: v1.9.5, normalized to 1.9.5
+-- BoringSSL submodule targets found: ssl, crypto
+-- BoringSSL TLS enabled - QUIC support not requested
+-- I/O backend: io_uring (Linux)
+-- I/O backend: epoll (Linux)
+-- ==========================================
+-- Project: cnetmod v2.1.0
+-- C++ Standard: C++23
+-- Compiler: Clang 23.1.3
+-- Build Type: Release
+-- Platform: Linux
+-- Standard Library Modules: /usr/share/libc++/v1
+-- Linker: mold (high-performance)
+-- Memory Allocator: mimalloc (high-performance)
+-- ==========================================
+-- 
+-- Performance Optimizations Enabled:
+--   mold linker: 10-20x faster linking
+--   mimalloc: 2-3x faster memory allocation
+-- 
+-- Configuring done (9.3s)
+-- Generating done (0.1s)
+-- Build files have been written to: /root/cnetmod-ws-20261020/build
+[0/4] Re-checking globbed directories...
+[1/270] Generating CXX dyndep file CMakeFiles/cnetmod_runtime.dir/CXX.dd
+[2/134] Scanning /root/cnetmod-ws-20261020/source/src/protocol/http/v1/http_v1_parser_buffered.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-ws-20261020/source/src/protocol/http/v1/http_v1_parser_buffered.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[3/134] Scanning /root/cnetmod-ws-20261020/source/src/protocol/http/v1/http_v1_parser.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-ws-20261020/source/src/protocol/http/v1/http_v1_parser.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[4/134] Generating CXX dyndep file testing/tests/CMakeFiles/test_stream_write.dir/CXX.dd
+[5/132] Generating CXX dyndep file 'CMakeFiles/cnetmod_runtime@synth_0.dir/CXX.dd'
+[6/132] Generating CXX dyndep file CMakeFiles/cnetmod_http.dir/CXX.dd
+[7/44] Generating CXX dyndep file CMakeFiles/cnetmod_websocket.dir/CXX.dd
+[8/24] Generating CXX dyndep file 'CMakeFiles/cnetmod_http@synth_0.dir/CXX.dd'
+[9/24] Generating CXX dyndep file testing/tests/CMakeFiles/test_http_parser.dir/CXX.dd
+[10/23] Generating CXX dyndep file 'CMakeFiles/cnetmod_websocket@synth_0.dir/CXX.dd'
+[11/23] Generating CXX dyndep file testing/tests/CMakeFiles/test_websocket_frame.dir/CXX.dd
+[12/22] Generating CXX dyndep file testing/bench/CMakeFiles/bench_ws_server.dir/CXX.dd
+[13/21] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v1/http_v1_parser_buffered.cpp.o
+[14/21] Building CXX object CMakeFiles/cnetmod_http.dir/src/protocol/http/v1/http_v1_parser.cpp.o
+[15/21] Linking CXX static library libcnetmod_http.a
+[16/21] Linking CXX executable testing/tests/test_http_parser
+[17/21] Linking CXX executable testing/bench/bench_ws_server
+[18/21] Linking CXX executable testing/tests/test_websocket_frame

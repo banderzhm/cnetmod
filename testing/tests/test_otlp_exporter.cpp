@@ -1187,6 +1187,8 @@ TEST(otlp_response_budget_rejects_excess_and_accepts_exact_boundary)
         const auto endpoint = listener->local_endpoint();
         ASSERT_TRUE(endpoint.has_value());
         bool closed_early{};
+        bool request_received{};
+        cnetmod::cancel_token accept_cancellation;
         bool drained{};
         bool flush_timed_out{};
         unsigned finished{};
@@ -1198,7 +1200,7 @@ TEST(otlp_response_budget_rejects_excess_and_accepts_exact_boundary)
         };
         auto collector = [&]() -> cnetmod::task<void>
         {
-            auto peer = co_await cnetmod::async_accept(*io, *listener);
+            auto peer = co_await cnetmod::async_accept(*io, *listener, accept_cancellation);
             if (!peer)
             {
                 io->stop();
@@ -1250,6 +1252,7 @@ TEST(otlp_response_budget_rejects_excess_and_accepts_exact_boundary)
                 }
                 input.append(bytes, *read);
             }
+            request_received = true;
             std::string reply = mode != 0
                 ? "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n10001\r\n"
                 : "HTTP/1.1 200 OK\r\nContent-Length: 65537\r\n\r\n";
@@ -1324,6 +1327,12 @@ TEST(otlp_response_budget_rejects_excess_and_accepts_exact_boundary)
             drained = exporter.submit(cnetmod::observability::otel_log_record{.body = "test"});
             if (mode >= 18)
             {
+                // Cancellation here targets an active response, not a race
+                // with DNS resolution or the initial request write.
+                const auto ready_deadline = std::chrono::steady_clock::now() + std::chrono::seconds{2};
+                while (!request_received && std::chrono::steady_clock::now() < ready_deadline)
+                    (void)co_await cnetmod::async_timer_wait(*io, std::chrono::milliseconds{1});
+                ASSERT_TRUE(request_received);
                 if (mode == 19)
                 {
                     const auto limit = std::chrono::steady_clock::now() + std::chrono::seconds{2};
@@ -1372,9 +1381,10 @@ TEST(otlp_response_budget_rejects_excess_and_accepts_exact_boundary)
             statistics = exporter.statistics();
             exporter.close();
             // A localhost connection may resolve only to an address family
-            // that the IPv4 fixture does not serve. Closing the listener makes
-            // a still-pending accept observable instead of leaving io.run()
-            // alive until the outer CTest timeout.
+            // that the IPv4 fixture does not serve. Explicitly cancel the
+            // pending accept before closing: io_uring pins the descriptor until
+            // its terminal completion, so close alone cannot wake that waiter.
+            accept_cancellation.cancel();
             listener->close();
             finish();
         };

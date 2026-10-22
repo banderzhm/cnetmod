@@ -398,16 +398,21 @@ auto run_udp_batch_layout_probe(cnetmod::io_context& context,
     std::string_view loopback_text, bool segmented = false)
     -> cnetmod::task<std::expected<void, std::error_code>>
 {
+    const bool constrained_wsl_ipv4 =
+        std::getenv("WSL_DISTRO_NAME") != nullptr && loopback_text == "127.0.0.1";
+    const auto full_payload_size = constrained_wsl_ipv4 ? 1400U : 1472U;
     std::array<std::size_t, 16> equal_sizes{};
-    equal_sizes.fill(1472U);
+    equal_sizes.fill(full_payload_size);
     if (auto result = co_await run_udp_batch_layout_case(context, loopback_text,
-            equal_sizes, false, false, segmented); !result)
+            equal_sizes, false, false, segmented);
+        !result)
         co_return result;
 #ifdef CNETMOD_HAS_IO_URING
     if (loopback_text == "127.0.0.1")
     {
         if (auto result = co_await run_udp_batch_layout_case(context, loopback_text,
-                equal_sizes, false, true, segmented); !result)
+                equal_sizes, false, true, segmented);
+            !result)
             co_return result;
     }
 #endif
@@ -416,19 +421,29 @@ auto run_udp_batch_layout_probe(cnetmod::io_context& context,
     // Short packets followed by full-size packets and zero-byte messages
     // must retain their individual lengths, payloads and destination order.
     std::array<std::size_t, 40> mixed_sizes{};
-    mixed_sizes.fill(1472U);
+    mixed_sizes.fill(full_payload_size);
     mixed_sizes[2] = 17U;
     mixed_sizes[10] = 0U;
     mixed_sizes[13] = 1U;
     mixed_sizes[24] = 0U;
     mixed_sizes[37] = 23U;
     if (auto result = co_await run_udp_batch_layout_case(context, loopback_text,
-            mixed_sizes, true, false, segmented); !result)
+            mixed_sizes, true, false, segmented);
+        !result)
         co_return result;
 
-    // Verify independent large datagrams whose aggregate exceeds 65507 bytes.
-    // Linux validation runs this in an isolated network namespace with lo up:
-    // WSL can route 127.0.0.1 through a host adapter that drops large packets.
+    // Verify independent datagrams whose aggregate exceeds 65507 bytes.
+    // Mirrored WSL policy-routes IPv4 localhost through a 1500-MTU host-facing
+    // adapter, so retain the aggregate-overflow contract there with safe-sized
+    // datagrams. IPv6 localhost and native Linux continue to verify 24 KiB
+    // individual payloads as well as an aggregate above the UDP ceiling.
+    if (constrained_wsl_ipv4)
+    {
+        std::array<std::size_t, 48> aggregate_sizes{};
+        aggregate_sizes.fill(1400U);
+        co_return co_await run_udp_batch_layout_case(context, loopback_text,
+            aggregate_sizes, false, false, segmented);
+    }
     constexpr std::array<std::size_t, 3> large_sizes{24000U, 24000U, 24000U};
     co_return co_await run_udp_batch_layout_case(context, loopback_text,
         large_sizes, false, false, segmented);
@@ -910,6 +925,24 @@ void check_udp_batch_would_block(batch_wait_probe probe, bool segmented = false)
     for (std::size_t attempt{}; attempt < 4096U; ++attempt)
     {
         const auto sent = ::send(sender_fd, filler.data(), filler.size(), MSG_DONTWAIT | MSG_NOSIGNAL);
+        if (sent < 0)
+        {
+            would_block = errno == EAGAIN || errno == EWOULDBLOCK;
+            break;
+        }
+    }
+    ASSERT_TRUE(would_block);
+    if (!would_block)
+        return;
+    // A failed 4 KiB write may still leave room for the five-byte probe below.
+    // Fill that tail one byte at a time so resuming the coroutine must enter
+    // the asynchronous EAGAIN path rather than completing synchronously.
+    const std::byte final_fill{};
+    would_block = false;
+    for (std::size_t attempt{}; attempt < 16384U; ++attempt)
+    {
+        const auto sent = ::send(sender_fd, &final_fill, sizeof(final_fill),
+            MSG_DONTWAIT | MSG_NOSIGNAL);
         if (sent < 0)
         {
             would_block = errno == EAGAIN || errno == EWOULDBLOCK;

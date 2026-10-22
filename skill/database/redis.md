@@ -868,6 +868,17 @@ auto main() -> int
 端口缺失或非法直接失败。测试服务须自行启动、隔离和回收；该入口不验证服务端宕机恢复，
 也不意味着 Redis/Valkey 的真实服务验收已经通过。
 
+## 连接池与协议性能路径
+
+正的池等待预算且调用方未取消时，借用优先尝试已有空闲连接，避免即时完成操作
+启动超时定时器；排队仍保留 FIFO、取消与关闭的归属逻辑。
+
+普通命令与 Pipeline 使用同一个有深度限制的 RESP 解析器消费完整聚合响应，
+分片时保留原始基址和累计偏移。整批 Pipeline 共用一个协程帧，直接向最终结果数组
+追加节点，避免每个命令及嵌套层的临时结果数组；节点保留实际 depth。此路径与独立 `resp3_parser`
+使用相同的 `max_embedded_depth` 上限。参考：
+[RESP specification](https://redis.io/docs/latest/develop/reference/protocol-spec/)。
+
 ## 参考示例
 
 - `examples/redis/redis_client.cpp` — 基本命令 + request 构建器 + Pipeline + 阻塞调用桥接

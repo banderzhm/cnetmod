@@ -454,6 +454,26 @@ auto main(int argc, char** argv) -> int
                 20U);
             co_return {};
         }
+        if (request.path == "/cached-extra-buffered" || request.path == "/cached-extra-shared")
+        {
+            const std::array<cnetmod::http::v3::header_field, 3> fields{{
+                {"content-type", "application/cached"},
+                {"content-length", "8"}, {"x-asset", "cached"}}};
+            auto encoded = cnetmod::http::v3::qpack_static_response_headers::encode(200, fields);
+            if (!encoded)
+                co_return std::unexpected(encoded.error());
+            response.static_headers = std::make_shared<
+                cnetmod::http::v3::qpack_static_response_headers>(std::move(*encoded));
+            // Model middleware adding fields after the static handler.
+            response.headers.emplace("content-type", "application/custom");
+            response.headers.emplace("set-cookie", "session=abc; Secure");
+            response.headers.emplace("access-control-allow-origin", "https://example.test");
+            if (request.path == "/cached-extra-shared")
+                response.shared_body = std::make_shared<const std::string>("asset-ok");
+            else
+                response.body = "asset-ok";
+            co_return {};
+        }
         if (request.path == "/bad-length")
         {
             response.status = 200;

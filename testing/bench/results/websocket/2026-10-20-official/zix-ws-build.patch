@@ -1,0 +1,11 @@
+--- official/Dockerfile
++++ local-build/Dockerfile
+@@ -52,7 +52,7 @@
+         amd64) ZIG_TARGET=x86_64-linux-musl; ZIG_CPU=x86_64_v3 ;; \
+         arm64) ZIG_TARGET=aarch64-linux-musl; ZIG_CPU=baseline ;; \
+     esac; \
+-    zig build \
++    zig build -j4 \
+     -Dtarget="${ZIG_TARGET}" \
+     -Dcpu="${ZIG_CPU}+aes+pclmul+adx" \
+     --release=fast --summary failures;

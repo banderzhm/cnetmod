@@ -1,0 +1,362 @@
+{
+  "libuvcpp": {
+    "files": [
+      {
+        "path": "meta.json",
+        "official_sha256": "ef963e1265f140462fae05e6745a977280c1f96e2ecc03f9b01640e6c936fae9",
+        "local_sha256": "ef963e1265f140462fae05e6745a977280c1f96e2ecc03f9b01640e6c936fae9"
+      },
+      {
+        "path": "README.md",
+        "official_sha256": "e58af9fd779a7e9223a070bf9e7b13aaf1cdecc27c3667594afce16ab87c1355",
+        "local_sha256": "e58af9fd779a7e9223a070bf9e7b13aaf1cdecc27c3667594afce16ab87c1355"
+      },
+      {
+        "path": "compose.gateway-h3.yml",
+        "official_sha256": "a3080762def15f6d2b240e4c7799e7f4363874680205ff38827c4b4af0a4bba7",
+        "local_sha256": "a3080762def15f6d2b240e4c7799e7f4363874680205ff38827c4b4af0a4bba7"
+      },
+      {
+        "path": "main.cc",
+        "official_sha256": "8b05d7c5111500ce313f7a710b47e8242b83a1e2a1ea8ae385bc8abe988267fe",
+        "local_sha256": "8b05d7c5111500ce313f7a710b47e8242b83a1e2a1ea8ae385bc8abe988267fe"
+      },
+      {
+        "path": "compose.gateway.yml",
+        "official_sha256": "94cdb94492655e3f78dcf5df8b2f8203a1426606322bc57c19e13aa033f34379",
+        "local_sha256": "94cdb94492655e3f78dcf5df8b2f8203a1426606322bc57c19e13aa033f34379"
+      },
+      {
+        "path": "compose.production-stack.yml",
+        "official_sha256": "505b20ed5c88567b1895bfca8f38ea84a18ca1e360260ab5e447b0ec4d68903a",
+        "local_sha256": "505b20ed5c88567b1895bfca8f38ea84a18ca1e360260ab5e447b0ec4d68903a"
+      },
+      {
+        "path": "proxy/Caddyfile",
+        "official_sha256": "e9cb27249f6ae0c568c2b86af2f9cd2ac0b271908e8880d4e2a82e8697b92cbc",
+        "local_sha256": "e9cb27249f6ae0c568c2b86af2f9cd2ac0b271908e8880d4e2a82e8697b92cbc"
+      },
+      {
+        "path": "proxy-production/Caddyfile",
+        "official_sha256": "b15ae1e9d6bd11f3cb8c5f6a392410078ddfb6b013cd645b0b34f771bc041055",
+        "local_sha256": "b15ae1e9d6bd11f3cb8c5f6a392410078ddfb6b013cd645b0b34f771bc041055"
+      }
+    ],
+    "all_non_dockerfile_sources_equal": true
+  },
+  "trillium": {
+    "files": [
+      {
+        "path": "meta.json",
+        "official_sha256": "2328fbaa89c3901a5e345c6921404635457b16ef51d39c608c626a40352608eb",
+        "local_sha256": "2328fbaa89c3901a5e345c6921404635457b16ef51d39c608c626a40352608eb"
+      },
+      {
+        "path": "README.md",
+        "official_sha256": "9b46bb32952781a6e58395628924e92a84fefdba4462e8171def615e78c278dc",
+        "local_sha256": "9b46bb32952781a6e58395628924e92a84fefdba4462e8171def615e78c278dc"
+      },
+      {
+        "path": "rustfmt.toml",
+        "official_sha256": "80d88f852d119924840bd075c7d381014aa0061df0ca5fca4e50d2decd9c347c",
+        "local_sha256": "80d88f852d119924840bd075c7d381014aa0061df0ca5fca4e50d2decd9c347c"
+      },
+      {
+        "path": "compose.gateway-h3.yml",
+        "official_sha256": "538094269ace4e61ed0050836d8a0aa47bcae335fe1393177d5fd4bd5c8b1a10",
+        "local_sha256": "538094269ace4e61ed0050836d8a0aa47bcae335fe1393177d5fd4bd5c8b1a10"
+      },
+      {
+        "path": "Cargo.lock",
+        "official_sha256": "00b6dd06d1c98cf8c3fbbde156fe1586c50912a76c730e2e2ee1fe9456219e5c",
+        "local_sha256": "00b6dd06d1c98cf8c3fbbde156fe1586c50912a76c730e2e2ee1fe9456219e5c"
+      },
+      {
+        "path": "Cargo.toml",
+        "official_sha256": "019c85a3b64abb929db09c517ea0e1ccb79e9780de40c37a8ef31115702b5e28",
+        "local_sha256": "019c85a3b64abb929db09c517ea0e1ccb79e9780de40c37a8ef31115702b5e28"
+      },
+      {
+        "path": "askama.toml",
+        "official_sha256": "297cbdf423e612df8073e78ba592139d0b011a3d075434599ac5998b5184fce1",
+        "local_sha256": "297cbdf423e612df8073e78ba592139d0b011a3d075434599ac5998b5184fce1"
+      },
+      {
+        "path": "compose.gateway.yml",
+        "official_sha256": "cf66290fa8ca4bf8bf92c1c1afea73ec5c7d18a4849c60eafa06bf047abcab02",
+        "local_sha256": "cf66290fa8ca4bf8bf92c1c1afea73ec5c7d18a4849c60eafa06bf047abcab02"
+      },
+      {
+        "path": "compose.production-stack.yml",
+        "official_sha256": "3a976aee7f83ea16f9e5bbc6274f491d86e6b14073767bfed9c1686270433fc9",
+        "local_sha256": "3a976aee7f83ea16f9e5bbc6274f491d86e6b14073767bfed9c1686270433fc9"
+      },
+      {
+        "path": "proto/benchmark.proto",
+        "official_sha256": "60cfc16737f42786033a8826d717bd20e988dc4fc1a44c9219655151f4bc7d03",
+        "local_sha256": "60cfc16737f42786033a8826d717bd20e988dc4fc1a44c9219655151f4bc7d03"
+      },
+      {
+        "path": "proxy/Caddyfile",
+        "official_sha256": "ad2a9e8435983f68ee2c48b2db5b11002a237a79ea436c75aefd3e381662ca9b",
+        "local_sha256": "ad2a9e8435983f68ee2c48b2db5b11002a237a79ea436c75aefd3e381662ca9b"
+      },
+      {
+        "path": "proxy-production/Caddyfile",
+        "official_sha256": "5862f5a42a68fb6c6485df4db9f04fab84a058d2909689d1315f167ddfc9932a",
+        "local_sha256": "5862f5a42a68fb6c6485df4db9f04fab84a058d2909689d1315f167ddfc9932a"
+      },
+      {
+        "path": "src/main.rs",
+        "official_sha256": "5ea5d8a75bddb30a3984ebc87dca758787ae1bfdef1d0f80c1b3d7e40790bfea",
+        "local_sha256": "5ea5d8a75bddb30a3984ebc87dca758787ae1bfdef1d0f80c1b3d7e40790bfea"
+      },
+      {
+        "path": "src/grpc.rs",
+        "official_sha256": "a12dc5a66edd92aae3e69eba5212f5f16aeed3164b8343bcb9febbb894923f91",
+        "local_sha256": "a12dc5a66edd92aae3e69eba5212f5f16aeed3164b8343bcb9febbb894923f91"
+      },
+      {
+        "path": "src/state.rs",
+        "official_sha256": "9deb47a360c981452a9439cedecb3aab991ada7e8efca9a3b96aad03e474f005",
+        "local_sha256": "9deb47a360c981452a9439cedecb3aab991ada7e8efca9a3b96aad03e474f005"
+      },
+      {
+        "path": "src/handlers.rs",
+        "official_sha256": "7dd0c952f65a43e2441a848033e4c695e6b83f84c3f11f6d2acc27f24bc4586e",
+        "local_sha256": "7dd0c952f65a43e2441a848033e4c695e6b83f84c3f11f6d2acc27f24bc4586e"
+      },
+      {
+        "path": "templates/fortunes.html",
+        "official_sha256": "9d1b1c46f0fb9b214fd6407a1d9cac83e71b00c29d1b92ea1c63787b41a4d317",
+        "local_sha256": "9d1b1c46f0fb9b214fd6407a1d9cac83e71b00c29d1b92ea1c63787b41a4d317"
+      },
+      {
+        "path": "src/handlers/fortunes.rs",
+        "official_sha256": "35448ed32399c63d65e591d3b845e4fc3e4fbdaf808e45cfae9c2fb8055e9fa2",
+        "local_sha256": "35448ed32399c63d65e591d3b845e4fc3e4fbdaf808e45cfae9c2fb8055e9fa2"
+      },
+      {
+        "path": "src/handlers/api.rs",
+        "official_sha256": "629756446f634ca9b708f5e5da5391039519e843875fb5a368b912cb79526bff",
+        "local_sha256": "629756446f634ca9b708f5e5da5391039519e843875fb5a368b912cb79526bff"
+      },
+      {
+        "path": "src/handlers/db.rs",
+        "official_sha256": "7fbd69541db39c328edec21d5d1824eff696be808e5de429da5550b8c2e29ac6",
+        "local_sha256": "7fbd69541db39c328edec21d5d1824eff696be808e5de429da5550b8c2e29ac6"
+      },
+      {
+        "path": "src/handlers/crud.rs",
+        "official_sha256": "367358b767b33c0eb15efd6116037b0b38ea02021c04d836edbe7327c8811fa3",
+        "local_sha256": "367358b767b33c0eb15efd6116037b0b38ea02021c04d836edbe7327c8811fa3"
+      },
+      {
+        "path": "src/handlers/ws.rs",
+        "official_sha256": "c7e49a505b28bd4252b9c5292052eacb45a2a9ffdc5094d90df298cc92e63ca9",
+        "local_sha256": "c7e49a505b28bd4252b9c5292052eacb45a2a9ffdc5094d90df298cc92e63ca9"
+      },
+      {
+        "path": "src/handlers/h1.rs",
+        "official_sha256": "f7212b95eca77460474f7c2f571a3afa64dc2d78b2f8b6b7d11e047bce10485f",
+        "local_sha256": "f7212b95eca77460474f7c2f571a3afa64dc2d78b2f8b6b7d11e047bce10485f"
+      },
+      {
+        "path": "src/grpc/benchmark.rs",
+        "official_sha256": "70097e4d95a6bcbfefa27e6bdc12639e879ce9b48901d3981e8ae8a38aec86ba",
+        "local_sha256": "70097e4d95a6bcbfefa27e6bdc12639e879ce9b48901d3981e8ae8a38aec86ba"
+      }
+    ],
+    "all_non_dockerfile_sources_equal": true
+  },
+  "cardigan": {
+    "files": [
+      {
+        "path": "meta.json",
+        "official_sha256": "84a75501eae068878ec81c60c26451259bcf3029fb6a41ff67949406a275480d",
+        "local_sha256": "84a75501eae068878ec81c60c26451259bcf3029fb6a41ff67949406a275480d"
+      },
+      {
+        "path": "build.sh",
+        "official_sha256": "5d45fd88694f6ae18d1bbc90feb502eceee127e42e9d2edfb5b3c7b8013a1935",
+        "local_sha256": "5d45fd88694f6ae18d1bbc90feb502eceee127e42e9d2edfb5b3c7b8013a1935"
+      },
+      {
+        "path": "LICENSE",
+        "official_sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04",
+        "local_sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04"
+      },
+      {
+        "path": ".dockerignore",
+        "official_sha256": "b53ee26e6ff1da219b0563333a76d2c9ec19eec713d6ee54e11a1edacb0e9f3d",
+        "local_sha256": "b53ee26e6ff1da219b0563333a76d2c9ec19eec713d6ee54e11a1edacb0e9f3d"
+      },
+      {
+        "path": "pom.xml",
+        "official_sha256": "df0c009f01c60b9d4cc30af42e4daaa7fef32d3e1a1e85e9d5f9dc1726c2bb77",
+        "local_sha256": "df0c009f01c60b9d4cc30af42e4daaa7fef32d3e1a1e85e9d5f9dc1726c2bb77"
+      },
+      {
+        "path": "proto/benchmark.proto",
+        "official_sha256": "1853d361641684d79a0761354cdf96e90c2ede8e7653d03526b76ca57f11e6e2",
+        "local_sha256": "1853d361641684d79a0761354cdf96e90c2ede8e7653d03526b76ca57f11e6e2"
+      },
+      {
+        "path": "src/main/java/dev/cardigan/httparena/HttpArenaJsonController.java",
+        "official_sha256": "b1a5e0588c11410fe925a3a7b3387f2d97fc38b2ededbc04d7164597569f683e",
+        "local_sha256": "b1a5e0588c11410fe925a3a7b3387f2d97fc38b2ededbc04d7164597569f683e"
+      },
+      {
+        "path": "src/main/java/dev/cardigan/httparena/HttpArenaStaticController.java",
+        "official_sha256": "cc4c66d39c85b58eeec18a26821e3f8a0f8c632730ccc10a5a3a1be8ba6d85fb",
+        "local_sha256": "cc4c66d39c85b58eeec18a26821e3f8a0f8c632730ccc10a5a3a1be8ba6d85fb"
+      },
+      {
+        "path": "src/main/java/dev/cardigan/httparena/HttpArenaMain.java",
+        "official_sha256": "4b0dffc1a805fa7cc622cf6020f10182a618973179a99c4c34493adf6ac7cee3",
+        "local_sha256": "4b0dffc1a805fa7cc622cf6020f10182a618973179a99c4c34493adf6ac7cee3"
+      },
+      {
+        "path": "src/main/java/dev/cardigan/httparena/HttpArenaDataset.java",
+        "official_sha256": "e1bf55e9b268fb01b865adf9cc50ea149d8fa75fcfa05acb71501d76e5c1fef1",
+        "local_sha256": "e1bf55e9b268fb01b865adf9cc50ea149d8fa75fcfa05acb71501d76e5c1fef1"
+      },
+      {
+        "path": "src/main/java/dev/cardigan/httparena/HttpArenaController.java",
+        "official_sha256": "b28fd7beeeb906138c33602e00adf40db298cabc494a24eba44bca5974a096ac",
+        "local_sha256": "b28fd7beeeb906138c33602e00adf40db298cabc494a24eba44bca5974a096ac"
+      },
+      {
+        "path": "src/main/java/dev/cardigan/httparena/HttpArenaGrpcController.java",
+        "official_sha256": "e974fd2945a5bb43ab022c481c93e6b06e317d0b0b3cff2809a34fa67e47efb7",
+        "local_sha256": "e974fd2945a5bb43ab022c481c93e6b06e317d0b0b3cff2809a34fa67e47efb7"
+      }
+    ],
+    "all_non_dockerfile_sources_equal": true
+  },
+  "helidon-production": {
+    "files": [
+      {
+        "path": "meta.json",
+        "official_sha256": "13825e4fa4a83ac5dbe82c40d53ecd8393658b5ca4cfb8d8176775781a212a30",
+        "local_sha256": "13825e4fa4a83ac5dbe82c40d53ecd8393658b5ca4cfb8d8176775781a212a30"
+      },
+      {
+        "path": "README.md",
+        "official_sha256": "63afe29714fae45d9519b1763fdd01e09a48710be5c2ba3fb15ea8f779955926",
+        "local_sha256": "63afe29714fae45d9519b1763fdd01e09a48710be5c2ba3fb15ea8f779955926"
+      },
+      {
+        "path": "pom.xml",
+        "official_sha256": "66f70a0c5cea1407f1c307b427af4a77ada5990c411a8beb0ce9b9d8c03e5346",
+        "local_sha256": "66f70a0c5cea1407f1c307b427af4a77ada5990c411a8beb0ce9b9d8c03e5346"
+      },
+      {
+        "path": "src/main/proto/benchmark.proto",
+        "official_sha256": "e8a922a8ea2397b945f69955a13669f66a1acf2aabbe707b27d6e1bd19241345",
+        "local_sha256": "e8a922a8ea2397b945f69955a13669f66a1acf2aabbe707b27d6e1bd19241345"
+      },
+      {
+        "path": "src/main/resources/application.yaml",
+        "official_sha256": "f686ea8a4a7828bc11a2e68daae791c5cd3078c84a85f1b8b222a6500d78d1b9",
+        "local_sha256": "f686ea8a4a7828bc11a2e68daae791c5cd3078c84a85f1b8b222a6500d78d1b9"
+      },
+      {
+        "path": "src/main/java/com/httparena/Rating.java",
+        "official_sha256": "01d3c7c929c5c0315622030fb19a60c8928aa21deb784e608bc9d717613c228f",
+        "local_sha256": "01d3c7c929c5c0315622030fb19a60c8928aa21deb784e608bc9d717613c228f"
+      },
+      {
+        "path": "src/main/java/com/httparena/DelayWait.java",
+        "official_sha256": "a266c5642a5fcd9c72c3dd3f350f61e40514be560177960cccadcc1e36e3678d",
+        "local_sha256": "a266c5642a5fcd9c72c3dd3f350f61e40514be560177960cccadcc1e36e3678d"
+      },
+      {
+        "path": "src/main/java/com/httparena/BenchmarkGrpcService.java",
+        "official_sha256": "11b4c442ac40e03bbd90b6ff2c5eddc73ef014d63a07eaf6a9c313b06f8a1b97",
+        "local_sha256": "11b4c442ac40e03bbd90b6ff2c5eddc73ef014d63a07eaf6a9c313b06f8a1b97"
+      },
+      {
+        "path": "src/main/java/com/httparena/TotalItems.java",
+        "official_sha256": "33d352b0b5ca95b3f0a9e6e1fac015f54f86cd0a3223ec89491a5a49ee5b77dc",
+        "local_sha256": "33d352b0b5ca95b3f0a9e6e1fac015f54f86cd0a3223ec89491a5a49ee5b77dc"
+      },
+      {
+        "path": "src/main/java/com/httparena/Items.java",
+        "official_sha256": "fdbbf6c80dc7f31eb3405969e7fa93a1fd888b711143aac4f32fc5478048e3e9",
+        "local_sha256": "fdbbf6c80dc7f31eb3405969e7fa93a1fd888b711143aac4f32fc5478048e3e9"
+      },
+      {
+        "path": "src/main/java/com/httparena/DelayHandler.java",
+        "official_sha256": "d9779e2590dda187204ce441bff445dffaa2e3ab24b02320671afb8473f764a4",
+        "local_sha256": "d9779e2590dda187204ce441bff445dffaa2e3ab24b02320671afb8473f764a4"
+      },
+      {
+        "path": "src/main/java/com/httparena/TotalItem.java",
+        "official_sha256": "4dce02038f32994e7833e29edbd15062e71d7eb2c1e225852ed572d53e09bf50",
+        "local_sha256": "4dce02038f32994e7833e29edbd15062e71d7eb2c1e225852ed572d53e09bf50"
+      },
+      {
+        "path": "src/main/java/com/httparena/Main.java",
+        "official_sha256": "8fb8e7b3b9b947c5c57b6ca2ada2087219a44acd403d71a7dc36d2590d8bd345",
+        "local_sha256": "8fb8e7b3b9b947c5c57b6ca2ada2087219a44acd403d71a7dc36d2590d8bd345"
+      },
+      {
+        "path": "src/main/java/com/httparena/Item.java",
+        "official_sha256": "b6d2dbf9a1b797efe0f111d784bf71f52b7a1094a650bbe9db04e5ccea47f657",
+        "local_sha256": "b6d2dbf9a1b797efe0f111d784bf71f52b7a1094a650bbe9db04e5ccea47f657"
+      },
+      {
+        "path": "src/main/java/com/httparena/EchoWsListener.java",
+        "official_sha256": "1a228f6d1334786a6ddefc636c11f398096b1218177765ef318095334112267b",
+        "local_sha256": "1a228f6d1334786a6ddefc636c11f398096b1218177765ef318095334112267b"
+      },
+      {
+        "path": "src/main/java/com/httparena/BaselineHandler.java",
+        "official_sha256": "a8fd36ad82902872cb1356d1e9d4d597208dcecccbd339c91393c53e30a422fb",
+        "local_sha256": "a8fd36ad82902872cb1356d1e9d4d597208dcecccbd339c91393c53e30a422fb"
+      },
+      {
+        "path": "src/main/java/com/httparena/EchoHandler.java",
+        "official_sha256": "b61b42a50e3818f28dc97219c93afc7527f88d523a7eb0c3a1fb2c884f7b655f",
+        "local_sha256": "b61b42a50e3818f28dc97219c93afc7527f88d523a7eb0c3a1fb2c884f7b655f"
+      },
+      {
+        "path": "src/main/java/com/httparena/PipelineHandler.java",
+        "official_sha256": "2da71c269f0e715ea150171ba269f83bc0eb9fc7290fac4cfb59ef0d7796920d",
+        "local_sha256": "2da71c269f0e715ea150171ba269f83bc0eb9fc7290fac4cfb59ef0d7796920d"
+      },
+      {
+        "path": "src/main/java/com/httparena/JsonHandler.java",
+        "official_sha256": "dfa896f1370d6cf18b065309168481141df845be0bf3b25b9373ec2f359008b9",
+        "local_sha256": "dfa896f1370d6cf18b065309168481141df845be0bf3b25b9373ec2f359008b9"
+      },
+      {
+        "path": "src/main/java/com/httparena/DbHandler.java",
+        "official_sha256": "c22277eb94bd2b612c523658612f6a2e353125a5eee78e4903eca5a3388bf853",
+        "local_sha256": "c22277eb94bd2b612c523658612f6a2e353125a5eee78e4903eca5a3388bf853"
+      },
+      {
+        "path": "src/main/java/com/httparena/BaselinePostHandler.java",
+        "official_sha256": "97b061b579b597eb1937dc48e0c0dbd0e7d25ccecab3ec2d80ce6032b562b07c",
+        "local_sha256": "97b061b579b597eb1937dc48e0c0dbd0e7d25ccecab3ec2d80ce6032b562b07c"
+      },
+      {
+        "path": "src/test/java/com/httparena/DelayHandlerTest.java",
+        "official_sha256": "41a134abb159a5727c3d127f97e83afd003e999f08178ff26062c7264667579f",
+        "local_sha256": "41a134abb159a5727c3d127f97e83afd003e999f08178ff26062c7264667579f"
+      },
+      {
+        "path": "src/test/java/com/httparena/BenchmarkGrpcServiceTest.java",
+        "official_sha256": "6e3505ca0a77517d984fbb9ce179a6d820074f36a5f609114a0f19623a4872ec",
+        "local_sha256": "6e3505ca0a77517d984fbb9ce179a6d820074f36a5f609114a0f19623a4872ec"
+      },
+      {
+        "path": "src/test/java/com/httparena/DelayWaitTest.java",
+        "official_sha256": "bd535bc581d71a251f4e436e39c680eb1dcdacabe3f37bfdcf66e3bff3613516",
+        "local_sha256": "bd535bc581d71a251f4e436e39c680eb1dcdacabe3f37bfdcf66e3bff3613516"
+      }
+    ],
+    "all_non_dockerfile_sources_equal": true
+  }
+}

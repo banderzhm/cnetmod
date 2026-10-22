@@ -4,8 +4,10 @@
 
 import std;
 import cnetmod.coro.task;
+import cnetmod.coro.spawn;
 import cnetmod.coro.mutex;
 import cnetmod.coro.striped_mutex;
+import cnetmod.io.io_context;
 
 using namespace cnetmod;
 
@@ -217,6 +219,121 @@ TEST(mutex_many_sequential_cycles)
         sync_wait(increment());
 
     ASSERT_EQ(counter, 100);
+}
+
+TEST(mutex_try_lock_is_exclusive_across_threads)
+{
+    async_mutex mtx;
+    constexpr std::size_t thread_count = 8;
+    constexpr std::size_t iterations_per_thread = 25'000;
+    std::atomic<std::size_t> entries{0};
+    std::atomic<std::size_t> inside{0};
+    std::atomic<std::size_t> overlap_count{0};
+    std::barrier start_line{
+        static_cast<std::ptrdiff_t>(thread_count)};
+    std::vector<std::jthread> threads;
+    threads.reserve(thread_count);
+
+    for (std::size_t thread = 0; thread < thread_count; ++thread)
+    {
+        threads.emplace_back([&]
+        {
+            start_line.arrive_and_wait();
+            for (std::size_t iteration = 0;
+                 iteration < iterations_per_thread; ++iteration)
+            {
+                while (!mtx.try_lock())
+                    std::this_thread::yield();
+
+                if (inside.fetch_add(1, std::memory_order_acq_rel) != 0)
+                    overlap_count.fetch_add(1, std::memory_order_relaxed);
+                entries.fetch_add(1, std::memory_order_relaxed);
+                inside.fetch_sub(1, std::memory_order_acq_rel);
+                mtx.unlock();
+            }
+        });
+    }
+    threads.clear();
+
+    ASSERT_EQ(overlap_count.load(std::memory_order_acquire), 0U);
+    ASSERT_EQ(inside.load(std::memory_order_acquire), 0U);
+    ASSERT_EQ(entries.load(std::memory_order_acquire),
+        thread_count * iterations_per_thread);
+    ASSERT_TRUE(mtx.try_lock());
+    mtx.unlock();
+}
+
+TEST(mutex_hands_off_all_waiters_across_event_loops)
+{
+    async_mutex mtx;
+    ASSERT_TRUE(mtx.try_lock());
+
+    auto first = make_io_context();
+    auto second = make_io_context();
+    auto third = make_io_context();
+    auto fourth = make_io_context();
+    std::array<io_context*, 4> loops{
+        first.get(), second.get(), third.get(), fourth.get()};
+    constexpr std::size_t waiters_per_loop = 32;
+    constexpr std::size_t waiter_count = loops.size() * waiters_per_loop;
+    std::atomic<std::size_t> awaiting{0};
+    std::atomic<std::size_t> completed{0};
+    std::atomic<std::size_t> inside{0};
+    std::atomic<std::size_t> overlap_count{0};
+    std::atomic<std::size_t> wrong_loop_count{0};
+
+    auto waiter = [&](io_context* owner) -> task<void>
+    {
+        // Publishing before co_await deliberately lets the releasing thread
+        // race both await_ready() and await_suspend(). Every interleaving must
+        // either acquire immediately or enqueue exactly once.
+        awaiting.fetch_add(1, std::memory_order_release);
+        co_await mtx.lock();
+
+        if (io_context::current() != owner)
+            wrong_loop_count.fetch_add(1, std::memory_order_relaxed);
+        if (inside.fetch_add(1, std::memory_order_acq_rel) != 0)
+            overlap_count.fetch_add(1, std::memory_order_relaxed);
+        inside.fetch_sub(1, std::memory_order_acq_rel);
+        mtx.unlock();
+
+        if (completed.fetch_add(1, std::memory_order_acq_rel) + 1 ==
+            waiter_count)
+        {
+            for (auto* loop : loops)
+                loop->stop();
+        }
+    };
+
+    for (auto* loop : loops)
+    {
+        for (std::size_t index = 0; index < waiters_per_loop; ++index)
+            spawn(*loop, waiter(loop));
+    }
+
+    std::array<std::jthread, 4> runners{
+        std::jthread{[&] { first->run(); }},
+        std::jthread{[&] { second->run(); }},
+        std::jthread{[&] { third->run(); }},
+        std::jthread{[&] { fourth->run(); }}};
+
+    while (awaiting.load(std::memory_order_acquire) != waiter_count)
+        std::this_thread::yield();
+
+    // Some waiters are already queued while others may be between the failed
+    // fast-path CAS and the queue-state exchange. This is the lost-wakeup
+    // boundary exercised by the three-state mutex implementation.
+    mtx.unlock();
+
+    for (auto& runner : runners)
+        runner.join();
+
+    ASSERT_EQ(completed.load(std::memory_order_acquire), waiter_count);
+    ASSERT_EQ(overlap_count.load(std::memory_order_acquire), 0U);
+    ASSERT_EQ(wrong_loop_count.load(std::memory_order_acquire), 0U);
+    ASSERT_EQ(inside.load(std::memory_order_acquire), 0U);
+    ASSERT_TRUE(mtx.try_lock());
+    mtx.unlock();
 }
 
 RUN_TESTS()

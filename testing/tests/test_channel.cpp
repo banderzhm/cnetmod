@@ -221,6 +221,55 @@ TEST(channel_concurrent_producer_consumer)
     ASSERT_EQ(sum, 4950);
 }
 
+TEST(channel_deferred_send_resumes_receiver_only_when_asked)
+{
+    channel<int> ch(1);
+    bool received = false;
+    int value = 0;
+    auto consumer = [&]() -> task<void>
+    {
+        auto v = co_await ch.receive();
+        ASSERT_TRUE(v.has_value());
+        value = *v;
+        received = true;
+    };
+    auto producer = [&]() -> task<void>
+    {
+        channel<int>::pending_resumption resumption;
+        ASSERT_TRUE(ch.try_send_deferred(7, resumption));
+        // The value is handed over, but the receiver has not run yet.
+        ASSERT_TRUE(static_cast<bool>(resumption));
+        ASSERT_FALSE(received);
+        resumption.resume();
+        ASSERT_TRUE(received);
+        ASSERT_EQ(value, 7);
+        // Without a waiting receiver the value is buffered as by try_send.
+        channel<int>::pending_resumption none;
+        ASSERT_TRUE(ch.try_send_deferred(8, none));
+        ASSERT_FALSE(static_cast<bool>(none));
+        ASSERT_FALSE(ch.try_send_deferred(9, none));
+        ASSERT_EQ(*ch.try_receive(), 8);
+        co_return;
+    };
+    // The consumer suspends in receive() first; the producer then hands it
+    // the value without resuming it inline.
+    sync_wait(when_all(consumer(), producer()));
+}
+
+TEST(channel_reopen_restores_an_empty_open_channel)
+{
+    channel<int> ch(1);
+    ASSERT_FALSE(ch.reopen()); // still open
+    ASSERT_TRUE(ch.try_send(1));
+    ch.close();
+    ASSERT_TRUE(ch.is_closed());
+    ASSERT_TRUE(ch.reopen());  // drops the buffered value
+    ASSERT_FALSE(ch.is_closed());
+    ASSERT_FALSE(ch.try_receive().has_value());
+    ASSERT_TRUE(ch.try_send(2));
+    ASSERT_EQ(*ch.try_receive(), 2);
+}
+
 TEST(channel_move_only_type)
 {
     channel<std::unique_ptr<int>> ch(2);

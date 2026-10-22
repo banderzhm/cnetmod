@@ -1,0 +1,12 @@
+{
+  "control2": {
+    "source_files": 939,
+    "mismatches": []
+  },
+  "candidate3": {
+    "source_files": 939,
+    "mismatches": []
+  },
+  "benchmark_sha256": "84f9aa96abf15f2bcf8e5a2370f9739893fa8028353b4650712f4f5c371553d6",
+  "normalization": "CRLF to LF"
+}

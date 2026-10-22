@@ -171,6 +171,13 @@ public:
 
     [[nodiscard]] auto to_string() const -> std::string;
 
+    /// Compares family and address bytes without formatting either side.
+    [[nodiscard]] auto operator==(const ip_address& other) const noexcept -> bool;
+    [[nodiscard]] auto operator!=(const ip_address& other) const noexcept -> bool
+    {
+        return !(*this == other);
+    }
+
     [[nodiscard]] auto family() const noexcept -> address_family
     {
         return family_;
@@ -224,6 +231,13 @@ public:
     void set_port(std::uint16_t p) noexcept;
 
     [[nodiscard]] auto to_string() const -> std::string;
+
+    /// Compares address and port without formatting either side.
+    [[nodiscard]] auto operator==(const endpoint& other) const noexcept -> bool;
+    [[nodiscard]] auto operator!=(const endpoint& other) const noexcept -> bool
+    {
+        return !(*this == other);
+    }
 
 private:
     ip_address address_;

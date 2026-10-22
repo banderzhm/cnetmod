@@ -1,0 +1,15 @@
+--- official/Dockerfile
++++ local-build/Dockerfile
+@@ -2,10 +2,10 @@
+ WORKDIR /src/app
+ 
+ COPY genhttp.csproj ./
+-RUN dotnet restore
++RUN dotnet restore --disable-parallel
+ 
+ COPY . .
+-RUN dotnet publish genhttp.csproj -c Release --no-self-contained -o /app
++RUN dotnet publish genhttp.csproj -m:4 -c Release --no-self-contained -o /app
+ 
+ FROM mcr.microsoft.com/dotnet/runtime:11.0
+ WORKDIR /app

@@ -1,0 +1,5 @@
+{
+  "source_sha": "036f369f387272f3689bda72468ccc454b6b3e2d",
+  "parent": "1c75855cdbcd1597c8e1198d9ac6bd1419d5b929",
+  "changes": "benchmark fixture affinity knob only; async handler and all framework code unchanged"
+}

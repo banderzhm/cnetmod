@@ -1,0 +1,291 @@
+[
+  {
+    "name": "cnetmod-ws-awaiter",
+    "executable_sha256": "2c24fbca92615c5512928f6c825677d1b03fca9e6a122f6ac36654709cbb42fe",
+    "Dockerfile": "FROM ws-baseline:20261020\nCOPY bench_ws_server /bench_ws_server\n",
+    "image_id": "sha256:3adef71026b7511621adda0a221be13842c7b9448a537b0ccb3d3edd77a1a775",
+    "config": {
+      "Entrypoint": [
+        "/bin/sh",
+        "-c",
+        "exec /bench_ws_server 8080 \"$(nproc)\""
+      ],
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ]
+    }
+  },
+  {
+    "name": "cnetmod-ws-batch-affine",
+    "executable_sha256": "da1f68f7fc421e8eae4459aa581f5cae0ff54f9d4a86441cbd2cf89844c73f3e",
+    "Dockerfile": "FROM ws-baseline:20261020\nCOPY bench_ws_server /bench_ws_server\n",
+    "image_id": "sha256:7c4b53345b0b7ebd8373c15460eb4ac3a60cb31de57747ab6614ab7f51f2a3a8",
+    "config": {
+      "Entrypoint": [
+        "/bin/sh",
+        "-c",
+        "exec /bench_ws_server 8080 \"$(nproc)\""
+      ],
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ]
+    }
+  },
+  {
+    "name": "cnetmod-ws-batch-compact",
+    "executable_sha256": "df6b8ca818abad441094b6d4f7582f7bbdaa5249fa14e155348a613a482f36cf",
+    "Dockerfile": "FROM ws-baseline:20261020\nCOPY bench_ws_server /bench_ws_server\n",
+    "image_id": "sha256:bef45f60f1d6b9093982caf7e280406bb37cb856f04989911fa064f1f1b2980f",
+    "config": {
+      "Entrypoint": [
+        "/bin/sh",
+        "-c",
+        "exec /bench_ws_server 8080 \"$(nproc)\""
+      ],
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ]
+    }
+  },
+  {
+    "name": "cnetmod-ws-batch-epoll",
+    "executable_sha256": "2a652ee0fa5710d1675a9f00812ee7fb328f55b14a23cf4363332771ff1b4cca",
+    "Dockerfile": "FROM ws-baseline:20261020\nCOPY bench_ws_server /bench_ws_server\n",
+    "image_id": "sha256:7ce34ea8bf598cfafee48b7b7870b6b7bf00926a6cb148a181577beaf2d99bae",
+    "config": {
+      "Entrypoint": [
+        "/bin/sh",
+        "-c",
+        "exec /bench_ws_server 8080 \"$(nproc)\""
+      ],
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ]
+    }
+  },
+  {
+    "name": "cnetmod-ws-batch-linked",
+    "executable_sha256": "4d90cc62d77d3a151d4688a9da8b973b243019357c346f446d118bcc96b80b36",
+    "Dockerfile": "FROM ws-baseline:20261020\nCOPY bench_ws_server /bench_ws_server\n",
+    "image_id": "sha256:e771e1c49b2b0d819016c046665a7123438681f9d3f6ba87be433eb0558b10c0",
+    "config": {
+      "Entrypoint": [
+        "/bin/sh",
+        "-c",
+        "exec /bench_ws_server 8080 \"$(nproc)\""
+      ],
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ]
+    }
+  },
+  {
+    "name": "cnetmod-ws-batch-multishot",
+    "executable_sha256": "8bdff57abc1becf5da14352e58cf3f998038b49aa874e55f0ebd948dd2e9aa3a",
+    "Dockerfile": "FROM ws-baseline:20261020\nCOPY bench_ws_server /bench_ws_server\n",
+    "image_id": "sha256:7c8c855a6a7d812c56a10f8351bb365de5c82e8e183d60ff6add4a2d52677c55",
+    "config": {
+      "Entrypoint": [
+        "/bin/sh",
+        "-c",
+        "exec /bench_ws_server 8080 \"$(nproc)\""
+      ],
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ]
+    }
+  },
+  {
+    "name": "cnetmod-ws-batch-nodelay",
+    "executable_sha256": "4c6a963d8d1ceacfa47613a5190e112dc80f7a5ccc40ee0cb2264552bfcb5a9e",
+    "Dockerfile": "FROM ws-baseline:20261020\nCOPY bench_ws_server /bench_ws_server\n",
+    "image_id": "sha256:bbe48007cfa706fd7a0e2aea1d6f656b41df098ec8321dd5efe768829b15c372",
+    "config": {
+      "Entrypoint": [
+        "/bin/sh",
+        "-c",
+        "exec /bench_ws_server 8080 \"$(nproc)\""
+      ],
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ]
+    }
+  },
+  {
+    "name": "cnetmod-ws-batch-ready",
+    "executable_sha256": "bd882418594196c069547bb2788189d9ad11bc2888cf9a29cb5701d76de18879",
+    "Dockerfile": "FROM ws-baseline:20261020\nCOPY bench_ws_server /bench_ws_server\n",
+    "image_id": "sha256:cb6eec1c3867ff2457762a7902b5ff8e2489f53dd3054058e76279a32e5713a6",
+    "config": {
+      "Entrypoint": [
+        "/bin/sh",
+        "-c",
+        "exec /bench_ws_server 8080 \"$(nproc)\""
+      ],
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ]
+    }
+  },
+  {
+    "name": "cnetmod-ws-batch-sharded",
+    "executable_sha256": "e2d6f110c9d0a34560f60366de6be35ff9ab0341ff6fc3b028a4321d444ae02d",
+    "Dockerfile": "FROM ws-baseline:20261020\nCOPY bench_ws_server /bench_ws_server\n",
+    "image_id": "sha256:e73b9d0bcc7a83733e4607ae92b27ffdae87440d2b38b6e84e2fcd57032c72cb",
+    "config": {
+      "Entrypoint": [
+        "/bin/sh",
+        "-c",
+        "exec /bench_ws_server 8080 \"$(nproc)\""
+      ],
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ]
+    }
+  },
+  {
+    "name": "cnetmod-ws-batch-small",
+    "executable_sha256": "ae15a7a69a83764a248408b958d01ac3da10a060220d7d9b3dbf50e40c17da04",
+    "Dockerfile": "FROM ws-baseline:20261020\nCOPY bench_ws_server /bench_ws_server\n",
+    "image_id": "sha256:e7a89e6afc2cfef0abefad4be48d00f72bb435ef912861ce66088c5a210c3866",
+    "config": {
+      "Entrypoint": [
+        "/bin/sh",
+        "-c",
+        "exec /bench_ws_server 8080 \"$(nproc)\""
+      ],
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ]
+    }
+  },
+  {
+    "name": "cnetmod-ws-duplex",
+    "executable_sha256": "ace5ec1000df68ba35f9f2838345753a39ec9a044cd4845964239063e0e1d88c",
+    "Dockerfile": "FROM ws-baseline:20261020\nCOPY bench_ws_server /bench_ws_server\n",
+    "image_id": "sha256:3445aa68969d46632cc0f64ab716452127d1aa9fe4dc35288d546e6f20405176",
+    "config": {
+      "Entrypoint": [
+        "/bin/sh",
+        "-c",
+        "exec /bench_ws_server 8080 \"$(nproc)\""
+      ],
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ]
+    }
+  },
+  {
+    "name": "cnetmod-ws-duplex-v2",
+    "executable_sha256": "f4e4b94cb26ad4e94e39e37592a62795a9d6f90569cfd937677c9d150db12841",
+    "Dockerfile": "FROM ws-baseline:20261020\nCOPY bench_ws_server /bench_ws_server\n",
+    "image_id": "sha256:1e3cada412d1d6b9eb9e6559712102b3044873f6a1c44b5006a125e4f6db2c69",
+    "config": {
+      "Entrypoint": [
+        "/bin/sh",
+        "-c",
+        "exec /bench_ws_server 8080 \"$(nproc)\""
+      ],
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ]
+    }
+  },
+  {
+    "name": "cnetmod-ws-final",
+    "executable_sha256": "cb9bb2c9389789195599ea3e20188589c718fd4a0b78705a7d3768df9a3e2b48",
+    "Dockerfile": "FROM ws-baseline:20261020\nCOPY bench_ws_server /bench_ws_server\n",
+    "image_id": "sha256:7eb3f966a42c10b11284daa68803ea3307ef81e674ba359a569f9913dda60be3",
+    "config": {
+      "Entrypoint": [
+        "/bin/sh",
+        "-c",
+        "exec /bench_ws_server 8080 \"$(nproc)\""
+      ],
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ]
+    }
+  },
+  {
+    "name": "cnetmod-ws-final24-b64",
+    "Dockerfile": "FROM cnetmod-ws-final:20261020\nENV CNETMOD_IOURING_SUBMIT_BATCH=64 CNETMOD_IOURING_CQE_TICK_LIMIT=1024\nENTRYPOINT [\"/bench_ws_server\",\"8080\",\"24\"]\n",
+    "image_id": "sha256:7075d5f37942702e05d8d2d9762976b20279ea0c85443d39a9171f6631842dfe",
+    "config": {
+      "Entrypoint": [
+        "/bench_ws_server",
+        "8080",
+        "24"
+      ],
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "CNETMOD_IOURING_SUBMIT_BATCH=64",
+        "CNETMOD_IOURING_CQE_TICK_LIMIT=1024"
+      ]
+    }
+  },
+  {
+    "name": "cnetmod-ws-poll-first",
+    "executable_sha256": "ace5ec1000df68ba35f9f2838345753a39ec9a044cd4845964239063e0e1d88c",
+    "Dockerfile": "FROM ws-baseline:20261020\nCOPY bench_ws_server /bench_ws_server\n",
+    "image_id": "sha256:3445aa68969d46632cc0f64ab716452127d1aa9fe4dc35288d546e6f20405176",
+    "config": {
+      "Entrypoint": [
+        "/bin/sh",
+        "-c",
+        "exec /bench_ws_server 8080 \"$(nproc)\""
+      ],
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ]
+    }
+  },
+  {
+    "name": "cnetmod-ws-reviewed",
+    "executable_sha256": "445feac8b71c08fad50b3efe9cd5b0137079055b90dbae0423a7e5daf58852ba",
+    "Dockerfile": "FROM ws-baseline:20261020\nCOPY bench_ws_server /bench_ws_server\n",
+    "image_id": "sha256:d86c66ae3c1b79a79f904a7668031d9642812f688393d47b417f34d2df9d9901",
+    "config": {
+      "Entrypoint": [
+        "/bin/sh",
+        "-c",
+        "exec /bench_ws_server 8080 \"$(nproc)\""
+      ],
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ]
+    }
+  },
+  {
+    "name": "cnetmod-ws-reviewed16-b64",
+    "Dockerfile": "FROM cnetmod-ws-reviewed:20261020\nENV CNETMOD_IOURING_SUBMIT_BATCH=64 CNETMOD_IOURING_CQE_TICK_LIMIT=1024\nENTRYPOINT [\"/bench_ws_server\",\"8080\",\"16\"]\n",
+    "image_id": "sha256:342c7f89caec1b64f79fa21fc2f114d47ac7210b13063fc6cd89d436499697ae",
+    "config": {
+      "Entrypoint": [
+        "/bench_ws_server",
+        "8080",
+        "16"
+      ],
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "CNETMOD_IOURING_SUBMIT_BATCH=64",
+        "CNETMOD_IOURING_CQE_TICK_LIMIT=1024"
+      ]
+    }
+  },
+  {
+    "name": "cnetmod-ws-workers16",
+    "Dockerfile": "FROM cnetmod-ws-batch-small:20261020\nENTRYPOINT [\"/bench_ws_server\", \"8080\", \"16\"]\n",
+    "image_id": "sha256:2f441caf1274e776bc8d0e17bcf52d06d9a08950fe3abc85afe59ed64216c628",
+    "config": {
+      "Entrypoint": [
+        "/bench_ws_server",
+        "8080",
+        "16"
+      ],
+      "Env": [
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ]
+    }
+  }
+]

@@ -35,12 +35,6 @@ import cnetmod.protocol.http.v2.session;
 namespace cnetmod::http {
 
 // =============================================================================
-// MIME Type Inference
-// =============================================================================
-
-export auto guess_mime_type(std::string_view ext) noexcept -> std::string_view;
-
-// =============================================================================
 // Static File Serving
 // =============================================================================
 
@@ -48,6 +42,13 @@ export struct static_file_options
 {
     std::filesystem::path root;
     std::string index_file = "index.html";
+    bool serve_precompressed = true;
+    /// Files no larger than this are retained in a disk-coherent memory cache.
+    /// Set to zero to disable body caching.
+    std::size_t cache_max_file_size = 1024U * 1024U;
+    /// Cached metadata is revalidated after this interval. A zero interval
+    /// checks the mounted directory on every request.
+    std::chrono::milliseconds revalidate_interval{500};
 };
 
 export auto serve_dir(static_file_options opts) -> handler_fn;
@@ -70,6 +71,9 @@ export struct response_header_options
     bool emit_server = true;
     bool emit_date = true;
 };
+
+/// Transfer an HTTP response into the HTTP/2 transport representation.
+export auto take_h2_response(response& output) -> v2::server_response;
 
 // =============================================================================
 // Date Cache
@@ -137,6 +141,10 @@ public:
 
     /// Set router
     void set_router(router r);
+    /// Optional protocol adapter for complete buffered HTTP/2 requests.
+    /// Middleware and streaming requests retain normal HTTP dispatch.
+    void set_h2_sync_adapter(v2::sync_server_handler handler,
+        v2::buffered_request_filter filter);
 
     /**
      * @brief Registers a middleware, ignoring empty optional components.
@@ -191,18 +199,19 @@ private:
 
     auto handle_h2(socket& client, io_context& io,
         std::span<const std::byte> initial,
-        cancel_token& cancellation) -> task<void>;
+        cancel_token& cancellation, cancel_token& write_cancellation) -> task<void>;
 
     auto make_h2_streaming_handler(io_context& io, socket& client)
         -> v2::borrowed_streaming_server_handler;
     auto make_h2_sync_handler(io_context& io, socket& client)
         -> v2::sync_server_handler;
+    auto make_h2_buffered_request_filter() -> v2::buffered_request_filter;
 
 #ifdef CNETMOD_HAS_SSL
     auto handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
         cancel_token& cancellation) -> task<void>;
     auto handle_h2_tls(socket& client, io_context& io, ssl_stream& ssl,
-        cancel_token& cancellation) -> task<void>;
+        cancel_token& cancellation, cancel_token& write_cancellation) -> task<void>;
 #endif
 
     auto execute_chain(request_context& ctx, handler_fn& handler,
@@ -227,6 +236,8 @@ private:
     std::vector<std::unique_ptr<cancel_token>> worker_accept_cancellations_;
     std::unique_ptr<recv_service_state> recv_services_;
     router router_;
+    v2::sync_server_handler h2_sync_adapter_;
+    v2::buffered_request_filter h2_sync_filter_;
     std::vector<middleware_fn> middlewares_;
     std::string host_;
     std::uint16_t port_ = 0;

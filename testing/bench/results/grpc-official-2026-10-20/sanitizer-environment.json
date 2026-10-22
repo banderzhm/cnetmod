@@ -1,0 +1,7 @@
+{
+  "source_sha": "70975f8d1b1939cb21cc1a00115a0c276c298c0f",
+  "ASAN_OPTIONS": "detect_leaks=1:halt_on_error=1",
+  "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1",
+  "suites_passed": 20,
+  "note": "Unit processes exit normally with leak detection. The smoke server is terminated after independent wire checks, so no clean-exit leak claim is made for that fixture."
+}

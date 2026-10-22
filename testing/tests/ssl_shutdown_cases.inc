@@ -179,6 +179,211 @@ TEST(tls_memory_bio_supports_concurrent_read_and_serialized_write)
     exercise_task.handle().promise().result();
 }
 
+TEST(tls_gather_write_preserves_order_across_queue_growth)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    auto identity = cnetmod::ssl_context::server();
+    ASSERT_TRUE(identity.has_value());
+    ASSERT_TRUE(identity->load_cert_file(CNETMOD_TLS_TEST_CERT).has_value());
+    ASSERT_TRUE(identity->load_key_file(CNETMOD_TLS_TEST_KEY).has_value());
+    auto listener = cnetmod::socket::create(cnetmod::address_family::ipv4,
+        cnetmod::socket_type::stream);
+    ASSERT_TRUE(listener.has_value());
+    ASSERT_TRUE(listener->bind(
+                            {cnetmod::ipv4_address::loopback(), 0})
+            .has_value());
+    ASSERT_TRUE(listener->listen().has_value());
+    const auto endpoint = listener->local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+
+    // A header, a body larger than the retained outbound capacity and a tail;
+    // sent twice so the second gather reuses (or reallocates) the queue.
+    const std::string header = "HTTP/1.1 200 OK\r\nContent-Length: 300000\r\n\r\n";
+    std::string body(300'000, '\0');
+    for (std::size_t index = 0; index < body.size(); ++index)
+        body[index] = static_cast<char>('a' + index % 23U);
+    const std::string tail(5'000, 'z');
+    std::string expected;
+    for (int round = 0; round < 2; ++round)
+        expected += header + body + tail;
+
+    unsigned finished{};
+    auto finish = [&]
+    {
+        if (++finished == 2)
+            io->stop();
+    };
+    auto peer = [&]() -> cnetmod::task<void>
+    {
+        auto socket = co_await cnetmod::async_accept(*io, *listener);
+        ASSERT_TRUE(socket.has_value());
+        cnetmod::ssl_stream stream{*identity, *io, *socket};
+        stream.set_accept_state();
+        ASSERT_TRUE((co_await stream.async_handshake()).has_value());
+        cnetmod::cancel_token token;
+        const std::array parts{
+            cnetmod::const_buffer{header.data(), header.size()},
+            cnetmod::const_buffer{body.data(), body.size()},
+            cnetmod::const_buffer{tail.data(), tail.size()}};
+        for (int round = 0; round < 2; ++round)
+            ASSERT_TRUE((co_await stream.async_write_gather(parts, token)).has_value());
+        std::array<std::byte, 1> marker{};
+        auto received = co_await stream.async_read(cnetmod::buffer(marker));
+        ASSERT_TRUE(received.has_value());
+        finish();
+    };
+    auto exercise = [&]() -> cnetmod::task<void>
+    {
+        auto socket = cnetmod::socket::create(cnetmod::address_family::ipv4,
+            cnetmod::socket_type::stream);
+        ASSERT_TRUE(socket.has_value());
+        ASSERT_TRUE((co_await cnetmod::async_connect(
+                         *io, *socket, *endpoint))
+                .has_value());
+        auto context = cnetmod::ssl_context::client();
+        ASSERT_TRUE(context.has_value());
+        context->set_verify_peer(false);
+        cnetmod::ssl_stream stream{*context, *io, *socket};
+        stream.set_connect_state();
+        ASSERT_TRUE((co_await stream.async_handshake()).has_value());
+        // Small reads leave most of each record queued in the receive BIO.
+        std::array<std::byte, 777> buffer{};
+        std::string received;
+        while (received.size() < expected.size())
+        {
+            auto read = co_await stream.async_read(cnetmod::buffer(buffer));
+            ASSERT_TRUE(read.has_value());
+            if (!read || *read == 0)
+                break;
+            received.append(reinterpret_cast<const char*>(buffer.data()), *read);
+        }
+        ASSERT_EQ(received.size(), expected.size());
+        ASSERT_TRUE(received == expected);
+        const std::array marker{std::byte{1}};
+        ASSERT_TRUE((co_await stream.async_write_all(
+                         cnetmod::const_buffer{marker.data(), marker.size()}))
+                .has_value());
+        finish();
+    };
+    auto peer_task = peer();
+    auto exercise_task = exercise();
+    io->post(peer_task.handle());
+    io->post(exercise_task.handle());
+    io->run();
+    ASSERT_TRUE(peer_task.handle().done());
+    ASSERT_TRUE(exercise_task.handle().done());
+    peer_task.handle().promise().result();
+    exercise_task.handle().promise().result();
+}
+
+TEST(tls_gather_write_keeps_order_when_the_peer_stalls_mid_stream)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    auto identity = cnetmod::ssl_context::server();
+    ASSERT_TRUE(identity.has_value());
+    ASSERT_TRUE(identity->load_cert_file(CNETMOD_TLS_TEST_CERT).has_value());
+    ASSERT_TRUE(identity->load_key_file(CNETMOD_TLS_TEST_KEY).has_value());
+    auto listener = cnetmod::socket::create(cnetmod::address_family::ipv4,
+        cnetmod::socket_type::stream);
+    ASSERT_TRUE(listener.has_value());
+    ASSERT_TRUE(listener->bind({cnetmod::ipv4_address::loopback(), 0}).has_value());
+    ASSERT_TRUE(listener->listen().has_value());
+    const auto endpoint = listener->local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+
+    // Each response is a small header followed by a body of several records,
+    // so a record above the direct-send threshold is written while a small
+    // record is still queued. The total exceeds the socket buffers, and the
+    // reader pauses first, so sends are partial or would block.
+    constexpr std::size_t responses = 12;
+    const std::string header = "HTTP/1.1 200 OK\r\nContent-Length: 200000\r\n\r\n";
+    std::string body(200'000, '\0');
+    std::string expected;
+    std::vector<std::string> bodies;
+    for (std::size_t round = 0; round < responses; ++round)
+    {
+        for (std::size_t index = 0; index < body.size(); ++index)
+            body[index] = static_cast<char>('a' + (index + round * 7U) % 26U);
+        bodies.push_back(body);
+        expected += header + body;
+    }
+
+    unsigned finished{};
+    auto finish = [&]
+    {
+        if (++finished == 2)
+            io->stop();
+    };
+    auto peer = [&]() -> cnetmod::task<void>
+    {
+        auto socket = co_await cnetmod::async_accept(*io, *listener);
+        ASSERT_TRUE(socket.has_value());
+        cnetmod::ssl_stream stream{*identity, *io, *socket};
+        stream.set_accept_state();
+        ASSERT_TRUE((co_await stream.async_handshake()).has_value());
+        cnetmod::cancel_token token;
+        for (std::size_t round = 0; round < responses; ++round)
+        {
+            const std::array parts{
+                cnetmod::const_buffer{header.data(), header.size()},
+                cnetmod::const_buffer{bodies[round].data(), bodies[round].size()}};
+            ASSERT_TRUE((co_await stream.async_write_gather(parts, token)).has_value());
+        }
+        std::array<std::byte, 1> marker{};
+        auto received = co_await stream.async_read(cnetmod::buffer(marker));
+        ASSERT_TRUE(received.has_value());
+        finish();
+    };
+    auto exercise = [&]() -> cnetmod::task<void>
+    {
+        auto socket = cnetmod::socket::create(cnetmod::address_family::ipv4,
+            cnetmod::socket_type::stream);
+        ASSERT_TRUE(socket.has_value());
+        ASSERT_TRUE((co_await cnetmod::async_connect(*io, *socket, *endpoint)).has_value());
+        auto context = cnetmod::ssl_context::client();
+        ASSERT_TRUE(context.has_value());
+        context->set_verify_peer(false);
+        cnetmod::ssl_stream stream{*context, *io, *socket};
+        stream.set_connect_state();
+        ASSERT_TRUE((co_await stream.async_handshake()).has_value());
+        // Let the sender run into a full socket before reading anything.
+        co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{150});
+        std::vector<std::byte> buffer(64U * 1024U);
+        std::string received;
+        std::size_t reads{};
+        while (received.size() < expected.size())
+        {
+            auto read = co_await stream.async_read(
+                cnetmod::mutable_buffer{buffer.data(), buffer.size()});
+            ASSERT_TRUE(read.has_value());
+            if (!read || *read == 0)
+                break;
+            received.append(reinterpret_cast<const char*>(buffer.data()), *read);
+            // Stall again part-way so a later write also meets a full buffer.
+            if (++reads % 40U == 0U)
+                co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{20});
+        }
+        ASSERT_EQ(received.size(), expected.size());
+        ASSERT_TRUE(received == expected);
+        const std::array marker{std::byte{1}};
+        ASSERT_TRUE((co_await stream.async_write_all(
+                         cnetmod::const_buffer{marker.data(), marker.size()}))
+                .has_value());
+        finish();
+    };
+    auto peer_task = peer();
+    auto exercise_task = exercise();
+    io->post(peer_task.handle());
+    io->post(exercise_task.handle());
+    io->run();
+    ASSERT_TRUE(peer_task.handle().done());
+    ASSERT_TRUE(exercise_task.handle().done());
+    peer_task.handle().promise().result();
+    exercise_task.handle().promise().result();
+}
+
 #if defined(CNETMOD_PLATFORM_LINUX) && defined(CNETMOD_USING_BORINGSSL)
 TEST(tls_kernel_tx_offload_preserves_payload_and_close_notify)
 {

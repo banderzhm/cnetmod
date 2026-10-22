@@ -1,0 +1,200 @@
+[info] available CPUs: 32
+[info] load generators: docker mode
+[info] framework: cnetmod-grpc-phase15-w16-pin0 (cnetmod-grpc-phase15-w16-pin0, C++)
+[info] subscribed tests: unary-grpc,unary-grpc-tls
+[info] building image: httparena-cnetmod-grpc-phase15-w16-pin0
+[info] skipping system tuning as requested (SKIP_TUNE=true)
+
+==============================================
+=== cnetmod-grpc-phase15-w16-pin0 / unary-grpc-tls / 256c (tool=h2load) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] gRPC server ready
+
+[run 1/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+12.
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+40.
+..
+32.
+47.Main benchmark duration is started for thread #22.
+4Main benchmark duration is started for thread #32.
+10.
+54.
+.
+2.
+
+41.
+.
+45. Stopping all clients.
+17. Stopping all clients.
+13. Stopping all clients.
+48. Stopping all clients.
+
+
+finished in 5.11s, 5139340.00 req/s, 186.89MB/s
+requests: 25696700 total, 25722300 started, 25696700 done, 25696700 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 25696700 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 934.44MB (979835395) total, 98.03MB (102793200) headers (space savings 93.85%), 171.54MB (179876900) data
+                     min         max         mean         sd        +/- sd
+time for request:      248us     52.15ms      4.37ms      3.63ms    86.42%
+time for connect:     2.51ms     71.41ms     16.72ms     12.63ms    86.33%
+time to 1st byte:     3.98ms     72.93ms     26.07ms     14.26ms    82.42%
+req/s           :   14322.01    28282.89    20063.11     3742.75    56.25%
+[info] CPU 790.3% | Mem 208MiB
+
+[run 2/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+42.
+27.
+
+0.
+.
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+.
+57. Stopping all clients.
+1. Stopping all clients.
+
+finished in 5.07s, 5135200.00 req/s, 186.74MB/s
+requests: 25676000 total, 25701600 started, 25676000 done, 25676000 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 25676000 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 933.69MB (979046104) total, 97.95MB (102710400) headers (space savings 93.85%), 171.41MB (179732000) data
+                     min         max         mean         sd        +/- sd
+time for request:      349us     40.41ms      4.30ms      3.55ms    86.23%
+time for connect:     3.27ms     35.00ms     11.24ms      5.54ms    68.75%
+time to 1st byte:     5.47ms     43.38ms     18.00ms      7.63ms    64.45%
+req/s           :   13931.51    29439.52    20054.08     3836.65    63.67%
+[info] CPU 838.6% | Mem 210MiB
+
+[run 3/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+5.
+25.
+55.
+
+
+finished in 5.08s, 4906040.00 req/s, 178.41MB/s
+requests: 24530200 total, 24555800 started, 24530200 done, 24530200 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 24530200 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 892.03MB (935356750) total, 93.58MB (98127200) headers (space savings 93.85%), 163.76MB (171711400) data
+                     min         max         mean         sd        +/- sd
+time for request:      247us     45.14ms      4.37ms      3.53ms    84.76%
+time for connect:     2.60ms     35.69ms     12.09ms      5.68ms    72.27%
+time to 1st byte:     4.54ms     45.59ms     20.90ms      9.59ms    68.75%
+req/s           :   13922.85    27897.19    19155.42     3435.57    62.89%
+[info] CPU 819.4% | Mem 210MiB
+
+=== Best: 5064299 req/s (CPU: 838.6%, Mem: 210MiB) ===
+[info] saved results/unary-grpc-tls/256/cnetmod-grpc-phase15-w16-pin0.json
+httparena-bench-cnetmod-grpc-phase15-w16-pin0
+httparena-bench-cnetmod-grpc-phase15-w16-pin0
+
+==============================================
+=== cnetmod-grpc-phase15-w16-pin0 / unary-grpc-tls / 1024c (tool=h2load) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] gRPC server ready
+
+[run 1/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+
+31Warm-up phase is over for thread #.
+12.
+37Warm-up phase is over for thread #.
+.
+.
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+38. Stopping all clients.
+
+finished in 5.17s, 4702360.00 req/s, 171.01MB/s
+requests: 23511800 total, 23614200 started, 23511800 done, 23511800 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 23511800 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 855.05MB (896585830) total, 89.71MB (94072800) headers (space savings 93.84%), 156.96MB (164582600) data
+                     min         max         mean         sd        +/- sd
+time for request:      347us    208.26ms     12.73ms     10.84ms    83.63%
+time for connect:     2.71ms    290.13ms     87.52ms     55.68ms    71.88%
+time to 1st byte:     3.84ms    328.99ms    157.49ms     74.99ms    61.23%
+req/s           :    3152.83     7488.48     4586.35      960.77    75.59%
+[info] CPU 613.5% | Mem 381MiB
+
+[run 2/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+progress: Warm-up phase is over for thread #43% of clients started
+25.
+progress: Warm-up phase is over for thread #75% of clients started
+5.
+12.
+
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+
+finished in 5.16s, 4921660.00 req/s, 178.98MB/s
+requests: 24608300 total, 24710700 started, 24608300 done, 24608300 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 24608300 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 894.92MB (938395375) total, 93.90MB (98458800) headers (space savings 93.84%), 164.28MB (172258100) data
+                     min         max         mean         sd        +/- sd
+time for request:      507us    168.39ms     11.22ms      7.77ms    56.92%
+time for connect:     2.24ms    214.63ms     55.23ms     46.84ms    75.98%
+time to 1st byte:     5.05ms    251.05ms     94.23ms     61.41ms    61.82%
+req/s           :    3950.84     6252.12     4800.69      450.35    70.21%
+[info] CPU 759.0% | Mem 405MiB
+
+[run 3/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+
+.
+28.
+progress: Warm-up phase is over for thread #40.
+6% of clients started
+TLS Protocol: TLSv1.3
+Cipher: TLS_AES_128_GCM_SHA256
+Server Temp Key: X25519 253 bits
+Application protocol: h2
+23
+39. Stopping all clients.
+
+finished in 5.14s, 4963820.00 req/s, 180.52MB/s
+requests: 24819100 total, 24921500 started, 24819100 done, 24819100 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 24819100 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 902.59MB (946433179) total, 94.70MB (99302000) headers (space savings 93.84%), 165.69MB (173733700) data
+                     min         max         mean         sd        +/- sd
+time for request:      539us    234.06ms     11.70ms      9.85ms    76.23%
+time for connect:     3.00ms    303.71ms     76.39ms     75.17ms    80.47%
+time to 1st byte:     7.17ms    329.40ms    148.86ms     96.70ms    52.73%
+req/s           :    3681.97     8584.28     4845.70     1060.67    83.40%
+[info] CPU 727.9% | Mem 420MiB
+
+=== Best: 4828618 req/s (CPU: 727.9%, Mem: 420MiB) ===
+[info] saved results/unary-grpc-tls/1024/cnetmod-grpc-phase15-w16-pin0.json
+httparena-bench-cnetmod-grpc-phase15-w16-pin0
+httparena-bench-cnetmod-grpc-phase15-w16-pin0
+[info] rebuilding site/data/*.json
+[updated] /root/cnetmod-grpc-20261020/phase15/site/data/frameworks.json
+[updated] /root/cnetmod-grpc-20261020/phase15/site/data/results/cnetmod-grpc-phase15-w16-pin0.json - 4 new, 4 total
+[updated] /root/cnetmod-grpc-20261020/phase15/site/data/results/cnetmod-grpc-phase15-w24-pin0.json - 4 new, 4 total
+[updated] /root/cnetmod-grpc-20261020/phase15/site/data/current.json
+[info] done

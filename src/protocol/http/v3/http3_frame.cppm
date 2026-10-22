@@ -128,6 +128,12 @@ export [[nodiscard]] auto decode_http3_frame(byte_view data)
 
 export [[nodiscard]] auto encode_http3_frame(const data_frame& frame) -> byte_buffer;
 export [[nodiscard]] auto encode_http3_frame(const headers_frame& frame) -> byte_buffer;
+
+/// Appends a type/length/payload frame to an existing buffer. Response
+/// assembly reuses one buffer for HEADERS, DATA and trailers instead of
+/// allocating a temporary frame vector and copying it again.
+export void append_http3_frame(byte_buffer& out, std::uint64_t type,
+    byte_view payload);
 export [[nodiscard]] auto encode_http3_frame(const settings_frame& frame) -> byte_buffer;
 export [[nodiscard]] auto encode_http3_frame(const push_promise_frame& frame) -> byte_buffer;
 export [[nodiscard]] auto encode_http3_frame(const goaway_frame& frame) -> byte_buffer;

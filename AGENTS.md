@@ -1561,7 +1561,7 @@ SSL 上下文（RAII 封装 `SSL_CTX*`），不可拷贝，仅可移动。
 ### `ssl_stream`
 **签名**: `export class ssl_stream`
 
-异步 TLS 流（基于 Memory BIO），不可拷贝，仅可移动。
+异步 TLS 流（基于框架自有的密文队列 BIO），不可拷贝，仅可移动。
 
 **构造**: `ssl_stream(ssl_context& ssl_ctx, io_context& io_ctx, socket& sock)`
 
@@ -1576,6 +1576,7 @@ Socket 必须已通过 `async_connect`（客户端）或 `async_accept`（服务
 | `async_read` | `auto async_read(mutable_buffer buf) -> task<expected<size_t, error_code>>` | 异步读取解密明文 |
 | `async_write` | `auto async_write(const_buffer buf) -> task<expected<size_t, error_code>>` | 异步写入（加密后发送） |
 | `async_write_all` | `auto async_write_all(const_buffer buf) -> task<expected<void, error_code>>` | 异步写完所有字节 |
+| `async_write_gather` | `auto async_write_gather(span<const const_buffer> bufs, cancel_token& token) -> task<expected<void, error_code>>` | 多段明文依次封装后一次刷出，缓冲区须存活到任务结束 |
 | `async_shutdown` | `auto async_shutdown() -> task<expected<void, error_code>>` | 异步 TLS 关闭 |
 | `async_shutdown` | `auto async_shutdown(cancel_token& token) -> task<expected<void, error_code>>` | 可取消关闭，token 与流必须存活到任务结束 |
 | `get_alpn_selected` | `auto get_alpn_selected() const noexcept -> string_view` | 获取 ALPN 协商结果 |
@@ -1596,17 +1597,21 @@ BoringSSL 导出 AES-128/256-GCM 的 TLS 1.2 发送密钥并安装到 Linux TLS 
 普通上下文默认不启用，继续协商 TLS 1.3。该路径仅卸载 TX，接收方向仍由 BoringSSL
 解密；QUIC 不使用 kTLS。
 
-HTTP/2 会在同一个 `ssl_stream` 上同时挂起读取协程和串行化的写入协程。框架在每次
-`SSL_read` / `SSL_write` 到对应 memory BIO 密文刷出完成之间持有协程锁，保证另一协程
-不会使 `BIO_get_mem_data()` 返回的内部存储失效，也不会在刷出后被错误的 `BIO_reset()`
-清掉新记录。应用层不需要再给一个读协程加锁；多个业务写入仍应由上层协议按帧顺序
-串行化。禁止绕过 `ssl_stream` 直接操作 `native()` 返回的 `SSL*`，否则该并发保证失效。
+用户态 TLS 的收发方向使用框架自有的密文队列 BIO，而不是 BoringSSL memory BIO：
+memory BIO 每次 `BIO_reset()` 都会把整块容量清零，部分读取后还要 memmove 剩余数据，
+大响应会多出一整遍内存写。队列只移动偏移、刷出后保留容量（超过 256 KiB 才释放），
+刷出只丢弃已写入的前缀。队列创建失败时自动回退到 memory BIO。
 
 HTTP/2 会在同一个 `ssl_stream` 上同时挂起读取协程和串行化的写入协程。框架在每次
-`SSL_read` / `SSL_write` 到对应 memory BIO 密文刷出完成之间持有协程锁，保证另一协程
-不会使 `BIO_get_mem_data()` 返回的内部存储失效，也不会在刷出后被错误的 `BIO_reset()`
-清掉新记录。应用层不需要再给一个读协程加锁；多个业务写入仍应由上层协议按帧顺序
-串行化。禁止绕过 `ssl_stream` 直接操作 `native()` 返回的 `SSL*`，否则该并发保证失效。
+`SSL_read` / `SSL_write` 到对应密文刷出完成之间持有协程锁，保证另一协程不会使正在
+提交给 socket 的队列存储失效。应用层不需要再给一个读协程加锁；多个业务写入仍应由
+上层协议按帧顺序串行化。禁止绕过 `ssl_stream` 直接操作 `native()` 返回的 `SSL*`，
+否则该并发保证失效。
+
+`async_write_gather` 在同一把锁内把所有段依次 `SSL_write` 进队列再一次刷出，
+HTTP/1.1 TLS 用它直接从共享静态文件缓存封装大响应体，HTTP/2 TLS 用它把共享响应体
+以引用方式成帧（`session::set_gather_writer`），都省去把响应体拷贝到帧缓冲区的一遍。
+kTLS 生效时逐段写入，由内核成帧。
 
 ### 错误处理
 **签名**:
@@ -2880,6 +2885,11 @@ public:
     void stop();
 };
 ```
+
+需要固定 worker 亲和性时，可传
+`{.enabled = true, .auto_assign_workers = true}`。显式 `worker_processors`
+优先；为空时自动轮转当前调用线程实际允许的 CPU 集合（Linux 支持稀疏 cpuset，
+Windows 使用当前线程的 processor group）。默认不启用自动亲和性。
 
 第二个构造函数借用调用方已有的 CPU pool；`server_context` 不负责停止它。
 Application 使用该重载，确保整个进程只有 `application.cpu_threads` 配置的一套
@@ -5246,6 +5256,17 @@ auto main() -> int
 - 不要在 `with_params` 中混合手动与自动格式化
 - 不要在多 worker 场景使用单 `connection_pool`——应使用 `sharded_connection_pool`
 
+## 连接池与协议性能路径
+
+`async_get_connection()` 在正的池等待预算下优先尝试已有空闲连接，避免即时借用
+创建定时器；FIFO 等待者、争用和耗尽仍使用原有等待路径。默认归还仍执行 session
+reset。只有明确可复用当前 session 的调用方才使用 `return_without_reset()`；基准须
+把无 reset 的借还与默认 reset 分开报告。
+
+小于等于 4096 字节的包正文与四字节包头合并写入，每连接复用写缓冲。大包仍走原有
+分包路径，保留序列号及最大包长度恰好整倍数时的空终止包。参考：
+[MySQL packets](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_basic_packets.html)。
+
 ## 参考示例
 
 - `examples/database/mysql/mysql_crud.cpp` — 完整 CRUD、Prepared Statement、Pipeline
@@ -5314,8 +5335,15 @@ struct connection_options {
     std::chrono::milliseconds connect_timeout{10000};
     std::size_t maximum_connect_attempts = 3;
     std::unordered_map<std::string, std::string> startup_parameters;
+    std::size_t statement_cache_capacity = 256;
 };
 ```
+
+`execute(parameterized_query)` 按 SQL 文本缓存命名预处理语句：首次执行发送
+Parse，确认 ParseComplete 后登记；之后同一 SQL 只发送 Bind/Execute，省去服务端
+每次解析和规划。缓存属于连接会话，断开或重连时清空；服务端报告语句不存在
+（26000）或计划失效（0A000）时剔除该项，下次重新 Parse。缓存满后新 SQL 回退为
+匿名语句，不淘汰已有项。参数是动态拼接 SQL 时应设为 0，避免占满缓存。
 
 ### `client` — 异步连接客户端
 
@@ -5805,6 +5833,17 @@ auto main() -> int
 - 不要忽略 `discard()` 标记——连接状态异常时用它通知池丢弃连接
 - 不要长时间持有 `pooled_connection`——及时归还以维持池吞吐量
 - 不要在多 worker 场景共享同一个 `connection_pool`——每个 worker 应持有独立池
+
+## 连接池与协议性能路径
+
+有正的借用预算且没有 FIFO 等待者时，`acquire()` 在锁内直接借出已有空闲连接，
+不为即时完成的操作创建超时定时器。没有可用连接、锁竞争、关闭或过期预算仍走原有
+可取消等待路径。普通借还按槽位增量维护 idle/checked-out 快照；扩容、重连和关闭
+仍完整刷新统计。
+
+客户端用每连接 8 KiB 的接收缓冲跨消息预读，不等待缓冲填满。长度上限和消息解析
+仍逐条执行；取消、断线和重连清空未读位置。协程不得并发操作同一客户端。
+协议参考：[PostgreSQL message formats](https://www.postgresql.org/docs/current/protocol-message-formats.html)。
 
 ## 参考示例
 
@@ -6686,6 +6725,17 @@ auto main() -> int
 端口缺失或非法直接失败。测试服务须自行启动、隔离和回收；该入口不验证服务端宕机恢复，
 也不意味着 Redis/Valkey 的真实服务验收已经通过。
 
+## 连接池与协议性能路径
+
+正的池等待预算且调用方未取消时，借用优先尝试已有空闲连接，避免即时完成操作
+启动超时定时器；排队仍保留 FIFO、取消与关闭的归属逻辑。
+
+普通命令与 Pipeline 使用同一个有深度限制的 RESP 解析器消费完整聚合响应，
+分片时保留原始基址和累计偏移。整批 Pipeline 共用一个协程帧，直接向最终结果数组
+追加节点，避免每个命令及嵌套层的临时结果数组；节点保留实际 depth。此路径与独立 `resp3_parser`
+使用相同的 `max_embedded_depth` 上限。参考：
+[RESP specification](https://redis.io/docs/latest/develop/reference/protocol-spec/)。
+
 ## 参考示例
 
 - `examples/redis/redis_client.cpp` — 基本命令 + request 构建器 + Pipeline + 阻塞调用桥接
@@ -7532,20 +7582,35 @@ struct rate_limiter_options {
 srv.use(rate_limiter({.rate = 100.0, .burst = 200.0}));
 ```
 
-### 5. compress — gzip 压缩
+### 5. compress — gzip / Brotli 压缩
 
 **签名**: `auto compress(compress_options opts = {}) -> http::middleware_fn`
 
 ```cpp
 struct compress_options {
     std::size_t min_size = 1024;  // 小于此值不压缩
-    int level = 6;                // 压缩级别 1-9
+    int level = 6;                // gzip 压缩级别 1-9
+    int brotli_quality = -1;      // Brotli 质量 0-11；负数 = 只协商 gzip（默认）
+    int brotli_window = 18;       // Brotli 窗口 log2 字节
+    std::size_t max_concurrency = 4;
+    // dispatch / measurements 见源码
 };
 ```
 
 ```cpp
 srv.use(compress({.min_size = 512, .level = 6}));
+srv.use(compress({.min_size = 512, .brotli_quality = 2}));  // 客户端 br 权重不低于 gzip 时用 br
 ```
+
+开启 Brotli 需要构建时找到 libbrotli（`CNETMOD_HAS_BROTLI`）；未找到时该选项被忽略，仍按 gzip 协商。
+对 4–8 KB 的 JSON，Brotli q2 与 gzip 6 体积相近而 CPU 约为一半；q5 体积再小约 10%，CPU 为 gzip 6 的 1.5 倍。
+
+压缩任务在执行期间只读借用响应正文，dispatcher 返回前必须保证 operation 已结束；不要把
+operation 投递后提前返回。这样框架无需复制未压缩正文，压缩失败、取消或结果更大时仍能原样
+保留响应。gzip 工作区按实际执行线程复用，因此 Application 的 CPU dispatcher 和独立服务器
+的同步执行都不需要业务自行缓存 zlib 状态。Application 应使用
+`runtime.compression(options)`，由组合根显式接入受管 CPU 池；直接调用 `compress(options)`
+表示明确接受在当前事件循环同步压缩。
 
 ### 6. body_limit — 请求体限制
 
@@ -8000,6 +8065,27 @@ HTTP/1 明文连接的首次探测缓冲在协议确定后立即释放；普通�
 
 #### `server::set_router`
 **签名**: `void set_router(router r)`
+
+#### `server::set_h2_sync_adapter`
+**签名**:
+```cpp
+void set_h2_sync_adapter(v2::sync_server_handler handler,
+    v2::buffered_request_filter filter);
+```
+在 `run()` 前配置完整 HTTP/2 请求的同步协议适配器。回调返回 `std::nullopt`
+时继续普通 HTTP 路由；filter 决定小请求体的缓冲资格，回调仍需检查请求是否适用。
+存在 middleware 或流式请求体时使用普通分发链。handler 和 filter 必须同时提供或同时清空。
+
+`v2::server_response` 可用 `static_headers` / `static_trailers` 复用固定协议元数据：
+`v2::static_header_fields::from<fields>()` 只接受静态存储期的 const 字段数组，
+防止把请求栈上的头部视图交给异步发送器。业务响应体和动态 metadata 仍由响应拥有。
+发送端分别扣减连接和流窗口；额度不足的响应等待 WINDOW_UPDATE，SETTINGS 缩窗可产生负额度。
+`v2::server_response::automatic_content_length` 默认为 true；设为 false 时只关闭自动生成
+Content-Length，显式提供的长度头仍然发送。DATA 和 END_STREAM 仍按完整响应编码。
+
+每个 HPACK 解码方向最多复用一个不改变动态表的头块（编码不超过 512 字节、16 个字段、
+解码内容不超过 4096 字节）。插入或调整动态表会使该复用失效；敏感字段、Authorization、
+Proxy-Authorization、Cookie 和 Set-Cookie 不参与复用。每次请求仍执行 HTTP/2 头部语义校验。
 
 #### `server::use`
 **签名**: `void use(middleware_fn mw)`
@@ -8494,6 +8580,11 @@ r.get("/docs", swagger_ui_handler());
 
 **配置**: 启用 SSL 后，HTTP/2 自动通过 ALPN 协商。无需额外配置。
 
+流式请求只在应用实际消费 body chunk 后回补接收窗口；普通和借用式 handler 遵循相同规则。
+同一轮消费产生的连接窗口回补会合并为一个 WINDOW_UPDATE，并共享一次后台任务和写入。
+不要依赖“一块数据对应一个连接 WINDOW_UPDATE”的帧数量；测试应核对回补字节总量，
+并确认尚未消费的数据没有提前获得信用。已结束的流只需要回补连接窗口。
+
 已经携带 `END_STREAM` 的完整请求由连接协程批量分发并合并刷出响应；只有请求正文仍在
 到达的流才启动后台流式任务。应用无需为了吞吐手工创建 task 或绕过 router，正文流式
 端点继续使用 `stream_*` 路由即可。单个 `HEADERS + END_STREAM` 的常见 GET/RPC 请求会
@@ -8619,13 +8710,60 @@ router r;
 r.get("/static/*filepath", serve_dir({
     .root = "./public",
     .index_file = "index.html",
+    .serve_precompressed = true,
+    .cache_max_file_size = 1024 * 1024,
+    .revalidate_interval = std::chrono::milliseconds{500},
 }));
 ```
 
 `serve_dir()` 使用协议无关的 pull-based response body：文件分块异步读取，
 HTTP/1 明文、TLS 和 HTTP/2 由服务器传输层分别编码。不要为了零拷贝或性能在
 静态文件 handler 中直接调用 `raw_socket()`；那会绕过 TLS 加密与 HTTP/2
-帧编码。框架会保持每次请求重新打开、stat 文件，因此替换静态资源后无需重启。
+帧编码。默认对不超过 1 MiB 的热点文件保留不可变共享响应体，HTTP/1 与 HTTP/2
+不会按请求重复打开、读取或复制文件；超过上限的文件仍按背压异步分块读取。
+缓存每 500 ms 重新核对文件大小和修改时间，因此替换或删除静态资源后无需重启。
+将 `cache_max_file_size` 设为 `0` 可关闭 body 缓存，将
+`revalidate_interval` 设为 `0ms` 可要求每次请求检查磁盘元数据。
+
+`serve_precompressed` 默认开启。客户端的 `Accept-Encoding` 允许时优先选择同目录的
+`.br`，其次选择 `.gz`；`q=0` 会明确禁用对应编码，并自动设置
+`Content-Encoding` 与 `Vary: Accept-Encoding`。Range 请求固定读取原始文件，避免
+把原文件的字节范围错误地应用到压缩表示。
+
+HTTP/3 使用同一磁盘一致性语义，但请求类型不同，因此显式导入
+`cnetmod.protocol.http.v3.static_files`：
+
+```cpp
+import std;
+import cnetmod.protocol.http.v3.server;
+import cnetmod.protocol.http.v3.static_files;
+
+auto static_files = cnetmod::http::v3::serve_dir({
+    .root = "/srv/public",
+    .url_prefix = "/static/",
+    .serve_precompressed = true,
+});
+
+cnetmod::http::v3::server_request_handler handler =
+    [static_files = std::move(static_files)](auto& request, auto& response)
+        -> std::error_code
+{
+    auto served = static_files(request, response);
+    if (!served)
+        return served.error();
+    if (*served)
+        return {};
+    // 继续处理其他业务路由。
+    response.status = cnetmod::http::status::not_found;
+    return {};
+};
+```
+
+该入口属于框架正式能力，不会在应用入口预读整个目录，也不会持有不校验磁盘的
+永久缓存。HTTP/3 对不超过 `cache_max_file_size`（默认 1 MiB）的文件保留共享内容，
+但每次请求都会核对大小与修改时间；替换或删除文件后立即更新或失效。它同样支持
+`.br`/`.gz` 预压缩副本、保留原文件的 `Content-Type`，并拒绝编码后的目录穿越。
+不要为了 benchmark 在应用层恢复启动时预加载目录。
 
 ---
 
@@ -8691,6 +8829,10 @@ SSE、手工流式输出或 chunked 响应时，框架先刷出此前普通响�
 返回部分写入时才进入完整写循环。这些均为传输层内部优化，应用不要为它们复制一套 handler。
 
 HTTP/2 的普通同步请求同样走内部借用式路由匹配，不复制已注册的 handler；请求上下文中的
+大块动态 `std::string` 响应会把所有权移动到连接写队列，并通过 vectored transport 直接发送
+DATA payload；无需为了零拷贝把每个 JSON 响应包装成 `shared_ptr`。不可变静态资源仍使用
+`set_shared_body()`，便于跨请求共享同一份内容。小响应继续复制进批量输出缓冲，避免为很小的
+payload 增加独立所有者和 gather segment 的管理成本。
 SSE、表单、追踪、取消与 request-scope 扩展状态仅在实际调用对应能力时创建。应用仍只使用
 公开的 `router::match()`、`request_context` 和 `get_sync()` 等接口，不得依赖这些内部视图，
 也不要为了追求吞吐绕过 endpoint metadata 或自行管理请求上下文生命周期。
@@ -8954,6 +9096,23 @@ peer FIN/RESET 给出最终大小后退休。QPACK 阻塞等待绑定到流取�
 Stream Cancellation 指令，避免保留阻塞 header section。
 
 
+### 静态表编码
+
+QPACK 的两个方向分开配置：
+
+- `set_qpack_settings(capacity, blocked)` 通告本端**解码**表，允许客户端把重复的请求字段
+  （`:authority`、`user-agent` 等）编成一个字节的索引，省去每个请求的 Huffman 字面量解码。
+  解码侧的 Section Acknowledgement / Insert Count Increment 通过
+  `quic_connection::try_queue_send` 提交，不单独发包，而是搭载在随后的响应包上；
+  早期每个 ack 单独 `await async_send` 才导致动态表反而更慢。同一批并发请求的 ack
+  在 accept 循环挂起前合并成一次解码器流写入；只有单个在途请求时仍立即提交。
+- `set_qpack_encoder_table_limit(limit)` 限制本端**编码**响应时使用的动态表（不通告，
+  默认不限制）。设为 0 时无论对端允许多少都只用静态表：每个字段一次哈希探测，
+  `qpack_encoder::encode_into` 直接写入调用方缓冲，没有编码器流流量和每响应的表状态。
+  响应头只有少量短字段时这是更省 CPU 的选择。
+
+HttpArena H3 适配器使用 4 KB 解码表 + 编码表上限 0。
+
 ### 共享缓冲响应体
 
 服务端可将预加载的不可变内容放入 `response.shared_body`。多个响应共享原始存储，
@@ -8987,7 +9146,8 @@ response.shared_body = cached_body;
 ```
 
 使用 `static_headers` 时，`response.status` 必须与预编码状态一致，
-`response.headers` 必须为空，并且不能同时使用 `body_source`。
+并且不能同时使用 `body_source`。`response.headers` 为空时直接复用预编码块；
+非空时合并缓存字段后走普通 QPACK 编码，同名字段以 `response.headers` 为准。
 
 ### 响应体流式发送
 
@@ -10787,6 +10947,15 @@ target_link_libraries(my_backend PRIVATE
 请求包中不存在的组件必须在配置阶段失败，不能等到链接阶段。消费者仍须使用与目标
 ID 一致的工具链和 ABI；系统依赖模式的 Unix SDK 还要求目标机器具有对应系统库。
 
+### 源码子目录消费
+
+需要跟随 cnetmod 源码构建的集成可在设置协议开关后使用
+`add_subdirectory(<cnetmod-source> <build-dir> EXCLUDE_FROM_ALL)`。Unix + Clang 下，
+cnetmod 会把 `-stdlib=libc++`、`-nostdinc++` 和匹配的 libc++ 头目录绑定到每个
+模块 target，并通过公开用法要求传递给消费目标。不要只在父工程全局追加这些参数：
+CMake 为导入模块生成的合成 BMI target 不保证继承父目录选项，可能把 libc++ 的
+`std.cppm` 与系统 libstdc++ 头混合，产生难以理解的标准库声明错误。
+
 ## 发布操作
 
 1. 在 `develop` 完成功能和三配置门禁。
@@ -10886,6 +11055,34 @@ Typed conversion supports nested mapped DTOs, optionals, enums, sequences, and
 string-keyed associative containers. Numeric decoding checks integral sign and
 range instead of silently narrowing.
 
+`write()` and `write_explicit_nulls()` serialize mapped DTOs directly into the
+output string without building a `document`. The output is byte-identical to
+`write_document(to_document(value))`: object keys in name order, the same
+string escapes, integers as written, doubles formatted by the backend, and
+`serialization_failed` for strings that are not valid UTF-8. Unordered maps and
+types with a custom `document_traits::encode` still go through a `document`.
+Do not hand-write JSON strings for speed; this path is the fast one.
+
+For a reusable response or connection buffer, use `write_to(output, value)`.
+It clears the logical contents but retains and reuses `output`'s capacity, and
+returns `expected<void, error_code>`. HTTP handlers can combine it with
+`response::generate_body()` so serialization writes directly into the response
+builder instead of allocating a temporary string:
+
+```cpp
+request.resp()
+    .set_status(cnetmod::http::status::ok)
+    .set_header("Content-Type", "application/json; charset=utf-8");
+auto written = request.resp().generate_body([&](std::string& output) {
+    return cnetmod::json::write_to(output, dto);
+});
+```
+
+`generate_body()` updates `Content-Length`; on serialization failure it drops
+the partial body and sets the length to zero. Prefer this path for repeated
+dynamic JSON responses. `write()` remains appropriate when the serialized value
+must be returned, cached, or passed independently of an HTTP response.
+
 ## ORM models and projections
 
 Do not add `CNETMOD_JSON` to a type already declared with `CNETMOD_MODEL` or
@@ -10902,6 +11099,28 @@ auto wire = cnetmod::json::write(user_record{42, "Ada"});
 This shared mapping covers ORM scalar fields, `DATE`, `DATETIME`, `TIME`, UUID,
 and nullable `DATETIME`. Database temporal values use their canonical
 timezone-free SQL text representation.
+
+## Embedding trusted JSON text
+
+`cnetmod::json::raw_json` is a non-owning view of JSON text that a trusted
+encoder has already produced, such as a PostgreSQL `json`/`jsonb` column. The
+direct writer copies it once and drops whitespace outside strings, so the output
+stays compact without building a document:
+
+```cpp
+struct item_row
+{
+    std::int64_t id{};
+    cnetmod::json::raw_json tags;
+};
+CNETMOD_JSON(item_row, CNETMOD_JSON_FIELD(id), CNETMOD_JSON_FIELD(tags))
+
+auto wire = cnetmod::json::write(item_row{.id = 7, .tags = {row[6].get_string()}});
+```
+
+The direct writer does not validate the text; never wrap request input or other
+untrusted strings. Conversion to a document (`to_document`) parses the text and
+reports invalid JSON. The view must outlive the write call.
 
 ## Application offload
 
@@ -13398,6 +13617,9 @@ void append_bytes(byte_buffer& out, std::uint32_t number, std::span<const std::b
 // proto schema 解析
 auto parse_schema(std::string_view proto_text) -> std::expected<file_def, std::error_code>;
 auto decode_message(std::span<const std::byte> data) -> std::expected<std::vector<field>, std::error_code>;
+auto visit_message(std::span<const std::byte> data,
+    const std::function<void(const field_view&)>& visitor)
+    -> std::expected<void, std::error_code>;
 ```
 
 ### gRPC 帧编解码
@@ -13429,21 +13651,80 @@ class message_stream_decoder {
 ```cpp
 explicit service_router(server_options options);
 void add_unary(std::string service, std::string method, unary_handler handler);
+void add_unary_sync(std::string service, std::string method, sync_unary_handler handler);
+void add_unary_sync(std::string service, std::string method, sync_payload_handler handler);
 void add_client_streaming(std::string service, std::string method, streaming_handler handler);
 void add_server_streaming(std::string service, std::string method, server_streaming_handler handler);
 void add_bidi_streaming(std::string service, std::string method, streaming_handler handler);
 auto make_http_handler() const -> http::handler_fn;
+auto make_http_sync_handler() const -> http::sync_handler_fn;
+auto make_h2_sync_handler() const -> http::v2::sync_server_handler;
+auto make_h2_request_filter() const -> http::v2::buffered_request_filter;
 ```
 
 **handler 签名**:
 ```cpp
 using unary_handler = std::function<task<std::expected<byte_buffer, status>>(std::span<const std::byte>, const call_context&)>;
+using sync_unary_handler = std::function<std::expected<byte_buffer, status>(std::span<const std::byte>, const call_context&)>;
+using sync_payload_handler = std::function<std::expected<byte_buffer, status>(std::span<const std::byte>)>;
 using streaming_handler = std::function<task<std::expected<std::vector<byte_buffer>, status>>(std::span<const byte_buffer>, const call_context&)>;
 using server_streaming_handler = std::function<task<std::expected<std::vector<byte_buffer>, status>>(std::span<const std::byte>, const call_context&)>;
 using server_interceptor = std::function<std::expected<void, status>(const call_context&)>;
 ```
 
 **`server_options`**: `max_receive_message_bytes`、`max_send_message_bytes`、`accept_gzip`、`interceptors`、`governance`
+
+### 同步 unary 计算与批量 HTTP/2 响应
+
+短小、无需等待 I/O 的业务计算可以用 `add_unary_sync()` 注册，再将
+`make_http_sync_handler()` 接到 HTTP router 的 `post_sync()` / `any_sync()`。
+同步适配器复用异步入口的完整协议处理，包括消息大小、压缩、metadata、拦截器、
+deadline、governance 和 trailers；每次请求仍调用业务函数，不能缓存固定响应冒充计算。
+不读取调用上下文的业务可注册单参数 `sync_payload_handler`。配置拦截器或 governance
+时仍构造完整上下文；普通调用直接检查 metadata 大小与 timeout，避免构造未使用的副本。
+
+```cpp
+service.add_unary_sync("demo.Echo", "Say",
+    [](std::span<const std::byte> input, const cnetmod::grpc::call_context&)
+        -> std::expected<cnetmod::grpc::byte_buffer, cnetmod::grpc::status>
+    {
+        return cnetmod::grpc::byte_buffer{input.begin(), input.end()};
+    });
+router.post_sync("/demo.Echo/Say", service.make_http_sync_handler());
+```
+
+HTTP/2 专用同步适配器可减少 HTTP 请求/响应对象转换。以已有 `service` 和 `server` 为例：
+
+```cpp
+cnetmod::http::router fallback;
+fallback.any("/*path", service.make_http_handler());
+server.set_router(std::move(fallback));
+server.set_h2_sync_adapter(service.make_h2_sync_handler(), service.make_h2_request_filter());
+```
+
+无 middleware、完整小请求体、已注册同步 unary 方法使用此适配器；大请求体、异步方法
+和 middleware 继续普通 HTTP 分发。两种同步入口共享校验、调用和响应组装流程。
+固定 Content-Type 和成功状态 trailer 使用静态只读字段块；动态状态、压缩和自定义
+metadata 每次按结果生成。静态块不包含业务响应体。
+HTTP/2 同步适配器关闭自动 Content-Length：每条 gRPC 消息仍有完整长度前缀，
+响应仍以带 END_STREAM 的状态 trailer 结束；参见
+[gRPC over HTTP2](https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md)。
+
+HTTP/2 在同步、无 middleware、非 request-stream 路由上最多缓冲 16 KiB 请求体，
+可跨读取收齐后批量排队响应。超过阈值立即转回有背压的流式接收，保留先前收到的数据；
+批量输出以 64 KiB / 250 微秒阈值触发写入，不设置等待凑批的计时器。
+独立写泵允许下一次读取与写入重叠；编码缓冲累计 128 KiB 时等待背压。
+完整同步请求已经收到 END_STREAM，消费完成后在所属事件循环按批归还连接流控额度；
+异步请求和流式请求仍在消费时归还额度，不能提前增加窗口。
+发送窗口不足的响应由连接保存，收到 WINDOW_UPDATE 后推进；单个响应大小受应用限制。
+同步回调不得阻塞或等待 I/O；耗时计算使用 executor 与异步 `add_unary()`。
+需要异步等待、客户端流或双向流时继续使用 `make_http_handler()`。同步入口遇到异步方法
+或流式 HTTP 请求上下文返回 `unimplemented`，不会尝试运行可能挂起的回调。
+
+`proto::visit_message()` 逐字段调用 visitor，`field_view::bytes` 借用输入而不复制未知的
+length-delimited 字段；字段对象只在回调内有效，字节视图不能超过输入存储的生命周期。
+畸形后缀可能在部分字段已被访问后才报错，因此仅在返回成功后提交业务结果。
+`decode_message()` 保留拥有数据的返回类型，并使用同一解析器执行校验。
 
 ### `grpc::client` — 客户端
 
@@ -17509,6 +17790,7 @@ auto main() -> int {
 ## 场景导航
 
 - 我要做 echo 服务 → [看这里](#场景1ws_server-路由注册)
+- 我要让 HTTP/1、h2c/gRPC、WebSocket 共用端口 → [看这里](#场景http-router-内升级)
 - 我要做 WebSocket 客户端 → [看这里](#场景2ws_client)
 - 我要做 frame 编解码 → [看这里](#场景3frame-编解码)
 - 我要做多核 WebSocket → [看这里](#场景4多核-server_context)
@@ -17544,6 +17826,8 @@ struct ws_message {
 auto parse_frame_header(std::span<const std::byte> data)
     -> std::expected<std::pair<frame_header, std::size_t>, std::error_code>;
 auto build_frame(opcode op, std::span<const std::byte> payload, bool mask, bool fin = true) -> std::vector<std::byte>;
+void append_frame_into(std::vector<std::byte>& frames, opcode op,
+    std::span<const std::byte> payload, bool mask, bool fin = true);
 auto build_close_frame(std::uint16_t code, std::string_view reason, bool mask) -> std::vector<std::byte>;
 void apply_mask(std::span<std::byte> data, std::uint32_t key) noexcept;
 ```
@@ -17558,8 +17842,26 @@ auto build_upgrade_request(std::string_view host, std::string_view path,
 auto validate_upgrade_response(const http::response_parser& resp, std::string_view expected_accept)
     -> std::expected<void, std::error_code>;
 auto validate_upgrade_request(const http::request_parser& req) -> std::expected<std::string, std::error_code>;
+auto validate_upgrade_request(const http::request_context& req) -> std::expected<std::string, std::error_code>;
 auto build_upgrade_response(std::string_view accept_key, std::string_view subprotocol = {}) -> http::response;
 ```
+
+### HTTP router 内升级
+
+```cpp
+auto accept_upgrade(http::request_context& request,
+    ws_handler_fn handler, std::string_view subprotocol = {})
+    -> std::expected<void, std::error_code>;
+```
+
+`accept_upgrade()` 是业务路由应使用的标准入口。它校验 RFC 6455 握手、准备
+`101 Switching Protocols`，并让 HTTP server 在 handler 返回后安全移交连接。
+移交前会停止 HTTP 的持续接收，再把 HTTP parser 和 io_uring 已预读的尾部字节
+一并交给 `ws::connection`，因此客户端把第一帧和握手放在同一个 TCP 包中也不会丢帧。
+
+该入口用于明文 HTTP/1.1 listener；同一 listener 仍可自动处理 h2c/gRPC。
+TLS/WSS 使用 `ws::server::set_ssl_context()` 的独立 listener。应用不要自行调用
+`request_context::raw_socket()`、手写 101 或在 handler 中移动底层 socket。
 
 ### `ws::connection` — 底层连接
 
@@ -17577,6 +17879,15 @@ auto handshake_query() const noexcept -> std::string_view;
 auto handshake_headers() const noexcept -> const http::header_map&;
 ```
 
+`connection::attach(socket, bool, std::span<const std::byte>)` 可接管已升级的
+传输并保留 HTTP 解析器多读的后续帧字节；传入的 span 在调用期间被复制。
+框架自带的 WS/WSS 握手也保留这些尾部字节。HTTP 的 request/response parser
+提供 `take_buffered_data()` 转移已完成消息后的字节，未完成时返回空且不消费输入。
+
+多 worker 的 Linux server 使用每 worker 的 SO_REUSEPORT listener，连接在接受它的
+事件循环处理；`stop()` 在对应事件循环取消 accept，并等待全部 listener 退出。
+默认启用 TCP_NODELAY，显式传入 `socket_options` 时遵循调用方选项。
+
 ### `ws::client` — 高层客户端
 
 ```cpp
@@ -17593,12 +17904,57 @@ auto is_open() const noexcept -> bool;
 
 **`client_options`**: `connect`（子协议、Origin、TLS）、`heartbeat_interval`、`heartbeat_payload`
 
+### 同步消息回调与批量写出
+
+同步业务可在 `ws_context::raw_connection()` 上使用消息循环，避免为每条消息
+创建接收、转发、发送协程。普通 `recv()/send_text()/send_binary()` API 保持可用，
+业务需要 `co_await` 数据库等异步操作时继续使用普通 API。
+
+```cpp
+using message_handler_fn = std::function<std::expected<void, std::error_code>(
+    opcode, std::span<const std::byte>, message_writer&)>;
+
+auto connection::async_process_messages(message_handler_fn handler,
+    std::size_t max_message_size = 16 * 1024 * 1024)
+    -> task<std::expected<void, std::error_code>>;
+
+auto message_writer::send(opcode op, std::span<const std::byte> payload)
+    -> std::expected<void, std::error_code>;
+```
+
+| 参数/对象 | 契约 |
+|---|---|
+| `handler` | 同步处理一条完整 text/binary 消息；返回错误终止循环 |
+| `payload` | 借用视图，仅在本次回调返回前有效；需要保存时自行复制 |
+| `message_writer` | 回调中发送 text/binary，允许发送零条或多条；每条仍编码为独立帧 |
+| `max_message_size` | 完整消息和分片累计上限，默认 16 MiB；超限发送 1009 关闭帧 |
+
+循环仅合并已经接收的完整消息产生的输出，不等待凑满一批，也不增加定时延迟。
+下一帧头或 payload 尚不完整时，先写完已有响应再等待输入。发送缓冲属于连接，
+所有写操作完成后才复用；回调不得保存 writer、借用 payload，也不得并发调用该连接
+的其他接收或发送操作。回调中的重 CPU/阻塞操作仍须遵守 executor/bridge 规范。
+
+此路径验证掩码方向、保留位/操作码、分片顺序、控制帧、关闭状态码、文本及关闭原因
+的 UTF-8；ping/pong/close 由循环处理。它不协商扩展或压缩。
+
+```cpp
+auto echo(ws::ws_context& ctx) -> cn::task<void>
+{
+    (void)co_await ctx.raw_connection().async_process_messages(
+        [](ws::opcode op, std::span<const std::byte> payload, ws::message_writer& output)
+            -> std::expected<void, std::error_code>
+        {
+            return output.send(op, payload);
+        });
+}
+```
+
 ### `ws::server` — 服务端
 
 ```cpp
 explicit server(io_context& ctx);         // 单线程
 explicit server(server_context& sctx);    // 多核
-auto listen(std::string_view host, std::uint16_t port, socket_options opts = {.reuse_address = true})
+auto listen(std::string_view host, std::uint16_t port, socket_options opts = {.reuse_address = true, .no_delay = true})
     -> std::expected<void, std::error_code>;
 void on(std::string_view pattern, ws_handler_fn handler); // 支持 /echo, /chat/:room, /api/*
 auto run() -> task<void>;
@@ -17621,6 +17977,50 @@ auto raw_connection() noexcept -> connection&;
 ```
 
 **`ws_handler_fn`**: `std::function<task<void>(ws_context&)>`
+
+## 场景：HTTP router 内升级
+
+```cpp
+import std;
+import cnetmod.core;
+import cnetmod.coro;
+import cnetmod.executor;
+import cnetmod.protocol.http;
+import cnetmod.protocol.websocket;
+
+namespace http = cnetmod::http;
+namespace ws = cnetmod::ws;
+
+http::router routes;
+routes.get("/ws", [](http::request_context& request) -> cnetmod::task<void>
+{
+    auto accepted = ws::accept_upgrade(request,
+        [](ws::ws_context& connection) -> cnetmod::task<void>
+        {
+            (void)co_await connection.raw_connection().async_process_messages(
+                [](ws::opcode op, std::span<const std::byte> payload,
+                    ws::message_writer& output)
+                    -> std::expected<void, std::error_code>
+                {
+                    return output.send(op, payload);
+                });
+        });
+    if (!accepted)
+        request.text(http::status::bad_request, "Bad WebSocket handshake");
+    co_return;
+});
+
+cnetmod::server_context runtime(4, 4);
+http::server server(runtime);
+server.set_router(std::move(routes));
+if (auto listening = server.listen("0.0.0.0", 8080); !listening)
+    throw std::system_error(listening.error());
+cnetmod::spawn(runtime.accept_io(), server.run());
+runtime.run();
+```
+
+路由中间件在升级前照常执行，所以认证、授权、限流应声明在 `/ws` 路由上。
+升级成功后 HTTP handler 已结束，长连接生命周期由 `ws_handler_fn` 管理。
 
 ## 场景 1：ws::server 路由注册
 
@@ -17796,7 +18196,7 @@ explicit server(io_context& ctx);
 // 多核模式：accept 在 sctx.accept_io()，连接分发至 worker io_context
 explicit server(server_context& sctx);
 auto listen(std::string_view host, std::uint16_t port,
-    socket_options opts = {.reuse_address = true})
+    socket_options opts = {.reuse_address = true, .no_delay = true})
     -> std::expected<void, std::error_code>;
 void on(std::string_view pattern, ws_handler_fn handler);
 auto run() -> task<void>;
@@ -17903,6 +18303,7 @@ auto chat_handler(ws::ws_context& ctx) -> cn::task<void> {
 | 长连接启用 `heartbeat_interval` | 不要忽略 close 帧的读取 |
 | 使用 `ws_context::param` 获取路由参数 | 不要在 handler 外保存 `ws_context` 引用 |
 | 多核模式使用 `server_context` | 不要在单线程 server 上调用 `sctx.run()` |
+| 共用 8080 时使用 `ws::accept_upgrade()` | 不要解析第二遍 Bearer/HTTP 头或手写 101 |
 | 控制帧由 `connection` 自动响应 | 不要手动构造 pong 帧回复 |
 | 广播使用互斥保护的连接注册表 | 不要无锁遍历连接集合 |
 

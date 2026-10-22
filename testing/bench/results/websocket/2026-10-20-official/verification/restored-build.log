@@ -1,0 +1,21 @@
+[0/2] Re-checking globbed directories...
+[1/32] Scanning /root/cnetmod-ws-20261020/source/src/protocol/websocket/client/websocket_client_connection_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-ws-20261020/source/src/protocol/websocket/client/websocket_client_connection_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[2/32] Scanning /root/cnetmod-ws-20261020/source/src/protocol/websocket/server/websocket_server_impl.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-ws-20261020/source/src/protocol/websocket/server/websocket_server_impl.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[3/32] Scanning /root/cnetmod-ws-20261020/source/testing/tests/test_websocket_frame.cpp for CXX dependencies
+warning: argument unused during compilation: '-stdlib=libc++'
+Diagnostics while scanning dependencies for '/root/cnetmod-ws-20261020/source/testing/tests/test_websocket_frame.cpp':
+warning: argument unused during compilation: '-stdlib=libc++'
+[4/32] Generating CXX dyndep file CMakeFiles/cnetmod_websocket.dir/CXX.dd
+[5/12] Generating CXX dyndep file testing/tests/CMakeFiles/test_websocket_frame.dir/CXX.dd
+[6/12] Building CXX object CMakeFiles/cnetmod_websocket.dir/src/protocol/websocket/server/websocket_server_impl.cpp.o
+[7/12] Building CXX object CMakeFiles/cnetmod_websocket.dir/src/protocol/websocket/client/websocket_client_connection_impl.cpp.o
+[8/12] Linking CXX static library libcnetmod_websocket.a
+[9/12] Linking CXX executable testing/bench/bench_ws_server
+[10/12] Building CXX object testing/tests/CMakeFiles/test_websocket_frame.dir/test_websocket_frame.cpp.o
+[11/12] Linking CXX executable testing/tests/test_websocket_frame

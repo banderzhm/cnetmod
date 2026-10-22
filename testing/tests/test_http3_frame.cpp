@@ -2,6 +2,8 @@
 
 import cnetmod.protocol.http.v3.frame;
 import cnetmod.protocol.http.v3.session;
+import cnetmod.protocol.http.v3.static_files;
+import cnetmod.protocol.http.v3.qpack;
 import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.quic;
 import cnetmod.coro.cancel;
@@ -73,6 +75,156 @@ TEST(http3_async_server_handler_can_share_buffered_response_body)
     ASSERT_TRUE(handled.has_value());
     ASSERT_TRUE(response.body.empty());
     ASSERT_TRUE(response.shared_body == cached);
+}
+
+TEST(http3_static_files_follow_disk_and_negotiate_precompressed_content)
+{
+    const auto root = std::filesystem::temp_directory_path() /
+        std::format("cnetmod-http3-static-{}",
+            std::chrono::steady_clock::now().time_since_epoch().count());
+    std::filesystem::create_directories(root);
+
+    struct cleanup
+    {
+        std::filesystem::path root;
+
+        ~cleanup()
+        {
+            std::error_code ignored;
+            std::filesystem::remove_all(root, ignored);
+        }
+    } remove{root};
+
+    {
+        std::ofstream original{root / "app.js", std::ios::binary};
+        original << "first";
+        std::ofstream brotli{root / "app.js.br", std::ios::binary};
+        brotli << "compressed";
+    }
+
+    auto static_files = cnetmod::http::v3::serve_dir({
+        .root = root,
+        .revalidate_interval = std::chrono::milliseconds::zero(),
+    });
+    cnetmod::http::v3::http3_request request;
+    request.path = "/static/app.js";
+    request.headers.emplace("accept-encoding", "br;q=1, gzip;q=0.8");
+    cnetmod::http::v3::http3_response response;
+    auto served = static_files(request, response);
+    ASSERT_TRUE(served.has_value());
+    ASSERT_TRUE(*served);
+    ASSERT_EQ(response.status, cnetmod::http::status::ok);
+    // A cached resource carries a pre-encoded HEADERS block instead of a
+    // per-request header map; decode it to assert the wire-visible fields.
+    ASSERT_TRUE(response.headers.empty());
+    ASSERT_TRUE(static_cast<bool>(response.static_headers));
+    cnetmod::http::v3::qpack_decoder header_decoder;
+    auto decode_headers = [&header_decoder](const auto& encoded) {
+        auto fields = header_decoder.decode(encoded, 0);
+        ASSERT_TRUE(fields.has_value());
+        return *fields;
+    };
+    auto served_fields = decode_headers(response.static_headers->encoded());
+    auto field_value = [](const std::vector<cnetmod::http::v3::header_field>& fields,
+                           std::string_view name) -> std::string {
+        const auto found = std::ranges::find_if(fields,
+            [name](const auto& field) { return field.name == name; });
+        return found == fields.end() ? std::string{} : found->value;
+    };
+    ASSERT_EQ(field_value(served_fields, ":status"), "200");
+    ASSERT_EQ(field_value(served_fields, "content-type"),
+        "application/javascript; charset=utf-8");
+    ASSERT_EQ(field_value(served_fields, "content-encoding"), "br");
+    ASSERT_EQ(field_value(served_fields, "content-length"), "10");
+    ASSERT_TRUE(static_cast<bool>(response.shared_body));
+    ASSERT_EQ(*response.shared_body, "compressed");
+
+    std::filesystem::remove(root / "app.js.br");
+    {
+        std::ofstream replacement{root / "app.js",
+            std::ios::binary | std::ios::trunc};
+        replacement << "replacement";
+    }
+    cnetmod::http::v3::http3_response changed;
+    auto changed_served = static_files(request, changed);
+    ASSERT_TRUE(changed_served.has_value());
+    ASSERT_TRUE(*changed_served);
+    ASSERT_TRUE(changed.headers.empty());
+    ASSERT_TRUE(static_cast<bool>(changed.static_headers));
+    auto changed_fields = decode_headers(changed.static_headers->encoded());
+    ASSERT_EQ(field_value(changed_fields, "content-length"), "11");
+    ASSERT_EQ(field_value(changed_fields, "content-encoding"), "");
+    ASSERT_TRUE(static_cast<bool>(changed.shared_body));
+    ASSERT_EQ(*changed.shared_body, "replacement");
+
+    request.path = "/static/%2e%2e/secret.txt";
+    cnetmod::http::v3::http3_response traversal;
+    served = static_files(request, traversal);
+    ASSERT_TRUE(served.has_value());
+    ASSERT_TRUE(*served);
+    ASSERT_EQ(traversal.status, cnetmod::http::status::forbidden);
+}
+
+TEST(http3_static_files_preserve_custom_headers_on_cache_miss_and_hit)
+{
+    const auto root = std::filesystem::temp_directory_path() /
+        std::format("cnetmod-http3-static-headers-{}",
+            std::chrono::steady_clock::now().time_since_epoch().count());
+    std::filesystem::create_directories(root);
+    struct cleanup
+    {
+        std::filesystem::path root;
+        ~cleanup()
+        {
+            std::error_code ignored;
+            std::filesystem::remove_all(root, ignored);
+        }
+    } remove{root};
+    {
+        std::ofstream file{root / "asset.txt", std::ios::binary};
+        file << "asset";
+    }
+    auto files = cnetmod::http::v3::serve_dir({
+        .root = root, .revalidate_interval = std::chrono::hours{1}});
+    cnetmod::http::v3::http3_request request;
+    request.path = "/static/asset.txt";
+    for (const auto method : {cnetmod::http::http_method::GET,
+             cnetmod::http::http_method::HEAD})
+    {
+        request.method = method;
+        for (const bool custom : {true, false, true})
+        {
+            cnetmod::http::v3::http3_response response;
+            if (custom)
+            {
+                response.headers.emplace("access-control-allow-origin", "https://example.test");
+                response.headers.emplace("set-cookie", "session=abc; Secure");
+                response.headers.emplace("content-type", "application/custom");
+            }
+            const auto served = files(request, response);
+            ASSERT_TRUE(served.has_value() && *served);
+            if (custom)
+            {
+                ASSERT_FALSE(static_cast<bool>(response.static_headers));
+                ASSERT_EQ(response.headers.at("access-control-allow-origin"), "https://example.test");
+                ASSERT_EQ(response.headers.at("set-cookie"), "session=abc; Secure");
+                ASSERT_EQ(response.headers.at("content-type"), "application/custom");
+                ASSERT_EQ(response.headers.at("content-length"), "5");
+            }
+            else
+            {
+                ASSERT_TRUE(static_cast<bool>(response.static_headers));
+                ASSERT_TRUE(response.headers.empty());
+            }
+            if (method == cnetmod::http::http_method::GET)
+            {
+                ASSERT_TRUE(static_cast<bool>(response.shared_body));
+                ASSERT_EQ(*response.shared_body, "asset");
+            }
+            else
+                ASSERT_FALSE(static_cast<bool>(response.shared_body));
+        }
+    }
 }
 
 TEST(webtransport_async_server_handler_contract)

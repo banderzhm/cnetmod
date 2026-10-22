@@ -1,0 +1,11 @@
+# started on Sat Oct 17 18:22:03 2026
+
+
+ Performance counter stats for process id '329664':
+
+          32116.76 msec task-clock
+            133356      context-switches
+              1729      cpu-migrations
+               865      page-faults
+
+       8.103322518 seconds time elapsed

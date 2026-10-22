@@ -12,113 +12,9 @@ import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.http.v3.qpack;
 import cnetmod.protocol.http.v3.server;
 import cnetmod.protocol.http.v3.session;
+import cnetmod.protocol.http.v3.static_files;
 
 namespace {
-
-struct static_asset
-{
-    std::shared_ptr<const std::string> identity;
-    std::shared_ptr<const std::string> brotli;
-    std::shared_ptr<const cnetmod::http::v3::qpack_static_response_headers>
-        identity_headers;
-    std::shared_ptr<const cnetmod::http::v3::qpack_static_response_headers>
-        brotli_headers;
-};
-
-using asset_cache = std::unordered_map<std::string, static_asset>;
-
-auto load_asset_file(const std::filesystem::path& path)
-    -> std::shared_ptr<const std::string>
-{
-    std::ifstream input{path, std::ios::binary};
-    if (!input)
-        throw std::system_error{std::make_error_code(std::errc::io_error),
-            path.string()};
-    auto content = std::make_shared<std::string>(
-        std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{});
-    if (input.bad() || content->size() != std::filesystem::file_size(path))
-        throw std::system_error{std::make_error_code(std::errc::io_error),
-            path.string()};
-    return content;
-}
-
-// The official fixture is immutable for a benchmark process. Cache it before
-// starting the event loops so concurrent requests do not amplify the 64 x 64
-// static profile into sustained file-I/O and temporary read buffers.
-auto load_assets(const std::filesystem::path& root) -> asset_cache
-{
-    asset_cache assets;
-    for (const auto& entry : std::filesystem::directory_iterator{root})
-    {
-        if (!entry.is_regular_file() || entry.path().extension() == ".br" ||
-            entry.path().extension() == ".gz")
-            continue;
-        static_asset asset;
-        asset.identity = load_asset_file(entry.path());
-        const auto content_type = cnetmod::http::guess_mime_type(
-            entry.path().extension().string());
-        const std::array identity_fields{
-            cnetmod::http::v3::header_field{"content-type", std::string{content_type}},
-            cnetmod::http::v3::header_field{"vary", "Accept-Encoding"}};
-        auto identity_headers = cnetmod::http::v3::qpack_static_response_headers::encode(
-            cnetmod::http::status::ok, identity_fields);
-        if (!identity_headers)
-            throw std::system_error{identity_headers.error()};
-        asset.identity_headers =
-            std::make_shared<cnetmod::http::v3::qpack_static_response_headers>(
-                std::move(*identity_headers));
-        auto compressed = entry.path();
-        compressed += ".br";
-        if (std::filesystem::exists(compressed))
-        {
-            asset.brotli = load_asset_file(compressed);
-            const std::array brotli_fields{
-                cnetmod::http::v3::header_field{"content-type", std::string{content_type}},
-                cnetmod::http::v3::header_field{"vary", "Accept-Encoding"},
-                cnetmod::http::v3::header_field{"content-encoding", "br"}};
-            auto brotli_headers = cnetmod::http::v3::qpack_static_response_headers::encode(
-                cnetmod::http::status::ok, brotli_fields);
-            if (!brotli_headers)
-                throw std::system_error{brotli_headers.error()};
-            asset.brotli_headers =
-                std::make_shared<cnetmod::http::v3::qpack_static_response_headers>(
-                    std::move(*brotli_headers));
-        }
-        assets.emplace("/static/" + entry.path().filename().string(), std::move(asset));
-    }
-    return assets;
-}
-
-auto serve_asset(const asset_cache& assets, cnetmod::http::v3::http3_request& request,
-    cnetmod::http::v3::http3_response& response) -> std::error_code
-{
-    const auto found = assets.find(request.path.substr(0, request.path.find('?')));
-    if (found == assets.end())
-    {
-        response.status = 404;
-        return {};
-    }
-    // This adapter accepts the official profile's exact negotiation or an
-    // identity request for independent byte validation. Other negotiations
-    // are rejected explicitly rather than silently misinterpreting q-values.
-    const auto encoding = request.headers.find("accept-encoding");
-    const bool brotli = encoding != request.headers.end() &&
-        (encoding->second == "br;q=1, gzip;q=0.8" || encoding->second == "br");
-    if (encoding != request.headers.end() && !encoding->second.empty() &&
-        encoding->second != "identity" && !brotli)
-    {
-        response.status = 406;
-        return {};
-    }
-    const auto& asset = found->second;
-    const auto use_brotli = brotli && static_cast<bool>(asset.brotli);
-    const auto& content = use_brotli ? asset.brotli : asset.identity;
-    response.static_headers = use_brotli
-        ? asset.brotli_headers
-        : asset.identity_headers;
-    response.shared_body = content;
-    return {};
-}
 
 auto handle_request(cnetmod::http::v3::http3_request& request,
     cnetmod::http::v3::http3_response& response) -> std::error_code
@@ -207,26 +103,23 @@ auto main(int argc, char** argv) -> int
     tls->configure_alpn_server({"h3"});
     if (!tls->load_cert_file(argv[1]) || !tls->load_key_file(argv[2]))
         return 1;
-    asset_cache assets;
+    cnetmod::http::v3::static_file_handler static_files;
     if (argc == 6)
-    {
-        try
-        {
-            assets = load_assets(argv[5]);
-        }
-        catch (const std::exception& error)
-        {
-            logger::error{"{}", error.what()};
-            return 1;
-        }
-    }
-    cnetmod::http::v3::server_request_handler handler = [&assets](
+        static_files = cnetmod::http::v3::serve_dir({.root = argv[5]});
+
+    cnetmod::http::v3::server_request_handler handler = [static_files =
+                                                                std::move(static_files)](
                                                             cnetmod::http::v3::http3_request& request,
                                                             cnetmod::http::v3::http3_response& response) -> std::error_code
     {
-        if (request.path.starts_with("/static/") &&
-            request.method == cnetmod::http::http_method::GET)
-            return serve_asset(assets, request, response);
+        if (static_files)
+        {
+            auto served = static_files(request, response);
+            if (!served)
+                return served.error();
+            if (*served)
+                return {};
+        }
         return handle_request(request, response);
     };
     cnetmod::server_context context{workers, workers};
@@ -272,6 +165,28 @@ auto main(int argc, char** argv) -> int
     {
         logger::error{"HTTP/3 UDP payload setup failed: {}",
             configured.error().message()};
+        return 1;
+    }
+    // Let the client index its repeated request fields in our QPACK decoder
+    // table: literal Huffman decoding of every request was the largest item
+    // of the request path. The acknowledgements ride on the response packets.
+    // CNETMOD_QPACK_DECODER_CAPACITY=0 restores the static-only decoder.
+    std::uint64_t qpack_capacity = 4096U;
+    if (const auto* capacity = std::getenv("CNETMOD_QPACK_DECODER_CAPACITY"))
+        qpack_capacity = std::strtoull(capacity, nullptr, 10);
+    if (const auto configured = server->set_qpack_settings(qpack_capacity,
+            qpack_capacity == 0U ? 0U : 100U);
+        !configured)
+    {
+        logger::error{"HTTP/3 QPACK setup failed: {}", configured.error().message()};
+        return 1;
+    }
+    // Our answers are a few short fields that the static table already
+    // encodes in about two dozen bytes. Indexing them would add per-response
+    // table bookkeeping and encoder-stream writes for no CPU benefit.
+    if (const auto configured = server->set_qpack_encoder_table_limit(0U); !configured)
+    {
+        logger::error{"HTTP/3 QPACK encoder setup failed: {}", configured.error().message()};
         return 1;
     }
     if (const auto result = server->start(); !result)

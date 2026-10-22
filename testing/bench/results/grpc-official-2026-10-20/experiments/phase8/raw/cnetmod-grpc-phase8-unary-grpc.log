@@ -1,0 +1,195 @@
+[info] available CPUs: 32
+[info] load generators: docker mode
+[info] framework: cnetmod-grpc-phase8 (cnetmod-grpc-phase8, C++)
+[info] subscribed tests: unary-grpc,unary-grpc-tls
+[info] building image: httparena-cnetmod-grpc-phase8
+[info] skipping system tuning as requested (SKIP_TUNE=true)
+
+==============================================
+=== cnetmod-grpc-phase8 / unary-grpc / 256c (tool=h2load) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] gRPC server ready
+
+[run 1/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+9.
+
+Application protocol: h2c
+
+56.
+.
+60. Stopping all clients.
+
+finished in 5.08s, 5232780.00 req/s, 190.29MB/s
+requests: 26163900 total, 26189500 started, 26163900 done, 26163900 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 26163900 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 951.43MB (997649731) total, 99.81MB (104662000) headers (space savings 93.85%), 174.66MB (183147300) data
+                     min         max         mean         sd        +/- sd
+time for request:      247us     42.75ms      4.23ms      3.76ms    88.73%
+time for connect:       24us      6.16ms      2.36ms      1.60ms    65.63%
+time to 1st byte:     1.04ms     48.29ms     19.60ms     13.04ms    57.81%
+req/s           :   14018.05    30935.71    20435.74     3749.68    66.02%
+[info] CPU 876.1% | Mem 306MiB
+
+[run 2/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+Application protocol: h2c
+
+56.
+48.
+59.
+17.
+
+
+52. Stopping all clients.
+55
+34. Stopping all clients.
+
+finished in 5.10s, 5255960.00 req/s, 191.13MB/s
+requests: 26279800 total, 26305400 started, 26279800 done, 26279800 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 26279800 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 955.65MB (1002068998) total, 100.26MB (105125600) headers (space savings 93.85%), 175.44MB (183958600) data
+                     min         max         mean         sd        +/- sd
+time for request:      267us     43.06ms      4.11ms      3.52ms    87.68%
+time for connect:       32us     11.37ms      2.70ms      2.36ms    78.52%
+time to 1st byte:     1.88ms     16.36ms      6.94ms      3.12ms    68.36%
+req/s           :   14253.21    29078.64    20524.50     3823.32    62.11%
+[info] CPU 986.5% | Mem 309MiB
+
+[run 3/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+0Main benchmark duration is started for thread #4.
+.
+Application protocol: h2c
+.
+49.Warm-up phase is over for thread #31.
+
+52.
+.
+4. Stopping all clients.
+
+59. Stopping all clients.
+24. Stopping all clients.
+31
+54. Stopping all clients.
+15
+44. Stopping all clients.
+61. Stopping all clients.
+46. Stopping all clients.
+21. Stopping all clients.
+
+finished in 5.09s, 5377300.00 req/s, 195.54MB/s
+requests: 26886500 total, 26912100 started, 26886500 done, 26886500 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 26886500 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 977.71MB (1025202469) total, 102.57MB (107552400) headers (space savings 93.85%), 179.49MB (188205500) data
+                     min         max         mean         sd        +/- sd
+time for request:      313us     39.36ms      3.97ms      3.19ms    85.34%
+time for connect:       39us     10.57ms      2.50ms      2.33ms    78.13%
+time to 1st byte:     1.08ms     14.40ms      6.29ms      3.27ms    63.28%
+req/s           :   14359.05    30547.74    20997.02     3726.90    64.45%
+[info] CPU 1073.5% | Mem 310MiB
+
+=== Best: 5282220 req/s (CPU: 1073.5%, Mem: 310MiB) ===
+[info] saved results/unary-grpc/256/cnetmod-grpc-phase8.json
+httparena-bench-cnetmod-grpc-phase8
+httparena-bench-cnetmod-grpc-phase8
+
+==============================================
+=== cnetmod-grpc-phase8 / unary-grpc / 1024c (tool=h2load) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] gRPC server ready
+
+[run 1/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+
+36.
+
+4.
+55.
+20.
+33.
+18.
+48.
+Application protocol: Main benchmark duration is started for thread #49.
+h2c
+3.
+.
+27. Stopping all clients.
+33. Stopping all clients.
+48. Stopping all clients.
+21. Stopping all clients.
+28. Stopping all clients.
+42. Stopping all clients.
+
+finished in 5.13s, 4666604.00 req/s, 169.71MB/s
+requests: 23333020 total, 23435420 started, 23333020 done, 23333020 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 23333020 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 848.55MB (889769245) total, 89.03MB (93357680) headers (space savings 93.84%), 155.76MB (163331140) data
+                     min         max         mean         sd        +/- sd
+time for request:      215us    154.48ms     13.16ms     10.61ms    66.97%
+time for connect:       19us     44.92ms      3.53ms      6.17ms    96.19%
+time to 1st byte:     1.80ms    153.13ms     43.58ms     26.80ms    65.92%
+req/s           :    3257.32     8352.28     4554.95      862.51    69.63%
+[info] CPU 878.4% | Mem 444MiB
+
+[run 2/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+61.
+5417..Warm-up phase is over for thread #
+
+28.
+19.
+
+Application protocol: h2c
+
+30
+
+finished in 5.13s, 4911460.00 req/s, 178.61MB/s
+requests: 24557300 total, 24659700 started, 24557300 done, 24557300 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 24557300 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 893.07MB (936452175) total, 93.70MB (98254800) headers (space savings 93.84%), 163.94MB (171901100) data
+                     min         max         mean         sd        +/- sd
+time for request:      559us    170.33ms     12.55ms     10.62ms    72.71%
+time for connect:       20us    121.35ms      9.00ms     13.28ms    86.43%
+time to 1st byte:     2.30ms    208.09ms     41.67ms     39.92ms    83.50%
+req/s           :    2998.14    10898.97     4798.12     1536.21    81.35%
+[info] CPU 988.2% | Mem 453MiB
+
+[run 3/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+.
+27.
+52.
+Application protocol: h2c
+5. Stopping all clients.
+
+finished in 5.18s, 4987324.00 req/s, 181.37MB/s
+requests: 24936620 total, 25039020 started, 24936620 done, 24936620 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 24936620 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 906.86MB (950916151) total, 95.15MB (99772080) headers (space savings 93.84%), 166.47MB (174556340) data
+                     min         max         mean         sd        +/- sd
+time for request:      579us     87.02ms     11.97ms      9.15ms    48.36%
+time for connect:       16us     37.53ms      8.13ms      8.39ms    83.01%
+time to 1st byte:     1.31ms     88.00ms     27.37ms     18.62ms    66.31%
+req/s           :    3493.67     8449.59     4864.74     1166.18    82.03%
+[info] CPU 1016.9% | Mem 451MiB
+
+=== Best: 4814019 req/s (CPU: 1016.9%, Mem: 451MiB) ===
+[info] saved results/unary-grpc/1024/cnetmod-grpc-phase8.json
+httparena-bench-cnetmod-grpc-phase8
+httparena-bench-cnetmod-grpc-phase8
+[info] rebuilding site/data/*.json
+[updated] /root/cnetmod-grpc-20261020/phase8/site/data/frameworks.json
+[updated] /root/cnetmod-grpc-20261020/phase8/site/data/results/cnetmod-grpc-phase8.json - 2 new, 2 total
+[updated] /root/cnetmod-grpc-20261020/phase8/site/data/current.json
+[info] done

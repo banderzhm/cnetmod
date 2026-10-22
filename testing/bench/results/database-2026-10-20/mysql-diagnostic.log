@@ -1,0 +1,1 @@
+[2026-10-20 14:26:03.614] [error] [130965424495744] [bench_database.cpp:213] benchmark failed: caching_sha2_password full auth requires TLS

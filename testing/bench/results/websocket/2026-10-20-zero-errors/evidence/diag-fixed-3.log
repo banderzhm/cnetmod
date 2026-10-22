@@ -1,0 +1,21 @@
+DIAG upgrade_parse=0 inflight_underflow=0
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     512 (8/thread)
+  Pipeline:  1
+  Req/conn:  10
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency    253us    175us    504us   1.45ms   2.89ms
+
+  8699461 frames sent in 5.00s, 8699322 frames received
+  Throughput: 1.74M req/s
+  Bandwidth:  33.01MB/s
+  WS upgrades: 880226
+  WS frames:   8699322
+  Latency samples: 8699322 / 8699322 responses (100.0%)
+  Reconnects: 869889

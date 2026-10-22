@@ -25,12 +25,14 @@ auto invoke(cnetmod::jwt_auth_options options,
     if (!authorization.empty())
         headers["Authorization"] = std::string{authorization};
     cnetmod::http::route_params params;
+    // The router normally owns the endpoint; here it lives for the call.
+    std::shared_ptr<cnetmod::http::endpoint> described;
     if (endpoint)
     {
-        auto described = std::make_shared<cnetmod::http::endpoint>();
+        described = std::make_shared<cnetmod::http::endpoint>();
         described->pattern = std::string{path};
         described->metadata = std::move(*endpoint);
-        params.matched = std::move(described);
+        params.matched = described.get();
     }
     cnetmod::http::request_context request{*io, peer, method, path,
         headers, {}, response, std::move(params)};

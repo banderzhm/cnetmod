@@ -59,6 +59,27 @@ HTTP/1 明文连接的首次探测缓冲在协议确定后立即释放；普通�
 #### `server::set_router`
 **签名**: `void set_router(router r)`
 
+#### `server::set_h2_sync_adapter`
+**签名**:
+```cpp
+void set_h2_sync_adapter(v2::sync_server_handler handler,
+    v2::buffered_request_filter filter);
+```
+在 `run()` 前配置完整 HTTP/2 请求的同步协议适配器。回调返回 `std::nullopt`
+时继续普通 HTTP 路由；filter 决定小请求体的缓冲资格，回调仍需检查请求是否适用。
+存在 middleware 或流式请求体时使用普通分发链。handler 和 filter 必须同时提供或同时清空。
+
+`v2::server_response` 可用 `static_headers` / `static_trailers` 复用固定协议元数据：
+`v2::static_header_fields::from<fields>()` 只接受静态存储期的 const 字段数组，
+防止把请求栈上的头部视图交给异步发送器。业务响应体和动态 metadata 仍由响应拥有。
+发送端分别扣减连接和流窗口；额度不足的响应等待 WINDOW_UPDATE，SETTINGS 缩窗可产生负额度。
+`v2::server_response::automatic_content_length` 默认为 true；设为 false 时只关闭自动生成
+Content-Length，显式提供的长度头仍然发送。DATA 和 END_STREAM 仍按完整响应编码。
+
+每个 HPACK 解码方向最多复用一个不改变动态表的头块（编码不超过 512 字节、16 个字段、
+解码内容不超过 4096 字节）。插入或调整动态表会使该复用失效；敏感字段、Authorization、
+Proxy-Authorization、Cookie 和 Set-Cookie 不参与复用。每次请求仍执行 HTTP/2 头部语义校验。
+
 #### `server::use`
 **签名**: `void use(middleware_fn mw)`
 **说明**: 添加中间件，按调用顺序构成中间件管道。
@@ -552,6 +573,11 @@ r.get("/docs", swagger_ui_handler());
 
 **配置**: 启用 SSL 后，HTTP/2 自动通过 ALPN 协商。无需额外配置。
 
+流式请求只在应用实际消费 body chunk 后回补接收窗口；普通和借用式 handler 遵循相同规则。
+同一轮消费产生的连接窗口回补会合并为一个 WINDOW_UPDATE，并共享一次后台任务和写入。
+不要依赖“一块数据对应一个连接 WINDOW_UPDATE”的帧数量；测试应核对回补字节总量，
+并确认尚未消费的数据没有提前获得信用。已结束的流只需要回补连接窗口。
+
 已经携带 `END_STREAM` 的完整请求由连接协程批量分发并合并刷出响应；只有请求正文仍在
 到达的流才启动后台流式任务。应用无需为了吞吐手工创建 task 或绕过 router，正文流式
 端点继续使用 `stream_*` 路由即可。单个 `HEADERS + END_STREAM` 的常见 GET/RPC 请求会
@@ -677,13 +703,60 @@ router r;
 r.get("/static/*filepath", serve_dir({
     .root = "./public",
     .index_file = "index.html",
+    .serve_precompressed = true,
+    .cache_max_file_size = 1024 * 1024,
+    .revalidate_interval = std::chrono::milliseconds{500},
 }));
 ```
 
 `serve_dir()` 使用协议无关的 pull-based response body：文件分块异步读取，
 HTTP/1 明文、TLS 和 HTTP/2 由服务器传输层分别编码。不要为了零拷贝或性能在
 静态文件 handler 中直接调用 `raw_socket()`；那会绕过 TLS 加密与 HTTP/2
-帧编码。框架会保持每次请求重新打开、stat 文件，因此替换静态资源后无需重启。
+帧编码。默认对不超过 1 MiB 的热点文件保留不可变共享响应体，HTTP/1 与 HTTP/2
+不会按请求重复打开、读取或复制文件；超过上限的文件仍按背压异步分块读取。
+缓存每 500 ms 重新核对文件大小和修改时间，因此替换或删除静态资源后无需重启。
+将 `cache_max_file_size` 设为 `0` 可关闭 body 缓存，将
+`revalidate_interval` 设为 `0ms` 可要求每次请求检查磁盘元数据。
+
+`serve_precompressed` 默认开启。客户端的 `Accept-Encoding` 允许时优先选择同目录的
+`.br`，其次选择 `.gz`；`q=0` 会明确禁用对应编码，并自动设置
+`Content-Encoding` 与 `Vary: Accept-Encoding`。Range 请求固定读取原始文件，避免
+把原文件的字节范围错误地应用到压缩表示。
+
+HTTP/3 使用同一磁盘一致性语义，但请求类型不同，因此显式导入
+`cnetmod.protocol.http.v3.static_files`：
+
+```cpp
+import std;
+import cnetmod.protocol.http.v3.server;
+import cnetmod.protocol.http.v3.static_files;
+
+auto static_files = cnetmod::http::v3::serve_dir({
+    .root = "/srv/public",
+    .url_prefix = "/static/",
+    .serve_precompressed = true,
+});
+
+cnetmod::http::v3::server_request_handler handler =
+    [static_files = std::move(static_files)](auto& request, auto& response)
+        -> std::error_code
+{
+    auto served = static_files(request, response);
+    if (!served)
+        return served.error();
+    if (*served)
+        return {};
+    // 继续处理其他业务路由。
+    response.status = cnetmod::http::status::not_found;
+    return {};
+};
+```
+
+该入口属于框架正式能力，不会在应用入口预读整个目录，也不会持有不校验磁盘的
+永久缓存。HTTP/3 对不超过 `cache_max_file_size`（默认 1 MiB）的文件保留共享内容，
+但每次请求都会核对大小与修改时间；替换或删除文件后立即更新或失效。它同样支持
+`.br`/`.gz` 预压缩副本、保留原文件的 `Content-Type`，并拒绝编码后的目录穿越。
+不要为了 benchmark 在应用层恢复启动时预加载目录。
 
 ---
 
@@ -749,6 +822,10 @@ SSE、手工流式输出或 chunked 响应时，框架先刷出此前普通响�
 返回部分写入时才进入完整写循环。这些均为传输层内部优化，应用不要为它们复制一套 handler。
 
 HTTP/2 的普通同步请求同样走内部借用式路由匹配，不复制已注册的 handler；请求上下文中的
+大块动态 `std::string` 响应会把所有权移动到连接写队列，并通过 vectored transport 直接发送
+DATA payload；无需为了零拷贝把每个 JSON 响应包装成 `shared_ptr`。不可变静态资源仍使用
+`set_shared_body()`，便于跨请求共享同一份内容。小响应继续复制进批量输出缓冲，避免为很小的
+payload 增加独立所有者和 gather segment 的管理成本。
 SSE、表单、追踪、取消与 request-scope 扩展状态仅在实际调用对应能力时创建。应用仍只使用
 公开的 `router::match()`、`request_context` 和 `get_sync()` 等接口，不得依赖这些内部视图，
 也不要为了追求吞吐绕过 endpoint metadata 或自行管理请求上下文生命周期。

@@ -1,0 +1,27 @@
+Test project /root/cnetmod-grpc-candidate
+      Start 42: test_http2_hpack
+ 1/11 Test #42: test_http2_hpack ......................................   Passed    0.00 sec
+      Start 43: test_http2_stream
+ 2/11 Test #43: test_http2_stream .....................................   Passed    0.02 sec
+      Start 45: test_grpc
+ 3/11 Test #45: test_grpc .............................................   Passed    0.01 sec
+      Start 46: test_grpc_proto
+ 4/11 Test #46: test_grpc_proto .......................................   Passed    0.00 sec
+      Start 55: test_grpc_proto_python
+ 5/11 Test #55: test_grpc_proto_python ................................   Passed    0.06 sec
+      Start 56: test_grpc_codegen_python
+ 6/11 Test #56: test_grpc_codegen_python ..............................   Passed    0.10 sec
+      Start 57: test_grpc_codegen_contract_python
+ 7/11 Test #57: test_grpc_codegen_contract_python .....................   Passed    0.16 sec
+      Start 58: test_grpcio_cross_process_interop_python
+ 8/11 Test #58: test_grpcio_cross_process_interop_python ..............   Passed    0.23 sec
+      Start 59: test_grpcio_server_to_cnetmod_client_interop_python
+ 9/11 Test #59: test_grpcio_server_to_cnetmod_client_interop_python ...   Passed    0.24 sec
+      Start 60: test_grpc_arena_harness
+10/11 Test #60: test_grpc_arena_harness ...............................   Passed    0.15 sec
+      Start 61: test_grpc_arena_smoke
+11/11 Test #61: test_grpc_arena_smoke .................................   Passed    0.90 sec
+
+100% tests passed out of 11
+
+Total Test time (real) =   1.88 sec

@@ -2322,6 +2322,7 @@ TEST(application_host_distributes_connections_and_restores_worker_affinity)
         std::this_thread::sleep_for(std::chrono::milliseconds{5});
     }
 
+    std::size_t attempts = 0;
     std::size_t successes = 0;
     if (host->state() == application::application_state::running)
     {
@@ -2339,8 +2340,17 @@ TEST(application_host_distributes_connections_and_restores_worker_affinity)
                     .client = {.request_timeout =
                                    std::chrono::milliseconds{500},
                         .keep_alive = false}}};
-            for (std::size_t index = 0; index < 8; ++index)
+            // SO_REUSEPORT selects a listener from the connection 4-tuple.
+            // A small fixed sample can legitimately hash to one worker, so
+            // keep opening independent connections until both workers have
+            // been observed or a generous deterministic ceiling is reached.
+            constexpr std::size_t maximum_attempts = 64;
+            for (std::size_t index = 0;
+                 index < maximum_attempts &&
+                 !second_worker_seen.load(std::memory_order_acquire);
+                 ++index)
             {
+                ++attempts;
                 auto response = co_await rest.get(std::format(
                     "http://127.0.0.1:{}/worker", endpoint->port()));
                 if (response && response->status_code() == 200 &&
@@ -2356,7 +2366,8 @@ TEST(application_host_distributes_connections_and_restores_worker_affinity)
     runner.join();
 
     ASSERT_TRUE(completed.has_value() && completed->has_value());
-    ASSERT_EQ(successes, std::size_t{8});
+    ASSERT_TRUE(attempts > 0);
+    ASSERT_EQ(successes, attempts);
     ASSERT_TRUE(second_worker_seen.load(std::memory_order_acquire));
     ASSERT_TRUE(affinity_preserved.load(std::memory_order_acquire));
 }
@@ -2556,6 +2567,7 @@ TEST(application_module_composition_follows_service_factories)
     ASSERT_TRUE(route_saw_service);
 }
 
+#ifdef CNETMOD_HAS_YAML_CONFIGURATION
 TEST(application_configuration_reads_jwt_yaml_lifetimes)
 {
     const auto path = std::filesystem::temp_directory_path() /
@@ -2648,6 +2660,7 @@ services:
     ASSERT_EQ(host->configuration().services.at("primary").properties.at("password").get<std::string>(),
         "yaml-secret");
 }
+#endif
 
 TEST(application_task_supervisor_rejects_invalid_recovery_before_registration)
 {

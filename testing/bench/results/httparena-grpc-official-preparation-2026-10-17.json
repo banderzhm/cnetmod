@@ -1,0 +1,1939 @@
+{
+  "official_repository": "https://github.com/MDA2AV/HttpArena",
+  "official_commit": "8977be2721a5aba7b320345cddfcd6f6b654e698",
+  "official_checkout": "/var/tmp/cnetmod-grpc-official",
+  "execution_status": "PREPARATION_ONLY_NO_BENCHMARK_STARTED",
+  "defaults": {
+    "duration": "5s",
+    "runs": 3,
+    "threads": 64,
+    "explicit_warmup": "none in official h2load argv",
+    "cooldown_seconds": 2,
+    "headline": "best official integer RPS of three rounds",
+    "rps": "HTTP 2xx / duration parsed from h2load finished-in line, truncated to integer",
+    "p99_latency": "official field uses request MAX; it is not a measured p99",
+    "cpu_memory": "official Docker stats mean CPU and peak memory; cgroup CPU delta also sampled",
+    "server_cpuset": "0-31,64-95",
+    "generator_cpuset": "32-63,96-127",
+    "container_memory_limit": "not set by framework_start"
+  },
+  "host": {
+    "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+    "effective_cpus": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31
+    ],
+    "docker": {
+      "ServerVersion": "29.9.1",
+      "NCPU": 32,
+      "MemTotal": 16598654976,
+      "OSType": "linux",
+      "OperatingSystem": "Arch Linux"
+    },
+    "cpu_model": "Intel(R) Core(TM) i9-14900K",
+    "mem_total_kib": 16209624,
+    "competitor_image_digests_and_compiler_flags": "pending real image preparation; not measured"
+  },
+  "official_host_gate": {
+    "passed": false,
+    "missing_cpu_ids": [
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50,
+      51,
+      52,
+      53,
+      54,
+      55,
+      56,
+      57,
+      58,
+      59,
+      60,
+      61,
+      62,
+      63,
+      64,
+      65,
+      66,
+      67,
+      68,
+      69,
+      70,
+      71,
+      72,
+      73,
+      74,
+      75,
+      76,
+      77,
+      78,
+      79,
+      80,
+      81,
+      82,
+      83,
+      84,
+      85,
+      86,
+      87,
+      88,
+      89,
+      90,
+      91,
+      92,
+      93,
+      94,
+      95,
+      96,
+      97,
+      98,
+      99,
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112,
+      113,
+      114,
+      115,
+      116,
+      117,
+      118,
+      119,
+      120,
+      121,
+      122,
+      123,
+      124,
+      125,
+      126,
+      127
+    ],
+    "fallback_permitted_for_official_claim": false
+  },
+  "profiles": [
+    {
+      "profile": "unary-grpc",
+      "server_cpuset": "0-31,64-95",
+      "connections": 256,
+      "endpoint": "grpc",
+      "argv_from_official_builder": [
+        "h2load",
+        "http://localhost:8080/benchmark.BenchmarkService/GetSum",
+        "-d",
+        "/var/tmp/cnetmod-grpc-official/requests/grpc-sum.bin",
+        "-H",
+        "content-type: application/grpc",
+        "-H",
+        "te: trailers",
+        "-c",
+        "256",
+        "-m",
+        "100",
+        "-t",
+        "64",
+        "-D",
+        "5s"
+      ]
+    },
+    {
+      "profile": "unary-grpc",
+      "server_cpuset": "0-31,64-95",
+      "connections": 1024,
+      "endpoint": "grpc",
+      "argv_from_official_builder": [
+        "h2load",
+        "http://localhost:8080/benchmark.BenchmarkService/GetSum",
+        "-d",
+        "/var/tmp/cnetmod-grpc-official/requests/grpc-sum.bin",
+        "-H",
+        "content-type: application/grpc",
+        "-H",
+        "te: trailers",
+        "-c",
+        "1024",
+        "-m",
+        "100",
+        "-t",
+        "64",
+        "-D",
+        "5s"
+      ]
+    },
+    {
+      "profile": "unary-grpc-tls",
+      "server_cpuset": "0-31,64-95",
+      "connections": 256,
+      "endpoint": "grpc-tls",
+      "argv_from_official_builder": [
+        "h2load",
+        "https://localhost:8443/benchmark.BenchmarkService/GetSum",
+        "-d",
+        "/var/tmp/cnetmod-grpc-official/requests/grpc-sum.bin",
+        "-H",
+        "content-type: application/grpc",
+        "-H",
+        "te: trailers",
+        "-c",
+        "256",
+        "-m",
+        "100",
+        "-t",
+        "64",
+        "-D",
+        "5s"
+      ]
+    },
+    {
+      "profile": "unary-grpc-tls",
+      "server_cpuset": "0-31,64-95",
+      "connections": 1024,
+      "endpoint": "grpc-tls",
+      "argv_from_official_builder": [
+        "h2load",
+        "https://localhost:8443/benchmark.BenchmarkService/GetSum",
+        "-d",
+        "/var/tmp/cnetmod-grpc-official/requests/grpc-sum.bin",
+        "-H",
+        "content-type: application/grpc",
+        "-H",
+        "te: trailers",
+        "-c",
+        "1024",
+        "-m",
+        "100",
+        "-t",
+        "64",
+        "-D",
+        "5s"
+      ]
+    },
+    {
+      "profile": "baseline-h2",
+      "server_cpuset": "0-31,64-95",
+      "connections": 256,
+      "endpoint": "h2",
+      "argv_from_official_builder": [
+        "h2load",
+        "https://localhost:8443/baseline2?a=1&b=1",
+        "-c",
+        "256",
+        "-m",
+        "100",
+        "-t",
+        "64",
+        "-D",
+        "5s"
+      ]
+    },
+    {
+      "profile": "baseline-h2",
+      "server_cpuset": "0-31,64-95",
+      "connections": 1024,
+      "endpoint": "h2",
+      "argv_from_official_builder": [
+        "h2load",
+        "https://localhost:8443/baseline2?a=1&b=1",
+        "-c",
+        "1024",
+        "-m",
+        "100",
+        "-t",
+        "64",
+        "-D",
+        "5s"
+      ]
+    },
+    {
+      "profile": "static-h2",
+      "server_cpuset": "0-31,64-95",
+      "connections": 256,
+      "endpoint": "static-h2",
+      "argv_from_official_builder": [
+        "h2load",
+        "-i",
+        "/var/tmp/cnetmod-grpc-official/requests/static-h2-uris.txt",
+        "-H",
+        "Accept-Encoding: br;q=1, gzip;q=0.8",
+        "-c",
+        "256",
+        "-m",
+        "32",
+        "-t",
+        "64",
+        "-D",
+        "5s"
+      ]
+    },
+    {
+      "profile": "static-h2",
+      "server_cpuset": "0-31,64-95",
+      "connections": 1024,
+      "endpoint": "static-h2",
+      "argv_from_official_builder": [
+        "h2load",
+        "-i",
+        "/var/tmp/cnetmod-grpc-official/requests/static-h2-uris.txt",
+        "-H",
+        "Accept-Encoding: br;q=1, gzip;q=0.8",
+        "-c",
+        "1024",
+        "-m",
+        "32",
+        "-t",
+        "64",
+        "-D",
+        "5s"
+      ]
+    },
+    {
+      "profile": "baseline-h2c",
+      "server_cpuset": "0-31,64-95",
+      "connections": 256,
+      "endpoint": "h2c",
+      "argv_from_official_builder": [
+        "h2load",
+        "http://localhost:8082/baseline2?a=1&b=1",
+        "-p",
+        "h2c",
+        "-c",
+        "256",
+        "-m",
+        "100",
+        "-t",
+        "64",
+        "-D",
+        "5s"
+      ]
+    },
+    {
+      "profile": "baseline-h2c",
+      "server_cpuset": "0-31,64-95",
+      "connections": 1024,
+      "endpoint": "h2c",
+      "argv_from_official_builder": [
+        "h2load",
+        "http://localhost:8082/baseline2?a=1&b=1",
+        "-p",
+        "h2c",
+        "-c",
+        "1024",
+        "-m",
+        "100",
+        "-t",
+        "64",
+        "-D",
+        "5s"
+      ]
+    },
+    {
+      "profile": "baseline-h2c",
+      "server_cpuset": "0-31,64-95",
+      "connections": 4096,
+      "endpoint": "h2c",
+      "argv_from_official_builder": [
+        "h2load",
+        "http://localhost:8082/baseline2?a=1&b=1",
+        "-p",
+        "h2c",
+        "-c",
+        "4096",
+        "-m",
+        "100",
+        "-t",
+        "64",
+        "-D",
+        "5s"
+      ]
+    },
+    {
+      "profile": "json-h2c",
+      "server_cpuset": "0-31,64-95",
+      "connections": 1024,
+      "endpoint": "json-h2c",
+      "argv_from_official_builder": [
+        "h2load",
+        "-i",
+        "/var/tmp/cnetmod-grpc-official/requests/json-h2c-uris.txt",
+        "-p",
+        "h2c",
+        "-c",
+        "1024",
+        "-m",
+        "32",
+        "-t",
+        "64",
+        "-D",
+        "5s"
+      ]
+    },
+    {
+      "profile": "json-h2c",
+      "server_cpuset": "0-31,64-95",
+      "connections": 4096,
+      "endpoint": "json-h2c",
+      "argv_from_official_builder": [
+        "h2load",
+        "-i",
+        "/var/tmp/cnetmod-grpc-official/requests/json-h2c-uris.txt",
+        "-p",
+        "h2c",
+        "-c",
+        "4096",
+        "-m",
+        "32",
+        "-t",
+        "64",
+        "-D",
+        "5s"
+      ]
+    }
+  ],
+  "published_leader_selection": {
+    "unary-grpc": {
+      "connections_used_for_selection": 1024,
+      "standard_frameworks": [
+        {
+          "entry": "libuvcpp",
+          "published_rps_reference_only": 3263606,
+          "result_path": "site/data/results/libuvcpp.json",
+          "category": "emerging",
+          "mode": "standard"
+        },
+        {
+          "entry": "helidon-production",
+          "published_rps_reference_only": 1145831,
+          "result_path": "site/data/results/helidon-production.json",
+          "category": "flagship",
+          "mode": "standard"
+        },
+        {
+          "entry": "trillium",
+          "published_rps_reference_only": 709412,
+          "result_path": "site/data/results/trillium.json",
+          "category": "emerging",
+          "mode": "standard"
+        }
+      ],
+      "engines": [
+        {
+          "entry": "vanilla-epoll",
+          "published_rps_reference_only": 7196679,
+          "result_path": "site/data/results/vanilla-epoll.json",
+          "category": "engine",
+          "mode": null
+        },
+        {
+          "entry": "cardigan",
+          "published_rps_reference_only": 6900612,
+          "result_path": "site/data/results/cardigan.json",
+          "category": "engine",
+          "mode": null
+        }
+      ]
+    },
+    "unary-grpc-tls": {
+      "connections_used_for_selection": 1024,
+      "standard_frameworks": [
+        {
+          "entry": "libuvcpp",
+          "published_rps_reference_only": 3092506,
+          "result_path": "site/data/results/libuvcpp.json",
+          "category": "emerging",
+          "mode": "standard"
+        },
+        {
+          "entry": "helidon-production",
+          "published_rps_reference_only": 1028364,
+          "result_path": "site/data/results/helidon-production.json",
+          "category": "flagship",
+          "mode": "standard"
+        },
+        {
+          "entry": "trillium",
+          "published_rps_reference_only": 650980,
+          "result_path": "site/data/results/trillium.json",
+          "category": "emerging",
+          "mode": "standard"
+        }
+      ],
+      "engines": [
+        {
+          "entry": "cardigan",
+          "published_rps_reference_only": 6575246,
+          "result_path": "site/data/results/cardigan.json",
+          "category": "engine",
+          "mode": null
+        }
+      ]
+    },
+    "baseline-h2": {
+      "connections_used_for_selection": 1024,
+      "standard_frameworks": [
+        {
+          "entry": "genhttp-ioxide",
+          "published_rps_reference_only": 9248930,
+          "result_path": "site/data/results/genhttp-ioxide.json",
+          "category": "emerging",
+          "mode": "standard"
+        },
+        {
+          "entry": "bun",
+          "published_rps_reference_only": 7059841,
+          "result_path": "site/data/results/bun.json",
+          "category": "flagship",
+          "mode": "standard"
+        },
+        {
+          "entry": "libuvcpp",
+          "published_rps_reference_only": 4688932,
+          "result_path": "site/data/results/libuvcpp.json",
+          "category": "emerging",
+          "mode": "standard"
+        }
+      ],
+      "engines": [
+        {
+          "entry": "cardigan",
+          "published_rps_reference_only": 14137905,
+          "result_path": "site/data/results/cardigan.json",
+          "category": "engine",
+          "mode": null
+        },
+        {
+          "entry": "ioxide",
+          "published_rps_reference_only": 12235767,
+          "result_path": "site/data/results/ioxide.json",
+          "category": "engine",
+          "mode": null
+        },
+        {
+          "entry": "proxygen",
+          "published_rps_reference_only": 5374723,
+          "result_path": "site/data/results/proxygen.json",
+          "category": "engine",
+          "mode": null
+        }
+      ]
+    },
+    "static-h2": {
+      "connections_used_for_selection": 1024,
+      "standard_frameworks": [
+        {
+          "entry": "bun",
+          "published_rps_reference_only": 599957,
+          "result_path": "site/data/results/bun.json",
+          "category": "flagship",
+          "mode": "standard"
+        },
+        {
+          "entry": "genhttp-ioxide",
+          "published_rps_reference_only": 540593,
+          "result_path": "site/data/results/genhttp-ioxide.json",
+          "category": "emerging",
+          "mode": "standard"
+        },
+        {
+          "entry": "genhttp-kestrel",
+          "published_rps_reference_only": 265919,
+          "result_path": "site/data/results/genhttp-kestrel.json",
+          "category": "emerging",
+          "mode": "standard"
+        }
+      ],
+      "engines": [
+        {
+          "entry": "cardigan",
+          "published_rps_reference_only": 1042076,
+          "result_path": "site/data/results/cardigan.json",
+          "category": "engine",
+          "mode": null
+        },
+        {
+          "entry": "ioxide",
+          "published_rps_reference_only": 950009,
+          "result_path": "site/data/results/ioxide.json",
+          "category": "engine",
+          "mode": null
+        },
+        {
+          "entry": "proxygen",
+          "published_rps_reference_only": 578070,
+          "result_path": "site/data/results/proxygen.json",
+          "category": "engine",
+          "mode": null
+        }
+      ]
+    },
+    "baseline-h2c": {
+      "connections_used_for_selection": 4096,
+      "standard_frameworks": [
+        {
+          "entry": "genhttp-ioxide",
+          "published_rps_reference_only": 9703143,
+          "result_path": "site/data/results/genhttp-ioxide.json",
+          "category": "emerging",
+          "mode": "standard"
+        },
+        {
+          "entry": "bun",
+          "published_rps_reference_only": 7262661,
+          "result_path": "site/data/results/bun.json",
+          "category": "flagship",
+          "mode": "standard"
+        },
+        {
+          "entry": "libuvcpp",
+          "published_rps_reference_only": 4702573,
+          "result_path": "site/data/results/libuvcpp.json",
+          "category": "emerging",
+          "mode": "standard"
+        }
+      ],
+      "engines": [
+        {
+          "entry": "cardigan",
+          "published_rps_reference_only": 13644450,
+          "result_path": "site/data/results/cardigan.json",
+          "category": "engine",
+          "mode": null
+        },
+        {
+          "entry": "vanilla-epoll",
+          "published_rps_reference_only": 12613769,
+          "result_path": "site/data/results/vanilla-epoll.json",
+          "category": "engine",
+          "mode": null
+        },
+        {
+          "entry": "proxygen",
+          "published_rps_reference_only": 5326627,
+          "result_path": "site/data/results/proxygen.json",
+          "category": "engine",
+          "mode": null
+        }
+      ]
+    },
+    "json-h2c": {
+      "connections_used_for_selection": 4096,
+      "standard_frameworks": [
+        {
+          "entry": "bun",
+          "published_rps_reference_only": 2218793,
+          "result_path": "site/data/results/bun.json",
+          "category": "flagship",
+          "mode": "standard"
+        },
+        {
+          "entry": "genhttp-ioxide",
+          "published_rps_reference_only": 1939706,
+          "result_path": "site/data/results/genhttp-ioxide.json",
+          "category": "emerging",
+          "mode": "standard"
+        },
+        {
+          "entry": "libuvcpp",
+          "published_rps_reference_only": 1486566,
+          "result_path": "site/data/results/libuvcpp.json",
+          "category": "emerging",
+          "mode": "standard"
+        }
+      ],
+      "engines": [
+        {
+          "entry": "vanilla-epoll",
+          "published_rps_reference_only": 3779859,
+          "result_path": "site/data/results/vanilla-epoll.json",
+          "category": "engine",
+          "mode": null
+        },
+        {
+          "entry": "proxygen",
+          "published_rps_reference_only": 1033301,
+          "result_path": "site/data/results/proxygen.json",
+          "category": "engine",
+          "mode": null
+        },
+        {
+          "entry": "proxygen-coro",
+          "published_rps_reference_only": 996239,
+          "result_path": "site/data/results/proxygen-coro.json",
+          "category": "engine",
+          "mode": null
+        }
+      ]
+    }
+  },
+  "ranking_policy": "Top three enabled, subscribed entries with exact matching result/meta directory at the highest connection count; standard flagship/emerging and engine tiers separate. Unresolved aliases and experimental/tuned rows are not silently mixed.",
+  "inputs": [
+    {
+      "path": "certs/generate.sh",
+      "bytes": 941,
+      "sha256": "819d8c6f1656d629a18e02e9077fb6f265eedec23ba71fd49525b4121cb5107f"
+    },
+    {
+      "path": "certs/server.crt",
+      "bytes": 1253,
+      "sha256": "49336a92fa4c738a0572f089b21e25a8a34b78f1113cd7a4cfb5d38b1963a456"
+    },
+    {
+      "path": "data/dataset.json",
+      "bytes": 12482,
+      "sha256": "210c0a3cfc79337861239410dcc5fece53264f068e8dafa88e6b9029edd87559"
+    },
+    {
+      "path": "data/static/analytics.js",
+      "bytes": 12288,
+      "sha256": "43a194d5c406e110fa339260a659b1b28ee74774b0d1c32b5ddb99abe1a24322"
+    },
+    {
+      "path": "data/static/analytics.js.br",
+      "bytes": 3899,
+      "sha256": "59664c88b5281371bdd82dcfa66968a4fed53c83884635aede98cfbf324fd445"
+    },
+    {
+      "path": "data/static/analytics.js.gz",
+      "bytes": 4390,
+      "sha256": "77eebdb13d49ff644d366e0170451406bac4ad1ae358238698d1d9c5f4e3df32"
+    },
+    {
+      "path": "data/static/app.js",
+      "bytes": 204800,
+      "sha256": "f7a305355b4e26ca50d3b2a98b3b804ac69f6150f83d988ad71c36e4787f3a35"
+    },
+    {
+      "path": "data/static/app.js.br",
+      "bytes": 47275,
+      "sha256": "ec9fe75a6380b136e1c10e595f7d7a945fc29cf147b6a308fdd2a5c67082b281"
+    },
+    {
+      "path": "data/static/app.js.gz",
+      "bytes": 54813,
+      "sha256": "0fdab757ebbbd1cf2dce304c32e01d1d54ba076be096b9f13a50c591ae7f1a20"
+    },
+    {
+      "path": "data/static/bold.woff2",
+      "bytes": 22528,
+      "sha256": "dc4f62329b37a3ed30c85b7dfd657579ef942d6dfc0abed23ddde39e34c584b5"
+    },
+    {
+      "path": "data/static/components.css",
+      "bytes": 204800,
+      "sha256": "fae69f80bae3e3e6dde17854e0a2e065d8851f10f5dec409408dd43e2ce397c1"
+    },
+    {
+      "path": "data/static/components.css.br",
+      "bytes": 33268,
+      "sha256": "02fe6c4948e9399e4a74b8375900ec46f919e57a418bc087a6e611548d1f6d79"
+    },
+    {
+      "path": "data/static/components.css.gz",
+      "bytes": 39348,
+      "sha256": "6a75255520b9ce4b2ffce9c4cdb238ea9778502dbb2bc7ff940770affcaeafa6"
+    },
+    {
+      "path": "data/static/footer.html",
+      "bytes": 56320,
+      "sha256": "9826f40f7679145c8563c774f82b4db8b9997bae3aa3c233d183022a53480282"
+    },
+    {
+      "path": "data/static/footer.html.br",
+      "bytes": 6974,
+      "sha256": "97aaaccac685f6d4944eb967ba4142085fe4fd45e691a07f7ca2c37ffd93acec"
+    },
+    {
+      "path": "data/static/footer.html.gz",
+      "bytes": 8256,
+      "sha256": "3dff48515527d52ca4d374564902396b51735d2fd1a8d94dd957aa76068a7017"
+    },
+    {
+      "path": "data/static/header.html",
+      "bytes": 122880,
+      "sha256": "7064366652dfc2e2cf3f36537ac018fd9758d8a2093dcdd00b50da905bb9a78a"
+    },
+    {
+      "path": "data/static/header.html.br",
+      "bytes": 9390,
+      "sha256": "537f1457e287089919b8ff84f16c1e310481fb703e13f0ffe12e809828cc073c"
+    },
+    {
+      "path": "data/static/header.html.gz",
+      "bytes": 11769,
+      "sha256": "43eccb8bd48103d0a718e8f9a0608761d6f34b63f9ed403d369ab681899fcb39"
+    },
+    {
+      "path": "data/static/helpers.js",
+      "bytes": 22528,
+      "sha256": "04205023cba9a17fede68370d586f2fe3831de1d6222078a1f52dc61c822f789"
+    },
+    {
+      "path": "data/static/helpers.js.br",
+      "bytes": 6612,
+      "sha256": "0bb28831297ca8e0e2a78b7f90344d2d7e8a6bdd6add2ecb1621953e09420fc9"
+    },
+    {
+      "path": "data/static/helpers.js.gz",
+      "bytes": 7442,
+      "sha256": "e677e7efb452cdf124f9b46717b0e3b2776d10b21ea5518949c37d688db7d18d"
+    },
+    {
+      "path": "data/static/hero.webp",
+      "bytes": 46080,
+      "sha256": "4b63f2a42ed1d27eb01ea5e634ee3f10ba919893be3b7da6bfff56e8fec81291"
+    },
+    {
+      "path": "data/static/icon-sprite.svg",
+      "bytes": 71680,
+      "sha256": "eba2848ed1eb2f43ea3c116293933ed985d0205af7b4d85a6a8d5185619c2125"
+    },
+    {
+      "path": "data/static/icon-sprite.svg.br",
+      "bytes": 11739,
+      "sha256": "fa215965f2434ba877949c917336b0eab1b152f0f648239c1476a8690832f5eb"
+    },
+    {
+      "path": "data/static/icon-sprite.svg.gz",
+      "bytes": 13657,
+      "sha256": "73b6cd060b5c0e68f071d85b2697f22d918dc1b330ae70d0acff8a8e33bde01c"
+    },
+    {
+      "path": "data/static/layout.css",
+      "bytes": 25600,
+      "sha256": "a9f7c3190ad26efcc38ac87b00f4520598312f918ab5177ee7d9434777552673"
+    },
+    {
+      "path": "data/static/layout.css.br",
+      "bytes": 5615,
+      "sha256": "e82e88eb35ec1748adb63d29659bfa9fa1cc878855fa09a1963502708601edff"
+    },
+    {
+      "path": "data/static/layout.css.gz",
+      "bytes": 6380,
+      "sha256": "a02e7aaa0c429d7a3f00683b61b278f51299c7f2ebb79684f4796a3d3a3999a1"
+    },
+    {
+      "path": "data/static/logo.svg",
+      "bytes": 15344,
+      "sha256": "7ebd0779bcf635c2e90b8089f43d83af1b57801e225f3ae2dbe6ca9402de3c1a"
+    },
+    {
+      "path": "data/static/logo.svg.br",
+      "bytes": 3028,
+      "sha256": "76e6834514f3dd115c88c90875a029cf594b266cc09df2f11d87e96d8e7b749c"
+    },
+    {
+      "path": "data/static/logo.svg.gz",
+      "bytes": 3654,
+      "sha256": "99cfcd1e329a7775dac82ba1f1a15a303e08f893b8b8dcaa32691682ab5ac88c"
+    },
+    {
+      "path": "data/static/manifest.json",
+      "bytes": 2883,
+      "sha256": "b2fdd02d07165e824f388ebfb990d31da81ae1f4b4e43e120d8ce0188133d86f"
+    },
+    {
+      "path": "data/static/manifest.json.br",
+      "bytes": 735,
+      "sha256": "cba141fa8263a3d8fc722a6330b0ce60838f483dca5e9c6b3916cd61b99907e5"
+    },
+    {
+      "path": "data/static/manifest.json.gz",
+      "bytes": 927,
+      "sha256": "beb6445261bc5b36d1736d710c513be1a87b40e815cb7f582183f222e39c3c98"
+    },
+    {
+      "path": "data/static/regular.woff2",
+      "bytes": 18432,
+      "sha256": "be0e98060033adb46c4a57e128357bfd07f89538e7f574b13cb965f5ebabd540"
+    },
+    {
+      "path": "data/static/reset.css",
+      "bytes": 8192,
+      "sha256": "f731d01f45d63ab02fdeccb914312be604856504daaa4338896a9c9aea1d2d25"
+    },
+    {
+      "path": "data/static/reset.css.br",
+      "bytes": 2420,
+      "sha256": "4db7e9531292b7674c79313a584793d36975d5c14fb98b7a29cc3f0b57381da0"
+    },
+    {
+      "path": "data/static/reset.css.gz",
+      "bytes": 2838,
+      "sha256": "e3f38f74149f98c7e5a5123a7ee716fb3216c76dd9c25b0d03591630a6d0d300"
+    },
+    {
+      "path": "data/static/router.js",
+      "bytes": 35840,
+      "sha256": "3a9fd7b7ebd2e71794558dfd8a876b8d2c51fdd9f11f0fc549c9c1fc016e2c7b"
+    },
+    {
+      "path": "data/static/router.js.br",
+      "bytes": 9665,
+      "sha256": "4940bcd6174015453b64d55acab687591320e881f1ac8e1cb2626a7d5be61e2e"
+    },
+    {
+      "path": "data/static/router.js.gz",
+      "bytes": 10856,
+      "sha256": "03400323240e388cf5e7aa6c8679fa96866bb5d9a59847973ba92c074bc29f2b"
+    },
+    {
+      "path": "data/static/theme.css",
+      "bytes": 18432,
+      "sha256": "b1f9a0efe8bfd9346c13193ff12ef69f54449910682f894fecc5f0d68acb2e50"
+    },
+    {
+      "path": "data/static/theme.css.br",
+      "bytes": 4520,
+      "sha256": "3418b7dad6e4b6b7b5d848c5ee51401bc576fac4bc7452bf9bbcd009c82f578f"
+    },
+    {
+      "path": "data/static/theme.css.gz",
+      "bytes": 5138,
+      "sha256": "548c4bdcb0f3e857557d27da6324b15eeb518f4cc2c77c5186b1b256923dafb3"
+    },
+    {
+      "path": "data/static/thumb1.webp",
+      "bytes": 8192,
+      "sha256": "d9afc8adbb9841c883a3c1b4693c0f800cd7fd97e7dfe132d6d6fb4c7d7980fd"
+    },
+    {
+      "path": "data/static/thumb2.webp",
+      "bytes": 6144,
+      "sha256": "ca93b219faef350794b3a332046e698ff137f0ff8507e310c68768236ec0c02a"
+    },
+    {
+      "path": "data/static/utilities.css",
+      "bytes": 61440,
+      "sha256": "66173b25f20d1c407f95d3705632c19abba5b70dfa7fe25846f9071ee8bd76ed"
+    },
+    {
+      "path": "data/static/utilities.css.br",
+      "bytes": 11595,
+      "sha256": "19b48bbdcd292500a0bf9b87cb66f36b5ba645e6280ffa3c2e57d39a6de8f157"
+    },
+    {
+      "path": "data/static/utilities.css.gz",
+      "bytes": 13040,
+      "sha256": "a099b703dc46a89879e0d0a20ceb2a908db2aad7374c002068c9fd304f9cf938"
+    },
+    {
+      "path": "data/static/vendor.js",
+      "bytes": 307200,
+      "sha256": "f038876d1de9e392dfa2985616c340f032488d45fbd8bfa8def532e738a31fc6"
+    },
+    {
+      "path": "data/static/vendor.js.br",
+      "bytes": 67294,
+      "sha256": "4b07ad33e37ab1e2e491450d52ae6c51de728800e77a6888ddf539b4d835faaf"
+    },
+    {
+      "path": "data/static/vendor.js.gz",
+      "bytes": 79899,
+      "sha256": "3fb764cae757393ede21b4e23acafb14a38b9b752686f683fd240eb2711556e1"
+    },
+    {
+      "path": "docker/h2load.Dockerfile",
+      "bytes": 736,
+      "sha256": "0e3a73b385014a04ff7dc867bfd7100cd682bbfc2af4242af4015f4b45f35765"
+    },
+    {
+      "path": "frameworks/bun/Dockerfile",
+      "bytes": 344,
+      "sha256": "1370102c9582b3a1b25294b24f624bae58fd17cfd60d77393429d49fe433f67d"
+    },
+    {
+      "path": "frameworks/bun/README.md",
+      "bytes": 5782,
+      "sha256": "8c7c2e8dc066f270ca7857afffcd0bf81bd489cccd7abc35f7b028770f760ac8"
+    },
+    {
+      "path": "frameworks/bun/entrypoint.sh",
+      "bytes": 704,
+      "sha256": "703a96416684124f3778483fbd2e48056f5a8ca8f7cd43f7888ac60cb0cdbbbb"
+    },
+    {
+      "path": "frameworks/bun/meta.json",
+      "bytes": 1035,
+      "sha256": "15ac819167dee951bb1d48876086b984b88a16606f4d34c374bb2b600a6eca38"
+    },
+    {
+      "path": "frameworks/bun/server.ts",
+      "bytes": 18746,
+      "sha256": "6ef0223f7db86b34b9caa2b0c5567b9d3d49b40ed774c1504c4555a73fa61be4"
+    },
+    {
+      "path": "frameworks/cardigan/.dockerignore",
+      "bytes": 8,
+      "sha256": "b53ee26e6ff1da219b0563333a76d2c9ec19eec713d6ee54e11a1edacb0e9f3d"
+    },
+    {
+      "path": "frameworks/cardigan/Dockerfile",
+      "bytes": 1003,
+      "sha256": "f21192fe62cc4bc1360b328a8f70aba0d813bd0b923030b48af8dad2ebb11581"
+    },
+    {
+      "path": "frameworks/cardigan/LICENSE",
+      "bytes": 16726,
+      "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04"
+    },
+    {
+      "path": "frameworks/cardigan/build.sh",
+      "bytes": 170,
+      "sha256": "5d45fd88694f6ae18d1bbc90feb502eceee127e42e9d2edfb5b3c7b8013a1935"
+    },
+    {
+      "path": "frameworks/cardigan/meta.json",
+      "bytes": 555,
+      "sha256": "84a75501eae068878ec81c60c26451259bcf3029fb6a41ff67949406a275480d"
+    },
+    {
+      "path": "frameworks/cardigan/pom.xml",
+      "bytes": 3429,
+      "sha256": "df0c009f01c60b9d4cc30af42e4daaa7fef32d3e1a1e85e9d5f9dc1726c2bb77"
+    },
+    {
+      "path": "frameworks/cardigan/proto/benchmark.proto",
+      "bytes": 383,
+      "sha256": "1853d361641684d79a0761354cdf96e90c2ede8e7653d03526b76ca57f11e6e2"
+    },
+    {
+      "path": "frameworks/cardigan/src/main/java/dev/cardigan/httparena/HttpArenaController.java",
+      "bytes": 4055,
+      "sha256": "b28fd7beeeb906138c33602e00adf40db298cabc494a24eba44bca5974a096ac"
+    },
+    {
+      "path": "frameworks/cardigan/src/main/java/dev/cardigan/httparena/HttpArenaDataset.java",
+      "bytes": 8217,
+      "sha256": "e1bf55e9b268fb01b865adf9cc50ea149d8fa75fcfa05acb71501d76e5c1fef1"
+    },
+    {
+      "path": "frameworks/cardigan/src/main/java/dev/cardigan/httparena/HttpArenaGrpcController.java",
+      "bytes": 11827,
+      "sha256": "e974fd2945a5bb43ab022c481c93e6b06e317d0b0b3cff2809a34fa67e47efb7"
+    },
+    {
+      "path": "frameworks/cardigan/src/main/java/dev/cardigan/httparena/HttpArenaJsonController.java",
+      "bytes": 902,
+      "sha256": "b1a5e0588c11410fe925a3a7b3387f2d97fc38b2ededbc04d7164597569f683e"
+    },
+    {
+      "path": "frameworks/cardigan/src/main/java/dev/cardigan/httparena/HttpArenaMain.java",
+      "bytes": 4216,
+      "sha256": "4b0dffc1a805fa7cc622cf6020f10182a618973179a99c4c34493adf6ac7cee3"
+    },
+    {
+      "path": "frameworks/cardigan/src/main/java/dev/cardigan/httparena/HttpArenaStaticController.java",
+      "bytes": 12533,
+      "sha256": "cc4c66d39c85b58eeec18a26821e3f8a0f8c632730ccc10a5a3a1be8ba6d85fb"
+    },
+    {
+      "path": "frameworks/genhttp-ioxide/.dockerignore",
+      "bytes": 29,
+      "sha256": "e7a61b3e23077bbde8dac22c453207fdd445727b92680b491c07931d0db86956"
+    },
+    {
+      "path": "frameworks/genhttp-ioxide/Dockerfile",
+      "bytes": 421,
+      "sha256": "5c1f8dd8141cb73164ac1d64f6cf874b6b88636986fc88a533d2b4e02764d81c"
+    },
+    {
+      "path": "frameworks/genhttp-ioxide/Infrastructure/Postgres.cs",
+      "bytes": 3286,
+      "sha256": "ab691adaf0a9b610997c4d5ecdb71c53d44587b59751ac9facbbd574982fb6df"
+    },
+    {
+      "path": "frameworks/genhttp-ioxide/Model.cs",
+      "bytes": 1434,
+      "sha256": "1a0d10defa30308fecbd43121f4d4f71b16ac1a1d64973868f202bb583f21cb7"
+    },
+    {
+      "path": "frameworks/genhttp-ioxide/Program.cs",
+      "bytes": 4762,
+      "sha256": "34eb7bf81d3dbf72dc197a1cb8c8bf405bd756778acfb7a9e48a7e7f03a8c843"
+    },
+    {
+      "path": "frameworks/genhttp-ioxide/Project.cs",
+      "bytes": 2424,
+      "sha256": "670d72885d8bc8156b51fbaa7394c9723be592ed6f8b00fcf2a4d158ac6c827c"
+    },
+    {
+      "path": "frameworks/genhttp-ioxide/README.md",
+      "bytes": 2656,
+      "sha256": "1914118dc8c9e009b41fa1c4cb3f1b42cb26ae2b768e488ede6189111ed7aa0c"
+    },
+    {
+      "path": "frameworks/genhttp-ioxide/Tests/AsyncDatabase.cs",
+      "bytes": 1508,
+      "sha256": "0fc2750095a7c6504902458c9432e42a5e6abd121e26dc92cc83e9c4c1dede55"
+    },
+    {
+      "path": "frameworks/genhttp-ioxide/Tests/Baseline.cs",
+      "bytes": 291,
+      "sha256": "9d121cedccb8fdd0fc3cb54ee23b50106a7e8ad832a409650e26a1b2739c0d42"
+    },
+    {
+      "path": "frameworks/genhttp-ioxide/Tests/Crud.cs",
+      "bytes": 4641,
+      "sha256": "cca0bdd013d954a081d764746b3745d34fe2ac5a962cf1f0cf8ae8fc3efb6533"
+    },
+    {
+      "path": "frameworks/genhttp-ioxide/Tests/Delay.cs",
+      "bytes": 4282,
+      "sha256": "8a6dd07dee1fdb759a9cf3bba422a258c0afa5d65d95f61bfc907333151790ea"
+    },
+    {
+      "path": "frameworks/genhttp-ioxide/Tests/Echo.cs",
+      "bytes": 203,
+      "sha256": "e85e677b4330cb4b539ca28d34248aaebb850f4026a6a90f80c13c0322aa4314"
+    },
+    {
+      "path": "frameworks/genhttp-ioxide/Tests/EchoHandler.cs",
+      "bytes": 1040,
+      "sha256": "c74a7c01ecdb4f9596cfb2d1601ea7928586716ec076708a668075a95bbdecb6"
+    },
+    {
+      "path": "frameworks/genhttp-ioxide/Tests/Json.cs",
+      "bytes": 1643,
+      "sha256": "3476eb9e133263982c05acb207ddd32ae20dfc843649929f6e7bf5dc936306b9"
+    },
+    {
+      "path": "frameworks/genhttp-ioxide/genhttp.csproj",
+      "bytes": 1969,
+      "sha256": "66bbb07b6079ee02eef1b3eafab1d6067b4e1bcd120cc7e59ad941345ff468d1"
+    },
+    {
+      "path": "frameworks/genhttp-ioxide/meta.json",
+      "bytes": 1514,
+      "sha256": "1f8c79f2798c718e5e8b6881442acef9a3a1330e79af7f284e2b91dc8ae56b64"
+    },
+    {
+      "path": "frameworks/genhttp-kestrel/Dockerfile",
+      "bytes": 666,
+      "sha256": "961cefe409acea66422c575308356e61697754286dca001fdf232f647f75e2dc"
+    },
+    {
+      "path": "frameworks/genhttp-kestrel/Infrastructure/Postgres.cs",
+      "bytes": 1188,
+      "sha256": "cf58cdcbc580ba94f2d5a07dbd0ea7b6fc57cf48536c69cf57b43a14919fbadc"
+    },
+    {
+      "path": "frameworks/genhttp-kestrel/Model.cs",
+      "bytes": 1437,
+      "sha256": "42f07653057dab266fb3479c704fa50084bdf83544e74c7a55304fa7663f4409"
+    },
+    {
+      "path": "frameworks/genhttp-kestrel/Program.cs",
+      "bytes": 1009,
+      "sha256": "da1118761548ad9db9a8152d9ec492f563acfdda6cce3a7f37994c8968ce71fe"
+    },
+    {
+      "path": "frameworks/genhttp-kestrel/Project.cs",
+      "bytes": 1730,
+      "sha256": "5cb42467713b15ff8ac2859b9456f6cce72a6e067e874a1c32d2542ad5ae6ba9"
+    },
+    {
+      "path": "frameworks/genhttp-kestrel/README.md",
+      "bytes": 1008,
+      "sha256": "a1f3e0b96e71084f55258aaba240ef5a6171c34019a80ae80e37999dfd52ed84"
+    },
+    {
+      "path": "frameworks/genhttp-kestrel/Tests/AsyncDatabase.cs",
+      "bytes": 1532,
+      "sha256": "674bb65294043d77f598fb33079964e057494404f79809916801a7f795d702ec"
+    },
+    {
+      "path": "frameworks/genhttp-kestrel/Tests/Baseline.cs",
+      "bytes": 291,
+      "sha256": "9d121cedccb8fdd0fc3cb54ee23b50106a7e8ad832a409650e26a1b2739c0d42"
+    },
+    {
+      "path": "frameworks/genhttp-kestrel/Tests/Crud.cs",
+      "bytes": 6097,
+      "sha256": "52d701d83f1707a0f0928a5464a6eb60d5cf8c9bd10cb062d224ff2713d799dd"
+    },
+    {
+      "path": "frameworks/genhttp-kestrel/Tests/Delay.cs",
+      "bytes": 609,
+      "sha256": "4f5090d121b85f5d74f53177978ce77e92ddd3f2d546a99043457e66a31a9406"
+    },
+    {
+      "path": "frameworks/genhttp-kestrel/Tests/Echo.cs",
+      "bytes": 203,
+      "sha256": "e85e677b4330cb4b539ca28d34248aaebb850f4026a6a90f80c13c0322aa4314"
+    },
+    {
+      "path": "frameworks/genhttp-kestrel/Tests/EchoHandler.cs",
+      "bytes": 1088,
+      "sha256": "41273b43133e920d7c2d75e6b6ec52b7af932d9470e654316b5572c6540b9ef5"
+    },
+    {
+      "path": "frameworks/genhttp-kestrel/Tests/Json.cs",
+      "bytes": 1706,
+      "sha256": "4b4db8358edffce5e14d97d7b99529232ce6728e454dd9fa05443022aaf107e5"
+    },
+    {
+      "path": "frameworks/genhttp-kestrel/genhttp.csproj",
+      "bytes": 963,
+      "sha256": "6d8dedfc917359b491db8e2f37a97db820272e9e9d1da238d33af6b4cbac118b"
+    },
+    {
+      "path": "frameworks/genhttp-kestrel/meta.json",
+      "bytes": 854,
+      "sha256": "0a355f6ec044af1b017a4d4549803a2b9645502bf6099bb371bdef1e12ada220"
+    },
+    {
+      "path": "frameworks/grpc-go/Dockerfile",
+      "bytes": 216,
+      "sha256": "97bc66c97790690d58f6348c2a61476e23eac9f8c19969e69a1583949cfa32a7"
+    },
+    {
+      "path": "frameworks/grpc-go/go.mod",
+      "bytes": 323,
+      "sha256": "9c3e22b181983f19a4385af3f40c2f392a5e024abba775cbc355e90420b4763e"
+    },
+    {
+      "path": "frameworks/grpc-go/go.sum",
+      "bytes": 2963,
+      "sha256": "c6b3f1819651ced200bc2b1b6128612637c25f00370f3ad697d14f06388b6f9b"
+    },
+    {
+      "path": "frameworks/grpc-go/main.go",
+      "bytes": 1370,
+      "sha256": "5a0e81349f638946b18ba59bee7732c7c4128acd77c49cbe972604d187ffb07f"
+    },
+    {
+      "path": "frameworks/grpc-go/meta.json",
+      "bytes": 323,
+      "sha256": "664f84d2efe47d08a387cba1460159165418168e88e314cc6d356dbe3263976a"
+    },
+    {
+      "path": "frameworks/grpc-go/proto/benchmark.pb.go",
+      "bytes": 5397,
+      "sha256": "7fa81bd5f68de0d2a88e163b1036cdb7416c730326eb06166f8f9dd81ce8f954"
+    },
+    {
+      "path": "frameworks/grpc-go/proto/benchmark.proto",
+      "bytes": 249,
+      "sha256": "6aefe8f32dbd5a0eb313f6923e259b4a1d1e6e1cc25282354118a3a0f5ef465a"
+    },
+    {
+      "path": "frameworks/grpc-go/proto/benchmark_grpc.pb.go",
+      "bytes": 4543,
+      "sha256": "f0fb5b65c58f0f207c3b14fe8e030dcfb677f56dad7fba696132ea64445ee0ee"
+    },
+    {
+      "path": "frameworks/helidon-production/Dockerfile",
+      "bytes": 1011,
+      "sha256": "089e4e7df6f759d7ce385c870fcccf3e20973e63fe6ebe497cd9d0d827e4d375"
+    },
+    {
+      "path": "frameworks/helidon-production/README.md",
+      "bytes": 2529,
+      "sha256": "63afe29714fae45d9519b1763fdd01e09a48710be5c2ba3fb15ea8f779955926"
+    },
+    {
+      "path": "frameworks/helidon-production/meta.json",
+      "bytes": 907,
+      "sha256": "13825e4fa4a83ac5dbe82c40d53ecd8393658b5ca4cfb8d8176775781a212a30"
+    },
+    {
+      "path": "frameworks/helidon-production/pom.xml",
+      "bytes": 5704,
+      "sha256": "66f70a0c5cea1407f1c307b427af4a77ada5990c411a8beb0ce9b9d8c03e5346"
+    },
+    {
+      "path": "frameworks/helidon-production/src/main/java/com/httparena/BaselineHandler.java",
+      "bytes": 732,
+      "sha256": "a8fd36ad82902872cb1356d1e9d4d597208dcecccbd339c91393c53e30a422fb"
+    },
+    {
+      "path": "frameworks/helidon-production/src/main/java/com/httparena/BaselinePostHandler.java",
+      "bytes": 858,
+      "sha256": "97b061b579b597eb1937dc48e0c0dbd0e7d25ccecab3ec2d80ce6032b562b07c"
+    },
+    {
+      "path": "frameworks/helidon-production/src/main/java/com/httparena/BenchmarkGrpcService.java",
+      "bytes": 1583,
+      "sha256": "11b4c442ac40e03bbd90b6ff2c5eddc73ef014d63a07eaf6a9c313b06f8a1b97"
+    },
+    {
+      "path": "frameworks/helidon-production/src/main/java/com/httparena/DbHandler.java",
+      "bytes": 6843,
+      "sha256": "c22277eb94bd2b612c523658612f6a2e353125a5eee78e4903eca5a3388bf853"
+    },
+    {
+      "path": "frameworks/helidon-production/src/main/java/com/httparena/DelayHandler.java",
+      "bytes": 673,
+      "sha256": "d9779e2590dda187204ce441bff445dffaa2e3ab24b02320671afb8473f764a4"
+    },
+    {
+      "path": "frameworks/helidon-production/src/main/java/com/httparena/DelayWait.java",
+      "bytes": 1092,
+      "sha256": "a266c5642a5fcd9c72c3dd3f350f61e40514be560177960cccadcc1e36e3678d"
+    },
+    {
+      "path": "frameworks/helidon-production/src/main/java/com/httparena/EchoHandler.java",
+      "bytes": 754,
+      "sha256": "b61b42a50e3818f28dc97219c93afc7527f88d523a7eb0c3a1fb2c884f7b655f"
+    },
+    {
+      "path": "frameworks/helidon-production/src/main/java/com/httparena/EchoWsListener.java",
+      "bytes": 581,
+      "sha256": "1a228f6d1334786a6ddefc636c11f398096b1218177765ef318095334112267b"
+    },
+    {
+      "path": "frameworks/helidon-production/src/main/java/com/httparena/Item.java",
+      "bytes": 313,
+      "sha256": "b6d2dbf9a1b797efe0f111d784bf71f52b7a1094a650bbe9db04e5ccea47f657"
+    },
+    {
+      "path": "frameworks/helidon-production/src/main/java/com/httparena/Items.java",
+      "bytes": 146,
+      "sha256": "fdbbf6c80dc7f31eb3405969e7fa93a1fd888b711143aac4f32fc5478048e3e9"
+    },
+    {
+      "path": "frameworks/helidon-production/src/main/java/com/httparena/JsonHandler.java",
+      "bytes": 1962,
+      "sha256": "dfa896f1370d6cf18b065309168481141df845be0bf3b25b9373ec2f359008b9"
+    },
+    {
+      "path": "frameworks/helidon-production/src/main/java/com/httparena/Main.java",
+      "bytes": 4126,
+      "sha256": "8fb8e7b3b9b947c5c57b6ca2ada2087219a44acd403d71a7dc36d2590d8bd345"
+    },
+    {
+      "path": "frameworks/helidon-production/src/main/java/com/httparena/PipelineHandler.java",
+      "bytes": 815,
+      "sha256": "2da71c269f0e715ea150171ba269f83bc0eb9fc7290fac4cfb59ef0d7796920d"
+    },
+    {
+      "path": "frameworks/helidon-production/src/main/java/com/httparena/Rating.java",
+      "bytes": 116,
+      "sha256": "01d3c7c929c5c0315622030fb19a60c8928aa21deb784e608bc9d717613c228f"
+    },
+    {
+      "path": "frameworks/helidon-production/src/main/java/com/httparena/TotalItem.java",
+      "bytes": 902,
+      "sha256": "4dce02038f32994e7833e29edbd15062e71d7eb2c1e225852ed572d53e09bf50"
+    },
+    {
+      "path": "frameworks/helidon-production/src/main/java/com/httparena/TotalItems.java",
+      "bytes": 156,
+      "sha256": "33d352b0b5ca95b3f0a9e6e1fac015f54f86cd0a3223ec89491a5a49ee5b77dc"
+    },
+    {
+      "path": "frameworks/helidon-production/src/main/proto/benchmark.proto",
+      "bytes": 425,
+      "sha256": "e8a922a8ea2397b945f69955a13669f66a1acf2aabbe707b27d6e1bd19241345"
+    },
+    {
+      "path": "frameworks/helidon-production/src/main/resources/application.yaml",
+      "bytes": 1272,
+      "sha256": "f686ea8a4a7828bc11a2e68daae791c5cd3078c84a85f1b8b222a6500d78d1b9"
+    },
+    {
+      "path": "frameworks/helidon-production/src/test/java/com/httparena/BenchmarkGrpcServiceTest.java",
+      "bytes": 3522,
+      "sha256": "6e3505ca0a77517d984fbb9ce179a6d820074f36a5f609114a0f19623a4872ec"
+    },
+    {
+      "path": "frameworks/helidon-production/src/test/java/com/httparena/DelayHandlerTest.java",
+      "bytes": 5523,
+      "sha256": "41a134abb159a5727c3d127f97e83afd003e999f08178ff26062c7264667579f"
+    },
+    {
+      "path": "frameworks/helidon-production/src/test/java/com/httparena/DelayWaitTest.java",
+      "bytes": 4833,
+      "sha256": "bd535bc581d71a251f4e436e39c680eb1dcdacabe3f37bfdcf66e3bff3613516"
+    },
+    {
+      "path": "frameworks/ioxide/.dockerignore",
+      "bytes": 10,
+      "sha256": "6c5082c7e6de3e350189c67a1aacf757485ecc26e0a3cf96683528565f3e5f12"
+    },
+    {
+      "path": "frameworks/ioxide/Config.cs",
+      "bytes": 18213,
+      "sha256": "14f36a3ee63e2ea18c3e3989f7ce9fce72f662d8cb79ef551eff31f0674c6bba"
+    },
+    {
+      "path": "frameworks/ioxide/Dockerfile",
+      "bytes": 1018,
+      "sha256": "a84437a8b533bc3852b370fac7b5896576a497fc6af235fd70c06d91d66f0564"
+    },
+    {
+      "path": "frameworks/ioxide/Env.cs",
+      "bytes": 2351,
+      "sha256": "03247893d687324cb6c928af62ab6025712eb4d8d505ca32757092819edc2a7e"
+    },
+    {
+      "path": "frameworks/ioxide/Handler.cs",
+      "bytes": 10037,
+      "sha256": "f17a6f4216f859bb2e3e7b26967db2e102b6ff52d21232c702f457fadf03f7c1"
+    },
+    {
+      "path": "frameworks/ioxide/HttpSession.cs",
+      "bytes": 28862,
+      "sha256": "71bde368361f20f604bf985711f85afcf53ab100acbd3f9a88faace438d76cf9"
+    },
+    {
+      "path": "frameworks/ioxide/Multiplexed.cs",
+      "bytes": 6826,
+      "sha256": "b0e8c076bffef2e0dfe7be81eb52f2f98b6afd34fd05c645fbd46b097b77d48d"
+    },
+    {
+      "path": "frameworks/ioxide/Precompressed.cs",
+      "bytes": 4361,
+      "sha256": "4a1fa3fe64e9cf0b09a7ff8dd5f3f4ba51e44634cf663d099c781ba7f5e170a5"
+    },
+    {
+      "path": "frameworks/ioxide/Program.cs",
+      "bytes": 5520,
+      "sha256": "cd2795982256c880abe2cfc6e3bc63857e077efba206a758d73447c5e9b91501"
+    },
+    {
+      "path": "frameworks/ioxide/README.md",
+      "bytes": 8345,
+      "sha256": "a3882cf638e873388321b2170e1a5125a2e20b0769423cb9f5c40342b37e68e3"
+    },
+    {
+      "path": "frameworks/ioxide/StaticRefresh.cs",
+      "bytes": 3344,
+      "sha256": "54a705a95bccc421c527063573421a30925e0ac288c2224fd52eec2a2d69816e"
+    },
+    {
+      "path": "frameworks/ioxide/ioxide-arena.csproj",
+      "bytes": 1990,
+      "sha256": "b93d7bf4e40450b81e1ac0d16df785950757bfae55bf7559d749b3d3a5404299"
+    },
+    {
+      "path": "frameworks/ioxide/meta.json",
+      "bytes": 1487,
+      "sha256": "73b9365f97c16b84af0d53c87904d9fe4d142e8f51aeef2996e6b7a043efbd82"
+    },
+    {
+      "path": "frameworks/libuvcpp/Dockerfile",
+      "bytes": 19870,
+      "sha256": "9500b83c6cbcd2f2a83cb445df6f694fb30568538db695dbacb53cd881277c05"
+    },
+    {
+      "path": "frameworks/libuvcpp/README.md",
+      "bytes": 21014,
+      "sha256": "e58af9fd779a7e9223a070bf9e7b13aaf1cdecc27c3667594afce16ab87c1355"
+    },
+    {
+      "path": "frameworks/libuvcpp/compose.gateway-h3.yml",
+      "bytes": 2072,
+      "sha256": "a3080762def15f6d2b240e4c7799e7f4363874680205ff38827c4b4af0a4bba7"
+    },
+    {
+      "path": "frameworks/libuvcpp/compose.gateway.yml",
+      "bytes": 3102,
+      "sha256": "94cdb94492655e3f78dcf5df8b2f8203a1426606322bc57c19e13aa033f34379"
+    },
+    {
+      "path": "frameworks/libuvcpp/compose.production-stack.yml",
+      "bytes": 4268,
+      "sha256": "505b20ed5c88567b1895bfca8f38ea84a18ca1e360260ab5e447b0ec4d68903a"
+    },
+    {
+      "path": "frameworks/libuvcpp/main.cc",
+      "bytes": 81352,
+      "sha256": "8b05d7c5111500ce313f7a710b47e8242b83a1e2a1ea8ae385bc8abe988267fe"
+    },
+    {
+      "path": "frameworks/libuvcpp/meta.json",
+      "bytes": 1463,
+      "sha256": "ef963e1265f140462fae05e6745a977280c1f96e2ecc03f9b01640e6c936fae9"
+    },
+    {
+      "path": "frameworks/libuvcpp/proxy-production/Caddyfile",
+      "bytes": 1908,
+      "sha256": "b15ae1e9d6bd11f3cb8c5f6a392410078ddfb6b013cd645b0b34f771bc041055"
+    },
+    {
+      "path": "frameworks/libuvcpp/proxy-production/Dockerfile",
+      "bytes": 312,
+      "sha256": "5baca33290db7e37d33d691abe56a79a5ef43670aac4f11cbb72b174aca1e9f5"
+    },
+    {
+      "path": "frameworks/libuvcpp/proxy/Caddyfile",
+      "bytes": 2091,
+      "sha256": "e9cb27249f6ae0c568c2b86af2f9cd2ac0b271908e8880d4e2a82e8697b92cbc"
+    },
+    {
+      "path": "frameworks/libuvcpp/proxy/Dockerfile",
+      "bytes": 426,
+      "sha256": "6b4b9bf4144722ac6c4821f5613f939b390f94c9c05f341081a286a242d7bd3e"
+    },
+    {
+      "path": "frameworks/proxygen-coro/README.md",
+      "bytes": 2862,
+      "sha256": "9d26f74eab4edc546afb4c4ec6632c470014b18616599597cf1d34f45da132df"
+    },
+    {
+      "path": "frameworks/proxygen-coro/build.sh",
+      "bytes": 426,
+      "sha256": "33b5b395742ed595dc378d06e6496d7046bc7ed9898c9fda416d228fb1dd7120"
+    },
+    {
+      "path": "frameworks/proxygen-coro/meta.json",
+      "bytes": 654,
+      "sha256": "9096460b643989bfd920e19d6f2a6c28c3601c5bef5daabe12f0cf49ad64cb9f"
+    },
+    {
+      "path": "frameworks/proxygen/CMakeLists.txt",
+      "bytes": 2040,
+      "sha256": "bdf0c494efdd5af630572b9350542288b8151fad273e50544ee7e4cb1805eced"
+    },
+    {
+      "path": "frameworks/proxygen/Dockerfile",
+      "bytes": 3017,
+      "sha256": "ea299c229a3af5657122eeae89f9734859ec23bb0c8939e3e55180be89894751"
+    },
+    {
+      "path": "frameworks/proxygen/README.md",
+      "bytes": 5681,
+      "sha256": "f9786415f82454f42dca4e399c5338dc320bde7393779892c835e6ab4e1f0dc2"
+    },
+    {
+      "path": "frameworks/proxygen/entrypoint.sh",
+      "bytes": 611,
+      "sha256": "e43181c117a48dbc5f1fac4f7f780a0beaf20ef74186dd8ffe3c835f4f8dd5c9"
+    },
+    {
+      "path": "frameworks/proxygen/meta.json",
+      "bytes": 663,
+      "sha256": "6a05033c590af2fafabc919cec4616a13363842a8fda1086295cfc282dc1086a"
+    },
+    {
+      "path": "frameworks/proxygen/src/ArenaCommon.h",
+      "bytes": 11624,
+      "sha256": "e3bcc7acc2da2048be9499edfc9c3bf8de5bb955eebcc3cd34283f0bab929896"
+    },
+    {
+      "path": "frameworks/proxygen/src/ArenaHQServer.cpp",
+      "bytes": 2438,
+      "sha256": "eccc1ba49d8eb8ef9a0e5a4f5190a7aedc4ac6bc3b9fc3e96f07069f2fe30859"
+    },
+    {
+      "path": "frameworks/proxygen/src/ArenaHQServer.h",
+      "bytes": 842,
+      "sha256": "3326c6527482e22552cae7d443064018f4193116ea9b7276ab381fdfbbcf86e5"
+    },
+    {
+      "path": "frameworks/proxygen/src/ArenaWebSocket.h",
+      "bytes": 12512,
+      "sha256": "6562429b7795968c0fc2ee3cbeed955064dc3e0b65133bc5b78a56a12afd94cb"
+    },
+    {
+      "path": "frameworks/proxygen/src/ClassicServer.cpp",
+      "bytes": 17846,
+      "sha256": "94239dd3f577245bfd68e50e99c959772bb14551e68494e70a7ba11f9b908892"
+    },
+    {
+      "path": "frameworks/proxygen/src/CoroServer.cpp",
+      "bytes": 23538,
+      "sha256": "a788e1a0b048d7a9a0197f5cf6f4812286a722f3ba0c418cfe253f01b4fab03b"
+    },
+    {
+      "path": "frameworks/trillium/Cargo.lock",
+      "bytes": 91813,
+      "sha256": "00b6dd06d1c98cf8c3fbbde156fe1586c50912a76c730e2e2ee1fe9456219e5c"
+    },
+    {
+      "path": "frameworks/trillium/Cargo.toml",
+      "bytes": 1020,
+      "sha256": "019c85a3b64abb929db09c517ea0e1ccb79e9780de40c37a8ef31115702b5e28"
+    },
+    {
+      "path": "frameworks/trillium/Dockerfile",
+      "bytes": 505,
+      "sha256": "d4ba53834d47afee45c155c024d3b447fda38047bbab6b563f7d57611230b7ab"
+    },
+    {
+      "path": "frameworks/trillium/README.md",
+      "bytes": 3105,
+      "sha256": "9b46bb32952781a6e58395628924e92a84fefdba4462e8171def615e78c278dc"
+    },
+    {
+      "path": "frameworks/trillium/askama.toml",
+      "bytes": 87,
+      "sha256": "297cbdf423e612df8073e78ba592139d0b011a3d075434599ac5998b5184fce1"
+    },
+    {
+      "path": "frameworks/trillium/compose.gateway-h3.yml",
+      "bytes": 1354,
+      "sha256": "538094269ace4e61ed0050836d8a0aa47bcae335fe1393177d5fd4bd5c8b1a10"
+    },
+    {
+      "path": "frameworks/trillium/compose.gateway.yml",
+      "bytes": 1694,
+      "sha256": "cf66290fa8ca4bf8bf92c1c1afea73ec5c7d18a4849c60eafa06bf047abcab02"
+    },
+    {
+      "path": "frameworks/trillium/compose.production-stack.yml",
+      "bytes": 3943,
+      "sha256": "3a976aee7f83ea16f9e5bbc6274f491d86e6b14073767bfed9c1686270433fc9"
+    },
+    {
+      "path": "frameworks/trillium/meta.json",
+      "bytes": 1252,
+      "sha256": "2328fbaa89c3901a5e345c6921404635457b16ef51d39c608c626a40352608eb"
+    },
+    {
+      "path": "frameworks/trillium/proto/benchmark.proto",
+      "bytes": 1003,
+      "sha256": "60cfc16737f42786033a8826d717bd20e988dc4fc1a44c9219655151f4bc7d03"
+    },
+    {
+      "path": "frameworks/trillium/proxy-production/Caddyfile",
+      "bytes": 1655,
+      "sha256": "5862f5a42a68fb6c6485df4db9f04fab84a058d2909689d1315f167ddfc9932a"
+    },
+    {
+      "path": "frameworks/trillium/proxy-production/Dockerfile",
+      "bytes": 320,
+      "sha256": "d6efedb9a5c4d930add397fab5abf83d1baaf660ee127c67df009ac45507048b"
+    },
+    {
+      "path": "frameworks/trillium/proxy/Caddyfile",
+      "bytes": 1426,
+      "sha256": "ad2a9e8435983f68ee2c48b2db5b11002a237a79ea436c75aefd3e381662ca9b"
+    },
+    {
+      "path": "frameworks/trillium/proxy/Dockerfile",
+      "bytes": 378,
+      "sha256": "e466e9034b6e6aaa35a836c122fc87a75629c4c52579d87ca913dd55ace5ebfb"
+    },
+    {
+      "path": "frameworks/trillium/rustfmt.toml",
+      "bytes": 328,
+      "sha256": "80d88f852d119924840bd075c7d381014aa0061df0ca5fca4e50d2decd9c347c"
+    },
+    {
+      "path": "frameworks/trillium/src/grpc.rs",
+      "bytes": 2464,
+      "sha256": "a12dc5a66edd92aae3e69eba5212f5f16aeed3164b8343bcb9febbb894923f91"
+    },
+    {
+      "path": "frameworks/trillium/src/grpc/benchmark.rs",
+      "bytes": 4056,
+      "sha256": "70097e4d95a6bcbfefa27e6bdc12639e879ce9b48901d3981e8ae8a38aec86ba"
+    },
+    {
+      "path": "frameworks/trillium/src/handlers.rs",
+      "bytes": 1773,
+      "sha256": "7dd0c952f65a43e2441a848033e4c695e6b83f84c3f11f6d2acc27f24bc4586e"
+    },
+    {
+      "path": "frameworks/trillium/src/handlers/api.rs",
+      "bytes": 9676,
+      "sha256": "629756446f634ca9b708f5e5da5391039519e843875fb5a368b912cb79526bff"
+    },
+    {
+      "path": "frameworks/trillium/src/handlers/crud.rs",
+      "bytes": 10270,
+      "sha256": "367358b767b33c0eb15efd6116037b0b38ea02021c04d836edbe7327c8811fa3"
+    },
+    {
+      "path": "frameworks/trillium/src/handlers/db.rs",
+      "bytes": 2544,
+      "sha256": "7fbd69541db39c328edec21d5d1824eff696be808e5de429da5550b8c2e29ac6"
+    },
+    {
+      "path": "frameworks/trillium/src/handlers/fortunes.rs",
+      "bytes": 2586,
+      "sha256": "35448ed32399c63d65e591d3b845e4fc3e4fbdaf808e45cfae9c2fb8055e9fa2"
+    },
+    {
+      "path": "frameworks/trillium/src/handlers/h1.rs",
+      "bytes": 4964,
+      "sha256": "f7212b95eca77460474f7c2f571a3afa64dc2d78b2f8b6b7d11e047bce10485f"
+    },
+    {
+      "path": "frameworks/trillium/src/handlers/ws.rs",
+      "bytes": 519,
+      "sha256": "c7e49a505b28bd4252b9c5292052eacb45a2a9ffdc5094d90df298cc92e63ca9"
+    },
+    {
+      "path": "frameworks/trillium/src/main.rs",
+      "bytes": 4173,
+      "sha256": "5ea5d8a75bddb30a3984ebc87dca758787ae1bfdef1d0f80c1b3d7e40790bfea"
+    },
+    {
+      "path": "frameworks/trillium/src/state.rs",
+      "bytes": 4110,
+      "sha256": "9deb47a360c981452a9439cedecb3aab991ada7e8efca9a3b96aad03e474f005"
+    },
+    {
+      "path": "frameworks/trillium/templates/fortunes.html",
+      "bytes": 257,
+      "sha256": "9d1b1c46f0fb9b214fd6407a1d9cac83e71b00c29d1b92ea1c63787b41a4d317"
+    },
+    {
+      "path": "frameworks/vanilla-epoll/.gitignore",
+      "bytes": 12,
+      "sha256": "d91eddb44a677acdba54bb1380d88c930faf002cf409d013f9df5a82e7f2e6d2"
+    },
+    {
+      "path": "frameworks/vanilla-epoll/Dockerfile",
+      "bytes": 7992,
+      "sha256": "45440a6a83de27c6af2a14a2ce8318aece5a55ee29fd9274e43360b50eabd4d2"
+    },
+    {
+      "path": "frameworks/vanilla-epoll/README.md",
+      "bytes": 2642,
+      "sha256": "6dd2c58c11686302720e71f26f42d6fb7eb45b5814eacdae7e647a4948f8081e"
+    },
+    {
+      "path": "frameworks/vanilla-epoll/main.v",
+      "bytes": 84469,
+      "sha256": "730a64f1df487b38b49f6ed81ac5ca617150a7f74c6befb6e6b57cc8ce714b19"
+    },
+    {
+      "path": "frameworks/vanilla-epoll/mbedtls-rsa-sign-cache.patch",
+      "bytes": 3810,
+      "sha256": "644e08c89e6d94532a9b500e1c930c60b285d5d9d0419c276b7151a29ea28ae6"
+    },
+    {
+      "path": "frameworks/vanilla-epoll/meta.json",
+      "bytes": 2898,
+      "sha256": "d0d5ccda47e568c84adfc00c8bfb575f9c72ef6c7aaaa08e6bb29fc3a80a8eba"
+    },
+    {
+      "path": "requests/benchmark.proto",
+      "bytes": 1003,
+      "sha256": "60cfc16737f42786033a8826d717bd20e988dc4fc1a44c9219655151f4bc7d03"
+    },
+    {
+      "path": "requests/grpc-sum.bin",
+      "bytes": 9,
+      "sha256": "b5899c09630ef99d38f033f7cddf447cc97382370832f822634f93c3714cbb6f"
+    },
+    {
+      "path": "requests/json-h2c-uris.txt",
+      "bytes": 236,
+      "sha256": "c4a7705b376069f99e5dcc08462cd58ed7d301c0ca7fd962a5ab8c811bf0bd28"
+    },
+    {
+      "path": "requests/static-h2-uris.txt",
+      "bytes": 833,
+      "sha256": "4f5ced39b50c242eab3ef97f918abbac010a61ead51617ee4af674ba0229f9ad"
+    },
+    {
+      "path": "scripts/benchmark.sh",
+      "bytes": 29447,
+      "sha256": "068d619526f2578d495797ef7e4e7c06a35ae5ac703ff53f7d3f65b477633c2a"
+    },
+    {
+      "path": "scripts/lib/common.sh",
+      "bytes": 5558,
+      "sha256": "c5aa2702125f12bbb321ead36feb1612b8a0a023de9d13ebd04fbaff1622c6dd"
+    },
+    {
+      "path": "scripts/lib/framework.sh",
+      "bytes": 11382,
+      "sha256": "7b9a7610fecb4755ac025ccb8b0e14499161763f3abd7b437a5d9a90480d70f2"
+    },
+    {
+      "path": "scripts/lib/profiles.sh",
+      "bytes": 9183,
+      "sha256": "5c5850418b3e3af407556a75b86f2ccf232a684ae743f0af4b9470a52d05de11"
+    },
+    {
+      "path": "scripts/lib/stats.sh",
+      "bytes": 7061,
+      "sha256": "f1fb80b99011bfcc8113ae9347e2b1b8888256dce7a17049c4ca7178ef509883"
+    },
+    {
+      "path": "scripts/lib/system.sh",
+      "bytes": 4788,
+      "sha256": "6c5b0e0fdbbe5690b29c8064529ffad4961ca21e7d4a1ec205c5b8041f22280b"
+    },
+    {
+      "path": "scripts/lib/tools/h2load.sh",
+      "bytes": 12795,
+      "sha256": "36c76feb92a169506e1b8b2b4fba6d302394154a61e1f6d83e1ed49657c93ac9"
+    },
+    {
+      "path": "scripts/validate.sh",
+      "bytes": 137480,
+      "sha256": "ca1266b63b979e2491df96e78aeb7f3077c694dd6ffe4ba4ba12123a86ff4f48"
+    },
+    {
+      "path": "site/content/docs/hardware/_index.md",
+      "bytes": 7979,
+      "sha256": "855d8569d6200610653d8bb4a6f207ee2f1be3296a7c048ee5ffb3abc87ff332"
+    },
+    {
+      "path": "site/content/docs/test-profiles/grpc/unary/implementation.md",
+      "bytes": 2416,
+      "sha256": "40c0522560ffcc26656cc6921eed7ef005dc73d2945a877d333741c0a8e88344"
+    },
+    {
+      "path": "site/content/docs/test-profiles/grpc/unary/validation.md",
+      "bytes": 2038,
+      "sha256": "a81f06d661afab72b75a7d9418b4e01db10bb4ffeda7f1f7dfefbbe35807697d"
+    },
+    {
+      "path": "site/content/docs/test-profiles/h2/baseline-h2/implementation.md",
+      "bytes": 2557,
+      "sha256": "bbec1c21c8c347696487f80795834d8ef7815d3c6c5b6bb24acbcd1609ea2883"
+    },
+    {
+      "path": "site/content/docs/test-profiles/h2/baseline-h2/validation.md",
+      "bytes": 1407,
+      "sha256": "f110259344be0f389373d5be57fb4cc1b4a18a2f4969d15536163f5a217f48e2"
+    },
+    {
+      "path": "site/content/docs/test-profiles/h2/baseline-h2c/implementation.md",
+      "bytes": 2949,
+      "sha256": "5c4eda10fc440dad40dc5716681fcaaabb96f1b5f6cb5f9ee2720519c65e195d"
+    },
+    {
+      "path": "site/content/docs/test-profiles/h2/baseline-h2c/validation.md",
+      "bytes": 1403,
+      "sha256": "79b008b869d4973824387f1c94a26cdc145ec91673f3399314d897ab6bd7dfc1"
+    },
+    {
+      "path": "site/content/docs/test-profiles/h2/json-h2c/implementation.md",
+      "bytes": 2468,
+      "sha256": "d23e9655a3f8924e6659cf3b4e3232fb8c4fcfd2882850fd47866deb1fb268fc"
+    },
+    {
+      "path": "site/content/docs/test-profiles/h2/json-h2c/validation.md",
+      "bytes": 1412,
+      "sha256": "79c14d41525acccc1d09c90c17c1f1eefc71dd5458955f35da5df401ab6337e6"
+    },
+    {
+      "path": "site/content/docs/test-profiles/h2/static-h2/implementation.md",
+      "bytes": 5241,
+      "sha256": "c8ec116b226cb0629bd7c5e4ef2310673cf66866d440300ba29f98972fa6e950"
+    },
+    {
+      "path": "site/content/docs/test-profiles/h2/static-h2/validation.md",
+      "bytes": 1577,
+      "sha256": "240de15110543f63609c00a2057804a7ec9b3cd48de56c193a8cbc697ecee4e0"
+    },
+    {
+      "path": "site/data/results/bun.json",
+      "bytes": 13073,
+      "sha256": "6a2087f43f8f37f7cff9419e6afd49bcc6a77f21637d1ccd2dae08b190e9c08b"
+    },
+    {
+      "path": "site/data/results/cardigan.json",
+      "bytes": 9066,
+      "sha256": "beb1d7dc69aff8942a3c0ff7aa37206a7c9b1cfa14414a901918f235aa299ed3"
+    },
+    {
+      "path": "site/data/results/genhttp-ioxide.json",
+      "bytes": 16724,
+      "sha256": "748f509572fdd7c22c3dd69532aeec616e765596b1e9d1e035f849550a7a5369"
+    },
+    {
+      "path": "site/data/results/genhttp-kestrel.json",
+      "bytes": 13249,
+      "sha256": "d7e4692d132e044446038e2662002ee7840b1499fa0a4da1f15e81eed8ae341d"
+    },
+    {
+      "path": "site/data/results/helidon-production.json",
+      "bytes": 17263,
+      "sha256": "1f0442306ca757371c88b9f181a0a7738872af6057526b70294b2cacfe501a4b"
+    },
+    {
+      "path": "site/data/results/ioxide.json",
+      "bytes": 10051,
+      "sha256": "67811bd858050543c63545eea267809ceb7eeee98074c0a5430e87289017b95d"
+    },
+    {
+      "path": "site/data/results/libuvcpp.json",
+      "bytes": 21737,
+      "sha256": "7f2b1bc9549d30d90d4d34745d7abd40e1854ebc4fdaf03ea1d3b0a94f74afd4"
+    },
+    {
+      "path": "site/data/results/proxygen-coro.json",
+      "bytes": 12510,
+      "sha256": "afa438e8d0797d3e7b146edc2f02b2f5d633abbd6c12111627e93a63afa9b4df"
+    },
+    {
+      "path": "site/data/results/proxygen.json",
+      "bytes": 12376,
+      "sha256": "053933bcc7c1e32bef8deaad5195b8fdf70585a6b69e5f5d01ad8931999823c2"
+    },
+    {
+      "path": "site/data/results/trillium.json",
+      "bytes": 20834,
+      "sha256": "b35e2a60d57ee40fa320e9e4238e77c2f568be9c774aed078bfc0d0f0b8d86b1"
+    },
+    {
+      "path": "site/data/results/vanilla-epoll.json",
+      "bytes": 18568,
+      "sha256": "15a5aa3ad8a6d2be0a0ea928c2a926ce040051b732a6afd5c74af0e03d16a57c"
+    }
+  ],
+  "pending_before_execution": [
+    "explicit performance token",
+    "hardware satisfying both official disjoint CPU sets",
+    "dedicated Docker daemon/host for official cleanup and system tuning",
+    "cnetmod official-port container entries and official validate.sh pass",
+    "immutable image digests, actual compiler/Release flags and <=4 build jobs for every entry",
+    "separate, clearly labelled true-quantile diagnostics; official statistics unchanged"
+  ],
+  "prior_local_comparison_eligible_as_official_result": false
+}

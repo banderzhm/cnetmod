@@ -9,15 +9,18 @@ set(TEST_SOURCES
     test_metric_aggregation.cpp
     test_flat_map.cpp
     test_charconv.cpp
+    test_converter.cpp
     test_concurrent_containers.cpp
     test_application_result.cpp
     test_json_template.cpp
+    test_json_writer.cpp
     test_application.cpp
     test_application_integrations.cpp
     test_application_composition.cpp
     test_deadline.cpp
     test_task_group.cpp
     test_task.cpp
+    test_stream_write.cpp
     test_lazy.cpp
     test_database_datetime.cpp
     test_configuration_properties.cpp
@@ -97,6 +100,10 @@ if(WIN32)
     list(APPEND TEST_SOURCES test_udp_sendto_on_cancel.cpp)
 endif()
 
+if(CNETMOD_ENABLE_WEBSOCKET)
+    list(APPEND TEST_SOURCES test_websocket_frame.cpp)
+endif()
+
 # Filter out QUIC/HTTP3 tests if QUIC not available
 if(NOT CNETMOD_HAS_QUIC)
     list(FILTER TEST_SOURCES EXCLUDE REGEX "^(test_quic|test_http3)")
@@ -157,6 +164,9 @@ if(CNETMOD_ENABLE_MYSQL AND CNETMOD_ENABLE_ORM)
 endif()
 if(CNETMOD_ENABLE_MYSQL)
     list(APPEND TEST_SOURCES test_mysql_pool.cpp)
+endif()
+if(CNETMOD_ENABLE_POSTGRESQL)
+    list(APPEND TEST_SOURCES test_postgresql_transport.cpp)
 endif()
 if(NOT CNETMOD_ENABLE_ORM OR NOT CNETMOD_ENABLE_MYSQL)
     list(REMOVE_ITEM TEST_SOURCES test_orm_json_result_map.cpp)
@@ -222,10 +232,14 @@ function(cnetmod_test_component TEST_NAME OUTPUT_VARIABLE)
         set(_target cnetmod_grpc)
     elseif(TEST_NAME MATCHES "^test_redis")
         set(_target cnetmod_redis)
+    elseif(TEST_NAME MATCHES "^test_postgresql")
+        set(_target cnetmod_postgresql)
     elseif(TEST_NAME MATCHES "^test_mysql")
         set(_target cnetmod_mysql)
     elseif(TEST_NAME MATCHES "^test_mongodb")
         set(_target cnetmod_mongodb)
+    elseif(TEST_NAME MATCHES "^test_websocket")
+        set(_target cnetmod_websocket)
     elseif(TEST_NAME MATCHES "^test_mqtt")
         set(_target cnetmod_mqtt)
     elseif(TEST_NAME MATCHES "^test_raft")

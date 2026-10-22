@@ -1,0 +1,14 @@
+--- official/Dockerfile
++++ local-build/Dockerfile
+@@ -2,9 +2,9 @@
+ RUN rustup default nightly-2026-06-27
+ WORKDIR /app
+ COPY Cargo.toml .
+-RUN mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release && rm -rf src/ target/release/httparena-wtx-ws* target/release/deps/httparena_wtx-ws*
++RUN mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release -j4 && rm -rf src/ target/release/httparena-wtx-ws* target/release/deps/httparena_wtx-ws*
+ COPY src ./src
+-RUN RUSTFLAGS="-C target-cpu=native" cargo build --release
++RUN RUSTFLAGS="-C target-cpu=native" cargo build --release -j4
+ 
+ FROM debian:bookworm-slim
+ COPY --from=build /app/target/release/httparena-wtx-ws /server

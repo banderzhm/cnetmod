@@ -1,0 +1,48 @@
+starting benchmark...
+spawning thread #0: 64 total client(s). Timing-based test with 0s of warm-up time and 8s of main duration for measurements.
+spawning thread #1: 64 total client(s). Timing-based test with 0s of warm-up time and 8s of main duration for measurements.
+spawning thread #2: 64 total client(s). Timing-based test with 0s of warm-up time and 8s of main duration for measurements.
+spawning thread #3: 64 total client(s). Timing-based test with 0s of warm-up time and 8s of main duration for measurements.
+Warm-up started for thread #0.
+Warm-up started for thread #3.
+Warm-up started for thread #2.
+progress: 9% of clients started
+progress: 18% of clients started
+Warm-up started for thread #1.
+progress: 28% of clients started
+progress: 37% of clients started
+progress: 46% of clients started
+progress: 56% of clients started
+progress: 65% of clients started
+progress: 75% of clients started
+progress: 84% of clients started
+progress: 93% of clients started
+Warm-up phase is over for thread #3.
+Main benchmark duration is started for thread #3.
+Warm-up phase is over for thread #2.
+Main benchmark duration is started for thread #2.
+Warm-up phase is over for thread #0.
+Main benchmark duration is started for thread #0.
+Warm-up phase is over for thread #1.
+Main benchmark duration is started for thread #1.
+Application protocol: h2c
+Main benchmark duration is over for thread #3. Stopping all clients.
+Main benchmark duration is over for thread #2. Stopping all clients.
+Stopped all clients for thread #2
+Stopped all clients for thread #3
+Main benchmark duration is over for thread #1. Stopping all clients.
+Stopped all clients for thread #1
+Main benchmark duration is over for thread #0. Stopping all clients.
+Stopped all clients for thread #0
+
+finished in 8.07s, 392082.00 req/s, 14.69MB/s
+requests: 3136656 total, 3162256 started, 3136656 done, 3136656 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 3136656 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 117.54MB (123248625) total, 11.97MB (12553024) headers (space savings 93.84%), 20.94MB (21956592) data
+                     min         max         mean         sd        +/- sd
+time for request:    15.10ms    128.03ms     63.56ms      6.88ms    70.42%
+time for connect:      557us      6.45ms      3.08ms      1.37ms    65.23%
+time to 1st byte:    38.95ms    106.63ms     64.39ms     18.16ms    58.20%
+req/s           :    1426.78     1728.45     1531.36      111.90    77.34%
+[ perf record: Woken up 9 times to write data ]
+[ perf record: Captured and wrote 2.616 MB /root/cnetmod-grpc-artifacts/candidate-profile/perf.data (15884 samples) ]

@@ -74,9 +74,19 @@ private:
         std::uint64_t high{};
     };
 
+    struct final_size_slot
+    {
+        stream_id id{};
+        final_sizes sizes{};
+        bool used{};
+    };
+
     std::array<std::vector<closed_stream_range>, 4> ranges_;
-    std::map<stream_id, final_sizes> recent_;
-    std::deque<stream_id> order_;
+    // Direct-mapped by stream ID: a closed stream overwrites the slot of the
+    // one closed final_size_capacity IDs earlier, with no allocation per
+    // stream. Created on the first retirement.
+    std::unique_ptr<std::array<final_size_slot, final_size_capacity>> recent_;
+    std::size_t recent_count_{};
 };
 
 export class quic_connection
@@ -178,6 +188,28 @@ public:
         bool fin = false)
         -> task<std::expected<void, std::error_code>>;
 
+    /// Commits a stream write without sending a packet now: the bytes ride
+    /// on the next packet this connection builds (typically the response
+    /// produced right after). Intended for control data with no latency
+    /// requirement, such as QPACK decoder acknowledgements. Returns false,
+    /// leaving nothing committed, when the caller must use async_send.
+    [[nodiscard]] auto try_queue_send(stream_id sid,
+        std::span<const std::byte> data) -> bool;
+
+    /// Synchronous form of async_send for a peer-initiated stream: commits
+    /// the write under the state lock when it is free and no earlier write
+    /// is queued, without sending a packet; call flush_pending_writes() once
+    /// a batch of such writes is committed. Returns nullopt, leaving `data`
+    /// and `shared_data` untouched, when the caller must use async_send or
+    /// async_send_shared (also after a flow-control rejection).
+    [[nodiscard]] auto try_send_now(stream_id sid, std::vector<std::byte>& data,
+        const std::shared_ptr<const std::string>& shared_data, bool fin)
+        -> std::optional<std::expected<void, std::error_code>>;
+
+    /// Sends what the committed writes produced unless another coroutine
+    /// already owns the packet writer and will observe them.
+    auto flush_pending_writes() -> task<void>;
+
     /// Update the RFC 9218 scheduling policy for subsequent data on one
     /// stream. Calls are serialized by the connection's I/O domain; urgency
     /// is clamped to the protocol range [0, 7].
@@ -191,6 +223,14 @@ public:
         stream_id sid,
         mutable_buffer buf)
         -> task<std::expected<std::size_t, std::error_code>>;
+
+    /// Synchronous form of async_recv for the common case: the connection
+    /// state is not held by another coroutine and this read cannot grant the
+    /// peer new flow-control credit (which would need a write). Returns
+    /// nullopt when the caller must use async_recv instead; otherwise returns
+    /// exactly what async_recv would have produced.
+    [[nodiscard]] auto try_recv(stream_id sid, mutable_buffer buf)
+        -> std::optional<std::expected<std::size_t, std::error_code>>;
 
     /// Wait until a stream receives additional contiguous data, reaches its
     /// remote FIN/reset, or the connection closes.  `async_recv` deliberately
@@ -245,6 +285,10 @@ public:
     /// permits it). A closed connection returns not_connected.
     [[nodiscard]] auto async_accept_stream()
         -> task<std::expected<stream_id, std::error_code>>;
+    /// Non-blocking accept of an already queued peer stream; nullopt means
+    /// none is queued (or the connection is closing) and async_accept_stream
+    /// should be awaited.
+    [[nodiscard]] auto try_accept_stream() noexcept -> std::optional<stream_id>;
 
     /// Release the buffers and readiness state of a fully closed stream while
     /// retaining the final sizes needed to validate delayed duplicate frames.
@@ -431,10 +475,12 @@ private:
         long_header hdr)
         -> task<std::expected<void, std::error_code>>;
 
-    /// Handle short header packet
+    /// Handle short header packet. This step performs only synchronous
+    /// post-handshake transitions, so it must not allocate a coroutine frame
+    /// for every received 1-RTT packet.
     [[nodiscard]] auto handle_short_header_packet(
         short_header hdr)
-        -> task<std::expected<void, std::error_code>>;
+        -> std::expected<void, std::error_code>;
 
     /// Process frames from packet
     [[nodiscard]] auto process_frames(const quic_frame_variant& frame)
@@ -522,6 +568,18 @@ private:
         std::vector<std::byte>& prefix,
         const std::shared_ptr<const std::string>& shared_data, bool fin)
         -> std::expected<void, std::error_code>;
+    /// Applies a stream write inline when the state lock is free and no
+    /// producer command is queued ahead of it (which keeps per-stream FIFO
+    /// order). Returns nullopt when the caller must use the command queue;
+    /// the payload is then untouched. A flow-control rejection also leaves
+    /// it untouched so the caller can fragment it.
+    [[nodiscard]] auto try_apply_stream_write_now(stream_id sid,
+        std::vector<std::byte>& prefix,
+        const std::shared_ptr<const std::string>& shared_data, bool fin)
+        -> std::optional<std::expected<void, std::error_code>>;
+    /// Becomes the packet owner for writes committed inline, unless another
+    /// coroutine already owns it and will observe the published request.
+    auto flush_after_direct_write() -> task<void>;
     [[nodiscard]] auto apply_application_datagram(std::vector<std::byte> data)
         -> task<std::expected<void, std::error_code>>;
     [[nodiscard]] auto await_local_stream_send_authority(stream_id sid)

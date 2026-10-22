@@ -332,6 +332,11 @@ void byte_buffer::clear() noexcept
     storage_.clear();
 }
 
+auto byte_buffer::release() noexcept -> std::vector<std::byte>
+{
+    return std::exchange(storage_, {});
+}
+
 void byte_buffer::push_back(std::byte value)
 {
     storage_.push_back(value);

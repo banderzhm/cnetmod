@@ -1,0 +1,57 @@
+{
+  "source_sha": "70975f8d1b1939cb21cc1a00115a0c276c298c0f",
+  "control_sha": "036f369f387272f3689bda72468ccc454b6b3e2d",
+  "official_sha": "8977be2721a5aba7b320345cddfcd6f6b654e698",
+  "all_passed": true,
+  "selected_rounds": 78,
+  "comparison": [
+    {
+      "profile": "unary-grpc",
+      "connections": 256,
+      "candidate": 5547569,
+      "baseline": 922376,
+      "baseline_gain_percent": 501.4433376410488,
+      "fastest_peer": "cnetmod-grpc-vanilla-certified",
+      "peer": 5006542,
+      "target": 5507197,
+      "peer_gain_percent": 10.806400905055824,
+      "passed": true
+    },
+    {
+      "profile": "unary-grpc",
+      "connections": 1024,
+      "candidate": 5243930,
+      "baseline": 587387,
+      "baseline_gain_percent": 792.7555427682261,
+      "fastest_peer": "cnetmod-grpc-vanilla-certified",
+      "peer": 4720019,
+      "target": 5192021,
+      "peer_gain_percent": 11.09976464077793,
+      "passed": true
+    },
+    {
+      "profile": "unary-grpc-tls",
+      "connections": 256,
+      "candidate": 5287944,
+      "baseline": 1035955,
+      "baseline_gain_percent": 410.44147670506925,
+      "fastest_peer": "cnetmod-grpc-cardigan-certified",
+      "peer": 4455897,
+      "target": 4901487,
+      "peer_gain_percent": 18.672940599838817,
+      "passed": true
+    },
+    {
+      "profile": "unary-grpc-tls",
+      "connections": 1024,
+      "candidate": 4896284,
+      "baseline": 600501,
+      "baseline_gain_percent": 715.3665023039096,
+      "fastest_peer": "cnetmod-grpc-cardigan-certified",
+      "peer": 3814210,
+      "target": 4195631,
+      "peer_gain_percent": 28.36954441417752,
+      "passed": true
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "cnetmod-grpc-phase15-w24-pin0": {
+    "image": "sha256:db2b3401d13cad1e8c2541b3a1f515cce37e6322b67af346230be639457f655c",
+    "source_base": "eb33c7529f4202810d7f240459322e6f3f26cf46",
+    "source_patch_sha256": "1dcf6d601d35bc35a627e6a4983624efb5359dd4d546c811c016e391e893d6eb",
+    "binary_sha256": "fb6b04935f17e89756ddd6a748fd9db81b2f14779975cc18ef642100cd5de4a5",
+    "runtime": "24 workers; pin=False; server CPUs all 32 eligible; native ThinLTO; FP; default submit8 CQ256",
+    "source_runtime_commit": "97dc944dfa3d1d40d224efeb1aa2f9c2a01a2b9d"
+  },
+  "cnetmod-grpc-phase15-w16-pin0": {
+    "image": "sha256:60656930114fcbcbdaf93fdc18efc9b1b56249aaf540071dcd059455641f5396",
+    "source_base": "eb33c7529f4202810d7f240459322e6f3f26cf46",
+    "source_patch_sha256": "1dcf6d601d35bc35a627e6a4983624efb5359dd4d546c811c016e391e893d6eb",
+    "binary_sha256": "fb6b04935f17e89756ddd6a748fd9db81b2f14779975cc18ef642100cd5de4a5",
+    "runtime": "16 workers; pin=False; server CPUs all 32 eligible; native ThinLTO; FP; default submit8 CQ256",
+    "source_runtime_commit": "97dc944dfa3d1d40d224efeb1aa2f9c2a01a2b9d"
+  },
+  "cnetmod-grpc-phase15-w16-pin1": {
+    "image": "sha256:12bc165ddb61399050b8d441fb1e417e01f8985861afd76f12dc1cbcfdb04bbb",
+    "source_base": "eb33c7529f4202810d7f240459322e6f3f26cf46",
+    "source_patch_sha256": "1dcf6d601d35bc35a627e6a4983624efb5359dd4d546c811c016e391e893d6eb",
+    "binary_sha256": "fb6b04935f17e89756ddd6a748fd9db81b2f14779975cc18ef642100cd5de4a5",
+    "runtime": "16 workers; pin=True; server CPUs 0-15; native ThinLTO; FP; default submit8 CQ256",
+    "source_runtime_commit": "97dc944dfa3d1d40d224efeb1aa2f9c2a01a2b9d"
+  }
+}

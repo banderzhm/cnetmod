@@ -1,0 +1,88 @@
+--- official/scripts/benchmark.sh
++++ staged/scripts/benchmark.sh
+@@ -66,8 +66,6 @@
+     #   - dangling images from earlier --build cycles (each iteration of
+     #     aspnet-minimal_nginx rebuilds ~300 MB of image layers)
+     # Both are idempotent and fast when there's nothing to clean.
+-    docker volume prune -f >/dev/null 2>&1 || true
+-    docker image prune  -f >/dev/null 2>&1 || true
+ }
+ if [ "${SKIP_TUNE:-}" != "true" ]; then
+     trap 'cleanup_all; system_restore' EXIT
+@@ -78,10 +76,6 @@
+ # Clean slate: stop any leftover benchmark containers from a previous
+ # crashed run, AND prune any leftover dangling volumes/images from the
+ # same source. Belt-and-suspenders vs. the cleanup_all at exit.
+-docker ps -q  --filter "name=httparena-" | xargs -r docker stop -t 5 2>/dev/null || true
+-docker ps -aq --filter "name=httparena-" | xargs -r docker rm -f -v 2>/dev/null || true
+-docker volume prune -f >/dev/null 2>&1 || true
+-docker image prune  -f >/dev/null 2>&1 || true
+ 
+ info "available CPUs: $(nproc 2>/dev/null || echo ?)"
+ 
+@@ -611,27 +605,10 @@
+     fi
+ }
+ 
+-# Iterate profiles × conns.
++# Supplementary high-connection selection only.
+ declare -A BEST_M
+ for profile in "${profiles_to_run[@]}"; do
+-    if [ -z "${PROFILES[$profile]+x}" ]; then
+-        warn "unknown profile: $profile"
+-        continue
+-    fi
+-    framework_subscribes_to "$profile" || { info "skip: $FRAMEWORK does not subscribe to $profile"; continue; }
+-
+     parse_profile "${PROFILES[$profile]}"
+-    IFS=',' read -ra CONN_COUNTS <<< "$PROF_CONNS"
+-    for CONNS in "${CONN_COUNTS[@]}"; do
+-        run_one "$profile" "$CONNS" || continue
+-    done
++    CONNS=1024
++    run_one "$profile" "$CONNS"
+ done
+-
+-# ── Rebuild site data ───────────────────────────────────────────────────────
+-
+-if [ "$SAVE_RESULTS" = "true" ]; then
+-    info "rebuilding site/data/*.json"
+-    python3 "$SCRIPT_DIR/rebuild_site_data.py" --root "$ROOT_DIR"
+-fi
+-
+-info "done"
+--- official/scripts/validate.sh
++++ staged/scripts/validate.sh
+@@ -34,8 +34,8 @@
+ CERTS_DIR="$ROOT_DIR/certs"
+ DATA_DIR="$ROOT_DIR/data"
+ 
+-PG_CONTAINER="httparena-validate-postgres"
+-PG_NETWORK="httparena-validate-net"
++PG_CONTAINER="httparena-validate-cnetmod-grpc-postgres"
++PG_NETWORK="httparena-validate-cnetmod-grpc-net"
+ 
+ cleanup() {
+     # put back any static file a staleness probe replaced, before anything else
+--- official/scripts/lib/common.sh
++++ staged/scripts/lib/common.sh
+@@ -76,7 +76,7 @@
+ ulimit -n "$HARD_NOFILE" 2>/dev/null || true
+ 
+ # Postgres sidecar.
+-PG_CONTAINER="httparena-postgres"
++PG_CONTAINER="httparena-cnetmod-grpc-postgres"
+ DATABASE_URL="postgres://bench:bench@localhost:5432/benchmark"
+ 
+ # ── Logging helpers ─────────────────────────────────────────────────────────
+--- official/scripts/lib/redis.sh
++++ staged/scripts/lib/redis.sh
+@@ -7,7 +7,7 @@
+ # Redis cost shows up in a separate CPU budget rather than stealing from
+ # the framework server's cpuset.
+ 
+-REDIS_CONTAINER="httparena-redis"
++REDIS_CONTAINER="httparena-cnetmod-grpc-redis"
+ REDIS_URL="redis://localhost:6379"
+ REDIS_CPUSET="${REDIS_CPUSET:-0,64}"
+ 

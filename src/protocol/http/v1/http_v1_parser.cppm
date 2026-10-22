@@ -14,6 +14,7 @@ export class request_parser
 {
 public:
     request_parser();
+    explicit request_parser(std::size_t initial_capacity);
     [[nodiscard]] auto consume(const char*, std::size_t)
         -> std::expected<std::size_t, std::error_code>;
     [[nodiscard]] auto ready() const noexcept -> bool;
@@ -23,6 +24,9 @@ public:
     [[nodiscard]] auto uri() const noexcept -> std::string_view;
     [[nodiscard]] auto version() const noexcept -> http_version;
     [[nodiscard]] auto headers() const -> const header_map&;
+    /// Transfer an owning header map; references into its cache move to the
+    /// result. Later queries rebuild the cache without changing request framing.
+    [[nodiscard]] auto take_headers() -> header_map;
     [[nodiscard]] auto body() const noexcept -> std::string_view;
     [[nodiscard]] auto take_body_chunk() -> std::string;
     [[nodiscard]] auto get_header(std::string_view) const -> std::string_view;
@@ -34,6 +38,8 @@ public:
     [[nodiscard]] auto consume_buffered()
         -> std::expected<void, std::error_code>;
     [[nodiscard]] auto has_buffered_data() const noexcept -> bool;
+    /// Transfer bytes received beyond a complete message, for protocol upgrade.
+    [[nodiscard]] auto take_buffered_data() -> std::string;
     void reset() noexcept;
 
 private:
@@ -87,6 +93,9 @@ private:
     state state_ = state::request_line;
     std::size_t read_pos_ = 0, header_bytes_ = 0, body_bytes_remaining_ = 0,
                 body_bytes_received_ = 0;
+    /// Offset in buf_ where the current message starts. Pipelined requests
+    /// advance it instead of moving the unread tail to the buffer front.
+    std::size_t message_start_ = 0;
     bool chunked_ = false, headers_ready_ = false, ready_ = false;
 };
 
@@ -103,6 +112,7 @@ public:
     [[nodiscard]] auto headers() const noexcept -> const header_map&;
     [[nodiscard]] auto body() const noexcept -> std::string_view;
     [[nodiscard]] auto get_header(std::string_view) const -> std::string_view;
+    [[nodiscard]] auto take_buffered_data() -> std::string;
     void reset() noexcept;
 
 private:

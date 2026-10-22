@@ -7,11 +7,13 @@ import cnetmod.core.address;
 import cnetmod.core.buffer;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
+import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
 import cnetmod.coro.cancel;
 import cnetmod.executor.async_op;
 import cnetmod.protocol.mysql;
 
 #include "mysql_pool_reset_cases.inc"
+#include "mysql_packet_write_cases.inc"
 
 RUN_TESTS()

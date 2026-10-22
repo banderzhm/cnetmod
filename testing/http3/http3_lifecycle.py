@@ -9,11 +9,14 @@ import tempfile
 
 try:
     import pylsqpack
+    from aioquic import tls
     from aioquic.asyncio import QuicConnectionProtocol, connect
     from aioquic.h3.connection import H3Connection, H3_ALPN, encode_frame
     from aioquic.h3.events import DataReceived, HeadersReceived
     from aioquic.quic.configuration import QuicConfiguration
     from aioquic.quic.events import StreamReset, ConnectionTerminated
+    from aioquic.quic.packet import pull_ack_frame
+    from aioquic.quic.crypto import next_key_phase
 except ImportError:
     raise SystemExit(77)
 
@@ -293,7 +296,60 @@ async def max_stream_credit_window(port):
               f"after_high={after_high}, after_cleanup={peer._quic._remote_max_streams_bidi}")
 
 
+async def reordered_previous_key_packet(port):
+    async with connect("127.0.0.1", port, configuration=configuration(),
+                       create_protocol=Probe) as peer:
+        assert await peer.get(port) == b"ok\n"
+        quic = peer._quic
+        crypto = quic._cryptos[tls.Epoch.ONE_RTT]
+        old_phase = crypto.key_phase
+        # Reserve a real packet number but hold this encrypted PING until
+        # after the server has authenticated the next key generation.
+        old_number = quic._packet_number
+        quic._packet_number += 1
+        header = bytes([0x43 | (old_phase << 2)]) + quic._peer_cid.cid + old_number.to_bytes(4, "big")
+        delayed = crypto.encrypt_packet(header, b"\x01" + b"\0" * 31, old_number)
+        acknowledged = asyncio.get_running_loop().create_future()
+        next_number = quic._packet_number
+        quic._packet_number += 1
+        next_keys = next_key_phase(crypto.send)
+        # RFC 9001 updates packet protection, not header protection. Construct
+        # a one-direction update without aioquic also advancing receive keys;
+        # this fixture isolates the server's read-key candidate retry path.
+        next_keys.hp = crypto.send.hp
+        next_header = bytes([0x43 | ((old_phase ^ 1) << 2)]) + quic._peer_cid.cid + next_number.to_bytes(4, "big")
+        advanced = next_keys.encrypt_packet(next_header, b"\x01" + b"\0" * 31, next_number)
+        advanced_acknowledged = asyncio.get_running_loop().create_future()
+        handlers = quic._QuicConnection__frame_handlers
+        originals = {kind: handlers[kind] for kind in (0x02, 0x03)}
+        for kind, (original, epochs) in originals.items():
+            def inspect_ack(context, frame_type, buf, original=original):
+                position = buf.tell()
+                ranges, _ = pull_ack_frame(buf)
+                buf.seek(position)
+                if context.epoch == tls.Epoch.ONE_RTT and old_number in ranges:
+                    if not acknowledged.done():
+                        acknowledged.set_result(None)
+                if context.epoch == tls.Epoch.ONE_RTT and next_number in ranges:
+                    if not advanced_acknowledged.done():
+                        advanced_acknowledged.set_result(None)
+                original(context, frame_type, buf)
+            handlers[kind] = (inspect_ack, epochs)
+        try:
+            address = quic._network_paths[0].addr
+            peer._transport.sendto(advanced, address)
+            await asyncio.wait_for(advanced_acknowledged, 5)
+            assert not acknowledged.done(), "held packet was acknowledged before delivery"
+            peer._transport.sendto(delayed, address)
+            await asyncio.wait_for(acknowledged, 5)
+            assert await peer.get(port) == b"ok\n"
+        finally:
+            handlers.update(originals)
+        print("PASS previous-key PING authenticated after failed next-key candidate")
+
+
 async def run(port):
+    await reordered_previous_key_packet(port)
     await padding_packets(port)
     await check(port)
     await max_stream_credit_window(port)

@@ -1,0 +1,16 @@
+{
+  "official_sha": "8977be2721a5aba7b320345cddfcd6f6b654e698",
+  "host_mode": "official small-host fallback; local comparison",
+  "supplementary_high_only": false,
+  "environment": {
+    "SKIP_TUNE": "true",
+    "LOADGEN_DOCKER": "true",
+    "H2LOAD_IMAGE": "sha256:74970518cfda531bae090951c6a7242ca8b0197dedd8dd8a4334078de7cbedab",
+    "H2THREADS": "64",
+    "RUNS": "3",
+    "DURATION": "5s"
+  },
+  "headline": "official best of three successful-2xx / measured duration",
+  "p99_latency": "official field is maximum, not a measured percentile",
+  "global_system_tuning": "disabled; host settings retained for all entries"
+}

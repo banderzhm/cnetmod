@@ -17,6 +17,8 @@ import cnetmod.core.address;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.spawn;
+import cnetmod.coro.cancel;
+import cnetmod.coro.wait_group;
 import cnetmod.executor.async_op;
 import cnetmod.executor.pool;
 import cnetmod.protocol.tcp;
@@ -107,6 +109,17 @@ private:
 
 export using ws_handler_fn = std::function<task<void>(ws_context&)>;
 
+/**
+ * @brief Accept WebSocket on a route owned by an HTTP server.
+ *
+ * This keeps HTTP/1.1, h2c/gRPC and WebSocket on one cleartext listener. The
+ * HTTP server completes the 101 response and transfers the connection without
+ * losing a frame already received with the handshake.
+ */
+export auto accept_upgrade(http::request_context& request,
+    ws_handler_fn handler, std::string_view subprotocol = {})
+    -> std::expected<void, std::error_code>;
+
 // =============================================================================
 // ws::server
 // =============================================================================
@@ -126,7 +139,7 @@ public:
 #endif
 
     auto listen(std::string_view host, std::uint16_t port,
-        socket_options opts = {.reuse_address = true})
+        socket_options opts = {.reuse_address = true, .no_delay = true})
         -> std::expected<void, std::error_code>;
 
     void on(std::string_view pattern, ws_handler_fn handler);
@@ -142,13 +155,25 @@ private:
         ws_handler_fn handler;
     };
 
+    struct accepted_connection
+    {
+        const route_entry* route = nullptr;
+        std::optional<ws_context> context;
+    };
+
     auto handle_connection(socket client, io_context& io) -> task<void>;
+    auto run_accept_shard(std::size_t index, async_wait_group& completed) -> task<void>;
+    auto accept_connection(socket client, connection& conn, io_context& io)
+        -> task<accepted_connection>;
 
     io_context& ctx_;
     server_context* sctx_ = nullptr; // Multi-core mode when non-null
     std::unique_ptr<tcp::acceptor> acc_;
+    std::vector<std::unique_ptr<tcp::acceptor>> worker_acceptors_;
+    std::vector<std::shared_ptr<cancel_token>> worker_cancellations_;
+    std::shared_ptr<cancel_token> accept_cancellation_ = std::make_shared<cancel_token>();
     std::vector<route_entry> routes_;
-    bool running_ = false;
+    std::atomic<bool> running_{false};
 #ifdef CNETMOD_HAS_SSL
     ssl_context* ssl_ctx_ = nullptr;
 #endif

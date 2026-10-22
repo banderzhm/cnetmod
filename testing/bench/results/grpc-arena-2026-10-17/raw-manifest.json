@@ -1,0 +1,610 @@
+[
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/clear-1024/1-h2load.txt",
+    "bytes": 2442,
+    "mtime_epoch": 1792231910.1862273,
+    "sha256": "ce7482b8cefd7fc92dc417bb4ee174feb9584b9c460d22281132d1533ade5454"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/clear-1024/1-requests.tsv",
+    "bytes": 30025177,
+    "mtime_epoch": 1792231910.16045,
+    "sha256": "4ab139561853f91e1d8996367a97778fc9b49107d2afc18d3fc9511b683bfcc6"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/clear-1024/1-warmup.txt",
+    "bytes": 2437,
+    "mtime_epoch": 1792231904.9844527,
+    "sha256": "af423c321c8751b59a638903abab07a466edb724d9303e37a787d6fcff63d96f"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/clear-1024/2-h2load.txt",
+    "bytes": 2442,
+    "mtime_epoch": 1792231920.8095045,
+    "sha256": "85cfd696eabb772a410c2d50957fa2f4fcf9d1210807b2873904a59753d99852"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/clear-1024/2-requests.tsv",
+    "bytes": 29512619,
+    "mtime_epoch": 1792231920.7884424,
+    "sha256": "07ecb2803cf830e3df094403c96ac14dce13c5871a727c3b6e0dc11d25c38a18"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/clear-1024/2-warmup.txt",
+    "bytes": 2437,
+    "mtime_epoch": 1792231915.6004455,
+    "sha256": "788113edb42f1fd341e4c7cf7f235b702ae9d1a7e61c3925bfba93e54723d82b"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/clear-1024/3-h2load.txt",
+    "bytes": 2442,
+    "mtime_epoch": 1792231931.39835,
+    "sha256": "3cdb1aa1c096b32203c413482602654183e3a897819442591ebb22b8efd6bee5"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/clear-1024/3-requests.tsv",
+    "bytes": 29215035,
+    "mtime_epoch": 1792231931.3684394,
+    "sha256": "7e2026b9c817a5a86ceb4ff3cd5cfae5af97cdb95fc2c26a34e6d6364766ecb1"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/clear-1024/3-warmup.txt",
+    "bytes": 2437,
+    "mtime_epoch": 1792231926.172441,
+    "sha256": "57d0aae0c35b9f638336a300c04cf1d32699b4ecca4215f3f181aee4318472ee"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/clear-1024/grpc-sum.bin",
+    "bytes": 9,
+    "mtime_epoch": 1792231902.3697426,
+    "sha256": "b5899c09630ef99d38f033f7cddf447cc97382370832f822634f93c3714cbb6f"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/clear-1024/results.json",
+    "bytes": 51808,
+    "mtime_epoch": 1792231934.1120095,
+    "sha256": "8d69cfbe6b6b3ca2da984b1d706cb7c19161046f863b225421914e354269a9ab"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/clear-256/1-h2load.txt",
+    "bytes": 2439,
+    "mtime_epoch": 1792231878.0176265,
+    "sha256": "b97aebf9d17e8b71a193bb41822de09f462a1aa16170c55956244249310f6973"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/clear-256/1-requests.tsv",
+    "bytes": 39476966,
+    "mtime_epoch": 1792231878.0004597,
+    "sha256": "642b5e2c605c46b0c6a21f1af0d10dd1974205c908511e0b661c62b8be9ef1be"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/clear-256/1-warmup.txt",
+    "bytes": 2433,
+    "mtime_epoch": 1792231872.8964612,
+    "sha256": "8654429a3b0d976eeb84cdbb6a827276cc40c36b23f3eb574f845ffd61839fe5"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/clear-256/2-h2load.txt",
+    "bytes": 2438,
+    "mtime_epoch": 1792231888.7370718,
+    "sha256": "8f766b910622c3b35b7b76063cf89a3594581328274fc5cdeec1512d4a5dd4d9"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/clear-256/2-requests.tsv",
+    "bytes": 38351203,
+    "mtime_epoch": 1792231888.7124572,
+    "sha256": "a7008bfddb5e4a3ff1c783477a867d1d4d3e42267c65070882fe156907615cd8"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/clear-256/2-warmup.txt",
+    "bytes": 2433,
+    "mtime_epoch": 1792231883.6084583,
+    "sha256": "f85486022ac83f202bc26be572db00184ca7a847f2e4103cf1d76fff49c35df7"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/clear-256/3-h2load.txt",
+    "bytes": 2438,
+    "mtime_epoch": 1792231899.3359225,
+    "sha256": "e75711e056072d7acc9d58b8f8b9299f7ec148b8541340090646d6fb3c65ac9d"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/clear-256/3-requests.tsv",
+    "bytes": 38242864,
+    "mtime_epoch": 1792231899.3084548,
+    "sha256": "f6326b00e157ac9f840f039f3650a540be620bfb69d2eca8b193916557fe546f"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/clear-256/3-warmup.txt",
+    "bytes": 2433,
+    "mtime_epoch": 1792231894.2044559,
+    "sha256": "15a2e4455c3aeac0c1ea46220a38eee5b38993ece90414b3d67689fd2db6ac09"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/clear-256/grpc-sum.bin",
+    "bytes": 9,
+    "mtime_epoch": 1792231870.385094,
+    "sha256": "b5899c09630ef99d38f033f7cddf447cc97382370832f822634f93c3714cbb6f"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/clear-256/results.json",
+    "bytes": 51764,
+    "mtime_epoch": 1792231902.2263403,
+    "sha256": "339167cb6822e199e5f79295654c4290b18f145624d8e6abe3ae9551e95886b5"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/tls-1024/1-h2load.txt",
+    "bytes": 2523,
+    "mtime_epoch": 1792231974.6257176,
+    "sha256": "1c9a574dcaa6fefe5bea4b0ec639c1b205676793421dad988eddd9d28b18295c"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/tls-1024/1-requests.tsv",
+    "bytes": 27725964,
+    "mtime_epoch": 1792231974.6004188,
+    "sha256": "092a8c311e8a08fc283fd22156c580a3eff09e4213dcd15519d1624da530ea62"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/tls-1024/1-warmup.txt",
+    "bytes": 2522,
+    "mtime_epoch": 1792231969.360425,
+    "sha256": "a20e39c635628c3eacc3b4ce007d471a35554f200fecaf0eb4c7d5f6bf2b6f69"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/tls-1024/2-h2load.txt",
+    "bytes": 2527,
+    "mtime_epoch": 1792231985.1204424,
+    "sha256": "45555dea32adc521dd64dd87d78647e126cb6a2f91cdb8a4b29377fd80cbc2a1"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/tls-1024/2-requests.tsv",
+    "bytes": 31088172,
+    "mtime_epoch": 1792231985.0964217,
+    "sha256": "3931b6271dafef9845992216a0be4160a314ce3e5eaa3e0ddb03b43adb3d3de4"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/tls-1024/2-warmup.txt",
+    "bytes": 2522,
+    "mtime_epoch": 1792231979.864423,
+    "sha256": "44ddb9f0c44c3464ed2ecf305a7d393deb9e6a2447e618409d93289e14ab8b7f"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/tls-1024/3-h2load.txt",
+    "bytes": 2527,
+    "mtime_epoch": 1792231995.7020118,
+    "sha256": "c63c767fd44093d9bbc0f27c24047d774c56c825ae109063b4aa39470aabecb2"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/tls-1024/3-requests.tsv",
+    "bytes": 30954319,
+    "mtime_epoch": 1792231995.6604197,
+    "sha256": "9db3ef781208f8afbf873cd1955990ff22a18596fa540c5a14c03b812dfb2bf3"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/tls-1024/3-warmup.txt",
+    "bytes": 2522,
+    "mtime_epoch": 1792231990.484421,
+    "sha256": "7b0ef47af63cc3f7811027334dc96d0b92a1c4206e611d698c741aab6a8b9452"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/tls-1024/grpc-sum.bin",
+    "bytes": 9,
+    "mtime_epoch": 1792231966.7862499,
+    "sha256": "b5899c09630ef99d38f033f7cddf447cc97382370832f822634f93c3714cbb6f"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/tls-1024/results.json",
+    "bytes": 51821,
+    "mtime_epoch": 1792231998.4795003,
+    "sha256": "bf9882d5bb83b97a4f506058fc7f375331a2a2afcfb8793a9468c97da2eb1d55"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/tls-256/1-h2load.txt",
+    "bytes": 2525,
+    "mtime_epoch": 1792231942.2924435,
+    "sha256": "d5f287b8e8fcecfd28f563d39e1f41b98858c00ac949c60ec8f1110c666ee112"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/tls-256/1-requests.tsv",
+    "bytes": 41433507,
+    "mtime_epoch": 1792231942.2684371,
+    "sha256": "b9db7bc60d5df039824bd6631a613cc3c6391ad1b55b68a004c4548cefe85fa3"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/tls-256/1-warmup.txt",
+    "bytes": 2518,
+    "mtime_epoch": 1792231937.1364381,
+    "sha256": "597c0b1c824e8a36ade3aeb2af04631ec8f8297aabfabaaaf3c19b8207100d05"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/tls-256/2-h2load.txt",
+    "bytes": 2525,
+    "mtime_epoch": 1792231952.9403796,
+    "sha256": "ede65f024ec5f3be16a4d2fb435b6f780a55a7f77ef9eb2a558eb9d2a48d9608"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/tls-256/2-requests.tsv",
+    "bytes": 42422262,
+    "mtime_epoch": 1792231952.9204335,
+    "sha256": "64c6e926fb3876db5f99b0978fa6f590d481e106c4283c3875ee43af496af330"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/tls-256/2-warmup.txt",
+    "bytes": 2518,
+    "mtime_epoch": 1792231947.8124354,
+    "sha256": "0dcd67b36829ffdb6e74d20ca1add1dad07fc1f6cf677ac4701305b93f6e48ba"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/tls-256/3-h2load.txt",
+    "bytes": 2524,
+    "mtime_epoch": 1792231963.6324155,
+    "sha256": "fd2a8441a3a6c810a5afa854e6d6aa71048ebea11e811d7b36d68201d58868c3"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/tls-256/3-requests.tsv",
+    "bytes": 40592489,
+    "mtime_epoch": 1792231963.60843,
+    "sha256": "83145e5988791169423a1522e3e6cbbe8d112458a70325f532a63f78ee6ff520"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/tls-256/3-warmup.txt",
+    "bytes": 2518,
+    "mtime_epoch": 1792231958.4964318,
+    "sha256": "7a3dc172c6cb2767cf64fe92432e9f26f618af22291e20ebfd46d4803769a9ca"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/tls-256/grpc-sum.bin",
+    "bytes": 9,
+    "mtime_epoch": 1792231934.5979977,
+    "sha256": "b5899c09630ef99d38f033f7cddf447cc97382370832f822634f93c3714cbb6f"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline/tls-256/results.json",
+    "bytes": 51787,
+    "mtime_epoch": 1792231966.642316,
+    "sha256": "05fb706b9510fe61de4452b7770959f6af48c41b21c8b9dd7f5381dd356727a8"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/clear-1024/1-h2load.txt",
+    "bytes": 2444,
+    "mtime_epoch": 1792232394.240593,
+    "sha256": "11d6c447a6a50e7589784da1962581c634c25e8fc2f60c71b69eb845151ee74b"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/clear-1024/1-requests.tsv",
+    "bytes": 43808431,
+    "mtime_epoch": 1792232394.2202995,
+    "sha256": "123ba48a0cec1d93bde55461c914610c1fcfe349f36a795a76d9565ffeb98d94"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/clear-1024/1-warmup.txt",
+    "bytes": 2437,
+    "mtime_epoch": 1792232389.0523012,
+    "sha256": "68bbb3a0f546d245fc53bfdec1910b1f14baaa4943629df1de46bcfde9d671e4"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/clear-1024/2-h2load.txt",
+    "bytes": 2444,
+    "mtime_epoch": 1792232404.9018056,
+    "sha256": "1f700f6c4be9d781180b9dfc7b715060e000baa1efb112648ff4509089900949"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/clear-1024/2-requests.tsv",
+    "bytes": 44063221,
+    "mtime_epoch": 1792232404.880296,
+    "sha256": "91d96999d1061caa2e8b56efe9ff774b85727b3f916cdec1007b4ddc1da66356"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/clear-1024/2-warmup.txt",
+    "bytes": 2437,
+    "mtime_epoch": 1792232399.7122977,
+    "sha256": "8e4dad4b95e580e42169491338f841d354a165b84523ef28bae4d96b2b410f5b"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/clear-1024/3-h2load.txt",
+    "bytes": 2444,
+    "mtime_epoch": 1792232415.728584,
+    "sha256": "202bd2029e86f3e6906fe292d298328f56367f267e26407b704da4ac8cb07966"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/clear-1024/3-requests.tsv",
+    "bytes": 44308865,
+    "mtime_epoch": 1792232415.7082932,
+    "sha256": "3ed08eedd76f5982a6abdf4af4fa8b0f2cdd2b922f039b756a0d28ed875ecd4e"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/clear-1024/3-warmup.txt",
+    "bytes": 2437,
+    "mtime_epoch": 1792232410.5042944,
+    "sha256": "2ac5bf93a51f036bf18d0c07e2eb41c6452ca218b3f9099d6b58702d8eeb2d81"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/clear-1024/grpc-sum.bin",
+    "bytes": 9,
+    "mtime_epoch": 1792232386.528405,
+    "sha256": "b5899c09630ef99d38f033f7cddf447cc97382370832f822634f93c3714cbb6f"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/clear-1024/results.json",
+    "bytes": 51873,
+    "mtime_epoch": 1792232418.642054,
+    "sha256": "ea05c6cac22ce2dbea07301118cd5382af79491883715999e8354354cebd8288"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/clear-256/1-h2load.txt",
+    "bytes": 2440,
+    "mtime_epoch": 1792232361.293432,
+    "sha256": "4f688d82631765539b9a38879eace620917bdfee2ae1b198b0e3e63a094a9ddc"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/clear-256/1-requests.tsv",
+    "bytes": 54110662,
+    "mtime_epoch": 1792232361.2763095,
+    "sha256": "2883811e08eb3fe18177dcdb49764dc0a3025591c16ad944077992c7684f66dc"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/clear-256/1-warmup.txt",
+    "bytes": 2433,
+    "mtime_epoch": 1792232356.1323113,
+    "sha256": "692220be76f3bbb5f5245658758bb3a5f06900c877cd04d426866278a94def86"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/clear-256/2-h2load.txt",
+    "bytes": 2440,
+    "mtime_epoch": 1792232372.1778328,
+    "sha256": "ff40e54206136e55fe97c3ff678e3a4e0a17794252ef7cc4f81bb95b3ed7c641"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/clear-256/2-requests.tsv",
+    "bytes": 51583682,
+    "mtime_epoch": 1792232372.160306,
+    "sha256": "50b1100e2cca0076555be5bfacec41470b3568741e6494d269c16700aa0879de"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/clear-256/2-warmup.txt",
+    "bytes": 2433,
+    "mtime_epoch": 1792232367.0363076,
+    "sha256": "4a145c465327fedd8bce17e90b715f188a4b989d181d6265715e0d62acfd0d38"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/clear-256/3-h2load.txt",
+    "bytes": 2440,
+    "mtime_epoch": 1792232383.1666944,
+    "sha256": "18e240d664a83ccbc9a70c3df0686288c59af6261cd62d1c83bbb8383e202c1f"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/clear-256/3-requests.tsv",
+    "bytes": 50438358,
+    "mtime_epoch": 1792232383.1483028,
+    "sha256": "47959fbbb08a2c0d3b5cc48c88db402c89b4f130b6ca23d1c2a27cd0c1dc8f82"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/clear-256/3-warmup.txt",
+    "bytes": 2433,
+    "mtime_epoch": 1792232378.0403042,
+    "sha256": "53f5d20bff2285b0474b46147a214999659d25a6d89d71af3f3a195bba49eca8"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/clear-256/grpc-sum.bin",
+    "bytes": 9,
+    "mtime_epoch": 1792232353.507833,
+    "sha256": "b5899c09630ef99d38f033f7cddf447cc97382370832f822634f93c3714cbb6f"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/clear-256/results.json",
+    "bytes": 51820,
+    "mtime_epoch": 1792232386.350541,
+    "sha256": "850ebb150a103e70097d46a2042f80a3e1e2add403be3c7016b95a3b3f8f5cba"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/tls-1024/1-h2load.txt",
+    "bytes": 2529,
+    "mtime_epoch": 1792232459.760297,
+    "sha256": "2db8499d39e392e69655c51d67caa8fce56aa68e9d7c211763aeabf2b0d0d83e"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/tls-1024/1-requests.tsv",
+    "bytes": 53274586,
+    "mtime_epoch": 1792232459.7322798,
+    "sha256": "86d4727fc7a9f8d1e346cba3cf035ac2bdaf9b2b8ae7738e84d7b425e5e31de9"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/tls-1024/1-warmup.txt",
+    "bytes": 2522,
+    "mtime_epoch": 1792232454.5562813,
+    "sha256": "704045379a64a9f5e5d8f3806a257f3b35161f9c0e1be8e9d13763ebb4b59b65"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/tls-1024/2-h2load.txt",
+    "bytes": 2529,
+    "mtime_epoch": 1792232470.631251,
+    "sha256": "48ff88e7486b067124f8d4baa2bbe3b6a227e9c4af65408114e9d23cc5fc186f"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/tls-1024/2-requests.tsv",
+    "bytes": 52283810,
+    "mtime_epoch": 1792232470.6042764,
+    "sha256": "f2627cce1478b63b41372807620b181817e6130fc96631d376c741342834a490"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/tls-1024/2-warmup.txt",
+    "bytes": 2522,
+    "mtime_epoch": 1792232465.440278,
+    "sha256": "cce4a61d7296814d8cbb1acc2b3f720dd5a7ba457adfae9beda26f4a6c723c69"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/tls-1024/3-h2load.txt",
+    "bytes": 2529,
+    "mtime_epoch": 1792232481.4913676,
+    "sha256": "c2745c644e6677d1592c10c6dfe873b2324ad88a210ccfe7ff11678299b30100"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/tls-1024/3-requests.tsv",
+    "bytes": 47498373,
+    "mtime_epoch": 1792232481.4642732,
+    "sha256": "7afed64983f2f3c3a1d05e4516d577274764491453f15884f76f0d30b624b9a6"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/tls-1024/3-warmup.txt",
+    "bytes": 2522,
+    "mtime_epoch": 1792232476.3282747,
+    "sha256": "ae5e787fc5470ece6479c4c5b586b2b3ac034d29c971dee599e585d7371bdbb7"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/tls-1024/grpc-sum.bin",
+    "bytes": 9,
+    "mtime_epoch": 1792232451.8705933,
+    "sha256": "b5899c09630ef99d38f033f7cddf447cc97382370832f822634f93c3714cbb6f"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/tls-1024/results.json",
+    "bytes": 51882,
+    "mtime_epoch": 1792232484.4047422,
+    "sha256": "aa88897648b7ffddc936252b61a844f69ed868e0ca995c2f9a25a6d97b3441db"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/tls-256/1-h2load.txt",
+    "bytes": 2525,
+    "mtime_epoch": 1792232426.774898,
+    "sha256": "f4d2f081d15182ab1489cab1788b4c613d52ed2d2b99c99ffff909a3e6d35fda"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/tls-256/1-requests.tsv",
+    "bytes": 53427389,
+    "mtime_epoch": 1792232426.7562897,
+    "sha256": "57d309eb4cabc1b74d21ee8533418f3ef1b1bbda985d7b78455ad2173437ee0f"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/tls-256/1-warmup.txt",
+    "bytes": 2518,
+    "mtime_epoch": 1792232421.6322913,
+    "sha256": "910d48a15b651941b1557e8918a549a1a7c1f81fb59dbae77a273be48afacfd7"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/tls-256/2-h2load.txt",
+    "bytes": 2525,
+    "mtime_epoch": 1792232437.533959,
+    "sha256": "77916afded2a654ef86ef1197f5180533cb1e76bed8b86946afc6af3fa4642db"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/tls-256/2-requests.tsv",
+    "bytes": 57080693,
+    "mtime_epoch": 1792232437.5162864,
+    "sha256": "6bb12df4cf7983f046e4738ec6c2a6c908a29c306fd3ddf5eac9cb76790aba2d"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/tls-256/2-warmup.txt",
+    "bytes": 2518,
+    "mtime_epoch": 1792232432.388288,
+    "sha256": "a13c4c32669f9012f7343a4107d07bbe5dfe962a728770bf6929aaae78758daf"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/tls-256/3-h2load.txt",
+    "bytes": 2525,
+    "mtime_epoch": 1792232448.4909549,
+    "sha256": "7bc24778a297e5ea16c88ab0ba8c1ee4a627fef5fcfcf7191dfb41de8cf77907"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/tls-256/3-requests.tsv",
+    "bytes": 57576419,
+    "mtime_epoch": 1792232448.4722834,
+    "sha256": "3affdb36b31de0490cab2683463e471f14134359b0828fbb4657b537fa45d94f"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/tls-256/3-warmup.txt",
+    "bytes": 2518,
+    "mtime_epoch": 1792232443.3562846,
+    "sha256": "e3e424a2a430b93548ce6312bb81cc90b89bc8cd65de638c160ca422ff5362b1"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/tls-256/grpc-sum.bin",
+    "bytes": 9,
+    "mtime_epoch": 1792232419.1248164,
+    "sha256": "b5899c09630ef99d38f033f7cddf447cc97382370832f822634f93c3714cbb6f"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-clean/tls-256/results.json",
+    "bytes": 51846,
+    "mtime_epoch": 1792232451.6161656,
+    "sha256": "249aa0a2168a519471374346263ec7f6c31c76ff32c0137f1809ad5a54e323c9"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline-profile/stat-h2load.txt",
+    "bytes": 2442,
+    "sha256": "de61a72241c96b441fffd3d53aa2a590d611ec4890a01ddc7854429cd14c137e"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline-profile/commands.json",
+    "bytes": 1178,
+    "sha256": "ab670af67f767eb48ce8f9cbc2812ebe2c9c1285695025cae78c652e0d1bffd8"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline-profile/perf-stat.txt",
+    "bytes": 515,
+    "sha256": "9c4fa86f588762abe5db7a7d2da2a37814b2875513167e14ea4570fc8778a704"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline-profile/perf-report.txt",
+    "bytes": 221726,
+    "sha256": "86440996f3d7b40ff2d9330dc02bcea980c6d810745ac4cf724c4a5b981c05e6"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline-profile/record-h2load.txt",
+    "bytes": 2607,
+    "sha256": "f24520ef7c4766840305175a4c11e491e4a6e7c82743d84286271cdd2b3020b7"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline-profile/perf.data",
+    "bytes": 2867547,
+    "sha256": "3676060215c212cbd1a93408b75d5f71701c4c9d3c61cec1d80a14ca8ef2cadc"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline-profile/clear-server.log",
+    "bytes": 116,
+    "sha256": "f343283603d0fc067e48d10e8e3838dceab20636f96a553a2ed544edc2b6f811"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/baseline-profile/perf-children.txt",
+    "bytes": 2019620,
+    "sha256": "8a91209da42a6374066d2bde473db45b79b6e57bc0e474eafde7bfa9cc550f0c"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-profile/stat-h2load.txt",
+    "bytes": 2444,
+    "sha256": "af1ba959d81c72c28f58419450dc42955aaa726868b2355b8125b2cb422902c0"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-profile/commands.json",
+    "bytes": 1180,
+    "sha256": "2a5a704f0f331b930372f6bacca53c4cdb48248c1816519770f5de791487ec36"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-profile/perf-stat.txt",
+    "bytes": 515,
+    "sha256": "8b485b0f409f9e973d93c548e52bf08dbad0e4879a709e0b5bc90fa402de132d"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-profile/perf-report.txt",
+    "bytes": 265049,
+    "sha256": "2cb96e6acd961b3ed82c29d0cc1295c718ad5cfaf23d4c6acae939267de0762a"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-profile/record-h2load.txt",
+    "bytes": 2610,
+    "sha256": "b78df7497318c5c1e32226c7f6f5bfda9a48d54b35b3d3f03eafdd4749abc3b5"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-profile/perf.data",
+    "bytes": 2836875,
+    "sha256": "c6f33e2ed6a11db65aef9769d7df31c37745bab1c4e95bf9aacbd99ac663f77c"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-profile/clear-server.log",
+    "bytes": 116,
+    "sha256": "21811ab6760931299c4ff9e4936c0b0808856d6743eceff02ebf0a264fa3ba13"
+  },
+  {
+    "path": "/root/cnetmod-grpc-artifacts/candidate-profile/perf-children.txt",
+    "bytes": 1669054,
+    "sha256": "680b9349f066d4a1b9d9052e6bb79f7e5719909b48c3d289df206ce357d137d3"
+  }
+]

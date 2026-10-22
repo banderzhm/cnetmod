@@ -1,0 +1,2 @@
+[ perf record: Woken up 16 times to write data ]
+[ perf record: Captured and wrote 6.913 MB /root/cnetmod-grpc-20261020/profiles-final/control/perf.data (35843 samples) ]

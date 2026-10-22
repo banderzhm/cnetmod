@@ -14,11 +14,13 @@ import os
 from pathlib import Path
 import re
 import signal
+import socket
 import ssl
 import subprocess
 import sys
 import tempfile
 import time
+import platform
 
 
 def arguments():
@@ -95,7 +97,7 @@ async def wait_until(predicate, timeout, reason):
         await asyncio.sleep(0.005)
 
 
-async def exercise(args, process, port, trace, result, imports):
+async def exercise(args, process, host, port, trace, result, imports):
     QuicConnectionProtocol, connect, QuicConfiguration, StreamDataReceived, \
         ConnectionTerminated, StreamReset, CryptoContext, Epoch, Buffer, \
         pull_quic_header, response_stream_frames = imports
@@ -156,9 +158,9 @@ async def exercise(args, process, port, trace, result, imports):
         async def open(self):
             loop = asyncio.get_running_loop()
             self.back, _ = await loop.create_datagram_endpoint(
-                lambda: Backend(self), remote_addr=("127.0.0.1", port))
+                lambda: Backend(self), remote_addr=(host, port))
             self.front, _ = await loop.create_datagram_endpoint(
-                lambda: self, local_addr=("127.0.0.1", 0))
+                lambda: self, local_addr=(host, 0))
             return self.front.get_extra_info("sockname")[1]
 
         def datagram_received(self, data, address):
@@ -262,7 +264,7 @@ async def exercise(args, process, port, trace, result, imports):
     result["peer_outgoing_target"] = 1200
     result["server_ceiling"] = 4096
     try:
-        async with connect("127.0.0.1", proxy_port, configuration=config,
+        async with connect(host, proxy_port, configuration=config,
                            create_protocol=RawPeer) as peer:
             proxy.attach(peer)
             await wait_until(discovery_ready, 8, "no actual probe-ACK discovery to4096")
@@ -373,7 +375,7 @@ def main():
         from aioquic.quic.events import StreamDataReceived, ConnectionTerminated, StreamReset
         from aioquic.quic.packet import pull_quic_header
         from aioquic.tls import Epoch
-        from http_client_e2e import make_certificate, reserve_port
+        from http_client_e2e import make_certificate
         from http3_outbound_pto import response_stream_frames
     except ImportError as error:
         print(f"fixture dependency unavailable: {error}", file=sys.stderr)
@@ -396,8 +398,17 @@ def main():
             result["peer_aead"] = {"kind": "unmodified-installed-aioquic",
                                     "stock_aioquic_interoperability": None}
         cert, key = make_certificate(args.records)
-        port = reserve_port()
-        command = [str(args.server.resolve()), "--port", str(port),
+        # Mirrored WSL policy-routes IPv4 localhost through a host-facing
+        # loopback adapter whose MTU is commonly 1500. IPv6 localhost remains
+        # on Linux lo, so it can exercise the same 4096-byte PMTU contract
+        # without weakening or skipping the regression.
+        host = "::1" if "microsoft" in platform.release().lower() else "127.0.0.1"
+        family = socket.AF_INET6 if ":" in host else socket.AF_INET
+        with socket.socket(family, socket.SOCK_DGRAM) as probe:
+            probe.bind((host, 0))
+            port = int(probe.getsockname()[1])
+        result["loopback_host"] = host
+        command = [str(args.server.resolve()), "--host", host, "--port", str(port),
                    "--cert", str(cert.resolve()), "--key", str(key.resolve()),
                    "--listening-report", str((args.records / "listening.txt").resolve()),
                    "--ready-report", str((args.records / "ready.txt").resolve()),
@@ -414,7 +425,7 @@ def main():
             async def run():
                 await wait_until(lambda: (args.records / "listening.txt").exists(), 3,
                                  "fixture did not start listening")
-                await exercise(args, process, port, Trace(log), result, imports)
+                await exercise(args, process, host, port, Trace(log), result, imports)
             asyncio.run(run())
     except Exception as error:
         result["status"] = "failed"

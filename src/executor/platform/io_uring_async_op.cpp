@@ -7,7 +7,6 @@ module;
     #include <arpa/inet.h>
     #include <cerrno>
     #include <cstdlib>
-    #include <exec/static_thread_pool.hpp>
     #include <fcntl.h>
     #include <liburing.h>
     #include <linux/udp.h>

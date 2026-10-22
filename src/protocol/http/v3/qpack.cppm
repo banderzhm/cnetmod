@@ -39,6 +39,10 @@ public:
     /// stream before allowing the peer to consume a block using dynamic data.
     [[nodiscard]] auto encode(std::span<const header_field> headers, std::uint64_t stream_id = 0)
         -> std::expected<byte_buffer, std::error_code>;
+    /// Appends the encoded block to `out` (same encoding as encode()). With
+    /// the dynamic table disabled this writes directly, without a temporary.
+    [[nodiscard]] auto encode_into(std::span<const header_field> headers,
+        std::uint64_t stream_id, byte_buffer& out) -> std::expected<void, std::error_code>;
 
     /// Returns and clears instructions queued for the encoder stream.
     [[nodiscard]] auto take_encoder_instructions() -> byte_buffer;
@@ -48,6 +52,10 @@ public:
     [[nodiscard]] auto process_decoder_instructions(byte_view data)
         -> std::expected<void, std::error_code>;
     void set_max_table_capacity(std::uint64_t capacity) noexcept;
+    /// Caps the dynamic table this encoder uses below the peer's setting.
+    /// A peer capacity authorizes, never requires, dynamic references; zero
+    /// keeps the allocation-free static-table encoding. Default: unlimited.
+    void set_local_table_limit(std::uint64_t capacity) noexcept;
     /// Applies the peer's SETTINGS_QPACK_BLOCKED_STREAMS limit.
     void set_max_blocked_streams(std::uint64_t maximum) noexcept;
 
@@ -106,6 +114,8 @@ public:
     /// Returns and clears decoder-stream acknowledgements generated while
     /// decoding successfully processed header blocks.
     [[nodiscard]] auto take_decoder_instructions() -> byte_buffer;
+    /// True when decoder-stream instructions are waiting to be flushed.
+    [[nodiscard]] auto has_pending_decoder_instructions() const noexcept -> bool;
     /// Retrieves header blocks whose Required Insert Count became available
     /// after process_encoder_instructions().
     [[nodiscard]] auto take_completed_header_blocks() -> std::vector<qpack_decoded_header_block>;

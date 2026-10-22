@@ -55,8 +55,15 @@ struct connection_options {
     std::chrono::milliseconds connect_timeout{10000};
     std::size_t maximum_connect_attempts = 3;
     std::unordered_map<std::string, std::string> startup_parameters;
+    std::size_t statement_cache_capacity = 256;
 };
 ```
+
+`execute(parameterized_query)` 按 SQL 文本缓存命名预处理语句：首次执行发送
+Parse，确认 ParseComplete 后登记；之后同一 SQL 只发送 Bind/Execute，省去服务端
+每次解析和规划。缓存属于连接会话，断开或重连时清空；服务端报告语句不存在
+（26000）或计划失效（0A000）时剔除该项，下次重新 Parse。缓存满后新 SQL 回退为
+匿名语句，不淘汰已有项。参数是动态拼接 SQL 时应设为 0，避免占满缓存。
 
 ### `client` — 异步连接客户端
 
@@ -546,6 +553,17 @@ auto main() -> int
 - 不要忽略 `discard()` 标记——连接状态异常时用它通知池丢弃连接
 - 不要长时间持有 `pooled_connection`——及时归还以维持池吞吐量
 - 不要在多 worker 场景共享同一个 `connection_pool`——每个 worker 应持有独立池
+
+## 连接池与协议性能路径
+
+有正的借用预算且没有 FIFO 等待者时，`acquire()` 在锁内直接借出已有空闲连接，
+不为即时完成的操作创建超时定时器。没有可用连接、锁竞争、关闭或过期预算仍走原有
+可取消等待路径。普通借还按槽位增量维护 idle/checked-out 快照；扩容、重连和关闭
+仍完整刷新统计。
+
+客户端用每连接 8 KiB 的接收缓冲跨消息预读，不等待缓冲填满。长度上限和消息解析
+仍逐条执行；取消、断线和重连清空未读位置。协程不得并发操作同一客户端。
+协议参考：[PostgreSQL message formats](https://www.postgresql.org/docs/current/protocol-message-formats.html)。
 
 ## 参考示例
 

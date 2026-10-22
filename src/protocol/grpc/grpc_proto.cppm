@@ -28,6 +28,17 @@ export struct field
     std::uint32_t fixed32_value = 0;
 };
 
+/// Non-owning field data, valid only while the input and visitor call remain alive.
+export struct field_view
+{
+    std::uint32_t number = 0;
+    wire_type type = wire_type::varint;
+    std::uint64_t varint_value = 0;
+    std::uint64_t fixed64_value = 0;
+    std::span<const std::byte> bytes;
+    std::uint32_t fixed32_value = 0;
+};
+
 export struct field_def
 {
     std::string label;
@@ -86,6 +97,12 @@ export void append_string(byte_buffer& out, std::uint32_t number,
     std::string_view value);
 export auto decode_message(std::span<const std::byte> data)
     -> std::expected<std::vector<field>, std::error_code>;
+/// Visits validated fields without copying length-delimited bytes. A malformed
+/// suffix reports an error after any already visited prefix; commit results only
+/// after success. Exceptions from the visitor propagate to its caller.
+export auto visit_message(std::span<const std::byte> data,
+    const std::function<void(const field_view&)>& visitor)
+    -> std::expected<void, std::error_code>;
 export auto find_first(std::span<const field> fields, std::uint32_t number)
     -> const field*;
 export auto field_string(const field& f) -> std::optional<std::string>;

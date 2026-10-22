@@ -1,0 +1,248 @@
+[info] available CPUs: 32
+[info] framework: genhttp-ioxide (genhttp-ioxide, C#)
+[info] subscribed tests: baseline,async,latency-1m,latency-10k,latency-500k-8cpu,pipelined,limited-conn,json-comp,json-tls,static-tls,baseline-h2c,json-h2c,baseline-h2,static-h2,static-h3,baseline-h3,8gbit,async-db,echo-ws,echo-ws-pipeline,echo-ws-limited
+[info] building image: httparena-genhttp-ioxide
+[info] skipping system tuning as requested (SKIP_TUNE=true)
+[info] starting postgres sidecar
+[info] postgres ready (seeded)
+
+==============================================
+=== genhttp-ioxide / echo-ws-pipeline / 512c (tool=gcannon) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] server ready
+
+[run 1/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     512 (8/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency    317us    106us    417us   4.92ms   11.80ms
+
+  129756224 frames sent in 5.00s, 129750160 frames received
+  Throughput: 25.94M req/s
+  Bandwidth:  173.19MB/s
+  WS upgrades: 512
+  WS frames:   129750160
+  Latency samples: 129750160 / 129750160 responses (100.0%)
+[info] CPU 1388.7% | Mem 1.4GiB
+
+[run 2/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     512 (8/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency    265us    110us    334us   4.22ms   9.90ms
+
+  154983264 frames sent in 5.00s, 154978016 frames received
+  Throughput: 30.99M req/s
+  Bandwidth:  206.88MB/s
+  WS upgrades: 512
+  WS frames:   154978016
+  Latency samples: 154978016 / 154978016 responses (100.0%)
+[info] CPU 1725.2% | Mem 1.4GiB
+
+[run 3/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     512 (8/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency    285us    111us    383us   4.23ms   12.60ms
+
+  143860752 frames sent in 5.01s, 143858192 frames received
+  Throughput: 28.70M req/s
+  Bandwidth:  191.62MB/s
+  WS upgrades: 512
+  WS frames:   143858192
+  Latency samples: 143858192 / 143858192 responses (100.0%)
+[info] CPU 1698.5% | Mem 1.4GiB
+
+=== Best: 30995603 req/s (CPU: 1725.2%, Mem: 1.4GiB) ===
+[info] saved results/echo-ws-pipeline/512/genhttp-ioxide.json
+httparena-bench-genhttp-ioxide
+httparena-bench-genhttp-ioxide
+
+==============================================
+=== genhttp-ioxide / echo-ws-pipeline / 4096c (tool=gcannon) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] server ready
+
+[run 1/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     4096 (64/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency   3.98ms   1.81ms   8.73ms   31.50ms   91.30ms
+
+  81776160 frames sent in 5.00s, 81710624 frames received
+  Throughput: 16.33M req/s
+  Bandwidth:  109.18MB/s
+  WS upgrades: 4096
+  WS frames:   81710624
+  Latency samples: 81710624 / 81710624 responses (100.0%)
+[info] CPU 1373.1% | Mem 2.1GiB
+
+[run 2/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     4096 (64/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency   3.20ms   1.43ms   7.88ms   21.10ms   51.10ms
+
+  103921376 frames sent in 5.00s, 103856864 frames received
+  Throughput: 20.75M req/s
+  Bandwidth:  138.69MB/s
+  WS upgrades: 4096
+  WS frames:   103856864
+  Latency samples: 103856864 / 103856864 responses (100.0%)
+[info] CPU 1692.7% | Mem 1.7GiB
+
+[run 3/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     4096 (64/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency   4.74ms    777us   14.00ms   50.10ms   102.10ms
+
+  71008528 frames sent in 5.00s, 70942992 frames received
+  Throughput: 14.18M req/s
+  Bandwidth:  94.80MB/s
+  WS upgrades: 4096
+  WS frames:   70942992
+  Latency samples: 70942992 / 70942992 responses (100.0%)
+[info] CPU 1958.5% | Mem 1.6GiB
+
+=== Best: 20771372 req/s (CPU: 1692.7%, Mem: 1.7GiB) ===
+[info] saved results/echo-ws-pipeline/4096/genhttp-ioxide.json
+httparena-bench-genhttp-ioxide
+httparena-bench-genhttp-ioxide
+
+==============================================
+=== genhttp-ioxide / echo-ws-pipeline / 16384c (tool=gcannon) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] server ready
+
+[run 1/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     16384 (256/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency   23.58ms   17.00ms   41.60ms   116.50ms   175.50ms
+
+  53358480 frames sent in 5.00s, 53096336 frames received
+  Throughput: 10.61M req/s
+  Bandwidth:  71.41MB/s
+  WS upgrades: 16384
+  WS frames:   53096336
+  Latency samples: 53096336 / 53096336 responses (100.0%)
+[info] CPU 1439.1% | Mem 6.0GiB
+
+[run 2/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     16384 (256/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency   16.16ms   12.20ms   30.90ms   56.80ms   85.10ms
+
+  82025664 frames sent in 5.01s, 81763520 frames received
+  Throughput: 16.33M req/s
+  Bandwidth:  109.59MB/s
+  WS upgrades: 16384
+  WS frames:   81763520
+  Latency samples: 81763520 / 81763520 responses (100.0%)
+[info] CPU 1880.6% | Mem 5.4GiB
+
+[run 3/3]
+gcannon v0.6.1 [WS]
+  Target:    localhost:8080/ws
+  Threads:   64
+  Conns:     16384 (256/thread)
+  Pipeline:  16
+  Req/conn:  unlimited (keep-alive)
+  Expected:  200
+  Duration:  5s
+
+
+  Thread Stats   Avg      p50      p90      p99    p99.9
+    Latency   18.65ms   14.80ms   36.30ms   70.80ms   107.40ms
+
+  70837632 frames sent in 5.03s, 70575488 frames received
+  Throughput: 14.04M req/s
+  Bandwidth:  94.32MB/s
+  WS upgrades: 16384
+  WS frames:   70575488
+  Latency samples: 70575488 / 70575488 responses (100.0%)
+[info] CPU 1719.4% | Mem 4.3GiB
+
+=== Best: 16320063 req/s (CPU: 1880.6%, Mem: 5.4GiB) ===
+[info] saved results/echo-ws-pipeline/16384/genhttp-ioxide.json
+httparena-bench-genhttp-ioxide
+httparena-bench-genhttp-ioxide
+[info] rebuilding site/data/*.json
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/frameworks.json
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/cnetmod-ws-baseline.json - 8 new, 8 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/results/genhttp-ioxide.json - 6 new, 33 total
+[updated] /root/cnetmod-ws-20261020/HttpArena/site/data/current.json
+[info] done
+httparena-postgres

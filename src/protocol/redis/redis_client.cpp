@@ -73,8 +73,10 @@ auto client::connect(connect_options opts)
     } guard{*this};
 
     opts_ = opts;
-    auto connected =
-        co_await async_connect_happy_eyeballs(ctx_, opts.host, opts.port);
+    happy_eyeballs_options connect_options;
+    connect_options.socket_opts.no_delay = true;
+    auto connected = co_await async_connect_happy_eyeballs(
+        ctx_, opts.host, opts.port, connect_options);
     if (!connected)
         co_return std::unexpected(connected.error().message());
     sock_ = std::move(connected->sock);
@@ -179,14 +181,9 @@ auto client::exec(const request& request)
     if (!written)
         co_return std::unexpected(written.error().message());
     std::vector<resp3_node> result;
-    for (std::size_t index = 0; index < request.size(); ++index)
-    {
-        auto nodes = co_await parse_one_response();
-        if (!nodes)
-            co_return std::unexpected(nodes.error());
-        for (auto& node : *nodes)
-            result.push_back(std::move(node));
-    }
+    auto parsed = co_await append_responses(result, request.size());
+    if (!parsed)
+        co_return std::unexpected(parsed.error());
     if (!is_reusable())
         co_return std::unexpected("response contains unexpected trailing data");
     guard.commit();
@@ -462,14 +459,9 @@ auto client::pipe(
     if (!written)
         co_return std::unexpected(written.error().message());
     std::vector<resp3_node> result;
-    for (std::size_t i = 0; i < commands.size(); ++i)
-    {
-        auto nodes = co_await parse_one_response();
-        if (!nodes)
-            co_return std::unexpected(nodes.error());
-        for (auto& node : *nodes)
-            result.push_back(std::move(node));
-    }
+    auto parsed = co_await append_responses(result, commands.size());
+    if (!parsed)
+        co_return std::unexpected(parsed.error());
     if (!is_reusable())
         co_return std::unexpected("response contains unexpected trailing data");
     guard.commit();
@@ -498,14 +490,9 @@ auto client::pipe(std::span<const std::vector<std::string>> commands)
     if (!written)
         co_return std::unexpected(written.error().message());
     std::vector<resp3_node> result;
-    for (std::size_t i = 0; i < commands.size(); ++i)
-    {
-        auto nodes = co_await parse_one_response();
-        if (!nodes)
-            co_return std::unexpected(nodes.error());
-        for (auto& node : *nodes)
-            result.push_back(std::move(node));
-    }
+    auto parsed = co_await append_responses(result, commands.size());
+    if (!parsed)
+        co_return std::unexpected(parsed.error());
     if (!is_reusable())
         co_return std::unexpected("response contains unexpected trailing data");
     guard.commit();
@@ -701,106 +688,57 @@ auto client::subscription_command(std::string_view command,
     if (!written)
         co_return std::unexpected(written.error().message());
     std::vector<resp3_node> result;
-    for (std::size_t i = 0; i < names.size(); ++i)
-    {
-        auto nodes = co_await parse_one_response();
-        if (!nodes)
-            co_return std::unexpected(nodes.error());
-        for (auto& node : *nodes)
-            result.push_back(std::move(node));
-    }
+    auto parsed = co_await append_responses(result, names.size());
+    if (!parsed)
+        co_return std::unexpected(parsed.error());
     co_return result;
 }
 
 auto client::parse_one_response()
     -> task<std::expected<std::vector<resp3_node>, std::string>>
 {
-    std::vector<resp3_node> nodes;
-    resp3_parser parser;
-    std::error_code error;
-    while (true)
+    return parse_responses<true>(nullptr, 1);
+}
+
+auto client::append_responses(std::vector<resp3_node>& nodes, std::size_t count)
+    -> task<std::expected<void, std::string>>
+{
+    return parse_responses<false>(&nodes, count);
+}
+
+template <bool Own>
+auto client::parse_responses(std::vector<resp3_node>* destination, std::size_t count)
+    -> task<std::expected<std::conditional_t<Own, std::vector<resp3_node>, void>, std::string>>
+{
+    std::vector<resp3_node> owned;
+    auto& nodes = Own ? owned : *destination;
+    nodes.reserve(nodes.size() + count);
+    // A whole pipeline shares one coroutine frame and one final result vector.
+    // Each bounded parser keeps its offset anchored across fragmented reads.
+    for (std::size_t response{}; response < count; ++response)
     {
-        if (rpos_ >= rbuf_.size() || rbuf_.empty())
+        resp3_parser parser;
+        while (!parser.done())
         {
+            std::error_code error;
+            auto node = parser.consume(std::string_view{rbuf_}.substr(rpos_), error);
+            if (error)
+                co_return std::unexpected(error.message());
+            if (node)
+            {
+                nodes.push_back(std::move(*node));
+                continue;
+            }
             if (!(co_await fill()))
                 co_return std::unexpected(std::string("connection closed"));
         }
-        auto view = std::string_view(rbuf_).substr(rpos_);
-        auto node = parser.consume(view, error);
-        if (error)
-            co_return std::unexpected(error.message());
-        if (node)
-        {
-            nodes.push_back(std::move(*node));
-            rpos_ += parser.consumed();
-            parser.reset();
-            auto& first = nodes.front();
-            if (first.is_aggregate() && first.aggregate_size > 0)
-            {
-                auto children = co_await parse_children(
-                    first.aggregate_size * element_multiplicity(first.data_type));
-                if (!children)
-                    co_return std::unexpected(children.error());
-                for (auto& child : *children)
-                    nodes.push_back(std::move(child));
-            }
-            compact_buffer();
-            co_return nodes;
-        }
-        // The parser retains the bulk header and its cumulative offset while
-        // the payload is fragmented. Keep both the parser and rpos_ anchored
-        // until the complete RESP value is available.
-        if (!(co_await fill()))
-            co_return std::unexpected(std::string("connection closed"));
+        rpos_ += parser.consumed();
+        compact_buffer();
     }
-}
-
-auto client::parse_children(std::size_t count)
-    -> task<std::expected<std::vector<resp3_node>, std::string>>
-{
-    std::vector<resp3_node> children;
-    children.reserve(count);
-    for (std::size_t i = 0; i < count; ++i)
-    {
-        resp3_parser parser;
-        std::error_code error;
-        while (true)
-        {
-            auto view = std::string_view(rbuf_).substr(rpos_);
-            if (view.empty())
-            {
-                if (!(co_await fill()))
-                    co_return std::unexpected(std::string("connection closed"));
-                continue;
-            }
-            auto node = parser.consume(view, error);
-            if (error)
-                co_return std::unexpected(error.message());
-            if (!node)
-            {
-                // A partial bulk/aggregate must resume from the same base
-                // view because resp3_parser::consumed() is cumulative.
-                if (!(co_await fill()))
-                    co_return std::unexpected(std::string("connection closed"));
-                continue;
-            }
-            rpos_ += parser.consumed();
-            children.push_back(std::move(*node));
-            auto& child = children.back();
-            if (child.is_aggregate() && child.aggregate_size > 0)
-            {
-                auto sub = co_await parse_children(
-                    child.aggregate_size * element_multiplicity(child.data_type));
-                if (!sub)
-                    co_return std::unexpected(sub.error());
-                for (auto& item : *sub)
-                    children.push_back(std::move(item));
-                i += sub->size();
-            }
-            break;
-        }
-    }
-    co_return children;
+    if constexpr (Own)
+        co_return std::move(owned);
+    else
+        co_return std::expected<void, std::string>{};
 }
 
 auto client::fill() -> task<bool>

@@ -1,0 +1,23 @@
+=== Validating: cnetmod-grpc-control-certified ===
+[info] Subscribed tests: unary-grpc unary-grpc-tls
+[build] Building Docker image...
+WARNING: Published ports are discarded when using host network mode
+a80295806390e5992309e7ef12f3c75a5ec32d9c45a030b2211768e8c4195363
+[wait] Waiting for server...
+[ready] Server is up
+[test] unary-grpc endpoint (h2c on :8080)
+  PASS [GetSum over h2c] (a=915 b=743 -> 1658)
+  PASS [GetSum over h2c (second random pair)] (a=277 b=616 -> 893)
+[test] unary-grpc-tls endpoint (h2+TLS on :8443)
+  PASS [unary-grpc-tls serves the mounted certificate]
+  PASS [unary-grpc-tls negotiates TLS 1.3] (cipher TLS_AES_256_GCM_SHA384)
+  PASS [unary-grpc-tls uses a TLS 1.3 AEAD cipher] (TLS_AES_256_GCM_SHA384)
+  PASS [unary-grpc-tls ALPN] (h2)
+  PASS [unary-grpc-tls TLS quality] (refuses every obsolete protocol and weak cipher probed)
+  NOTE [unary-grpc-tls TLS quality]: this openssl cannot offer ssl3, so those were not probed
+  PASS [GetSum over h2+TLS] (a=619 b=825 -> 1444)
+  PASS [GetSum over h2+TLS (second random pair)] (a=887 b=710 -> 1597)
+[info] TLS verdict: pass, opt-in tls_check: none
+
+=== Results: 9 passed, 0 failed ===
+httparena-validate-cnetmod-grpc-control-certified

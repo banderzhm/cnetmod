@@ -1,0 +1,55 @@
+Test project /root/cnetmod-compile-20261021/candidate
+      Start  4: test_charconv
+ 1/23 Test  #4: test_charconv ....................   Passed    0.00 sec
+      Start  5: test_converter
+ 2/23 Test  #5: test_converter ...................   Passed    0.00 sec
+      Start  8: test_json_template
+ 3/23 Test  #8: test_json_template ...............   Passed    0.00 sec
+      Start 10: test_application_integrations
+ 4/23 Test #10: test_application_integrations ....   Passed    0.65 sec
+      Start 13: test_task_group
+ 5/23 Test #13: test_task_group ..................   Passed    0.00 sec
+      Start 14: test_task
+ 6/23 Test #14: test_task ........................   Passed    0.04 sec
+      Start 15: test_stream_write
+ 7/23 Test #15: test_stream_write ................   Passed    0.01 sec
+      Start 18: test_channel
+ 8/23 Test #18: test_channel .....................   Passed    0.00 sec
+      Start 19: test_mutex
+ 9/23 Test #19: test_mutex .......................   Passed    0.00 sec
+      Start 22: test_semaphore
+10/23 Test #22: test_semaphore ...................   Passed    0.00 sec
+      Start 23: test_wait_group
+11/23 Test #23: test_wait_group ..................   Passed    0.00 sec
+      Start 24: test_shared_mutex
+12/23 Test #24: test_shared_mutex ................   Passed    0.00 sec
+      Start 33: test_http_compress
+13/23 Test #33: test_http_compress ...............   Passed    0.00 sec
+      Start 34: test_http_parser
+14/23 Test #34: test_http_parser .................   Passed    0.01 sec
+      Start 44: test_http2_hpack
+15/23 Test #44: test_http2_hpack .................   Passed    0.00 sec
+      Start 45: test_http2_stream
+16/23 Test #45: test_http2_stream ................   Passed    0.14 sec
+      Start 47: test_grpc
+17/23 Test #47: test_grpc ........................   Passed    0.01 sec
+      Start 48: test_grpc_proto
+18/23 Test #48: test_grpc_proto ..................   Passed    0.00 sec
+      Start 51: test_redis
+19/23 Test #51: test_redis .......................   Passed    1.36 sec
+      Start 52: test_redis_template
+20/23 Test #52: test_redis_template ..............   Passed    1.11 sec
+      Start 57: test_mysql_pool
+21/23 Test #57: test_mysql_pool ..................   Passed    0.27 sec
+      Start 58: test_postgresql_transport
+22/23 Test #58: test_postgresql_transport ........   Passed    0.03 sec
+      Start 63: test_redis_tls
+23/23 Test #63: test_redis_tls ...................   Passed    0.65 sec
+
+100% tests passed out of 23
+
+Label Time Summary:
+mysql    =   0.27 sec*proc (1 test)
+pool     =   0.27 sec*proc (1 test)
+
+Total Test time (real) =   4.30 sec

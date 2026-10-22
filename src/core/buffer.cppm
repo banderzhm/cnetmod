@@ -162,6 +162,8 @@ public:
     void append(byte_view source);
     void append(const_buffer source);
     void append(std::span<const std::byte> source);
+    /// Moves the storage out, leaving this buffer empty.
+    [[nodiscard]] auto release() noexcept -> std::vector<std::byte>;
     [[nodiscard]] auto view() const noexcept -> byte_view;
     [[nodiscard]] auto writable_view() noexcept -> mutable_buffer;
     operator byte_view() const noexcept;

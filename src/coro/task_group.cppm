@@ -15,6 +15,13 @@ namespace cnetmod {
 
 namespace detail {
 
+    struct task_group_token_slot
+    {
+        std::shared_ptr<cancel_token> token;
+        std::size_t next_free{};
+        bool active = true;
+    };
+
     struct task_group_state
     {
         async_wait_group completed;
@@ -22,7 +29,8 @@ namespace detail {
         // Keep the short metadata critical sections project-owned and CAS based;
         // never block an I/O worker on a platform mutex.
         concurrent_containers::atomic_rw_latch latch;
-        std::vector<std::shared_ptr<cancel_token>> tokens;
+        std::vector<task_group_token_slot> tokens;
+        std::size_t first_free = std::numeric_limits<std::size_t>::max();
         std::optional<std::error_code> first_error;
         bool joining = false;
     };
@@ -40,8 +48,11 @@ namespace detail {
             std::shared_ptr<cancel_token> token;
             {
                 concurrent_containers::exclusive_latch_guard lock{state->latch};
-                token = state->tokens[index];
+                if (state->tokens[index].active)
+                    token = state->tokens[index].token;
             }
+            if (!token)
+                continue;
             if (reason == cancellation_reason::deadline_exceeded)
                 token->cancel_due_to_deadline();
             else
@@ -80,25 +91,14 @@ namespace detail {
             cancel_task_group(state, cancellation_reason::deadline_exceeded);
     }
 
-    inline auto run_task_group_child(std::shared_ptr<task_group_state> state,
+    void retire_task_group_child(
+        const std::shared_ptr<task_group_state>& state, std::size_t slot) noexcept;
+
+    auto run_task_group_child(std::shared_ptr<task_group_state> state,
         std::shared_ptr<cancel_token> token,
+        std::size_t slot,
         std::function<task<std::expected<void, std::error_code>>(cancel_token&)> operation)
-        -> task<void>
-    {
-        try
-        {
-            auto result = co_await operation(*token);
-            if (!result)
-                fail_task_group(state, result.error());
-        }
-        catch (...)
-        {
-            // task_group is an error-code boundary: never let a detached child
-            // terminate the process while it is being structurally joined.
-            fail_task_group(state, std::make_error_code(std::errc::operation_canceled));
-        }
-        state->completed.done();
-    }
+        -> task<void>;
 
 } // namespace detail
 
@@ -123,39 +123,7 @@ public:
 
     /// Starts one cancellable child. Returns false once join() has begun.
     auto run(std::function<task<std::expected<void, std::error_code>>(cancel_token&)> operation)
-        -> bool
-    {
-        auto token = std::make_shared<cancel_token>();
-        {
-            concurrent_containers::exclusive_latch_guard lock{state_->latch};
-            if (state_->joining)
-                return false;
-            state_->tokens.push_back(token);
-            state_->completed.add();
-        }
-        auto failed = [state = state_](std::exception_ptr) noexcept
-        {
-            try
-            {
-                detail::fail_task_group(state, std::make_error_code(std::errc::operation_canceled));
-            }
-            catch (...)
-            {
-                // Sibling cancellation must not strand this completion slot.
-            }
-            state->completed.done();
-        };
-        try
-        {
-            spawn_guarded(*context_, detail::run_task_group_child(state_, std::move(token), std::move(operation)), failed);
-        }
-        catch (...)
-        {
-            failed(std::current_exception());
-            return false;
-        }
-        return true;
-    }
+        -> bool;
 
     /// Requests explicit caller cancellation for every child.
     void cancel() noexcept

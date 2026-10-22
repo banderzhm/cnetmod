@@ -53,8 +53,12 @@ private:
         -> std::optional<entry_view>;
     [[nodiscard]] auto find(std::string_view name, std::string_view value,
         bool exact) const -> std::uint32_t;
+    void remember_decoded_block(std::span<const std::byte> block,
+        std::span<const header_field> fields);
     std::deque<entry> dynamic_table_;
     std::vector<std::byte> huffman_scratch_;
+    std::vector<std::byte> decoded_block_;
+    std::vector<header_field> decoded_fields_;
     std::size_t dynamic_table_bytes_ = 0;
     std::size_t dynamic_table_limit_ = 4096;
 };

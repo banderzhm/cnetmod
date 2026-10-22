@@ -134,6 +134,23 @@ peer FIN/RESET 给出最终大小后退休。QPACK 阻塞等待绑定到流取�
 Stream Cancellation 指令，避免保留阻塞 header section。
 
 
+### 静态表编码
+
+QPACK 的两个方向分开配置：
+
+- `set_qpack_settings(capacity, blocked)` 通告本端**解码**表，允许客户端把重复的请求字段
+  （`:authority`、`user-agent` 等）编成一个字节的索引，省去每个请求的 Huffman 字面量解码。
+  解码侧的 Section Acknowledgement / Insert Count Increment 通过
+  `quic_connection::try_queue_send` 提交，不单独发包，而是搭载在随后的响应包上；
+  早期每个 ack 单独 `await async_send` 才导致动态表反而更慢。同一批并发请求的 ack
+  在 accept 循环挂起前合并成一次解码器流写入；只有单个在途请求时仍立即提交。
+- `set_qpack_encoder_table_limit(limit)` 限制本端**编码**响应时使用的动态表（不通告，
+  默认不限制）。设为 0 时无论对端允许多少都只用静态表：每个字段一次哈希探测，
+  `qpack_encoder::encode_into` 直接写入调用方缓冲，没有编码器流流量和每响应的表状态。
+  响应头只有少量短字段时这是更省 CPU 的选择。
+
+HttpArena H3 适配器使用 4 KB 解码表 + 编码表上限 0。
+
 ### 共享缓冲响应体
 
 服务端可将预加载的不可变内容放入 `response.shared_body`。多个响应共享原始存储，
@@ -167,7 +184,8 @@ response.shared_body = cached_body;
 ```
 
 使用 `static_headers` 时，`response.status` 必须与预编码状态一致，
-`response.headers` 必须为空，并且不能同时使用 `body_source`。
+并且不能同时使用 `body_source`。`response.headers` 为空时直接复用预编码块；
+非空时合并缓存字段后走普通 QPACK 编码，同名字段以 `response.headers` 为准。
 
 ### 响应体流式发送
 

@@ -1,0 +1,23 @@
+=== Validating: cnetmod-grpc-phase7-pin16 ===
+[info] Subscribed tests: unary-grpc unary-grpc-tls
+[build] Building Docker image...
+WARNING: Published ports are discarded when using host network mode
+c14c43ee5bc6acbffd650c6b1dcb7d6c5dac07b73f55d5a440e79e382f615411
+[wait] Waiting for server...
+[ready] Server is up
+[test] unary-grpc endpoint (h2c on :8080)
+  PASS [GetSum over h2c] (a=710 b=901 -> 1611)
+  PASS [GetSum over h2c (second random pair)] (a=934 b=214 -> 1148)
+[test] unary-grpc-tls endpoint (h2+TLS on :8443)
+  PASS [unary-grpc-tls serves the mounted certificate]
+  PASS [unary-grpc-tls negotiates TLS 1.3] (cipher TLS_AES_256_GCM_SHA384)
+  PASS [unary-grpc-tls uses a TLS 1.3 AEAD cipher] (TLS_AES_256_GCM_SHA384)
+  PASS [unary-grpc-tls ALPN] (h2)
+  PASS [unary-grpc-tls TLS quality] (refuses every obsolete protocol and weak cipher probed)
+  NOTE [unary-grpc-tls TLS quality]: this openssl cannot offer ssl3, so those were not probed
+  PASS [GetSum over h2+TLS] (a=439 b=234 -> 673)
+  PASS [GetSum over h2+TLS (second random pair)] (a=598 b=247 -> 845)
+[info] TLS verdict: pass, opt-in tls_check: none
+
+=== Results: 9 passed, 0 failed ===
+httparena-validate-cnetmod-grpc-phase7-pin16

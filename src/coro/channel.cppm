@@ -65,33 +65,32 @@ class channel
 
     class spinlock
     {
-        std::atomic_flag flag_{};
-        // Most channel operations are uncontended. Avoid entering libc++'s
-        // global atomic-notify table on every unlock; a waiter announces
-        // itself before sleeping, and an unlock only notifies when one exists.
-        std::atomic<std::uint32_t> waiters_{};
+        // 0 = free, 1 = held, 2 = held with a sleeping contender. Unlock
+        // only enters the platform wait table when a contender slept.
+        std::atomic<std::uint32_t> state_{};
 
     public:
         void lock() noexcept
         {
-            if (!flag_.test_and_set(std::memory_order_acquire))
+            std::uint32_t expected = 0U;
+            if (state_.compare_exchange_strong(expected, 1U, std::memory_order_acquire,
+                    std::memory_order_relaxed))
                 return;
-            waiters_.fetch_add(1U, std::memory_order_relaxed);
-            do
+            // Advertise a sleeper before waiting; the exchange is a full barrier, so
+            // an unlock that observes 1 cannot race past a contender about to sleep.
+            if (expected != 2U)
+                expected = state_.exchange(2U, std::memory_order_acquire);
+            while (expected != 0U)
             {
-                flag_.wait(true, std::memory_order_relaxed);
-            } while (flag_.test_and_set(std::memory_order_acquire));
-            waiters_.fetch_sub(1U, std::memory_order_relaxed);
+                state_.wait(2U, std::memory_order_relaxed);
+                expected = state_.exchange(2U, std::memory_order_acquire);
+            }
         }
 
         void unlock() noexcept
         {
-            flag_.clear(std::memory_order_release);
-            // If an unlock wins the tiny race before a contender increments
-            // waiters_, that contender observes the cleared flag and retries
-            // instead of sleeping, so no wakeup can be lost.
-            if (waiters_.load(std::memory_order_relaxed) != 0U)
-                flag_.notify_one();
+            if (state_.exchange(0U, std::memory_order_release) == 2U)
+                state_.notify_one();
         }
     };
 
@@ -417,6 +416,46 @@ public:
         return succeeded;
     }
 
+    /// A receiver that a deferred send has already handed its value to and
+    /// that must be resumed later by calling resume() exactly once.
+    class pending_resumption
+    {
+    public:
+        pending_resumption() noexcept = default;
+        explicit operator bool() const noexcept { return waiter_ != nullptr; }
+        void resume() noexcept { resume_waiter(std::exchange(waiter_, nullptr)); }
+
+    private:
+        friend class channel;
+        explicit pending_resumption(waiter_node* waiter) noexcept : waiter_(waiter) {}
+        waiter_node* waiter_{};
+    };
+
+    /// Like try_send, but a receiver that was waiting is returned instead of
+    /// resumed. The value is already delivered; the caller resumes it once
+    /// it has released state the receiver is going to need (for example a
+    /// lock held around the send).
+    auto try_send_deferred(T value, pending_resumption& resumption) -> bool
+    {
+        auto_lock g(lock_);
+        if (closed_)
+            return false;
+        if (recv_head_)
+        {
+            auto* w = static_cast<recv_node*>(recv_head_);
+            *w->slot = std::move(value);
+            dequeue(recv_head_, recv_tail_);
+            resumption = pending_resumption{w};
+            return true;
+        }
+        if (capacity_ > 0 && !buf_full())
+        {
+            buf_push(std::move(value));
+            return true;
+        }
+        return false;
+    }
+
     /// Non-blocking send from an existing object.
     /// The value is moved only when the send succeeds, which lets callers
     /// safely fall back to the suspending send path when the channel is full.
@@ -593,6 +632,26 @@ public:
     }
 
     /// Close channel — wakes all waiting senders/receivers, zero heap allocation
+    /// Returns a closed channel to its initial open, empty state so that its
+    /// owner can reuse it. Fails, changing nothing, unless the channel is
+    /// closed and no coroutine is waiting on it; the caller must also be the
+    /// only owner (no coroutine may be about to await it).
+    auto reopen() noexcept -> bool
+    {
+        auto_lock g(lock_);
+        if (!closed_ || send_head_ || recv_head_)
+            return false;
+        while (count_ > 0)
+        {
+            slots_[read_pos_].destroy();
+            read_pos_ = next_pos(read_pos_);
+            --count_;
+        }
+        read_pos_ = write_pos_ = 0;
+        closed_ = false;
+        return true;
+    }
+
     void close() noexcept
     {
         waiter_node* sends = nullptr;

@@ -172,6 +172,9 @@ export struct thread_affinity_options
     bool enabled{false};
     std::vector<unsigned> worker_processors;
     std::optional<unsigned> accept_processor;
+    /// With an empty explicit list, distribute workers across the calling
+    /// thread's eligible processors. Explicit CPU lists always take priority.
+    bool auto_assign_workers{false};
 };
 
 export auto set_current_thread_affinity(unsigned processor) noexcept

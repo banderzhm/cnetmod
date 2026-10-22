@@ -15,6 +15,8 @@ export void apply_mask(std::span<std::byte> data, std::uint32_t key) noexcept;
 export void build_frame_into(std::vector<std::byte>& frame, opcode op,
     std::span<const std::byte> payload, bool mask,
     bool fin = true);
+export void append_frame_into(std::vector<std::byte>& frames, opcode op,
+    std::span<const std::byte> payload, bool mask, bool fin = true);
 export auto build_frame(opcode op, std::span<const std::byte> payload,
     bool mask, bool fin = true) -> std::vector<std::byte>;
 export auto build_close_frame(std::uint16_t code, std::string_view reason,

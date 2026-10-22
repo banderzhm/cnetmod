@@ -11,6 +11,21 @@ module cnetmod.protocol.quic;
 import std;
 import :crypto;
 import cnetmod.core.log;
+import cnetmod.core.ssl;
+
+namespace cnetmod::quic {
+
+struct quic_crypto_regression_access
+{
+    static auto install(quic_tls_session& session, std::uint32_t cipher,
+        std::span<const std::uint8_t> secret, bool reading) -> bool
+    {
+        return session.install_secret(encryption_level::application,
+            cipher, secret, reading);
+    }
+};
+
+} // namespace cnetmod::quic
 
 namespace {
 namespace q = cnetmod::quic;
@@ -230,6 +245,59 @@ auto failure_cases(results& result, const suite& cipher) -> void
         std::make_error_code(std::errc::message_size), "HP sample requires 16 bytes after PN+4");
     result.check(packet == too_short, "short HP sample leaves packet unchanged");
 }
+auto secret_replacement_case(results& result, const suite& cipher, bool reading) -> void
+{
+    ++result.cases;
+    auto tls = cnetmod::ssl_context::quic_client();
+    if (!result.check(tls.has_value(), "replacement TLS context"))
+        return;
+    auto session = q::quic_tls_session::client(*tls);
+    auto reference = q::quic_tls_session::client(*tls);
+    if (!result.check(session.has_value() && reference.has_value(), "replacement sessions"))
+        return;
+    const std::array<std::uint8_t, 32> first_secret{};
+    auto next_secret = first_secret;
+    next_secret.fill(0x91U);
+    if (!result.check(q::quic_crypto_regression_access::install(**session,
+            cipher.id, first_secret, reading), "first secret installed"))
+        return;
+    const auto keys = reading ? (*session)->read_keys(q::encryption_level::application)
+                              : (*session)->write_keys(q::encryption_level::application);
+    const auto header = make_header(8U, 7U, false);
+    const std::vector<std::byte> body(64U, std::byte{0x31});
+    auto warm = q::seal_payload(*keys, body, header, 7U);
+    auto protected_header = joined(header, std::vector<std::byte>(64U));
+    const auto hp = q::protect_header(*keys, protected_header, header.size() - 4U, false);
+    if (!result.check(warm.has_value() && hp.has_value() && keys->aead_context_cached,
+            "old AEAD and HP caches warmed"))
+        return;
+    // Retain the old owner to detect a stale pointer deterministically,
+    // without making the regression depend on use-after-free behavior.
+    const auto old_owner = keys->aead_context;
+    if (!result.check(q::quic_crypto_regression_access::install(**session,
+            cipher.id, next_secret, reading), "replacement secret installed"))
+        return;
+    if (!result.check(!keys->aead_context && !keys->aead_context_cached,
+            "replacement invalidates both owner and cached pointer"))
+        return;
+    if (!result.check(q::quic_crypto_regression_access::install(**reference,
+            cipher.id, next_secret, reading), "reference secret installed"))
+        return;
+    const auto reference_keys = reading
+        ? (*reference)->read_keys(q::encryption_level::application)
+        : (*reference)->write_keys(q::encryption_level::application);
+    auto actual = q::seal_payload(*keys, body, header, 7U);
+    auto expected = q::seal_payload(*reference_keys, body, header, 7U);
+    result.check(actual && expected && *actual == *expected && *actual != *warm,
+        "replacement uses new AEAD material");
+    auto actual_hp = joined(header, std::vector<std::byte>(64U));
+    auto expected_hp = actual_hp;
+    const auto actual_protected = q::protect_header(*keys, actual_hp, header.size() - 4U, false);
+    const auto expected_protected = q::protect_header(*reference_keys, expected_hp, header.size() - 4U, false);
+    result.check(actual_protected && expected_protected && actual_hp == expected_hp &&
+            actual_hp != protected_header && keys->aead_context != old_owner,
+        "replacement uses new header-protection material and owner");
+}
 } // namespace
 
 extern "C" auto cnetmod_test_in_place_crypto() -> int
@@ -254,6 +322,8 @@ extern "C" auto cnetmod_test_in_place_crypto() -> int
                                 success_case(result, cipher, count, cid_size, pn, path,
                                     key_phase, relocation);
         failure_cases(result, cipher);
+        secret_replacement_case(result, cipher, true);
+        secret_replacement_case(result, cipher, false);
     }
     logger::info{"in-place crypto: cases={} checks={} failures={}",
         result.cases, result.checks, result.failures};

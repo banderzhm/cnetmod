@@ -656,6 +656,12 @@ auto encode_frame(const ack_frame& f) -> std::vector<std::byte>
 {
     std::vector<std::byte> out;
     out.reserve(64);
+    append_ack_frame(out, f);
+    return out;
+}
+
+void append_ack_frame(std::vector<std::byte>& out, const ack_frame& f)
+{
     append_varint(out, f.has_ecn ? 0x03 : 0x02);
     append_varint(out, f.largest_acked);
     append_varint(out, f.ack_delay);
@@ -672,7 +678,6 @@ auto encode_frame(const ack_frame& f) -> std::vector<std::byte>
         append_varint(out, f.ect_1_count);
         append_varint(out, f.ecn_ce_count);
     }
-    return out;
 }
 
 auto encode_frame(const reset_stream_frame& f) -> std::vector<std::byte>
@@ -873,6 +878,12 @@ auto encode_frame(const path_ack_frame& f) -> std::vector<std::byte>
 {
     std::vector<std::byte> out;
     out.reserve(40U + f.acknowledgment.ack_ranges.size() * 4U);
+    append_path_ack_frame(out, f);
+    return out;
+}
+
+void append_path_ack_frame(std::vector<std::byte>& out, const path_ack_frame& f)
+{
     append_varint(out, static_cast<std::uint64_t>(f.acknowledgment.has_ecn ? frame_type::path_ack_ecn : frame_type::path_ack));
     append_varint(out, f.path_id);
     append_varint(out, f.acknowledgment.largest_acked);
@@ -890,7 +901,6 @@ auto encode_frame(const path_ack_frame& f) -> std::vector<std::byte>
         append_varint(out, f.acknowledgment.ect_1_count);
         append_varint(out, f.acknowledgment.ecn_ce_count);
     }
-    return out;
 }
 
 auto encode_frame(const path_abandon_frame& f) -> std::vector<std::byte>
