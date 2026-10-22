@@ -73,8 +73,10 @@ auto client::connect(connect_options opts)
     } guard{*this};
 
     opts_ = opts;
-    auto connected =
-        co_await async_connect_happy_eyeballs(ctx_, opts.host, opts.port);
+    happy_eyeballs_options connect_options;
+    connect_options.socket_opts.no_delay = true;
+    auto connected = co_await async_connect_happy_eyeballs(
+        ctx_, opts.host, opts.port, connect_options);
     if (!connected)
         co_return std::unexpected(connected.error().message());
     sock_ = std::move(connected->sock);
