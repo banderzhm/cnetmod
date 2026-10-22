@@ -196,6 +196,20 @@ public:
     [[nodiscard]] auto try_queue_send(stream_id sid,
         std::span<const std::byte> data) -> bool;
 
+    /// Synchronous form of async_send for a peer-initiated stream: commits
+    /// the write under the state lock when it is free and no earlier write
+    /// is queued, without sending a packet; call flush_pending_writes() once
+    /// a batch of such writes is committed. Returns nullopt, leaving `data`
+    /// and `shared_data` untouched, when the caller must use async_send or
+    /// async_send_shared (also after a flow-control rejection).
+    [[nodiscard]] auto try_send_now(stream_id sid, std::vector<std::byte>& data,
+        const std::shared_ptr<const std::string>& shared_data, bool fin)
+        -> std::optional<std::expected<void, std::error_code>>;
+
+    /// Sends what the committed writes produced unless another coroutine
+    /// already owns the packet writer and will observe them.
+    auto flush_pending_writes() -> task<void>;
+
     /// Update the RFC 9218 scheduling policy for subsequent data on one
     /// stream. Calls are serialized by the connection's I/O domain; urgency
     /// is clamped to the protocol range [0, 7].

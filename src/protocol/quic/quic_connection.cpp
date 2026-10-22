@@ -5531,6 +5531,27 @@ auto quic_connection::try_apply_stream_write_now(stream_id sid,
     return result;
 }
 
+auto quic_connection::try_send_now(stream_id sid, std::vector<std::byte>& data,
+    const std::shared_ptr<const std::string>& shared_data, bool fin)
+    -> std::optional<std::expected<void, std::error_code>>
+{
+    // Locally initiated streams may still need send authority from the
+    // peer's transport parameters; only async_send waits for it.
+    if (is_client_initiated(sid) == (impl_->connection_role == quic_role::client))
+        return std::nullopt;
+    auto result = try_apply_stream_write_now(sid, data, shared_data, fin);
+    if (result && !*result && result->error() == make_error_code(quic_errc::flow_control_error))
+        return std::nullopt;
+    if (result && *result && impl_->terminal_send_error)
+        return std::expected<void, std::error_code>{std::unexpect, impl_->terminal_send_error};
+    return result;
+}
+
+auto quic_connection::flush_pending_writes() -> task<void>
+{
+    co_await flush_after_direct_write();
+}
+
 auto quic_connection::try_queue_send(stream_id sid,
     std::span<const std::byte> data) -> bool
 {

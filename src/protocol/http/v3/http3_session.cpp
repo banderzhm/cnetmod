@@ -1449,12 +1449,16 @@ auto http3_server_session::run() -> task<void>
             if (decoder_.has_pending_decoder_instructions() && !conn_.is_closed())
                 (void)co_await flush_qpack_decoder_instructions(
                     conn_, decoder_, qpack_decoder_stream_);
+            // Responses committed inline during the batch leave together,
+            // acknowledgements included, in one flush.
+            if (std::exchange(inline_writes_pending_, false))
+                co_await conn_.flush_pending_writes();
             accepted = co_await conn_.async_accept_stream();
         }
         if (!accepted)
             break;
 
-        peer_streams_.add();
+        // serve_peer_stream counts the stream in peer_streams_.
         // Keep each peer-stream coroutine owned by the I/O context instead of
         // an unowned eager detached frame.  A session can accept another
         // connection's stream while an earlier stream is suspended; ownership
@@ -1465,9 +1469,11 @@ auto http3_server_session::run() -> task<void>
         // connection's context, so start the child inline instead of paying
         // a post-queue allocation and reactor hop for every request stream.
         batching_decoder_acks_ = true;
-        spawn_local(conn_.context(), service_peer_stream(*accepted));
+        serve_peer_stream(*accepted);
     }
     batching_decoder_acks_ = false;
+    if (std::exchange(inline_writes_pending_, false))
+        co_await conn_.flush_pending_writes();
     close_qpack_waiters(qpack_waiters_);
     co_await peer_streams_.wait();
 }
@@ -1477,10 +1483,43 @@ auto http3_server_session::cancel_request(stream_id id) -> task<void>
     (void)co_await conn_.async_cancel_stream(id);
 }
 
-auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
+void http3_server_session::finish_peer_stream(stream_id id, bool unidirectional) noexcept
 {
+    // operator[] during header decoding also inserts an empty queue
+    // for unblocked requests. Release it on every exit, including
+    // cancellation/error paths, rather than retaining one per request.
+    completed_headers_.erase(id);
+    if (qpack_waiters_.contains(id))
+        (void)decoder_.cancel_blocked_stream(id);
+    qpack_waiters_.erase(id);
+    (void)conn_.retire_stream(id);
+    if (unidirectional)
+    {
+        peer_unidirectional_stream_types_.erase(id);
+        peer_unidirectional_stream_bytes_.erase(id);
+    }
+    if (!unidirectional)
+    {
+        --active_streams_;
+        if (received_goaway_ && active_streams_ == 0U && !closing_)
+        {
+            closing_ = true;
+            spawn(conn_.context(),
+                conn_.async_close({}, "peer completed HTTP/3 shutdown"));
+        }
+    }
+    peer_streams_.done();
+}
 
-    dynamic_buffer wire{webtransport_handler_ ? stream_read_chunk_size : initial_request_read_size};
+auto http3_server_session::service_peer_stream(stream_id id,
+    std::optional<resumed_stream> resumed) -> task<void>
+{
+    dynamic_buffer wire = resumed ? std::move(resumed->wire)
+        : dynamic_buffer{webtransport_handler_ ? stream_read_chunk_size : initial_request_read_size};
+    // The inline path already reached FIN: the whole request is in `wire`.
+    const bool received_fin = resumed && resumed->fin;
+    std::shared_ptr<channel<std::monostate>> resumed_qpack_waiter =
+        resumed ? std::move(resumed->qpack_waiter) : nullptr;
     // Explicit streaming handlers can start once the request HEADERS frame is
     // complete. Keep the remaining DATA/trailer frames in `wire` for the
     // concurrent body pump below; synchronous and legacy async handlers retain
@@ -1502,37 +1541,14 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
         ++active_streams_;
     scope_guard completion{[this, id, unidirectional]
         {
-            // operator[] during header decoding also inserts an empty queue
-            // for unblocked requests. Release it on every exit, including
-            // cancellation/error paths, rather than retaining one per request.
-            completed_headers_.erase(id);
-            if (qpack_waiters_.contains(id))
-                (void)decoder_.cancel_blocked_stream(id);
-            qpack_waiters_.erase(id);
-            (void)conn_.retire_stream(id);
-            if (unidirectional)
-            {
-                peer_unidirectional_stream_types_.erase(id);
-                peer_unidirectional_stream_bytes_.erase(id);
-            }
-            if (!unidirectional)
-            {
-                --active_streams_;
-                if (received_goaway_ && active_streams_ == 0U && !closing_)
-                {
-                    closing_ = true;
-                    spawn(conn_.context(),
-                        conn_.async_close({}, "peer completed HTTP/3 shutdown"));
-                }
-            }
-            peer_streams_.done();
+            finish_peer_stream(id, unidirectional);
         }};
     // Filled by the WebTransport classifier when the stream is instead an
     // ordinary HTTP request. It must outlive the initial receive loop so the
     // normal request path can reuse the single QPACK decode below.
     std::optional<http3_request> pre_parsed_request;
 
-    for (;;)
+    while (!received_fin)
     {
 
         // Most request HEADERS fit in the first small allocation. Reuse its
@@ -1856,6 +1872,19 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
     else
     {
         std::shared_ptr<channel<std::monostate>> qpack_waiter;
+        if (resumed_qpack_waiter)
+        {
+            // The inline parse found the HEADERS blocked and registered this
+            // waiter; wait for the encoder stream before decoding again.
+            qpack_waiter = std::move(resumed_qpack_waiter);
+            const auto progress = co_await wait_for_peer_qpack_progress(
+                conn_, decoder_, qpack_decoder_stream_, id, qpack_waiter);
+            if (!progress)
+            {
+                (void)co_await conn_.async_cancel_stream(id);
+                co_return;
+            }
+        }
         for (;;)
         {
             std::expected<http3_request, std::error_code> parsed_request;
@@ -2141,7 +2170,12 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
         response.shared_body.reset();
         response.static_headers.reset();
     }
+    co_await send_response(id, request->method, response);
+}
 
+auto http3_server_session::send_response(stream_id id, http_method method,
+    http3_response& response) -> task<void>
+{
     // PUSH_PROMISE frames are part of the parent request stream and must
     // precede its final response HEADERS. Do this only after the handler has
     // produced its complete response so an invalid push never escapes as a
@@ -2166,7 +2200,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
     // response, but a HEAD response never contains DATA. Keep headers (and an
     // explicitly supplied Content-Length) while suppressing either body form.
     const bool suppress_response_body = response_forbids_content(
-        response.status, request->method == http_method::HEAD);
+        response.status, method == http_method::HEAD);
     if (suppress_response_body)
         response.body_source.reset();
 
@@ -2387,6 +2421,227 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
     }
     if (!response_sent)
         co_await cancel_request(id);
+}
+
+auto http3_server_session::respond_owned(stream_id id, http_method method,
+    http3_response response) -> task<void>
+{
+    scope_guard completion{[this, id] { finish_peer_stream(id, false); }};
+    co_await send_response(id, method, response);
+}
+
+auto http3_server_session::send_encoded_owned(stream_id id, byte_buffer instructions,
+    std::vector<std::byte> encoded, std::shared_ptr<const std::string> shared_body)
+    -> task<void>
+{
+    // Entered with response_header_mutex_ held when `instructions` is not
+    // empty: encoder instructions must reach the encoder stream in the order
+    // the HEADERS that refer to them were encoded.
+    scope_guard completion{[this, id] { finish_peer_stream(id, false); }};
+    if (!instructions.empty())
+    {
+        async_lock_guard header_guard{response_header_mutex_, std::adopt_lock};
+        if (!qpack_encoder_stream_)
+        {
+            co_await conn_.async_close(std::make_error_code(std::errc::protocol_error),
+                "HTTP/3 QPACK encoder stream unavailable");
+            co_return;
+        }
+        const auto encoder_sent = co_await conn_.async_send(
+            *qpack_encoder_stream_, instructions.release(), false);
+        if (!encoder_sent)
+        {
+            co_await conn_.async_close(encoder_sent.error(),
+                "HTTP/3 QPACK encoder stream failed");
+            co_return;
+        }
+    }
+    const auto sent = shared_body
+        ? co_await conn_.async_send_shared(id, std::move(encoded), std::move(shared_body), true)
+        : co_await conn_.async_send(id, std::move(encoded), true);
+    if (!sent)
+        co_await cancel_request(id);
+}
+
+auto http3_server_session::close_owned(stream_id id, std::error_code error) -> task<void>
+{
+    scope_guard completion{[this, id] { finish_peer_stream(id, false); }};
+    co_await conn_.async_close(error, "invalid HTTP/3 request stream");
+}
+
+auto http3_server_session::cancel_owned(stream_id id, std::uint64_t code) -> task<void>
+{
+    scope_guard completion{[this, id] { finish_peer_stream(id, false); }};
+    (void)co_await conn_.async_cancel_stream(id, code);
+}
+
+void http3_server_session::serve_peer_stream(stream_id id)
+{
+    peer_streams_.add();
+    const bool unidirectional = (id & 0x02U) != 0U;
+    // Only complete requests for a synchronous handler are served here; every
+    // other stream kind keeps its coroutine.
+    if (unidirectional || webtransport_handler_ || streaming_handler_ || async_handler_ ||
+        !handler_)
+    {
+        spawn_local(conn_.context(), service_peer_stream(id));
+        return;
+    }
+    if (!inline_wire_)
+        inline_wire_.emplace(initial_request_read_size);
+    auto& wire = *inline_wire_;
+    wire.clear();
+    auto hand_off = [&](bool fin, std::shared_ptr<channel<std::monostate>> waiter = nullptr)
+    {
+        resumed_stream resumed{std::move(wire), fin, std::move(waiter)};
+        inline_wire_.reset();
+        spawn_local(conn_.context(), service_peer_stream(id, std::move(resumed)));
+    };
+
+    // Read what has arrived. A request that is not complete yet, or a read
+    // that needs the coroutine, continues in service_peer_stream.
+    const auto header_allowance = local_settings_.max_header_list_size == 0U
+        ? 65536U : local_settings_.max_header_list_size;
+    const auto maximum_wire = request_body_options_.max_bytes >
+            std::numeric_limits<std::uint64_t>::max() - header_allowance
+        ? std::numeric_limits<std::uint64_t>::max()
+        : request_body_options_.max_bytes + header_allowance;
+    for (;;)
+    {
+        const auto read_size = wire.readable_bytes() < initial_request_read_size
+            ? initial_request_read_size - wire.readable_bytes()
+            : stream_read_chunk_size;
+        auto received = conn_.try_recv(id, wire.prepare(read_size));
+        if (!received || (!*received &&
+                received->error() == std::make_error_code(std::errc::operation_would_block)))
+        {
+            hand_off(false);
+            return;
+        }
+        if (!*received)
+        {
+            // A reset stream or closed connection: the coroutine's read
+            // reports it the same way and releases the stream.
+            hand_off(false);
+            return;
+        }
+        if (**received == 0U)
+            break;
+        wire.commit(**received);
+        if (wire.readable_bytes() > maximum_wire)
+        {
+            ++active_streams_;
+            spawn_local(conn_.context(), cancel_owned(id, 0x107U));
+            return;
+        }
+    }
+    if (conn_.is_stream_cancelled(id))
+    {
+        ++active_streams_;
+        spawn_local(conn_.context(), cancel_owned(id, 0U));
+        return;
+    }
+    if (!request_header_mutex_.try_lock())
+    {
+        hand_off(true);
+        return;
+    }
+    std::expected<http3_request, std::error_code> parsed;
+    std::shared_ptr<channel<std::monostate>> qpack_waiter;
+    {
+        async_lock_guard header_guard{request_header_mutex_, std::adopt_lock};
+        parsed = request_from_frames(decoder_, wire.readable_view(), id,
+            completed_header_blocks(id));
+        // Decoder acknowledgements are left pending: run() commits them for
+        // the whole accept batch before it flushes the responses.
+        if (!parsed && parsed.error() == std::make_error_code(std::errc::resource_unavailable_try_again))
+            qpack_waiter = qpack_waiter_for(qpack_waiters_, id);
+        else
+            qpack_waiters_.erase(id);
+    }
+    if (!parsed)
+    {
+        if (qpack_waiter)
+        {
+            hand_off(true, std::move(qpack_waiter));
+            return;
+        }
+        ++active_streams_;
+        spawn_local(conn_.context(), close_owned(id, parsed.error()));
+        return;
+    }
+
+    ++active_streams_;
+    if (parsed->body.size() > request_body_options_.max_bytes)
+    {
+        spawn_local(conn_.context(), cancel_owned(id, 0x107U));
+        return;
+    }
+    http3_response response;
+    if (handler_(*parsed, response))
+    {
+        response.status = status::internal_server_error;
+        response.body.clear();
+        response.shared_body.reset();
+        response.static_headers.reset();
+    }
+
+    // The common response (no pushes, no body producer, a consistent
+    // length) is encoded and committed here; anything else, or a lock or
+    // transport that is busy, finishes in a coroutine.
+    const auto method = parsed->method;
+    const bool suppress_body = response_forbids_content(response.status,
+        method == http_method::HEAD);
+    const auto declared_length = response_declared_length(response);
+    const auto buffered_body = buffered_response_body(response);
+    const bool simple = response.pushes.empty() && !response.body_source &&
+        declared_length && buffered_body &&
+        (suppress_body || !*declared_length || **declared_length == buffered_body->size());
+    if (!simple || !response_header_mutex_.try_lock())
+    {
+        spawn_local(conn_.context(), respond_owned(id, method, std::move(response)));
+        return;
+    }
+    const bool shared = response.shared_body && !suppress_body && response.trailers.empty();
+    auto encoded = shared ? response_headers_frame(encoder_, response, id)
+                          : response_frames(encoder_, response, id, suppress_body);
+    if (!encoded)
+    {
+        response_header_mutex_.unlock();
+        spawn_local(conn_.context(), close_owned(id, encoded.error()));
+        return;
+    }
+    std::shared_ptr<const std::string> shared_body;
+    if (shared)
+    {
+        append_varint(static_cast<std::uint64_t>(http3_frame_type::data), *encoded);
+        append_varint(static_cast<std::uint64_t>(response.shared_body->size()), *encoded);
+        shared_body = response.shared_body;
+    }
+    auto instructions = encoder_.take_encoder_instructions();
+    auto bytes = encoded->release();
+    if (!instructions.empty())
+    {
+        // Keep the lock until the encoder stream carries the instructions.
+        spawn_local(conn_.context(), send_encoded_owned(id, std::move(instructions),
+            std::move(bytes), std::move(shared_body)));
+        return;
+    }
+    response_header_mutex_.unlock();
+    auto sent = conn_.try_send_now(id, bytes, shared_body, true);
+    if (!sent)
+    {
+        spawn_local(conn_.context(), send_encoded_owned(id, {},
+            std::move(bytes), std::move(shared_body)));
+        return;
+    }
+    if (!*sent)
+    {
+        spawn_local(conn_.context(), cancel_owned(id, 0U));
+        return;
+    }
+    inline_writes_pending_ = true;
+    finish_peer_stream(id, false);
 }
 
 auto read_varint(byte_view input, std::size_t& used)

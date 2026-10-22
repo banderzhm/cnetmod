@@ -332,7 +332,35 @@ public:
         -> task<std::expected<std::pair<std::uint64_t, std::vector<std::byte>>, std::error_code>>;
 
 private:
-    auto service_peer_stream(stream_id id) -> task<void>;
+    /// Request-stream state handed from the inline path to the coroutine.
+    struct resumed_stream
+    {
+        dynamic_buffer wire;
+        bool fin{};
+        /// Set when the inline parse found the HEADERS blocked on QPACK.
+        std::shared_ptr<channel<std::monostate>> qpack_waiter;
+    };
+    /// Serves a complete request with a synchronous handler without a
+    /// coroutine when its bytes, both header locks and the transport allow
+    /// it; otherwise hands the stream, with what was read, to the coroutine.
+    void serve_peer_stream(stream_id id);
+    auto service_peer_stream(stream_id id, std::optional<resumed_stream> resumed = {})
+        -> task<void>;
+    /// Sends a handler's response: pushes, body validation, encoding, write.
+    auto send_response(stream_id id, http_method method, http3_response& response)
+        -> task<void>;
+    /// Coroutine tails of the inline path. Each owns the request stream and
+    /// releases it like service_peer_stream does.
+    auto respond_owned(stream_id id, http_method method, http3_response response)
+        -> task<void>;
+    auto send_encoded_owned(stream_id id, byte_buffer instructions,
+        std::vector<std::byte> encoded, std::shared_ptr<const std::string> shared_body)
+        -> task<void>;
+    auto close_owned(stream_id id, std::error_code error) -> task<void>;
+    auto cancel_owned(stream_id id, std::uint64_t code) -> task<void>;
+    /// Releases a request stream: retire it, update counters, shut down
+    /// after GOAWAY once idle.
+    void finish_peer_stream(stream_id id, bool unidirectional) noexcept;
     auto cancel_request(stream_id id) -> task<void>;
     quic_connection& conn_;
     server_request_handler handler_;
@@ -360,6 +388,12 @@ private:
     // True while run() dispatches the streams of one accept batch; it then
     // commits the batch's QPACK decoder acknowledgements in one write.
     bool batching_decoder_acks_{};
+    // Responses committed by the inline path; run() sends them once per
+    // accept batch.
+    bool inline_writes_pending_{};
+    // Receive buffer of the inline path, reused across requests; moved into
+    // the coroutine when a stream needs it.
+    std::optional<dynamic_buffer> inline_wire_;
     bool peer_control_stream_seen_{};
     bool peer_settings_seen_{};
     bool peer_datagram_enabled_{};
