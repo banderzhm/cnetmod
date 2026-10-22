@@ -37,6 +37,17 @@ struct compress_options
     /** @brief Gzip compression level passed to the selected backend. */
     int level = 6;
 
+    /**
+     * @brief Brotli quality (0-11) for clients that accept `br`, or a
+     * negative value to negotiate gzip only (the default). When enabled, `br`
+     * is chosen whenever the client rates it at least as high as gzip.
+     * Ignored when the library was built without Brotli.
+     */
+    int brotli_quality = -1;
+
+    /** @brief Brotli window size, log2 bytes (10-24). */
+    int brotli_window = 18;
+
     /** @brief Maximum number of compression operations in flight. */
     std::size_t max_concurrency = 4;
 
@@ -53,7 +64,8 @@ struct compress_options
 };
 
 /**
- * @brief Creates gzip response compression with negotiation and bounded work.
+ * @brief Creates gzip (and optionally Brotli) response compression with
+ * negotiation and bounded work.
  */
 [[nodiscard]] auto compress(compress_options opts = {}) -> http::middleware_fn;
 } // namespace cnetmod
