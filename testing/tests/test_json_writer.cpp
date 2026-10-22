@@ -121,6 +121,25 @@ TEST(json_writer_matches_document_backend_byte_for_byte)
     ASSERT_EQ(*direct, *compact);
 }
 
+TEST(json_writer_writes_into_and_reuses_caller_owned_storage)
+{
+    const auto value = sample();
+    const auto expected = cnetmod::json::write(value);
+    ASSERT_TRUE(expected.has_value());
+
+    std::string output;
+    output.reserve(64U * 1024U);
+    const auto* const storage = output.data();
+    ASSERT_TRUE(cnetmod::json::write_to(output, value).has_value());
+    ASSERT_EQ(output, *expected);
+    ASSERT_TRUE(output.data() == storage);
+
+    ASSERT_FALSE(cnetmod::json::write_to(
+        output, std::vector<std::string>{"\xC0\x80"})
+            .has_value());
+    ASSERT_TRUE(output.empty());
+}
+
 TEST(json_writer_emits_sorted_keys_escapes_and_number_formats)
 {
     const auto direct = cnetmod::json::write(sample());

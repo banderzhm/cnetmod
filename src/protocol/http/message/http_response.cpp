@@ -171,24 +171,25 @@ auto response::set_body(std::string_view body) -> response&
     shared_body_.reset();
     body_source_.reset();
     body_.assign(body);
+    refresh_content_length();
+    return *this;
+}
+
+void response::refresh_content_length()
+{
     std::array<char, 24> length{};
     const auto [end, error] = std::to_chars(
         length.data(), length.data() + length.size(), body_.size());
     if (error == std::errc{})
         set_common_header(0, {length.data(), end});
-    return *this;
 }
 
 auto response::set_body(std::string body) -> response&
 {
     shared_body_.reset();
     body_source_.reset();
-    std::array<char, 24> length{};
-    const auto [end, error] = std::to_chars(
-        length.data(), length.data() + length.size(), body.size());
-    if (error == std::errc{})
-        set_common_header(0, {length.data(), end});
     body_ = std::move(body);
+    refresh_content_length();
     return *this;
 }
 

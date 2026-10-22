@@ -144,6 +144,46 @@ TEST(response_set_body_string)
     ASSERT_EQ(resp.get_header("Content-Length"), std::string_view("6"));
 }
 
+TEST(response_generate_body_reuses_storage_and_discards_partial_failure)
+{
+    response resp;
+    const char* first_storage{};
+    auto generated = resp.generate_body([&](std::string& output)
+                                            -> std::expected<void, std::error_code>
+        {
+            output.assign(16U * 1024U, 'a');
+            first_storage = output.data();
+            return {};
+        });
+    ASSERT_TRUE(generated.has_value());
+    ASSERT_EQ(resp.body().size(), std::size_t{16U * 1024U});
+    ASSERT_EQ(resp.get_header("Content-Length"), std::string_view("16384"));
+
+    resp.reset();
+    const char* second_storage{};
+    generated = resp.generate_body([&](std::string& output)
+                                       -> std::expected<void, std::error_code>
+        {
+            output.assign(4096U, 'b');
+            second_storage = output.data();
+            return {};
+        });
+    ASSERT_TRUE(generated.has_value());
+    ASSERT_TRUE(second_storage == first_storage);
+    ASSERT_EQ(resp.get_header("Content-Length"), std::string_view("4096"));
+
+    generated = resp.generate_body([](std::string& output)
+                                       -> std::expected<void, std::error_code>
+        {
+            output = "partial";
+            return std::unexpected(
+                std::make_error_code(std::errc::invalid_argument));
+        });
+    ASSERT_FALSE(generated.has_value());
+    ASSERT_TRUE(resp.body().empty());
+    ASSERT_EQ(resp.get_header("Content-Length"), std::string_view("0"));
+}
+
 TEST(response_shared_body_reuses_immutable_storage)
 {
     response resp;

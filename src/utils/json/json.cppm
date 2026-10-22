@@ -51,6 +51,14 @@ namespace detail {
             resize_uninitialized(initial);
         }
 
+        inline explicit json_writer(std::string& output,
+            std::size_t initial = 256U)
+            : output_(&output)
+        {
+            output.clear();
+            resize_uninitialized(std::max(initial, output.capacity()));
+        }
+
         [[nodiscard]] inline auto size() const noexcept -> std::size_t { return size_; }
 
         inline void reserve(std::size_t extra)
@@ -90,8 +98,13 @@ namespace detail {
 
         [[nodiscard]] inline auto take() && -> std::string
         {
-            out_.resize(size_);
-            return std::move(out_);
+            finish();
+            return std::move(owned_);
+        }
+
+        inline void finish()
+        {
+            output_->resize(size_);
         }
 
     private:
@@ -105,13 +118,14 @@ namespace detail {
         // not be zero-filled first.
         void resize_uninitialized(std::size_t capacity)
         {
-            out_.resize_and_overwrite(capacity,
+            output_->resize_and_overwrite(capacity,
                 [](char*, std::size_t count) noexcept { return count; });
-            data_ = out_.data();
-            capacity_ = out_.size();
+            data_ = output_->data();
+            capacity_ = output_->size();
         }
 
-        std::string out_;
+        std::string owned_;
+        std::string* output_ = &owned_;
         char* data_{};
         std::size_t size_{};
         std::size_t capacity_{};
@@ -1534,6 +1548,24 @@ namespace detail {
         last_size = out.size();
         return std::move(out).take();
     }
+
+    template <typename T>
+    [[nodiscard]] auto write_direct_to(
+        std::string& output, const T& value, bool emit_nulls)
+        -> std::expected<void, std::error_code>
+    {
+        thread_local std::size_t last_size = 512U;
+        json_writer out{
+            output, std::max<std::size_t>(512U, last_size + last_size / 8U)};
+        if (auto written = write_value(out, value, emit_nulls); !written)
+        {
+            output.clear();
+            return std::unexpected(written.error());
+        }
+        last_size = out.size();
+        out.finish();
+        return {};
+    }
 } // namespace detail
 
 struct default_codec
@@ -1628,6 +1660,19 @@ requires codec_for<Codec, T>
 [[nodiscard]] auto write(const T& value) -> std::expected<std::string, std::error_code>
 {
     return Codec::template encode<T>(value);
+}
+
+/**
+ * @brief Serializes directly into caller-owned storage.
+ *
+ * Existing capacity is reused. This is the preferred path for reusable HTTP
+ * response builders and other connection-local output buffers.
+ */
+template <typename T>
+[[nodiscard]] auto write_to(std::string& output, const T& value)
+    -> std::expected<void, std::error_code>
+{
+    return detail::write_direct_to(output, value, false);
 }
 
 template <typename T>

@@ -49,6 +49,25 @@ public:
 
     auto set_body(std::string body) -> response&;
 
+    /// Generate a body directly in the response-owned reusable buffer.
+    /// The generator must return expected<void, error_code>. On failure the
+    /// partial body is discarded and Content-Length is reset to zero.
+    template <typename Generator>
+    requires std::same_as<std::invoke_result_t<Generator&, std::string&>,
+        std::expected<void, std::error_code>>
+    auto generate_body(Generator&& generator)
+        -> std::expected<void, std::error_code>
+    {
+        shared_body_.reset();
+        body_source_.reset();
+        body_.clear();
+        auto generated = std::invoke(generator, body_);
+        if (!generated)
+            body_.clear();
+        refresh_content_length();
+        return generated;
+    }
+
     /// Reuse immutable buffered content without copying it into every
     /// response. The storage remains alive until the transport consumes it.
     auto set_shared_body(std::shared_ptr<const std::string> body) -> response&;
@@ -197,6 +216,7 @@ private:
         -> response&;
     auto set_common_header_owned(std::size_t slot, std::string value)
         -> response&;
+    void refresh_content_length();
 
     int status_code_ = 200;
     std::string status_msg_;

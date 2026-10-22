@@ -83,6 +83,26 @@ string escapes, integers as written, doubles formatted by the backend, and
 types with a custom `document_traits::encode` still go through a `document`.
 Do not hand-write JSON strings for speed; this path is the fast one.
 
+For a reusable response or connection buffer, use `write_to(output, value)`.
+It clears the logical contents but retains and reuses `output`'s capacity, and
+returns `expected<void, error_code>`. HTTP handlers can combine it with
+`response::generate_body()` so serialization writes directly into the response
+builder instead of allocating a temporary string:
+
+```cpp
+request.resp()
+    .set_status(cnetmod::http::status::ok)
+    .set_header("Content-Type", "application/json; charset=utf-8");
+auto written = request.resp().generate_body([&](std::string& output) {
+    return cnetmod::json::write_to(output, dto);
+});
+```
+
+`generate_body()` updates `Content-Length`; on serialization failure it drops
+the partial body and sets the length to zero. Prefer this path for repeated
+dynamic JSON responses. `write()` remains appropriate when the serialized value
+must be returned, cached, or passed independently of an HTTP response.
+
 ## ORM models and projections
 
 Do not add `CNETMOD_JSON` to a type already declared with `CNETMOD_MODEL` or
