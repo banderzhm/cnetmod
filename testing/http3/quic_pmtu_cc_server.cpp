@@ -18,6 +18,7 @@ using clock_type = std::chrono::steady_clock;
 
 struct options
 {
+    std::string host{"127.0.0.1"};
     std::uint16_t port{4433};
     std::uint64_t ceiling{4096U};
     std::string certificate;
@@ -309,14 +310,24 @@ auto main(int argc, char** argv) -> int
     {
         const std::string_view name{argv[index]};
         const std::string value{argv[index + 1]};
-        if (name == "--port") arguments.port = static_cast<std::uint16_t>(std::stoul(value));
-        else if (name == "--ceiling") arguments.ceiling = std::stoull(value);
-        else if (name == "--cert") arguments.certificate = value;
-        else if (name == "--key") arguments.key = value;
-        else if (name == "--listening-report") arguments.listening = value;
-        else if (name == "--ready-report") arguments.ready = value;
-        else if (name == "--result-report") arguments.report = value;
-        else return 2;
+        if (name == "--host")
+            arguments.host = value;
+        else if (name == "--port")
+            arguments.port = static_cast<std::uint16_t>(std::stoul(value));
+        else if (name == "--ceiling")
+            arguments.ceiling = std::stoull(value);
+        else if (name == "--cert")
+            arguments.certificate = value;
+        else if (name == "--key")
+            arguments.key = value;
+        else if (name == "--listening-report")
+            arguments.listening = value;
+        else if (name == "--ready-report")
+            arguments.ready = value;
+        else if (name == "--result-report")
+            arguments.report = value;
+        else
+            return 2;
     }
     if (arguments.ceiling < 1200U || arguments.ceiling > 65507U ||
         arguments.listening.empty() || arguments.ready.empty() || arguments.report.empty())
@@ -330,7 +341,7 @@ auto main(int argc, char** argv) -> int
         return 1;
     auto context = cn::make_io_context();
     fixture state{*context, tls, std::move(arguments)};
-    const auto address = cn::ip_address::from_string("127.0.0.1");
+    const auto address = cn::ip_address::from_string(state.arguments.host);
     if (!address || !state.socket.open(cn::endpoint{*address, state.arguments.port}))
         return 1;
     auto start = [&state]() -> cn::task<void>
