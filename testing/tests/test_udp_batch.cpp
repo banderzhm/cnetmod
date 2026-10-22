@@ -426,9 +426,18 @@ auto run_udp_batch_layout_probe(cnetmod::io_context& context,
             mixed_sizes, true, false, segmented); !result)
         co_return result;
 
-    // Verify independent large datagrams whose aggregate exceeds 65507 bytes.
-    // Linux validation runs this in an isolated network namespace with lo up:
-    // WSL can route 127.0.0.1 through a host adapter that drops large packets.
+    // Verify independent datagrams whose aggregate exceeds 65507 bytes. WSL
+    // may route loopback through a host adapter and silently drop individually
+    // fragmented 24 KiB UDP packets, so retain the aggregate-overflow contract
+    // there with MTU-sized datagrams. Native Linux still verifies both large
+    // individual payloads and an aggregate above the UDP payload ceiling.
+    if (std::getenv("WSL_DISTRO_NAME") != nullptr)
+    {
+        std::array<std::size_t, 48> aggregate_sizes{};
+        aggregate_sizes.fill(1400U);
+        co_return co_await run_udp_batch_layout_case(context, loopback_text,
+            aggregate_sizes, false, false, segmented);
+    }
     constexpr std::array<std::size_t, 3> large_sizes{24000U, 24000U, 24000U};
     co_return co_await run_udp_batch_layout_case(context, loopback_text,
         large_sizes, false, false, segmented);
@@ -910,6 +919,24 @@ void check_udp_batch_would_block(batch_wait_probe probe, bool segmented = false)
     for (std::size_t attempt{}; attempt < 4096U; ++attempt)
     {
         const auto sent = ::send(sender_fd, filler.data(), filler.size(), MSG_DONTWAIT | MSG_NOSIGNAL);
+        if (sent < 0)
+        {
+            would_block = errno == EAGAIN || errno == EWOULDBLOCK;
+            break;
+        }
+    }
+    ASSERT_TRUE(would_block);
+    if (!would_block)
+        return;
+    // A failed 4 KiB write may still leave room for the five-byte probe below.
+    // Fill that tail one byte at a time so resuming the coroutine must enter
+    // the asynchronous EAGAIN path rather than completing synchronously.
+    const std::byte final_fill{};
+    would_block = false;
+    for (std::size_t attempt{}; attempt < 16384U; ++attempt)
+    {
+        const auto sent = ::send(sender_fd, &final_fill, sizeof(final_fill),
+            MSG_DONTWAIT | MSG_NOSIGNAL);
         if (sent < 0)
         {
             would_block = errno == EAGAIN || errno == EWOULDBLOCK;
