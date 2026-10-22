@@ -72,6 +72,12 @@ public:
     /// response. The storage remains alive until the transport consumes it.
     auto set_shared_body(std::shared_ptr<const std::string> body) -> response&;
 
+    /// Reuse immutable buffered content without changing Content-Length.
+    /// This is for responses whose complete header block was prepared with
+    /// the same body and is installed separately.
+    auto set_shared_body_preserve_headers(
+        std::shared_ptr<const std::string> body) -> response&;
+
     auto set_body_preserve_headers(std::string body) -> response&;
 
     /// Install a pull-based response body. The transport consumes the source
