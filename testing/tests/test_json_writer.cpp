@@ -60,6 +60,27 @@ template <> struct cnetmod::json::document_traits<writer_test::item>
     }
 };
 
+namespace writer_test {
+struct repeated
+{
+    std::int64_t first{};
+    std::int64_t second{};
+    std::optional<std::string> label;
+};
+} // namespace writer_test
+
+// "x" is mapped twice; like assignment into the backend's map, the field
+// declared last provides the value.
+template <> struct cnetmod::json::document_traits<writer_test::repeated>
+{
+    static constexpr auto fields()
+    {
+        return std::tuple{cnetmod::json::field("x", &writer_test::repeated::first),
+            cnetmod::json::field("a", &writer_test::repeated::label),
+            cnetmod::json::field("x", &writer_test::repeated::second)};
+    }
+};
+
 CNETMOD_JSON(writer_test::listing, CNETMOD_JSON_FIELD(items), CNETMOD_JSON_FIELD(count),
     CNETMOD_JSON_FIELD(counters), CNETMOD_JSON_FIELD(unordered))
 CNETMOD_JSON(writer_test::with_enum, CNETMOD_JSON_FIELD(value), CNETMOD_JSON_FIELD(note))
@@ -112,6 +133,33 @@ TEST(json_writer_emits_sorted_keys_escapes_and_number_formats)
         R"({"active":false,"id":2,"name":"b","rating":{"count":0,"score":0},)"
         R"("serial":0,"tags":[],"weight":0.1}],"unordered":{"b":6,"m":7,"y":5}})";
     ASSERT_EQ(*direct, expected);
+}
+
+TEST(json_writer_repeated_names_and_plain_strings_match_the_backend)
+{
+    const writer_test::repeated value{.first = 1, .second = 2};
+    const auto direct = cnetmod::json::write(value);
+    ASSERT_TRUE(direct.has_value());
+    ASSERT_EQ(*direct, std::string{R"({"x":2})"});
+    ASSERT_EQ(*direct, cnetmod::json::write_document(*cnetmod::json::to_document(value)).value());
+    ASSERT_EQ(*cnetmod::json::write(writer_test::repeated{.first = 1, .second = 2, .label = "q"}),
+        std::string{R"({"a":"q","x":2})"});
+
+    // Every length around the 8-byte word boundary, plain and with one byte
+    // that needs escaping at the last position.
+    for (std::size_t length = 0; length <= 17U; ++length)
+    {
+        std::string plain;
+        for (std::size_t index = 0; index < length; ++index)
+            plain.push_back(static_cast<char>('a' + index % 26U));
+        ASSERT_EQ(*cnetmod::json::write(plain), "\"" + plain + "\"");
+        if (length == 0U)
+            continue;
+        auto quoted = plain;
+        quoted.back() = '"';
+        const auto expected = "\"" + plain.substr(0, length - 1U) + "\\\"\"";
+        ASSERT_EQ(*cnetmod::json::write(quoted), expected);
+    }
 }
 
 TEST(json_writer_null_policies_enums_and_doubles)

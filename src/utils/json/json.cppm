@@ -43,50 +43,59 @@ namespace detail {
     class json_writer
     {
     public:
-        explicit json_writer(std::size_t initial = 256U)
+        // Member functions defined in a named module's class are not
+        // implicitly inline, so the per-byte primitives say so explicitly;
+        // otherwise every put/append is an out-of-line call.
+        inline explicit json_writer(std::size_t initial = 256U)
         {
             resize_uninitialized(initial);
         }
 
-        [[nodiscard]] auto size() const noexcept -> std::size_t { return size_; }
+        [[nodiscard]] inline auto size() const noexcept -> std::size_t { return size_; }
 
-        void reserve(std::size_t extra)
+        inline void reserve(std::size_t extra)
         {
             if (size_ + extra <= capacity_) [[likely]]
                 return;
             grow(extra);
         }
 
-        void put(char value)
+        inline void put(char value)
         {
             reserve(1U);
             data_[size_++] = value;
         }
 
-        void put_unchecked(char value) noexcept { data_[size_++] = value; }
+        inline void put_unchecked(char value) noexcept { data_[size_++] = value; }
 
-        void append(const char* value, std::size_t count)
+        inline void append(const char* value, std::size_t count)
         {
             reserve(count);
             std::memcpy(data_ + size_, value, count);
             size_ += count;
         }
 
-        void append(std::string_view value) { append(value.data(), value.size()); }
+        inline void append(std::string_view value) { append(value.data(), value.size()); }
 
-        void append_unchecked(const char* value, std::size_t count) noexcept
+        inline void append_unchecked(const char* value, std::size_t count) noexcept
         {
             std::memcpy(data_ + size_, value, count);
             size_ += count;
         }
 
-        [[nodiscard]] auto take() && -> std::string
+        /// Write position for formatting in place after reserve(); advance()
+        /// commits the bytes written there.
+        [[nodiscard]] inline auto cursor() noexcept -> char* { return data_ + size_; }
+        inline void advance(std::size_t count) noexcept { size_ += count; }
+
+        [[nodiscard]] inline auto take() && -> std::string
         {
             out_.resize(size_);
             return std::move(out_);
         }
 
     private:
+        // Growth is rare; keep it out of the inlined fast paths.
         void grow(std::size_t extra)
         {
             resize_uninitialized(std::max(capacity_ * 2U, size_ + extra));
@@ -1251,10 +1260,41 @@ namespace detail {
     template <std::integral T>
     void append_integer(json_writer& out, T value)
     {
-        std::array<char, 24> digits{};
-        const auto [end, error] = std::to_chars(digits.data(), digits.data() + digits.size(),
-            value);
-        out.append(digits.data(), static_cast<std::size_t>(end - digits.data()));
+        // Format straight into reserved output; 20 digits plus a sign.
+        constexpr std::size_t widest = 21U;
+        out.reserve(widest);
+        auto* const first = out.cursor();
+        const auto [end, error] = std::to_chars(first, first + widest, value);
+        out.advance(static_cast<std::size_t>(end - first));
+    }
+
+    /// The order sorted_field_order() describes, computed at compile time:
+    /// position P holds the field index to emit there, or the field count for
+    /// a position dropped because a later field repeats its name.
+    template <typename T>
+    [[nodiscard]] consteval auto compile_time_field_order()
+    {
+        constexpr auto fields = document_traits<T>::fields();
+        constexpr std::size_t count = std::tuple_size_v<std::remove_cvref_t<decltype(fields)>>;
+        std::array<std::string_view, count> names{};
+        [&]<std::size_t... I>(std::index_sequence<I...>)
+        {
+            ((names[I] = std::get<I>(fields).name), ...);
+        }(std::make_index_sequence<count>{});
+        std::array<std::size_t, count> indices{};
+        for (std::size_t index = 0; index < count; ++index)
+            indices[index] = index;
+        // Stable insertion sort: equal names keep declaration order.
+        for (std::size_t position = 1; position < count; ++position)
+            for (std::size_t at = position; at > 0 && names[indices[at]] < names[indices[at - 1U]]; --at)
+                std::swap(indices[at], indices[at - 1U]);
+        std::array<std::size_t, count> order{};
+        for (std::size_t position = 0; position < count; ++position)
+            order[position] = position + 1U < count &&
+                    names[indices[position + 1U]] == names[indices[position]]
+                ? count
+                : indices[position];
+        return order;
     }
 
     /// Field indices of T in the order their names sort, which is the order
@@ -1317,34 +1357,39 @@ namespace detail {
                 ...);
             return result;
         }(std::make_index_sequence<count>{});
-        using writer = auto (*)(json_writer&, const T&, bool, bool&)
-            -> std::expected<void, std::error_code>;
-        static const auto writers = []<std::size_t... I>(std::index_sequence<I...>)
+        // The emission order is a compile-time constant, so every member is
+        // written by a direct, inlinable call instead of through a table of
+        // function pointers walked at run time.
+        static constexpr auto order = compile_time_field_order<T>();
+        const auto write_member = [&]<std::size_t I>(bool& first)
+            -> std::expected<void, std::error_code>
         {
-            return std::array<writer, count>{
-                +[](json_writer& output, const T& owner, bool nulls, bool& first)
-                    -> std::expected<void, std::error_code>
-                {
-                    const auto& member = std::get<I>(fields);
-                    const auto& field_value = owner.*(member.member);
-                    if constexpr (is_optional_v<decltype(field_value)>)
-                        if (!field_value && !nulls)
-                            return {};
-                    const auto& key = keys[I];
-                    if (key.empty())
-                        return std::unexpected(make_error_code(errc::serialization_failed));
-                    output.reserve(key.size() + 1U);
-                    if (!std::exchange(first, false))
-                        output.put_unchecked(',');
-                    output.append_unchecked(key.data(), key.size());
-                    return write_value(output, field_value, nulls);
-                }...};
-        }(std::make_index_sequence<count>{});
+            const auto& member = std::get<I>(fields);
+            const auto& field_value = value.*(member.member);
+            if constexpr (is_optional_v<std::remove_cvref_t<decltype(field_value)>>)
+                if (!field_value && !emit_nulls)
+                    return {};
+            const auto& key = keys[I];
+            if (key.empty())
+                return std::unexpected(make_error_code(errc::serialization_failed));
+            out.reserve(key.size() + 1U);
+            if (!std::exchange(first, false))
+                out.put_unchecked(',');
+            out.append_unchecked(key.data(), key.size());
+            return write_value(out, field_value, emit_nulls);
+        };
         out.put('{');
         bool first = true;
-        for (const auto index : sorted_field_order<T>())
-            if (auto written = writers[index](out, value, emit_nulls, first); !written)
-                return written;
+        std::expected<void, std::error_code> result;
+        [&]<std::size_t... P>(std::index_sequence<P...>)
+        {
+            // Stops at the first failure; skipped positions hold `count`.
+            (void)((order[P] == count ||
+                       (result = write_member.template operator()<(order[P] < count ? order[P] : 0U)>(first))) &&
+                ...);
+        }(std::make_index_sequence<count>{});
+        if (!result)
+            return result;
         out.put('}');
         return {};
     }

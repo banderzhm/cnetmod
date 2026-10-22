@@ -12,6 +12,7 @@ endif()
 set(BENCH_TARGETS
     bench_coroutine
     bench_channel
+    bench_json
     bench_sync
     bench_io
     bench_http

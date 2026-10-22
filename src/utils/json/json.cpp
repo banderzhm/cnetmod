@@ -181,11 +181,54 @@ namespace detail {
         }
     } // namespace
 
+    namespace
+    {
+        /// True when every byte of the word needs no escaping: not a control
+        /// byte, not a quote or backslash, and plain ASCII. A word may report
+        /// a false hit (borrow), never a false miss.
+        [[nodiscard]] inline auto plain_word(std::uint64_t word) noexcept -> bool
+        {
+            constexpr std::uint64_t ones = 0x0101010101010101ULL;
+            constexpr std::uint64_t highs = 0x8080808080808080ULL;
+            const auto quote = word ^ (ones * '"');
+            const auto backslash = word ^ (ones * '\\');
+            const auto flagged = ((word - ones * 0x20U) & ~word) | (word & highs) |
+                ((quote - ones) & ~quote) | ((backslash - ones) & ~backslash);
+            return (flagged & highs) == 0U;
+        }
+
+        /// Whole-string check for the common case of short identifiers and
+        /// labels. A tail shorter than a word is padded with spaces, which
+        /// are plain, so it is tested by the same word predicate.
+        [[nodiscard]] inline auto plain_ascii(std::string_view value) noexcept -> bool
+        {
+            std::size_t index = 0;
+            for (; value.size() - index >= 8U; index += 8U)
+            {
+                std::uint64_t word;
+                std::memcpy(&word, value.data() + index, sizeof word);
+                if (!plain_word(word))
+                    return false;
+            }
+            if (index == value.size())
+                return true;
+            std::uint64_t word = 0x2020202020202020ULL;
+            std::memcpy(&word, value.data() + index, value.size() - index);
+            return plain_word(word);
+        }
+    } // namespace
+
     auto append_string(json_writer& out, std::string_view value) -> bool
     {
         // Quotes plus the unescaped bytes; escapes reserve their own room.
         out.reserve(value.size() + 2U);
         out.put_unchecked('"');
+        if (plain_ascii(value))
+        {
+            out.append_unchecked(value.data(), value.size());
+            out.put_unchecked('"');
+            return true;
+        }
         std::size_t run = 0;
         std::size_t index = 0;
         const auto flush = [&]
