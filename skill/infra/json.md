@@ -75,6 +75,14 @@ Typed conversion supports nested mapped DTOs, optionals, enums, sequences, and
 string-keyed associative containers. Numeric decoding checks integral sign and
 range instead of silently narrowing.
 
+`write()` and `write_explicit_nulls()` serialize mapped DTOs directly into the
+output string without building a `document`. The output is byte-identical to
+`write_document(to_document(value))`: object keys in name order, the same
+string escapes, integers as written, doubles formatted by the backend, and
+`serialization_failed` for strings that are not valid UTF-8. Unordered maps and
+types with a custom `document_traits::encode` still go through a `document`.
+Do not hand-write JSON strings for speed; this path is the fast one.
+
 ## ORM models and projections
 
 Do not add `CNETMOD_JSON` to a type already declared with `CNETMOD_MODEL` or

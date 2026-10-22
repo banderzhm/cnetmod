@@ -13,6 +13,7 @@ set(TEST_SOURCES
     test_concurrent_containers.cpp
     test_application_result.cpp
     test_json_template.cpp
+    test_json_writer.cpp
     test_application.cpp
     test_application_integrations.cpp
     test_application_composition.cpp

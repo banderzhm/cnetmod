@@ -36,6 +36,82 @@ struct parse_options
 [[nodiscard]] auto write_document(const document& value, bool prettify = false)
     -> std::expected<std::string, std::error_code>;
 
+namespace detail {
+    /// Append-only output for the direct writer: bytes are written through a
+    /// raw pointer into reserved string storage, so each byte costs no size
+    /// check or out-of-line call; capacity grows geometrically.
+    class json_writer
+    {
+    public:
+        explicit json_writer(std::size_t initial = 256U)
+        {
+            out_.resize(initial);
+            data_ = out_.data();
+            capacity_ = out_.size();
+        }
+
+        void reserve(std::size_t extra)
+        {
+            if (size_ + extra <= capacity_) [[likely]]
+                return;
+            grow(extra);
+        }
+
+        void put(char value)
+        {
+            reserve(1U);
+            data_[size_++] = value;
+        }
+
+        void put_unchecked(char value) noexcept { data_[size_++] = value; }
+
+        void append(const char* value, std::size_t count)
+        {
+            reserve(count);
+            std::memcpy(data_ + size_, value, count);
+            size_ += count;
+        }
+
+        void append(std::string_view value) { append(value.data(), value.size()); }
+
+        void append_unchecked(const char* value, std::size_t count) noexcept
+        {
+            std::memcpy(data_ + size_, value, count);
+            size_ += count;
+        }
+
+        [[nodiscard]] auto take() && -> std::string
+        {
+            out_.resize(size_);
+            return std::move(out_);
+        }
+
+    private:
+        void grow(std::size_t extra)
+        {
+            out_.resize(std::max(capacity_ * 2U, size_ + extra));
+            data_ = out_.data();
+            capacity_ = out_.size();
+        }
+
+        std::string out_;
+        char* data_{};
+        std::size_t size_{};
+        std::size_t capacity_{};
+    };
+
+    // Direct serialization primitives. Their output is byte-identical to the
+    // document backend's compact dump: object keys in std::map order, quote,
+    // backslash, the short escapes for b f n r t and u00xx for the other controls, UTF-8
+    // passed through and rejected when malformed.
+    /// Appends `value` as a JSON string; false when it is not valid UTF-8.
+    [[nodiscard]] auto append_string(json_writer& out, std::string_view value) -> bool;
+    [[nodiscard]] auto append_double(json_writer& out, double value)
+        -> std::expected<void, std::error_code>;
+    [[nodiscard]] auto append_document(json_writer& out, const document& value)
+        -> std::expected<void, std::error_code>;
+} // namespace detail
+
 /**
  * @brief Backend-neutral JSON value tree.
  *
@@ -1143,6 +1219,242 @@ template <typename T>
     return detail::decode_value<T>(source, true, true);
 }
 
+namespace detail {
+    template <typename T> struct is_std_map : std::false_type
+    {
+    };
+
+    // std::map<std::string, V> with the standard ordering: iterated in the
+    // same key order as the backend's own object storage.
+    template <typename V, typename A>
+    struct is_std_map<std::map<std::string, V, std::less<>, A>> : std::true_type
+    {
+    };
+
+    template <typename V, typename A>
+    struct is_std_map<std::map<std::string, V, std::less<std::string>, A>> : std::true_type
+    {
+    };
+
+    template <typename T>
+    [[nodiscard]] auto write_value(json_writer& out, const T& value, bool emit_nulls)
+        -> std::expected<void, std::error_code>;
+
+    template <std::integral T>
+    void append_integer(json_writer& out, T value)
+    {
+        std::array<char, 24> digits{};
+        const auto [end, error] = std::to_chars(digits.data(), digits.data() + digits.size(),
+            value);
+        out.append(digits.data(), static_cast<std::size_t>(end - digits.data()));
+    }
+
+    /// Field indices of T in the order their names sort, which is the order
+    /// the document backend's std::map emits them. A repeated name keeps only
+    /// its last field, as assignment into that map would.
+    template <typename T>
+    [[nodiscard]] auto sorted_field_order() -> const auto&
+    {
+        static constexpr std::size_t count = std::tuple_size_v<
+            std::remove_cvref_t<decltype(document_traits<T>::fields())>>;
+        static const auto order = []
+        {
+            const auto fields = document_traits<T>::fields();
+            std::array<std::string_view, count> names{};
+            [&]<std::size_t... I>(std::index_sequence<I...>)
+            {
+                ((names[I] = std::get<I>(fields).name), ...);
+            }(std::make_index_sequence<count>{});
+            std::array<std::size_t, count> indices{};
+            for (std::size_t index = 0; index < count; ++index)
+                indices[index] = index;
+            std::ranges::stable_sort(indices, [&](std::size_t lhs, std::size_t rhs)
+                { return names[lhs] < names[rhs]; });
+            std::vector<std::size_t> unique;
+            for (std::size_t position = 0; position < count; ++position)
+            {
+                const auto index = indices[position];
+                // Equal names are adjacent after the stable sort; the last
+                // declared field among them wins.
+                if (position + 1U < count && names[indices[position + 1U]] == names[index])
+                    continue;
+                unique.push_back(index);
+            }
+            return unique;
+        }();
+        return order;
+    }
+
+    template <typename T>
+    [[nodiscard]] auto write_object(json_writer& out, const T& value, bool emit_nulls)
+        -> std::expected<void, std::error_code>
+    {
+        using fields_type = std::remove_cvref_t<decltype(document_traits<T>::fields())>;
+        static constexpr std::size_t count = std::tuple_size_v<fields_type>;
+        static const fields_type fields = document_traits<T>::fields();
+        // Each member's `"name":` prefix, escaped once per type. An empty
+        // entry means the name itself is not valid UTF-8.
+        static const auto keys = []<std::size_t... I>(std::index_sequence<I...>)
+        {
+            std::array<std::string, count> result;
+            ([&]
+                {
+                    json_writer encoded{std::get<I>(fields).name.size() + 3U};
+                    if (append_string(encoded, std::get<I>(fields).name))
+                    {
+                        encoded.put(':');
+                        result[I] = std::move(encoded).take();
+                    }
+                }(),
+                ...);
+            return result;
+        }(std::make_index_sequence<count>{});
+        using writer = auto (*)(json_writer&, const T&, bool, bool&)
+            -> std::expected<void, std::error_code>;
+        static const auto writers = []<std::size_t... I>(std::index_sequence<I...>)
+        {
+            return std::array<writer, count>{
+                +[](json_writer& output, const T& owner, bool nulls, bool& first)
+                    -> std::expected<void, std::error_code>
+                {
+                    const auto& member = std::get<I>(fields);
+                    const auto& field_value = owner.*(member.member);
+                    if constexpr (is_optional_v<decltype(field_value)>)
+                        if (!field_value && !nulls)
+                            return {};
+                    const auto& key = keys[I];
+                    if (key.empty())
+                        return std::unexpected(make_error_code(errc::serialization_failed));
+                    output.reserve(key.size() + 1U);
+                    if (!std::exchange(first, false))
+                        output.put_unchecked(',');
+                    output.append_unchecked(key.data(), key.size());
+                    return write_value(output, field_value, nulls);
+                }...};
+        }(std::make_index_sequence<count>{});
+        out.put('{');
+        bool first = true;
+        for (const auto index : sorted_field_order<T>())
+            if (auto written = writers[index](out, value, emit_nulls, first); !written)
+                return written;
+        out.put('}');
+        return {};
+    }
+
+    template <typename T>
+    [[nodiscard]] auto write_value(json_writer& out, const T& value, bool emit_nulls)
+        -> std::expected<void, std::error_code>
+    {
+        using value_type = std::remove_cvref_t<T>;
+        if constexpr (std::same_as<value_type, document>)
+            return append_document(out, value);
+        else if constexpr (is_optional_v<value_type>)
+        {
+            if (!value)
+            {
+                out.append("null");
+                return {};
+            }
+            return write_value(out, *value, emit_nulls);
+        }
+        else if constexpr (std::same_as<value_type, bool>)
+        {
+            out.append(value ? "true" : "false");
+            return {};
+        }
+        else if constexpr (std::integral<value_type>)
+        {
+            // The document backend stores every integer as int64 or uint64.
+            if constexpr (std::is_unsigned_v<value_type>)
+                append_integer(out, static_cast<std::uint64_t>(value));
+            else
+                append_integer(out, static_cast<std::int64_t>(value));
+            return {};
+        }
+        else if constexpr (std::floating_point<value_type>)
+            return append_double(out, static_cast<double>(value));
+        else if constexpr (StringLike<value_type>)
+        {
+            if (!append_string(out, std::string_view{value}))
+                return std::unexpected(make_error_code(errc::serialization_failed));
+            return {};
+        }
+        else if constexpr (std::same_as<value_type, std::filesystem::path>)
+        {
+            if (!append_string(out, value.string()))
+                return std::unexpected(make_error_code(errc::serialization_failed));
+            return {};
+        }
+        else if constexpr (std::is_enum_v<value_type>)
+        {
+            append_integer(out, static_cast<std::underlying_type_t<value_type>>(value));
+            return {};
+        }
+        else if constexpr (BackendDocumentMapped<value_type> ||
+            CustomDocumentMapped<value_type>)
+        {
+            auto encoded = encode_value(value, emit_nulls);
+            if (!encoded)
+                return std::unexpected(encoded.error());
+            return append_document(out, *encoded);
+        }
+        else if constexpr (FieldDocumentMapped<value_type>)
+            return write_object(out, value, emit_nulls);
+        else if constexpr (is_std_map<value_type>::value)
+        {
+            out.put('{');
+            bool first = true;
+            for (const auto& [key, entry] : value)
+            {
+                if (!std::exchange(first, false))
+                    out.put(',');
+                if (!append_string(out, std::string_view{key}))
+                    return std::unexpected(make_error_code(errc::serialization_failed));
+                out.put(':');
+                if (auto written = write_value(out, entry, emit_nulls); !written)
+                    return written;
+            }
+            out.put('}');
+            return {};
+        }
+        else if constexpr (AssociativeObject<value_type>)
+        {
+            // Other maps have no key order matching the backend's; keep its
+            // ordering by going through the document.
+            auto encoded = encode_value(value, emit_nulls);
+            if (!encoded)
+                return std::unexpected(encoded.error());
+            return append_document(out, *encoded);
+        }
+        else if constexpr (Sequence<value_type>)
+        {
+            out.put('[');
+            bool first = true;
+            for (const auto& entry : value)
+            {
+                if (!std::exchange(first, false))
+                    out.put(',');
+                if (auto written = write_value(out, entry, emit_nulls); !written)
+                    return written;
+            }
+            out.put(']');
+            return {};
+        }
+        else
+            return std::unexpected(make_error_code(errc::type_mismatch));
+    }
+
+    template <typename T>
+    [[nodiscard]] auto write_direct(const T& value, bool emit_nulls)
+        -> std::expected<std::string, std::error_code>
+    {
+        json_writer out{512U};
+        if (auto written = write_value(out, value, emit_nulls); !written)
+            return std::unexpected(written.error());
+        return std::move(out).take();
+    }
+} // namespace detail
+
 struct default_codec
 {
     template <typename T>
@@ -1157,10 +1469,7 @@ struct default_codec
     template <typename T>
     [[nodiscard]] static auto encode(const T& value) -> std::expected<std::string, std::error_code>
     {
-        auto result = detail::encode_value(value, false);
-        if (!result)
-            return std::unexpected(result.error());
-        return write_document(*result);
+        return detail::write_direct(value, false);
     }
 };
 
@@ -1216,10 +1525,7 @@ struct explicit_null_codec
     template <typename T>
     [[nodiscard]] static auto encode(const T& value) -> std::expected<std::string, std::error_code>
     {
-        auto result = detail::encode_value(value, true);
-        if (!result)
-            return std::unexpected(result.error());
-        return write_document(*result);
+        return detail::write_direct(value, true);
     }
 };
 

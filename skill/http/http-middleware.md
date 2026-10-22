@@ -254,20 +254,28 @@ struct rate_limiter_options {
 srv.use(rate_limiter({.rate = 100.0, .burst = 200.0}));
 ```
 
-### 5. compress — gzip 压缩
+### 5. compress — gzip / Brotli 压缩
 
 **签名**: `auto compress(compress_options opts = {}) -> http::middleware_fn`
 
 ```cpp
 struct compress_options {
     std::size_t min_size = 1024;  // 小于此值不压缩
-    int level = 6;                // 压缩级别 1-9
+    int level = 6;                // gzip 压缩级别 1-9
+    int brotli_quality = -1;      // Brotli 质量 0-11；负数 = 只协商 gzip（默认）
+    int brotli_window = 18;       // Brotli 窗口 log2 字节
+    std::size_t max_concurrency = 4;
+    // dispatch / measurements 见源码
 };
 ```
 
 ```cpp
 srv.use(compress({.min_size = 512, .level = 6}));
+srv.use(compress({.min_size = 512, .brotli_quality = 2}));  // 客户端 br 权重不低于 gzip 时用 br
 ```
+
+开启 Brotli 需要构建时找到 libbrotli（`CNETMOD_HAS_BROTLI`）；未找到时该选项被忽略，仍按 gzip 协商。
+对 4–8 KB 的 JSON，Brotli q2 与 gzip 6 体积相近而 CPU 约为一半；q5 体积再小约 10%，CPU 为 gzip 6 的 1.5 倍。
 
 ### 6. body_limit — 请求体限制
 
