@@ -59,26 +59,46 @@ public:
         async_mutex& mtx_;
         waiter_node node_;
 
-        explicit lock_awaitable(async_mutex& mtx) noexcept;
+        inline explicit lock_awaitable(async_mutex& mtx) noexcept : mtx_(mtx) {}
 
-        auto await_ready() noexcept -> bool;
+        inline auto await_ready() noexcept -> bool { return mtx_.try_lock(); }
 
         auto await_suspend(std::coroutine_handle<> h) noexcept
             -> std::coroutine_handle<>;
 
-        void await_resume() noexcept;
+        inline void await_resume() noexcept {}
     };
 
-    auto lock() noexcept -> lock_awaitable;
+    inline auto lock() noexcept -> lock_awaitable { return lock_awaitable{*this}; }
 
-    /// Release lock, wake up next waiter
-    void unlock() noexcept;
+    /// Release lock, wake up next waiter. Uncontended, this is one CAS.
+    inline void unlock() noexcept
+    {
+        std::uint32_t expected = locked;
+        if (!state_.compare_exchange_strong(expected, unlocked,
+                std::memory_order_release, std::memory_order_relaxed)) [[unlikely]]
+            unlock_contended();
+    }
 
-    /// Try to acquire lock (non-blocking)
-    [[nodiscard]] auto try_lock() noexcept -> bool;
+    /// Try to acquire lock (non-blocking). One CAS.
+    [[nodiscard]] inline auto try_lock() noexcept -> bool
+    {
+        std::uint32_t expected = unlocked;
+        return state_.compare_exchange_strong(expected, locked,
+            std::memory_order_acquire, std::memory_order_relaxed);
+    }
 
 private:
-    std::atomic<bool> locked_{false};
+    // unlocked; locked with no queued waiter; locked and a waiter may be
+    // queued. Only `contended` sends unlock to the queue, so the common
+    // uncontended lock/unlock pair is two CAS operations and no queue lock.
+    static constexpr std::uint32_t unlocked = 0U;
+    static constexpr std::uint32_t locked = 1U;
+    static constexpr std::uint32_t contended = 2U;
+
+    void unlock_contended() noexcept;
+
+    std::atomic<std::uint32_t> state_{unlocked};
     mutable spinlock lock_;
     waiter_node* head_ = nullptr;
     waiter_node* tail_ = nullptr;
@@ -97,9 +117,16 @@ private:
 export class async_lock_guard
 {
 public:
-    explicit async_lock_guard(async_mutex& mtx, std::adopt_lock_t) noexcept;
+    inline explicit async_lock_guard(async_mutex& mtx, std::adopt_lock_t) noexcept
+        : mtx_(&mtx)
+    {
+    }
 
-    ~async_lock_guard();
+    inline ~async_lock_guard()
+    {
+        if (mtx_)
+            mtx_->unlock();
+    }
 
     async_lock_guard(const async_lock_guard&) = delete;
     auto operator=(const async_lock_guard&) -> async_lock_guard& = delete;
@@ -107,7 +134,7 @@ public:
     async_lock_guard(async_lock_guard&& other) noexcept;
     auto operator=(async_lock_guard&& other) noexcept -> async_lock_guard&;
 
-    void release() noexcept;
+    inline void release() noexcept { mtx_ = nullptr; }
 
 private:
     async_mutex* mtx_;
