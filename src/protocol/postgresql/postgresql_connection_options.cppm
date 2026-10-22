@@ -31,6 +31,13 @@ struct connection_options
     std::size_t maximum_message_size = 64U * 1024U * 1024U;
     std::size_t maximum_column_count = 65535;
     std::size_t maximum_row_count = 1000000;
+    /// Parameterized queries are parsed and planned once per connection as
+    /// named server-side statements, keyed by SQL text, and then only bound
+    /// and executed. This bounds the number of distinct statements a session
+    /// keeps; texts beyond it use the unnamed statement as before. Set 0 for
+    /// poolers that do not keep session state between transactions
+    /// (PgBouncer transaction mode).
+    std::size_t statement_cache_capacity = 256;
     std::unordered_map<std::string, std::string> startup_parameters;
 };
 

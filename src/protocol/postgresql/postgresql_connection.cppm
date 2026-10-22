@@ -159,6 +159,9 @@ private:
     auto read_exact(std::uint8_t*, std::size_t, Cancellation cancellation = nullptr) -> task<bool>;
     template <typename Cancellation = std::nullptr_t>
     auto read_message(Cancellation cancellation = nullptr) -> task<std::expected<detail::backend_message, std::string>>;
+    /// Consumes one complete, already-received message without copying.
+    /// The payload view is valid until the next receive operation.
+    auto take_buffered_message(char& type, std::span<const std::uint8_t>& payload) noexcept -> bool;
     template <typename Cancellation = std::nullptr_t>
     auto write_all(std::span<const std::uint8_t>, Cancellation cancellation = nullptr) -> task<bool>;
     template <typename Cancellation>
@@ -194,6 +197,11 @@ private:
     std::uint32_t process_id_{};
     std::uint32_t secret_key_{};
     std::uint64_t statement_counter_{};
+    /// Named statements this session has parsed, keyed by normalized SQL.
+    /// Cleared with the session; see connection_options::statement_cache_capacity.
+    std::unordered_map<std::string, std::string> statement_cache_;
+    /// Set by collect_results when the server confirmed a Parse.
+    bool parse_completed_{};
     std::atomic_flag operation_in_progress_{};
     std::array<std::uint8_t, 8192> receive_buffer_{};
     std::size_t receive_begin_{};
