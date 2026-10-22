@@ -29,6 +29,9 @@ namespace detail {
     {
         if (left.size() != right.size())
             return false;
+        // Clients almost always send canonical-case names.
+        if (std::memcmp(left.data(), right.data(), left.size()) == 0)
+            return true;
         for (std::size_t index{}; index < left.size(); ++index)
             if (ascii_lower(static_cast<unsigned char>(left[index])) !=
                 ascii_lower(static_cast<unsigned char>(right[index])))
@@ -112,9 +115,19 @@ namespace detail {
 
     auto find_crlf(const char* data, std::size_t size) noexcept -> std::size_t
     {
-        for (std::size_t i = 0; i + 1 < size; ++i)
-            if (data[i] == '\r' && data[i + 1] == '\n')
-                return i;
+        // memchr is vectorised; a lone CR (not followed by LF) is skipped.
+        const char* cursor = data;
+        const char* const end = data + size;
+        while (cursor < end)
+        {
+            const auto* cr = static_cast<const char*>(
+                std::memchr(cursor, '\r', static_cast<std::size_t>(end - cursor)));
+            if (cr == nullptr || cr + 1 >= end)
+                return std::string_view::npos;
+            if (cr[1] == '\n')
+                return static_cast<std::size_t>(cr - data);
+            cursor = cr + 1;
+        }
         return std::string_view::npos;
     }
 
