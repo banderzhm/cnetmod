@@ -5335,8 +5335,15 @@ struct connection_options {
     std::chrono::milliseconds connect_timeout{10000};
     std::size_t maximum_connect_attempts = 3;
     std::unordered_map<std::string, std::string> startup_parameters;
+    std::size_t statement_cache_capacity = 256;
 };
 ```
+
+`execute(parameterized_query)` 按 SQL 文本缓存命名预处理语句：首次执行发送
+Parse，确认 ParseComplete 后登记；之后同一 SQL 只发送 Bind/Execute，省去服务端
+每次解析和规划。缓存属于连接会话，断开或重连时清空；服务端报告语句不存在
+（26000）或计划失效（0A000）时剔除该项，下次重新 Parse。缓存满后新 SQL 回退为
+匿名语句，不淘汰已有项。参数是动态拼接 SQL 时应设为 0，避免占满缓存。
 
 ### `client` — 异步连接客户端
 
@@ -11061,6 +11068,28 @@ auto wire = cnetmod::json::write(user_record{42, "Ada"});
 This shared mapping covers ORM scalar fields, `DATE`, `DATETIME`, `TIME`, UUID,
 and nullable `DATETIME`. Database temporal values use their canonical
 timezone-free SQL text representation.
+
+## Embedding trusted JSON text
+
+`cnetmod::json::raw_json` is a non-owning view of JSON text that a trusted
+encoder has already produced, such as a PostgreSQL `json`/`jsonb` column. The
+direct writer copies it once and drops whitespace outside strings, so the output
+stays compact without building a document:
+
+```cpp
+struct item_row
+{
+    std::int64_t id{};
+    cnetmod::json::raw_json tags;
+};
+CNETMOD_JSON(item_row, CNETMOD_JSON_FIELD(id), CNETMOD_JSON_FIELD(tags))
+
+auto wire = cnetmod::json::write(item_row{.id = 7, .tags = {row[6].get_string()}});
+```
+
+The direct writer does not validate the text; never wrap request input or other
+untrusted strings. Conversion to a document (`to_document`) parses the text and
+reports invalid JSON. The view must outlive the write call.
 
 ## Application offload
 

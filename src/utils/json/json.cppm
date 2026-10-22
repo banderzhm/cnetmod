@@ -127,6 +127,8 @@ namespace detail {
         -> std::expected<void, std::error_code>;
     [[nodiscard]] auto append_document(json_writer& out, const document& value)
         -> std::expected<void, std::error_code>;
+    /// Copies already-valid JSON text, dropping whitespace outside strings.
+    void append_raw_json(json_writer& out, std::string_view text);
 } // namespace detail
 
 /**
@@ -785,6 +787,20 @@ private:
     bool discarded_ = false;
 };
 
+/**
+ * @brief Non-owning view of JSON text that is already known to be valid.
+ *
+ * Use it to embed a value produced by a trusted encoder (for example a
+ * PostgreSQL json/jsonb column) without building a document. The writer
+ * copies the text once, dropping insignificant whitespace, so output stays
+ * compact. The caller guarantees validity; the text is not checked when
+ * written directly. It is parsed when converted to a document.
+ */
+struct raw_json
+{
+    std::string_view text;
+};
+
 using value = document;
 using raw_value = document;
 using array_type = document::array_type;
@@ -1023,6 +1039,8 @@ namespace detail {
         using value_type = std::remove_cvref_t<T>;
         if constexpr (std::same_as<value_type, document>)
             return value;
+        else if constexpr (std::same_as<value_type, raw_json>)
+            return parse_document(value.text);
         else if constexpr (is_optional_v<value_type>)
             return value ? encode_value(*value, emit_nulls)
                          : std::expected<document, std::error_code>{document(nullptr)};
@@ -1401,6 +1419,11 @@ namespace detail {
         using value_type = std::remove_cvref_t<T>;
         if constexpr (std::same_as<value_type, document>)
             return append_document(out, value);
+        else if constexpr (std::same_as<value_type, raw_json>)
+        {
+            append_raw_json(out, value.text);
+            return {};
+        }
         else if constexpr (is_optional_v<value_type>)
         {
             if (!value)

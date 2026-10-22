@@ -162,6 +162,34 @@ TEST(json_writer_repeated_names_and_plain_strings_match_the_backend)
     }
 }
 
+namespace writer_test {
+struct embedded
+{
+    std::int64_t id{};
+    cnetmod::json::raw_json tags;
+};
+} // namespace writer_test
+
+CNETMOD_JSON(writer_test::embedded, CNETMOD_JSON_FIELD(id), CNETMOD_JSON_FIELD(tags))
+
+TEST(json_writer_embeds_raw_json_compactly_and_keeps_string_whitespace)
+{
+    // PostgreSQL renders jsonb with spaces after separators; strings keep
+    // their own spaces and escaped quotes.
+    const std::string text = "[\"heavy duty\", \"a\\\" b\" ,\n\t{\"k\" : [1, 2]}]";
+    const writer_test::embedded value{.id = 7, .tags = {text}};
+    const auto direct = cnetmod::json::write(value);
+    ASSERT_TRUE(direct.has_value());
+    const std::string expected = R"({"id":7,"tags":["heavy duty","a\" b",{"k":[1,2]}]})";
+    ASSERT_EQ(*direct, expected);
+    // The document path parses the text and agrees with the direct writer.
+    const auto document = cnetmod::json::to_document(value);
+    ASSERT_TRUE(document.has_value());
+    ASSERT_EQ(cnetmod::json::write_document(*document).value(), expected);
+    ASSERT_EQ(*cnetmod::json::write(cnetmod::json::raw_json{"\"\\\\\" "}), std::string{"\"\\\\\""});
+    ASSERT_FALSE(cnetmod::json::to_document(writer_test::embedded{.tags = {"[1,"}}).has_value());
+}
+
 TEST(json_writer_null_policies_enums_and_doubles)
 {
     writer_test::with_enum value{.value = writer_test::level::high};

@@ -100,6 +100,28 @@ This shared mapping covers ORM scalar fields, `DATE`, `DATETIME`, `TIME`, UUID,
 and nullable `DATETIME`. Database temporal values use their canonical
 timezone-free SQL text representation.
 
+## Embedding trusted JSON text
+
+`cnetmod::json::raw_json` is a non-owning view of JSON text that a trusted
+encoder has already produced, such as a PostgreSQL `json`/`jsonb` column. The
+direct writer copies it once and drops whitespace outside strings, so the output
+stays compact without building a document:
+
+```cpp
+struct item_row
+{
+    std::int64_t id{};
+    cnetmod::json::raw_json tags;
+};
+CNETMOD_JSON(item_row, CNETMOD_JSON_FIELD(id), CNETMOD_JSON_FIELD(tags))
+
+auto wire = cnetmod::json::write(item_row{.id = 7, .tags = {row[6].get_string()}});
+```
+
+The direct writer does not validate the text; never wrap request input or other
+untrusted strings. Conversion to a document (`to_document`) parses the text and
+reports invalid JSON. The view must outlive the write call.
+
 ## Application offload
 
 Use `cnetmod::application::json_template` for parsing or writing on the

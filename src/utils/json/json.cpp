@@ -294,6 +294,35 @@ namespace detail {
         return true;
     }
 
+    void append_raw_json(json_writer& out, std::string_view text)
+    {
+        // The output is never longer than the input.
+        out.reserve(text.size());
+        auto* cursor = out.cursor();
+        auto* const begin = cursor;
+        bool in_string = false;
+        bool escaped = false;
+        for (const char byte : text)
+        {
+            if (in_string)
+            {
+                *cursor++ = byte;
+                if (escaped)
+                    escaped = false;
+                else if (byte == '\\')
+                    escaped = true;
+                else if (byte == '"')
+                    in_string = false;
+                continue;
+            }
+            if (byte == ' ' || byte == '\t' || byte == '\n' || byte == '\r')
+                continue;
+            *cursor++ = byte;
+            in_string = byte == '"';
+        }
+        out.advance(static_cast<std::size_t>(cursor - begin));
+    }
+
     auto append_double(json_writer& out, double value)
         -> std::expected<void, std::error_code>
     {
