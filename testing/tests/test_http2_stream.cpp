@@ -1001,14 +1001,15 @@ TEST(http2_shared_bodies_are_framed_by_reference_with_identical_wire_bytes)
             reinterpret_cast<const std::byte*>(preface.data()) + preface.size()};
         auto settings = framed({.type = frame_type::settings}, {});
         input.insert(input.end(), settings.begin(), settings.end());
-        for (const auto [id, path] : {std::pair{1U, "/large"}, std::pair{3U, "/small"}, std::pair{5U, "/large"}})
+        for (const auto [id, path] : {std::pair{1U, "/large"},
+                 std::pair{3U, "/small"}, std::pair{5U, "/large"},
+                 std::pair{7U, "/owned"}})
         {
             const std::array headers{header_field{":method", "GET"},
                 header_field{":scheme", "https"}, header_field{":path", path}};
             auto encoded = encoder.encode(headers);
             ASSERT_TRUE(encoded.has_value());
-            auto head = framed({.type = frame_type::headers, .flags = 0x5,
-                                   .stream_id = id}, *encoded);
+            auto head = framed({.type = frame_type::headers, .flags = 0x5, .stream_id = id}, *encoded);
             input.insert(input.end(), head.begin(), head.end());
         }
         bool delivered = false;
@@ -1044,8 +1045,13 @@ TEST(http2_shared_bodies_are_framed_by_reference_with_identical_wire_bytes)
         {
             for (const auto& header : request.headers)
                 if (header.name == ":path")
+                {
+                    if (header.value == "/owned")
+                        return server_response{.status = 200,
+                            .body_text = std::string(20'480, 'O')};
                     return server_response{.status = 200,
                         .shared_body = header.value == "/large" ? large : small};
+                }
             return server_response{.status = 404};
         };
         session connection{*io, unused, std::move(handler),
@@ -1054,14 +1060,20 @@ TEST(http2_shared_bodies_are_framed_by_reference_with_identical_wire_bytes)
         if (gather)
         {
             connection.set_gather_writer([&](std::span<const cnetmod::const_buffer> parts)
-                    -> cnetmod::task<std::expected<void, std::error_code>>
+                                             -> cnetmod::task<std::expected<void, std::error_code>>
                 {
                     for (const auto& part : parts)
                     {
                         const auto* first = static_cast<const std::byte*>(part.data);
-                        // Borrowed parts point into the shared bodies themselves.
+                        // Shared cache bodies retain their original address;
+                        // dynamically owned strings are also emitted as a
+                        // separate DATA payload rather than copied into the
+                        // connection's frame buffer.
                         if (first >= reinterpret_cast<const std::byte*>(large->data()) &&
                             first < reinterpret_cast<const std::byte*>(large->data() + large->size()))
+                            ++borrowed_parts;
+                        else if (part.size >= 4U * 1024U &&
+                            std::to_integer<char>(*first) == 'O')
                             ++borrowed_parts;
                         output.insert(output.end(), first, first + part.size);
                     }
@@ -1084,13 +1096,13 @@ TEST(http2_shared_bodies_are_framed_by_reference_with_identical_wire_bytes)
     const auto copied = exchange(false, copied_parts);
     const auto borrowed = exchange(true, borrowed_parts);
     ASSERT_EQ(copied_parts, std::size_t{0});
-    // Two large responses, each framed as two borrowed DATA payloads.
-    ASSERT_EQ(borrowed_parts, std::size_t{4});
+    // Three large responses, each framed as two borrowed DATA payloads.
+    ASSERT_EQ(borrowed_parts, std::size_t{6});
     ASSERT_EQ(borrowed.size(), copied.size());
     ASSERT_TRUE(borrowed == copied);
 
     // The copied wire image carries both bodies byte for byte.
-    std::array<std::size_t, 6> received{};
+    std::array<std::size_t, 8> received{};
     for (std::size_t offset{}; offset + frame_header_size <= copied.size();)
     {
         auto header = decode_frame_header(std::span{copied}.subspan(offset, frame_header_size));
@@ -1100,8 +1112,13 @@ TEST(http2_shared_bodies_are_framed_by_reference_with_identical_wire_bytes)
         if (header->type == frame_type::data && header->stream_id < received.size())
         {
             const auto payload = std::span{copied}.subspan(offset + frame_header_size, header->length);
-            const auto fill = header->stream_id == 3 ? std::byte{'s'} : std::byte{'L'};
-            ASSERT_TRUE(std::ranges::all_of(payload, [fill](std::byte value) { return value == fill; }));
+            const auto fill = header->stream_id == 3 ? std::byte{'s'}
+                : header->stream_id == 7             ? std::byte{'O'}
+                                                     : std::byte{'L'};
+            ASSERT_TRUE(std::ranges::all_of(payload, [fill](std::byte value)
+                {
+                    return value == fill;
+                }));
             received[header->stream_id] += header->length;
         }
         offset += frame_header_size + header->length;
@@ -1109,6 +1126,7 @@ TEST(http2_shared_bodies_are_framed_by_reference_with_identical_wire_bytes)
     ASSERT_EQ(received[1], large->size());
     ASSERT_EQ(received[3], small->size());
     ASSERT_EQ(received[5], large->size());
+    ASSERT_EQ(received[7], std::size_t{20'480});
 }
 
 TEST(http2_streaming_response_source_is_framed_without_buffering_the_body)

@@ -7605,6 +7605,13 @@ srv.use(compress({.min_size = 512, .brotli_quality = 2}));  // 客户端 br 权�
 开启 Brotli 需要构建时找到 libbrotli（`CNETMOD_HAS_BROTLI`）；未找到时该选项被忽略，仍按 gzip 协商。
 对 4–8 KB 的 JSON，Brotli q2 与 gzip 6 体积相近而 CPU 约为一半；q5 体积再小约 10%，CPU 为 gzip 6 的 1.5 倍。
 
+压缩任务在执行期间只读借用响应正文，dispatcher 返回前必须保证 operation 已结束；不要把
+operation 投递后提前返回。这样框架无需复制未压缩正文，压缩失败、取消或结果更大时仍能原样
+保留响应。gzip 工作区按实际执行线程复用，因此 Application 的 CPU dispatcher 和独立服务器
+的同步执行都不需要业务自行缓存 zlib 状态。Application 应使用
+`runtime.compression(options)`，由组合根显式接入受管 CPU 池；直接调用 `compress(options)`
+表示明确接受在当前事件循环同步压缩。
+
 ### 6. body_limit — 请求体限制
 
 **签名**: `auto body_limit(std::size_t max_bytes = 1024 * 1024) -> http::middleware_fn`
@@ -8822,6 +8829,10 @@ SSE、手工流式输出或 chunked 响应时，框架先刷出此前普通响�
 返回部分写入时才进入完整写循环。这些均为传输层内部优化，应用不要为它们复制一套 handler。
 
 HTTP/2 的普通同步请求同样走内部借用式路由匹配，不复制已注册的 handler；请求上下文中的
+大块动态 `std::string` 响应会把所有权移动到连接写队列，并通过 vectored transport 直接发送
+DATA payload；无需为了零拷贝把每个 JSON 响应包装成 `shared_ptr`。不可变静态资源仍使用
+`set_shared_body()`，便于跨请求共享同一份内容。小响应继续复制进批量输出缓冲，避免为很小的
+payload 增加独立所有者和 gather segment 的管理成本。
 SSE、表单、追踪、取消与 request-scope 扩展状态仅在实际调用对应能力时创建。应用仍只使用
 公开的 `router::match()`、`request_context` 和 `get_sync()` 等接口，不得依赖这些内部视图，
 也不要为了追求吞吐绕过 endpoint metadata 或自行管理请求上下文生命周期。

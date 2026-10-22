@@ -822,6 +822,10 @@ SSE、手工流式输出或 chunked 响应时，框架先刷出此前普通响�
 返回部分写入时才进入完整写循环。这些均为传输层内部优化，应用不要为它们复制一套 handler。
 
 HTTP/2 的普通同步请求同样走内部借用式路由匹配，不复制已注册的 handler；请求上下文中的
+大块动态 `std::string` 响应会把所有权移动到连接写队列，并通过 vectored transport 直接发送
+DATA payload；无需为了零拷贝把每个 JSON 响应包装成 `shared_ptr`。不可变静态资源仍使用
+`set_shared_body()`，便于跨请求共享同一份内容。小响应继续复制进批量输出缓冲，避免为很小的
+payload 增加独立所有者和 gather segment 的管理成本。
 SSE、表单、追踪、取消与 request-scope 扩展状态仅在实际调用对应能力时创建。应用仍只使用
 公开的 `router::match()`、`request_context` 和 `get_sync()` 等接口，不得依赖这些内部视图，
 也不要为了追求吞吐绕过 endpoint metadata 或自行管理请求上下文生命周期。

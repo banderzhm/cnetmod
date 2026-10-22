@@ -91,9 +91,10 @@ using transport_reader =
 using transport_writer =
     std::function<cnetmod::task<std::expected<void, std::error_code>>(
         cnetmod::const_buffer)>;
-/// Optional vectored transport. When installed, large shared response bodies
-/// are framed by reference and handed to the transport together with the
-/// owned frame bytes instead of being copied into the outbound buffer first.
+/// Optional vectored transport. When installed, large shared and dynamically
+/// owned string response bodies are framed by reference and handed to the
+/// transport together with the owned frame bytes instead of being copied into
+/// the outbound buffer first.
 using transport_gather_writer =
     std::function<cnetmod::task<std::expected<void, std::error_code>>(
         std::span<const cnetmod::const_buffer>)>;

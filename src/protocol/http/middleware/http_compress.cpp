@@ -247,34 +247,90 @@ namespace {
     }
 
 #ifdef CNETMOD_HAS_ZLIB
-    auto gzip_compress(std::string input, int level)
+    class gzip_encoder
+    {
+    public:
+        gzip_encoder() = default;
+
+        ~gzip_encoder()
+        {
+            if (initialized_)
+                ::deflateEnd(&stream_);
+        }
+
+        gzip_encoder(const gzip_encoder&) = delete;
+        auto operator=(const gzip_encoder&) -> gzip_encoder& = delete;
+
+        auto compress(std::string_view input, int level)
+            -> std::expected<std::string, std::error_code>
+        {
+            if (input.size() > static_cast<std::size_t>(
+                                   std::numeric_limits<uInt>::max()))
+                return std::unexpected(
+                    std::make_error_code(std::errc::value_too_large));
+
+            if (!prepare(level))
+                return std::unexpected(
+                    std::make_error_code(std::errc::io_error));
+
+            const auto bound = ::deflateBound(&stream_,
+                static_cast<uLong>(input.size()));
+            if (bound > static_cast<uLong>(
+                            std::numeric_limits<uInt>::max()))
+                return std::unexpected(
+                    std::make_error_code(std::errc::value_too_large));
+
+            // The string is the final response body. Writing into it directly
+            // avoids the former temporary vector followed by a second copy.
+            std::string output(static_cast<std::size_t>(bound), '\0');
+            stream_.next_in = reinterpret_cast<Bytef*>(
+                const_cast<char*>(input.data()));
+            stream_.avail_in = static_cast<uInt>(input.size());
+            stream_.next_out = reinterpret_cast<Bytef*>(output.data());
+            stream_.avail_out = static_cast<uInt>(output.size());
+            const auto result = ::deflate(&stream_, Z_FINISH);
+            if (result != Z_STREAM_END)
+                return std::unexpected(
+                    std::make_error_code(std::errc::io_error));
+            output.resize(static_cast<std::size_t>(stream_.total_out));
+            return output;
+        }
+
+    private:
+        auto prepare(int level) noexcept -> bool
+        {
+            if (initialized_ && level == level_)
+                return ::deflateReset(&stream_) == Z_OK;
+            if (initialized_)
+            {
+                ::deflateEnd(&stream_);
+                stream_ = {};
+                initialized_ = false;
+            }
+            if (::deflateInit2(&stream_, level, Z_DEFLATED, 15 + 16, 8,
+                    Z_DEFAULT_STRATEGY) != Z_OK)
+                return false;
+            initialized_ = true;
+            level_ = level;
+            return true;
+        }
+
+        z_stream stream_{};
+        int level_{};
+        bool initialized_{};
+    };
+
+    auto gzip_compress(std::string_view input, int level)
         -> std::expected<std::string, std::error_code>
     {
-        if (input.size() > static_cast<std::size_t>(
-                               std::numeric_limits<uInt>::max()))
-            return std::unexpected(
-                std::make_error_code(std::errc::value_too_large));
-        const auto bound = ::compressBound(static_cast<uLong>(input.size()));
-        std::vector<Bytef> output(bound + 32U);
-        z_stream stream{};
-        if (deflateInit2(&stream, level, Z_DEFLATED, 15 + 16, 8,
-                Z_DEFAULT_STRATEGY) != Z_OK)
-            return std::unexpected(std::make_error_code(std::errc::io_error));
-        stream.next_in = reinterpret_cast<Bytef*>(input.data());
-        stream.avail_in = static_cast<uInt>(input.size());
-        stream.next_out = output.data();
-        stream.avail_out = static_cast<uInt>(output.size());
-        const auto result = deflate(&stream, Z_FINISH);
-        const auto size = output.size() - stream.avail_out;
-        deflateEnd(&stream);
-        if (result != Z_STREAM_END)
-            return std::unexpected(std::make_error_code(std::errc::io_error));
-        return std::string(
-            reinterpret_cast<const char*>(output.data()), size);
+        // Compression is synchronous inside the selected executor. One codec
+        // workspace per executor thread is therefore reusable without locks.
+        thread_local gzip_encoder encoder;
+        return encoder.compress(input, level);
     }
 #endif
 #ifdef CNETMOD_HAS_BROTLI
-    auto brotli_compress(const std::string& input, int quality, int window)
+    auto brotli_compress(std::string_view input, int quality, int window)
         -> std::expected<std::string, std::error_code>
     {
         std::string output(::BrotliEncoderMaxCompressedSize(input.size()), '\0');
@@ -320,20 +376,24 @@ namespace {
             co_return;
         }
         permit_guard permit{state->permits};
-        auto operation = [body = std::string{context.resp().body()},
+        // The dispatcher contract keeps the operation alive until completion,
+        // and the response body is not mutated while it is awaited. Borrowing
+        // it removes one full allocation and copy from every compressed reply.
+        const auto body = context.resp().body();
+        auto operation = [body,
                              level = options.level, coding,
                              quality = options.brotli_quality,
                              window = options.brotli_window]() mutable
             -> std::expected<std::string, std::error_code>
         {
-#ifdef CNETMOD_HAS_BROTLI
+    #ifdef CNETMOD_HAS_BROTLI
             if (coding == content_coding::brotli)
                 return brotli_compress(body, quality, window);
-#else
+    #else
             (void)quality;
             (void)window;
-#endif
-            return gzip_compress(std::move(body), level);
+    #endif
+            return gzip_compress(body, level);
         };
         const auto started = std::chrono::steady_clock::now();
         std::expected<std::string, std::error_code> compressed;

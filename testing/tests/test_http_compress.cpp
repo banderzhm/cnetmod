@@ -1,5 +1,8 @@
 #include "test_framework.hpp"
 #include <cnetmod/config.hpp>
+#ifdef CNETMOD_HAS_ZLIB
+    #include <zlib.h>
+#endif
 #ifdef CNETMOD_HAS_BROTLI
     #include <brotli/decode.h>
 #endif
@@ -22,7 +25,8 @@ struct compression_observation
 };
 
 auto run_compression(std::string accept_encoding,
-    std::string vary = {}, bool cancel = false, int brotli_quality = -1)
+    std::string vary = {}, bool cancel = false, int brotli_quality = -1,
+    std::string payload = std::string(4096, 'a'))
     -> compression_observation
 {
     auto io = cnetmod::make_io_context();
@@ -59,15 +63,45 @@ auto run_compression(std::string accept_encoding,
         request.cancel_pending_operations();
     auto middleware = cnetmod::compress(std::move(options));
     cnetmod::sync_wait(middleware(request,
-        [&request]() -> cnetmod::task<void>
+        [&request, &payload]() -> cnetmod::task<void>
         {
-            request.text(cnetmod::http::status::ok,
-                std::string(4096, 'a'));
+            request.text(cnetmod::http::status::ok, payload);
             co_return;
         }));
     observation.response = std::move(response);
     return observation;
 }
+
+#ifdef CNETMOD_HAS_ZLIB
+auto gunzip(std::string_view compressed, std::size_t expected_size)
+    -> std::optional<std::string>
+{
+    z_stream stream{};
+    if (::inflateInit2(&stream, 15 + 16) != Z_OK)
+        return std::nullopt;
+
+    struct cleanup
+    {
+        z_stream* stream;
+
+        ~cleanup()
+        {
+            ::inflateEnd(stream);
+        }
+    } guard{&stream};
+
+    std::string output(expected_size, '\0');
+    stream.next_in = reinterpret_cast<Bytef*>(
+        const_cast<char*>(compressed.data()));
+    stream.avail_in = static_cast<uInt>(compressed.size());
+    stream.next_out = reinterpret_cast<Bytef*>(output.data());
+    stream.avail_out = static_cast<uInt>(output.size());
+    if (::inflate(&stream, Z_FINISH) != Z_STREAM_END)
+        return std::nullopt;
+    output.resize(static_cast<std::size_t>(stream.total_out));
+    return output;
+}
+#endif
 } // namespace
 
 TEST(compression_honors_explicit_gzip_rejection)
@@ -150,7 +184,8 @@ TEST(compression_prefers_brotli_only_when_enabled_and_not_rated_lower)
                   .response.get_header("Content-Encoding"),
         std::string_view("br"));
     ASSERT_TRUE(run_compression("br;q=0, gzip;q=0", {}, false, 2)
-                    .response.get_header("Content-Encoding").empty());
+            .response.get_header("Content-Encoding")
+            .empty());
 #endif
 }
 
@@ -172,6 +207,23 @@ TEST(compression_does_not_dispatch_cancelled_request)
     const auto observation = run_compression("gzip", {}, true);
     ASSERT_FALSE(observation.dispatched);
     ASSERT_TRUE(observation.response.get_header("Content-Encoding").empty());
+}
+
+TEST(compression_reuses_gzip_workspace_without_retaining_previous_input)
+{
+#ifdef CNETMOD_HAS_ZLIB
+    for (const auto fill : {'a', 'b', 'c', 'a'})
+    {
+        const auto payload = std::string(8192U, fill);
+        const auto observation = run_compression(
+            "gzip", {}, false, -1, payload);
+        ASSERT_EQ(observation.response.get_header("Content-Encoding"),
+            std::string_view("gzip"));
+        const auto decoded = gunzip(observation.response.body(), payload.size());
+        ASSERT_TRUE(decoded.has_value());
+        ASSERT_TRUE(*decoded == payload);
+    }
+#endif
 }
 
 RUN_TESTS()

@@ -277,6 +277,13 @@ srv.use(compress({.min_size = 512, .brotli_quality = 2}));  // 客户端 br 权�
 开启 Brotli 需要构建时找到 libbrotli（`CNETMOD_HAS_BROTLI`）；未找到时该选项被忽略，仍按 gzip 协商。
 对 4–8 KB 的 JSON，Brotli q2 与 gzip 6 体积相近而 CPU 约为一半；q5 体积再小约 10%，CPU 为 gzip 6 的 1.5 倍。
 
+压缩任务在执行期间只读借用响应正文，dispatcher 返回前必须保证 operation 已结束；不要把
+operation 投递后提前返回。这样框架无需复制未压缩正文，压缩失败、取消或结果更大时仍能原样
+保留响应。gzip 工作区按实际执行线程复用，因此 Application 的 CPU dispatcher 和独立服务器
+的同步执行都不需要业务自行缓存 zlib 状态。Application 应使用
+`runtime.compression(options)`，由组合根显式接入受管 CPU 池；直接调用 `compress(options)`
+表示明确接受在当前事件循环同步压缩。
+
 ### 6. body_limit — 请求体限制
 
 **签名**: `auto body_limit(std::size_t max_bytes = 1024 * 1024) -> http::middleware_fn`
