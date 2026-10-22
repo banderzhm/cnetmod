@@ -15,6 +15,10 @@ module;
 #if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_PLATFORM_WINDOWS)
     #include <wincrypt.h>
 #endif
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_PLATFORM_LINUX)
+    #include <cerrno>
+    #include <sys/socket.h>
+#endif
 
 module cnetmod.core.ssl;
 
@@ -183,6 +187,11 @@ namespace {
             return count;
         }
 
+        /// Socket the owner may write to directly; null keeps every record
+        /// queued. The handle is read at each write, never cached, so a
+        /// closed socket whose descriptor number was reused is not written.
+        const cnetmod::socket* direct_socket = nullptr;
+
         void consume(std::size_t size) noexcept
         {
             begin_ += std::min(size, end_ - begin_);
@@ -263,15 +272,56 @@ namespace {
         return 1;
     }
 
+    /// Records at least this large are sent from the BIO, together with
+    /// whatever is queued ahead of them: the ciphertext then crosses to the
+    /// kernel once instead of being copied into the queue first. Smaller
+    /// records keep batching so one gathered write carries a burst of frames.
+    constexpr std::size_t direct_send_threshold = 8U * 1024U;
+
     auto queue_bio_write(BIO* bio, const char* in, int size) -> int
     {
         BIO_clear_retry_flags(bio);
         if (size <= 0)
             return 0;
-        return queue_of(bio)->append(reinterpret_cast<const std::byte*>(in),
-                   static_cast<std::size_t>(size))
-            ? size
-            : -1;
+        auto* const queue = queue_of(bio);
+        auto bytes = reinterpret_cast<const std::byte*>(in);
+        auto count = static_cast<std::size_t>(size);
+        #if defined(CNETMOD_PLATFORM_LINUX)
+        // The stream serializes SSL_write and the flush that follows it, and
+        // the queue is sent first below, so the order of bytes on the wire is
+        // preserved.
+        if (queue->direct_socket != nullptr && count >= direct_send_threshold &&
+            queue->direct_socket->is_open())
+        {
+            // Records queued ahead of this one (typically a small HTTP/2
+            // HEADERS record) go out in the same call, in order, followed by
+            // this record straight from the caller's buffer.
+            const auto queued = queue->readable();
+            iovec vectors[2];
+            vectors[0] = {const_cast<std::byte*>(queued.data()), queued.size()};
+            vectors[1] = {const_cast<std::byte*>(bytes), count};
+            msghdr message{};
+            message.msg_iov = vectors;
+            message.msg_iovlen = 2;
+            const auto sent = ::sendmsg(
+                static_cast<int>(queue->direct_socket->native_handle()), &message,
+                MSG_DONTWAIT | MSG_NOSIGNAL);
+            if (sent > 0)
+            {
+                auto remaining = static_cast<std::size_t>(sent);
+                const auto from_queue = std::min(remaining, queued.size());
+                queue->consume(from_queue);
+                remaining -= from_queue;
+                bytes += remaining;
+                count -= remaining;
+            }
+            // EAGAIN or an error: queue the record; the asynchronous write
+            // that follows reports a real socket failure.
+        }
+        #endif
+        if (count == 0)
+            return size;
+        return queue->append(bytes, count) ? size : -1;
     }
 
     auto queue_bio_read(BIO* bio, char* out, int size) -> int
@@ -836,6 +886,10 @@ ssl_stream::ssl_stream(ssl_context& context, io_context& io, socket& socket)
     rbio_ = new_transport_bio();
     wbio_ = new_transport_bio();
     SSL_set_bio(ssl_, rbio_, wbio_);
+    #if defined(CNETMOD_PLATFORM_LINUX)
+    if (is_queue_bio(wbio_))
+        queue_of(wbio_)->direct_socket = std::addressof(sock_);
+    #endif
 }
 
 ssl_stream::~ssl_stream()
