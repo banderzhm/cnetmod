@@ -79,6 +79,18 @@ target_link_libraries(my_backend PRIVATE
 请求包中不存在的组件必须在配置阶段失败，不能等到链接阶段。消费者仍须使用与目标
 ID 一致的工具链和 ABI；系统依赖模式的 Unix SDK 还要求目标机器具有对应系统库。
 
+### 标准库模块与已安装 SDK
+
+- MSVC 的 Visual Studio generator 由 MSBuild 提供 `std`；Ninja 没有这个隐式能力，
+  因此已安装包必须在消费者配置时确认导出图是否已有 `std.ixx`，只在缺失时补一份。
+  禁止无条件重复加入标准库模块，否则 Ninja 会为同一 BMI 生成两条规则。
+- Unix 消费者必须从自己的 `CMAKE_CXX_COMPILER` 推导匹配的 libc++ 模块、头文件和
+  runtime，不能复用 SDK 生产机器的绝对路径。机器并存多个 LLVM 版本时，优先使用
+  当前编译器 prefix；不得按硬编码版本列表误选旧工具链。
+- 对外导出的 `.cppm` 只保留声明以及模板/内联所需实现。返回协程 lambda 的非模板
+  中间件工厂等实现放入 `.cpp` 并进入对应静态库，避免已安装模块消费者出现实现符号
+  不可见或跨 BMI 链接失败。
+
 ### 源码子目录消费
 
 需要跟随 cnetmod 源码构建的集成可在设置协议开关后使用

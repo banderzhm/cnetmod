@@ -250,25 +250,50 @@ endif()
 # consumer uses Ninja.  This keeps the release archive binary-only while still
 # allowing downstream `.cppm` units to import `std`.
 if(MSVC AND CMAKE_GENERATOR MATCHES "Ninja")
-    get_filename_component(_cnetmod_compiler_bin "${CMAKE_CXX_COMPILER}" DIRECTORY)
-    get_filename_component(_cnetmod_compiler_host "${_cnetmod_compiler_bin}" DIRECTORY)
-    get_filename_component(_cnetmod_compiler_bin_root "${_cnetmod_compiler_host}" DIRECTORY)
-    get_filename_component(_cnetmod_msvc_root "${_cnetmod_compiler_bin_root}" DIRECTORY)
-    set(_cnetmod_msvc_modules "${_cnetmod_msvc_root}/modules")
+    # Ninja-built SDKs already export the standard-library units as part of
+    # runtime's module set. Visual Studio-built SDKs do not, so only add a
+    # consumer-side provider when the exported set does not contain std.ixx.
+    get_target_property(_cnetmod_runtime_modules cnetmod::runtime
+        CXX_MODULE_SET_cxx_modules)
+    set(_cnetmod_has_std_module FALSE)
+    foreach(_cnetmod_module IN LISTS _cnetmod_runtime_modules)
+        get_filename_component(_cnetmod_module_name "${_cnetmod_module}" NAME)
+        if(_cnetmod_module_name STREQUAL "std.ixx")
+            set(_cnetmod_has_std_module TRUE)
+            break()
+        endif()
+    endforeach()
 
-    if(EXISTS "${_cnetmod_msvc_modules}/std.ixx" AND
-       EXISTS "${_cnetmod_msvc_modules}/std.compat.ixx")
-        target_sources(cnetmod::runtime INTERFACE
-            FILE_SET cxx_std_modules TYPE CXX_MODULES
-            BASE_DIRS "${_cnetmod_msvc_modules}"
-            FILES
-                "${_cnetmod_msvc_modules}/std.ixx"
-                "${_cnetmod_msvc_modules}/std.compat.ixx")
-    else()
-        message(FATAL_ERROR
-            "cnetmod requires MSVC STL module units for Ninja consumers. "
-            "Set up a complete MSVC toolchain that provides std.ixx.")
+    if(NOT _cnetmod_has_std_module)
+        get_filename_component(_cnetmod_compiler_bin "${CMAKE_CXX_COMPILER}" DIRECTORY)
+        get_filename_component(_cnetmod_compiler_host "${_cnetmod_compiler_bin}" DIRECTORY)
+        get_filename_component(_cnetmod_compiler_bin_root "${_cnetmod_compiler_host}" DIRECTORY)
+        get_filename_component(_cnetmod_msvc_root "${_cnetmod_compiler_bin_root}" DIRECTORY)
+        set(_cnetmod_msvc_modules "${_cnetmod_msvc_root}/modules")
+
+        if(EXISTS "${_cnetmod_msvc_modules}/std.ixx" AND
+           EXISTS "${_cnetmod_msvc_modules}/std.compat.ixx")
+            target_sources(cnetmod::runtime INTERFACE
+                FILE_SET cxx_std_modules TYPE CXX_MODULES
+                BASE_DIRS "${_cnetmod_msvc_modules}"
+                FILES
+                    "${_cnetmod_msvc_modules}/std.ixx"
+                    "${_cnetmod_msvc_modules}/std.compat.ixx")
+        else()
+            message(FATAL_ERROR
+                "cnetmod requires MSVC STL module units for Ninja consumers. "
+                "Set up a complete MSVC toolchain that provides std.ixx.")
+        endif()
     endif()
+    unset(_cnetmod_runtime_modules)
+    unset(_cnetmod_has_std_module)
+    unset(_cnetmod_module)
+    unset(_cnetmod_module_name)
+    unset(_cnetmod_compiler_bin)
+    unset(_cnetmod_compiler_host)
+    unset(_cnetmod_compiler_bin_root)
+    unset(_cnetmod_msvc_root)
+    unset(_cnetmod_msvc_modules)
 endif()
 
 foreach(_cnetmod_component IN LISTS cnetmod_FIND_COMPONENTS)
