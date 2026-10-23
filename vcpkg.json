@@ -1,6 +1,6 @@
 {
   "name": "cnetmod",
-  "version": "2.2.2",
+  "version": "2.2.3",
   "description": "Cross-platform asynchronous network library with C++23 modules",
   "homepage": "https://github.com/banderzhm/cnetmod",
   "license": "MIT",

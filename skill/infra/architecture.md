@@ -1,13 +1,13 @@
 # 项目架构
 
-> cnetmod v2.2.2 — 基于 C++23 Modules 的跨平台异步网络库。
+> cnetmod v2.2.3 — 基于 C++23 Modules 的跨平台异步网络库。
 
 ## 项目概述
 
 | 属性 | 值 |
 |------|------|
 | 名称 | cnetmod |
-| 版本 | 2.2.2（唯一来源为根目录 `VERSION`） |
+| 版本 | 2.2.3（唯一来源为根目录 `VERSION`） |
 | 语言标准 | C++23（`CMAKE_CXX_STANDARD 23`） |
 | 构建系统 | CMake 3.28+，`CMAKE_CXX_SCAN_FOR_MODULES ON` |
 | 库类型 | 分层静态组件；`cnetmod::core` / `cnetmod::all` 是兼容聚合入口 |

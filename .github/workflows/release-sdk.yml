@@ -8,7 +8,7 @@ on:
       tag:
         description: Existing immutable version tag
         required: true
-        default: v2.2.2
+        default: v2.2.3
 
 permissions:
   contents: read
