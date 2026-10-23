@@ -89,29 +89,14 @@ namespace detail {
         std::uint64_t remaining{};
     };
 
-    auto resolve_static_file(static_file_state& state, request_context& ctx,
-        const std::string& relative, bool range_requested)
+    auto refresh_static_file(static_file_state& state, request_context& ctx,
+        const std::string& relative, std::string_view accepted,
+        std::string_view requested_encoding, std::string key,
+        std::chrono::steady_clock::time_point now,
+        std::shared_ptr<const cached_static_file> cached)
         -> task<std::expected<std::shared_ptr<const cached_static_file>,
             std::error_code>>
     {
-        const auto accepted = ctx.get_header("Accept-Encoding");
-        auto requested_encoding = std::string_view{"identity"};
-        if (!range_requested && state.options.serve_precompressed)
-        {
-            if (accepts_content_encoding(accepted, "br"))
-                requested_encoding = "br";
-            else if (accepts_content_encoding(accepted, "gzip"))
-                requested_encoding = "gzip";
-        }
-        auto key = relative;
-        key.push_back('\n');
-        key.append(requested_encoding);
-
-        const auto now = std::chrono::steady_clock::now();
-        auto cached = state.entries.find(key).value_or(nullptr);
-        if (cached && now - cached->validated_at < state.options.revalidate_interval)
-            co_return cached;
-
         auto original = state.options.root / relative;
         std::error_code error;
         if (std::filesystem::is_directory(original, error))
@@ -221,8 +206,27 @@ namespace detail {
         }
 
         const auto range_hdr = ctx.get_header("Range");
-        auto resolved = co_await resolve_static_file(
-            state, ctx, rel_str, !range_hdr.empty());
+        const auto accepted = ctx.get_header("Accept-Encoding");
+        auto requested_encoding = std::string_view{"identity"};
+        if (range_hdr.empty() && state.options.serve_precompressed)
+        {
+            if (accepts_content_encoding(accepted, "br"))
+                requested_encoding = "br";
+            else if (accepts_content_encoding(accepted, "gzip"))
+                requested_encoding = "gzip";
+        }
+        auto key = rel_str;
+        key.push_back('\n');
+        key.append(requested_encoding);
+        const auto now = std::chrono::steady_clock::now();
+        auto cached = state.entries.find(key).value_or(nullptr);
+        std::expected<std::shared_ptr<const cached_static_file>,
+            std::error_code>
+            resolved{cached};
+        if (!cached || now - cached->validated_at >= state.options.revalidate_interval)
+            resolved = co_await refresh_static_file(state, ctx, rel_str,
+                accepted, requested_encoding, std::move(key), now,
+                std::move(cached));
         if (!resolved)
         {
             if (resolved.error() == std::errc::no_such_file_or_directory)
@@ -776,7 +780,10 @@ struct server::recv_service_state
     {
         auto& shared = registry();
         concurrent_containers::exclusive_latch_guard lock{shared.latch};
-        std::erase_if(shared.loops, [](const auto& entry) { return entry.second.expired(); });
+        std::erase_if(shared.loops, [](const auto& entry)
+            {
+                return entry.second.expired();
+            });
         for (const auto& [id, service] : shared.loops)
             if (id == uring.instance_id())
                 if (auto existing = service.lock())

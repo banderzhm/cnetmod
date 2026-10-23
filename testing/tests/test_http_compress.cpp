@@ -26,7 +26,7 @@ struct compression_observation
 
 auto run_compression(std::string accept_encoding,
     std::string vary = {}, bool cancel = false, int brotli_quality = -1,
-    std::string payload = std::string(4096, 'a'))
+    std::string payload = std::string(4096, 'a'), bool use_dispatch = true)
     -> compression_observation
 {
     auto io = cnetmod::make_io_context();
@@ -59,6 +59,8 @@ auto run_compression(std::string accept_encoding,
             observation.measurements.push_back(std::move(value));
         },
     };
+    if (!use_dispatch)
+        options.dispatch = {};
     if (cancel)
         request.cancel_pending_operations();
     auto middleware = cnetmod::compress(std::move(options));
@@ -223,6 +225,117 @@ TEST(compression_reuses_gzip_workspace_without_retaining_previous_input)
         ASSERT_TRUE(decoded.has_value());
         ASSERT_TRUE(*decoded == payload);
     }
+#endif
+}
+
+TEST(compression_can_transform_response_storage_without_a_dispatcher)
+{
+#ifdef CNETMOD_HAS_ZLIB
+    const auto payload = std::string(8192U, 'x');
+    const auto observation = run_compression(
+        "gzip", {}, false, -1, payload, false);
+    ASSERT_FALSE(observation.dispatched);
+    ASSERT_EQ(observation.response.get_header("Content-Encoding"),
+        std::string_view("gzip"));
+    const auto decoded = gunzip(observation.response.body(), payload.size());
+    ASSERT_TRUE(decoded.has_value());
+    ASSERT_TRUE(*decoded == payload);
+#endif
+}
+
+TEST(compression_reuses_only_an_explicitly_keyed_unchanged_response)
+{
+#ifdef CNETMOD_HAS_ZLIB
+    auto io = cnetmod::make_io_context();
+    cnetmod::socket socket;
+    cnetmod::http::header_map headers;
+    headers["Accept-Encoding"] = "gzip";
+    std::size_t operations{};
+    auto middleware = cnetmod::compress({
+        .min_size = 1,
+        .max_concurrency = 1,
+        .cache_capacity = 2,
+        .cache_key = [](const cnetmod::http::request_context&)
+            -> std::optional<std::string>
+        {
+            return "stable-resource";
+        },
+        .measurements = [&operations](
+                            cnetmod::instrumentation::metric_measurement value)
+        {
+            if (value.name == "http.server.response.compression.operations" &&
+                std::ranges::any_of(value.attributes, [](const auto& attribute)
+                    {
+                        return attribute.first == "outcome" &&
+                            attribute.second == "compressed";
+                    }))
+                ++operations;
+        },
+    });
+
+    const auto invoke = [&](std::string payload)
+    {
+        cnetmod::http::response response;
+        cnetmod::http::request_context request{
+            *io, socket, "GET", "/", headers, {}, response, {}};
+        cnetmod::sync_wait(middleware(request,
+            [&request, payload = std::move(payload)]() -> cnetmod::task<void>
+            {
+                request.text(cnetmod::http::status::ok, payload);
+                co_return;
+            }));
+        return response;
+    };
+
+    const auto original = std::string(8192U, 'a');
+    auto first = invoke(original);
+    auto second = invoke(original);
+    ASSERT_EQ(operations, 1U);
+    ASSERT_TRUE(first.body() == second.body());
+
+    const auto changed = std::string(8192U, 'b');
+    auto third = invoke(changed);
+    ASSERT_EQ(operations, 2U);
+    const auto decoded = gunzip(third.body(), changed.size());
+    ASSERT_TRUE(decoded.has_value());
+    ASSERT_TRUE(*decoded == changed);
+#endif
+}
+
+TEST(compression_ignores_a_throwing_application_cache_key)
+{
+#ifdef CNETMOD_HAS_ZLIB
+    auto io = cnetmod::make_io_context();
+    cnetmod::socket socket;
+    cnetmod::http::header_map headers;
+    headers["Accept-Encoding"] = "gzip";
+    auto middleware = cnetmod::compress({
+        .min_size = 1,
+        .max_concurrency = 1,
+        .cache_capacity = 1,
+        .cache_key = [](const cnetmod::http::request_context&)
+            -> std::optional<std::string>
+        {
+            throw std::runtime_error{"application cache-key failure"};
+        },
+    });
+
+    const auto payload = std::string(8192U, 'x');
+    cnetmod::http::response response;
+    cnetmod::http::request_context request{
+        *io, socket, "GET", "/", headers, {}, response, {}};
+    cnetmod::sync_wait(middleware(request,
+        [&request, &payload]() -> cnetmod::task<void>
+        {
+            request.text(cnetmod::http::status::ok, payload);
+            co_return;
+        }));
+
+    ASSERT_EQ(response.get_header("Content-Encoding"),
+        std::string_view("gzip"));
+    const auto decoded = gunzip(response.body(), payload.size());
+    ASSERT_TRUE(decoded.has_value());
+    ASSERT_TRUE(*decoded == payload);
 #endif
 }
 

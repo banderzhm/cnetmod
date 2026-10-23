@@ -58,6 +58,7 @@ public:
     auto generate_body(Generator&& generator)
         -> std::expected<void, std::error_code>
     {
+        restore_generation_buffer();
         shared_body_.reset();
         body_source_.reset();
         body_.clear();
@@ -66,6 +67,35 @@ public:
             body_.clear();
         refresh_content_length();
         return generated;
+    }
+
+    /// Transform the current body through response-owned scratch storage.
+    /// The transformer returns true to commit the generated output, false to
+    /// retain the original body, or an error. Both buffers keep their capacity
+    /// across reset(), which avoids alternating allocation of source and
+    /// encoded bodies on a persistent connection.
+    template <typename Transformer>
+    requires std::same_as<std::invoke_result_t<Transformer&,
+                              std::string_view, std::string&>,
+        std::expected<bool, std::error_code>>
+    auto transform_body(Transformer&& transformer)
+        -> std::expected<bool, std::error_code>
+    {
+        const auto input = body();
+        transformed_body_.clear();
+        auto transformed = std::invoke(
+            transformer, input, transformed_body_);
+        if (!transformed || !*transformed)
+        {
+            transformed_body_.clear();
+            return transformed;
+        }
+        shared_body_.reset();
+        body_source_.reset();
+        body_.swap(transformed_body_);
+        body_is_transformed_ = true;
+        refresh_content_length();
+        return true;
     }
 
     /// Reuse immutable buffered content without copying it into every
@@ -223,6 +253,7 @@ private:
     auto set_common_header_owned(std::size_t slot, std::string value)
         -> response&;
     void refresh_content_length();
+    void restore_generation_buffer() noexcept;
 
     int status_code_ = 200;
     std::string status_msg_;
@@ -234,6 +265,8 @@ private:
     mutable bool headers_snapshot_valid_{};
     header_map trailers_;
     std::string body_;
+    std::string transformed_body_;
+    bool body_is_transformed_{};
     std::shared_ptr<const std::string> shared_body_;
     std::shared_ptr<response_body_source> body_source_;
     std::shared_ptr<const preencoded_header_block> preencoded_h2_headers_;

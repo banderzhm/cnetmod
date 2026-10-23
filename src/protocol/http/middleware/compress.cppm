@@ -27,6 +27,17 @@ using compression_dispatch = std::function<task<std::expected<std::string,
     std::error_code>>(compression_operation, cancel_token&)>;
 
 /**
+ * @brief Returns the semantic identity of a repeatable response.
+ *
+ * The key must include every request property that can change the response
+ * body. Returning `std::nullopt` bypasses the cache for that request. The
+ * middleware also compares the uncompressed body before reusing an entry, so
+ * stale application data is recompressed instead of being served.
+ */
+using compression_cache_key = std::function<std::optional<std::string>(
+    const http::request_context&)>;
+
+/**
  * @brief Configures response compression policy and optional infrastructure.
  */
 struct compress_options
@@ -50,6 +61,20 @@ struct compress_options
 
     /** @brief Maximum number of compression operations in flight. */
     std::size_t max_concurrency = 4;
+
+    /**
+     * @brief Maximum number of explicitly keyed compressed responses kept in
+     * memory. Zero disables caching (the default).
+     */
+    std::size_t cache_capacity = 0;
+
+    /**
+     * @brief Optional semantic key for repeatable response compression.
+     *
+     * Caching remains disabled unless both this callback and `cache_capacity`
+     * are configured. Do not key personalized responses only by their route.
+     */
+    compression_cache_key cache_key;
 
     /**
      * @brief Optional CPU scheduler supplied by the owning runtime.

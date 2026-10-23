@@ -16,17 +16,35 @@ import cnetmod.protocol.http;
 import cnetmod.coro.semaphore;
 import cnetmod.instrumentation.metric;
 import cnetmod.protocol.http.semantics;
+import cnetmod.utils.concurrent_containers.striped_hash_map;
 
 namespace cnetmod {
 namespace {
+    struct cached_compression
+    {
+        std::string source;
+        std::shared_ptr<const std::string> encoded;
+    };
+
     struct compression_state
     {
-        explicit compression_state(std::size_t concurrency) noexcept
-            : permits(std::max<std::size_t>(concurrency, 1U))
+        compression_state(std::size_t concurrency, std::size_t cache_capacity)
+            : permits(std::max<std::size_t>(concurrency, 1U)),
+              available_cache_slots(cache_capacity)
         {
+            if (cache_capacity != 0U)
+            {
+                cache = std::make_unique<cache_type>(
+                    std::max<std::size_t>(cache_capacity, 4U), 16U);
+            }
         }
 
+        using cache_type = concurrent_containers::striped_hash_map<std::string,
+            std::shared_ptr<const cached_compression>>;
+
         async_semaphore permits;
+        std::unique_ptr<cache_type> cache;
+        std::atomic<std::size_t> available_cache_slots;
     };
 
     struct permit_guard
@@ -155,7 +173,12 @@ namespace {
         return wildcard_quality.value_or(0U);
     }
 
-    enum class content_coding : std::uint8_t { none, gzip, brotli };
+    enum class content_coding : std::uint8_t
+    {
+        none,
+        gzip,
+        brotli
+    };
 
     auto negotiate(std::string_view accept_encoding, const compress_options& options) noexcept
         -> content_coding
@@ -177,6 +200,69 @@ namespace {
     auto coding_name(content_coding coding) noexcept -> const char*
     {
         return coding == content_coding::brotli ? "br" : "gzip";
+    }
+
+    auto cache_key_for(const compress_options& options,
+        const http::request_context& context, content_coding coding)
+        -> std::optional<std::string>
+    {
+        if (options.cache_capacity == 0U || !options.cache_key)
+            return std::nullopt;
+        std::optional<std::string> key;
+        try
+        {
+            key = options.cache_key(context);
+        }
+        catch (...)
+        {
+            return std::nullopt;
+        }
+        if (!key)
+            return std::nullopt;
+        key->push_back('\0');
+        key->push_back(static_cast<char>(coding));
+        return key;
+    }
+
+    auto reserve_cache_slot(compression_state& state) noexcept -> bool
+    {
+        auto available = state.available_cache_slots.load(
+            std::memory_order_relaxed);
+        while (available != 0U)
+        {
+            if (state.available_cache_slots.compare_exchange_weak(available,
+                    available - 1U, std::memory_order_acq_rel,
+                    std::memory_order_relaxed))
+                return true;
+        }
+        return false;
+    }
+
+    void store_cached(compression_state& state, const std::string& key,
+        std::string_view source, std::shared_ptr<const std::string> encoded,
+        bool replacing)
+    {
+        if (!state.cache)
+            return;
+        auto value = std::make_shared<const cached_compression>(
+            cached_compression{.source = std::string{source},
+                .encoded = std::move(encoded)});
+        if (replacing)
+        {
+            state.cache->insert_or_assign(key, std::move(value));
+            return;
+        }
+        if (!reserve_cache_slot(state))
+            return;
+        if (!state.cache->try_emplace(key, value))
+        {
+            // Another request inserted the same cold key after our lookup.
+            // Return the reservation so concurrent misses cannot consume the
+            // entire bounded capacity with duplicate keys, then refresh it.
+            state.available_cache_slots.fetch_add(
+                1U, std::memory_order_release);
+            state.cache->insert_or_assign(key, std::move(value));
+        }
     }
 
     auto is_compressible(std::string_view content_type) -> bool
@@ -261,8 +347,8 @@ namespace {
         gzip_encoder(const gzip_encoder&) = delete;
         auto operator=(const gzip_encoder&) -> gzip_encoder& = delete;
 
-        auto compress(std::string_view input, int level)
-            -> std::expected<std::string, std::error_code>
+        auto compress(std::string_view input, int level, std::string& output)
+            -> std::expected<void, std::error_code>
         {
             if (input.size() > static_cast<std::size_t>(
                                    std::numeric_limits<uInt>::max()))
@@ -282,7 +368,7 @@ namespace {
 
             // The string is the final response body. Writing into it directly
             // avoids the former temporary vector followed by a second copy.
-            std::string output(static_cast<std::size_t>(bound), '\0');
+            output.resize(static_cast<std::size_t>(bound));
             stream_.next_in = reinterpret_cast<Bytef*>(
                 const_cast<char*>(input.data()));
             stream_.avail_in = static_cast<uInt>(input.size());
@@ -293,7 +379,7 @@ namespace {
                 return std::unexpected(
                     std::make_error_code(std::errc::io_error));
             output.resize(static_cast<std::size_t>(stream_.total_out));
-            return output;
+            return {};
         }
 
     private:
@@ -320,23 +406,34 @@ namespace {
         bool initialized_{};
     };
 
-    auto gzip_compress(std::string_view input, int level)
-        -> std::expected<std::string, std::error_code>
+    auto gzip_compress_into(std::string_view input, int level,
+        std::string& output) -> std::expected<void, std::error_code>
     {
         // Compression is synchronous inside the selected executor. One codec
         // workspace per executor thread is therefore reusable without locks.
         thread_local gzip_encoder encoder;
-        return encoder.compress(input, level);
+        return encoder.compress(input, level, output);
+    }
+
+    auto gzip_compress(std::string_view input, int level)
+        -> std::expected<std::string, std::error_code>
+    {
+        std::string output;
+        auto compressed = gzip_compress_into(input, level, output);
+        if (!compressed)
+            return std::unexpected(compressed.error());
+        return output;
     }
 #endif
 #ifdef CNETMOD_HAS_BROTLI
-    auto brotli_compress(std::string_view input, int quality, int window)
-        -> std::expected<std::string, std::error_code>
+    auto brotli_compress_into(std::string_view input, int quality, int window,
+        std::string& output) -> std::expected<void, std::error_code>
     {
-        std::string output(::BrotliEncoderMaxCompressedSize(input.size()), '\0');
-        if (output.empty())
+        const auto maximum = ::BrotliEncoderMaxCompressedSize(input.size());
+        if (maximum == 0U)
             return std::unexpected(std::make_error_code(std::errc::value_too_large));
-        auto size = output.size();
+        output.resize(maximum);
+        auto size = maximum;
         if (::BrotliEncoderCompress(std::clamp(quality, BROTLI_MIN_QUALITY, BROTLI_MAX_QUALITY),
                 std::clamp(window, BROTLI_MIN_WINDOW_BITS, BROTLI_MAX_WINDOW_BITS),
                 BROTLI_MODE_TEXT, input.size(),
@@ -344,6 +441,17 @@ namespace {
                 reinterpret_cast<std::uint8_t*>(output.data())) != BROTLI_TRUE)
             return std::unexpected(std::make_error_code(std::errc::io_error));
         output.resize(size);
+        return {};
+    }
+
+    auto brotli_compress(std::string_view input, int quality, int window)
+        -> std::expected<std::string, std::error_code>
+    {
+        std::string output;
+        auto compressed = brotli_compress_into(
+            input, quality, window, output);
+        if (!compressed)
+            return std::unexpected(compressed.error());
         return output;
     }
 #endif
@@ -370,16 +478,113 @@ namespace {
             count_outcome(options, coding, "cancelled");
             co_return;
         }
+        // The response body remains stable while an optional dispatcher owns
+        // the operation. The inline path instead writes into response-owned
+        // scratch storage so persistent connections retain both capacities.
+        const auto body = context.resp().body();
+        auto cache_key = cache_key_for(options, context, coding);
+        bool replacing_cached = false;
+        if (cache_key)
+        {
+            if (auto cached = state->cache->find(*cache_key))
+            {
+                replacing_cached = true;
+                if ((*cached)->source == body)
+                {
+                    context.resp().set_shared_body((*cached)->encoded);
+                    context.resp().set_header(
+                        "Content-Encoding", coding_name(coding));
+                    merge_vary(context.resp(), "Accept-Encoding");
+                    count_outcome(options, coding, "cached");
+                    co_return;
+                }
+            }
+        }
         if (!state->permits.try_acquire())
         {
             count_outcome(options, coding, "capacity");
             co_return;
         }
         permit_guard permit{state->permits};
-        // The dispatcher contract keeps the operation alive until completion,
-        // and the response body is not mutated while it is awaited. Borrowing
-        // it removes one full allocation and copy from every compressed reply.
-        const auto body = context.resp().body();
+        const auto started = std::chrono::steady_clock::now();
+        if (!options.dispatch)
+        {
+            std::expected<bool, std::error_code> transformed;
+            try
+            {
+                transformed = context.resp().transform_body(
+                    [level = options.level, coding,
+                        quality = options.brotli_quality,
+                        window = options.brotli_window](
+                        std::string_view input, std::string& output)
+                        -> std::expected<bool, std::error_code>
+                    {
+                        std::expected<void, std::error_code> compressed;
+    #ifdef CNETMOD_HAS_BROTLI
+                        if (coding == content_coding::brotli)
+                            compressed = brotli_compress_into(
+                                input, quality, window, output);
+                        else
+    #else
+                        (void)quality;
+                        (void)window;
+    #endif
+                            compressed = gzip_compress_into(input, level, output);
+                        if (!compressed)
+                            return std::unexpected(compressed.error());
+                        return output.size() < input.size();
+                    });
+            }
+            catch (const std::bad_alloc&)
+            {
+                transformed = std::unexpected(
+                    std::make_error_code(std::errc::not_enough_memory));
+            }
+            catch (...)
+            {
+                transformed = std::unexpected(
+                    std::make_error_code(std::errc::io_error));
+            }
+            const auto elapsed = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - started)
+                                     .count();
+            measure(options.measurements,
+                "http.server.response.compression.duration", elapsed,
+                instrumentation::metric_kind::histogram,
+                {{"content.encoding", coding_name(coding)}});
+            if (!transformed)
+            {
+                count_outcome(options, coding, "error");
+                co_return;
+            }
+            if (!*transformed)
+            {
+                count_outcome(options, coding, "larger");
+                co_return;
+            }
+            measure(options.measurements,
+                "http.server.response.compression.input.size",
+                static_cast<double>(source_size),
+                instrumentation::metric_kind::histogram,
+                {{"content.encoding", coding_name(coding)}});
+            measure(options.measurements,
+                "http.server.response.compression.output.size",
+                static_cast<double>(context.resp().body().size()),
+                instrumentation::metric_kind::histogram,
+                {{"content.encoding", coding_name(coding)}});
+            context.resp().set_header("Content-Encoding", coding_name(coding));
+            merge_vary(context.resp(), "Accept-Encoding");
+            if (cache_key)
+            {
+                auto encoded = std::make_shared<const std::string>(
+                    context.resp().body());
+                store_cached(*state, *cache_key, body, encoded,
+                    replacing_cached);
+                context.resp().set_shared_body(std::move(encoded));
+            }
+            count_outcome(options, coding, "compressed");
+            co_return;
+        }
         auto operation = [body,
                              level = options.level, coding,
                              quality = options.brotli_quality,
@@ -395,7 +600,6 @@ namespace {
     #endif
             return gzip_compress(body, level);
         };
-        const auto started = std::chrono::steady_clock::now();
         std::expected<std::string, std::error_code> compressed;
         try
         {
@@ -451,7 +655,16 @@ namespace {
             static_cast<double>(compressed->size()),
             instrumentation::metric_kind::histogram,
             {{"content.encoding", coding_name(coding)}});
-        context.resp().set_body(std::move(*compressed));
+        if (cache_key)
+        {
+            auto encoded = std::make_shared<const std::string>(
+                std::move(*compressed));
+            store_cached(*state, *cache_key, body, encoded,
+                replacing_cached);
+            context.resp().set_shared_body(std::move(encoded));
+        }
+        else
+            context.resp().set_body(std::move(*compressed));
         context.resp().set_header("Content-Encoding", coding_name(coding));
         context.resp().set_header("Content-Length",
             std::to_string(context.resp().body().size()));
@@ -468,7 +681,7 @@ namespace {
 auto compress(compress_options options) -> http::middleware_fn
 {
     auto state = std::make_shared<compression_state>(
-        options.max_concurrency);
+        options.max_concurrency, options.cache_capacity);
     return [options = std::move(options), state = std::move(state)](
                http::request_context& context, http::next_fn next)
                -> task<void>

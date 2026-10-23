@@ -168,6 +168,7 @@ auto response::remove_header(std::string_view key) -> response&
 
 auto response::set_body(std::string_view body) -> response&
 {
+    restore_generation_buffer();
     shared_body_.reset();
     body_source_.reset();
     body_.assign(body);
@@ -186,6 +187,7 @@ void response::refresh_content_length()
 
 auto response::set_body(std::string body) -> response&
 {
+    restore_generation_buffer();
     shared_body_.reset();
     body_source_.reset();
     body_ = std::move(body);
@@ -196,6 +198,7 @@ auto response::set_body(std::string body) -> response&
 auto response::set_shared_body(std::shared_ptr<const std::string> body)
     -> response&
 {
+    restore_generation_buffer();
     body_.clear();
     body_source_.reset();
     shared_body_ = std::move(body);
@@ -211,6 +214,7 @@ auto response::set_shared_body(std::shared_ptr<const std::string> body)
 auto response::set_shared_body_preserve_headers(
     std::shared_ptr<const std::string> body) -> response&
 {
+    restore_generation_buffer();
     body_.clear();
     body_source_.reset();
     shared_body_ = std::move(body);
@@ -219,6 +223,7 @@ auto response::set_shared_body_preserve_headers(
 
 auto response::set_body_preserve_headers(std::string body) -> response&
 {
+    restore_generation_buffer();
     shared_body_.reset();
     body_source_.reset();
     body_ = std::move(body);
@@ -228,6 +233,7 @@ auto response::set_body_preserve_headers(std::string body) -> response&
 auto response::set_body_source(std::shared_ptr<response_body_source> source)
     -> response&
 {
+    restore_generation_buffer();
     body_.clear();
     shared_body_.reset();
     body_source_ = std::move(source);
@@ -240,6 +246,7 @@ auto response::set_body_source(std::shared_ptr<response_body_source> source)
 
 void response::reset(int status_code, http_version version) noexcept
 {
+    restore_generation_buffer();
     status_code_ = status_code;
     status_msg_.clear();
     version_ = version;
@@ -261,6 +268,16 @@ void response::reset(int status_code, http_version version) noexcept
     body_source_.reset();
     preencoded_h2_headers_.reset();
     has_cached_date_header_ = false;
+}
+
+void response::restore_generation_buffer() noexcept
+{
+    if (body_is_transformed_)
+    {
+        body_.swap(transformed_body_);
+        body_is_transformed_ = false;
+    }
+    transformed_body_.clear();
 }
 
 auto response::set_cookie(std::string_view name, std::string_view value,
