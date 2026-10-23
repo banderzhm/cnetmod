@@ -413,7 +413,7 @@ namespace {
         co_return {};
     }
 
-    auto qpack_waiter_for(cnetmod::flat_map<stream_id,
+    auto qpack_waiter_for(std::unordered_map<stream_id,
                               std::shared_ptr<channel<std::monostate>>>& waiters,
         stream_id stream) -> std::shared_ptr<channel<std::monostate>>
     {
@@ -423,7 +423,7 @@ namespace {
         return position->second;
     }
 
-    auto notify_qpack_waiter(cnetmod::flat_map<stream_id,
+    auto notify_qpack_waiter(std::unordered_map<stream_id,
                                  std::shared_ptr<channel<std::monostate>>>& waiters,
         stream_id stream) -> void
     {
@@ -434,7 +434,7 @@ namespace {
         }
     }
 
-    auto close_qpack_waiters(cnetmod::flat_map<stream_id,
+    auto close_qpack_waiters(std::unordered_map<stream_id,
         std::shared_ptr<channel<std::monostate>>>& waiters) -> void
     {
         auto pending = std::move(waiters);

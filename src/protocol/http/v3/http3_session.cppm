@@ -415,11 +415,14 @@ private:
     // The decoder completes those blocks asynchronously; retain the decoded
     // fields and wake the owning request coroutine without re-decoding (and
     // therefore without issuing a duplicate Header Acknowledgement).
-    cnetmod::flat_map<stream_id,
+    // QPACK-blocked streams churn independently and are erased out of order.
+    // A hash table avoids shifting shared owners on every completed stream.
+    static constexpr std::size_t qpack_state_capacity{128U};
+    std::unordered_map<stream_id,
         std::shared_ptr<channel<std::monostate>>>
-        qpack_waiters_;
-    cnetmod::flat_map<stream_id, std::deque<std::vector<header_field>>>
-        completed_headers_;
+        qpack_waiters_{qpack_state_capacity};
+    std::unordered_map<stream_id, std::deque<std::vector<header_field>>>
+        completed_headers_{qpack_state_capacity};
     // Request parsing only consumes completed QPACK blocks; an entry exists
     // only when the decoder actually completed a blocked block.  The common
     // unblocked request must not materialize an empty deque (deque's default
@@ -564,12 +567,13 @@ private:
     channel<std::monostate> push_promise_progress_{1024};
     cnetmod::flat_map<stream_id, std::uint64_t> peer_unidirectional_stream_types_;
     cnetmod::flat_map<stream_id, std::size_t> peer_unidirectional_stream_bytes_;
-    cnetmod::flat_map<stream_id,
+    static constexpr std::size_t qpack_state_capacity{128U};
+    std::unordered_map<stream_id,
         std::shared_ptr<channel<std::monostate>>>
-        qpack_waiters_;
-    cnetmod::flat_map<stream_id,
+        qpack_waiters_{qpack_state_capacity};
+    std::unordered_map<stream_id,
         std::deque<std::vector<header_field>>>
-        completed_headers_;
+        completed_headers_{qpack_state_capacity};
     cnetmod::flat_map<stream_id, std::shared_ptr<webtransport_session_state>>
         webtransport_sessions_;
     channel<std::pair<std::uint64_t, std::vector<std::byte>>> http_datagrams_{256};
