@@ -901,6 +901,9 @@ public:
         options.reuse_port = shared_port_;
         options.recv_buffer_size = 4 * 1024 * 1024;
         options.send_buffer_size = 4 * 1024 * 1024;
+#ifdef CNETMOD_HAS_IO_URING
+        options.udp_receive_coalescing = true;
+#endif
         auto opened = socket_.open(endpoint_, options);
         if (!opened)
             return std::unexpected(opened.error());
@@ -1642,12 +1645,11 @@ private:
             co_await post_awaitable{context_};
     }
 
-    [[nodiscard]] auto process_incoming(udp_received_datagram incoming) -> task<void>
+    [[nodiscard]] auto process_incoming_datagram(std::span<const std::byte> buffer,
+        const endpoint& sender) -> task<void>
     {
         if (!running_)
             co_return;
-        auto& buffer = incoming.bytes;
-        const auto& sender = incoming.peer;
         if (buffer.empty())
             co_return;
 
@@ -1782,6 +1784,27 @@ private:
         }
         ensure_http3_session(connection);
         refresh_connection_routes(connection);
+    }
+
+    [[nodiscard]] auto process_incoming(udp_received_datagram incoming) -> task<void>
+    {
+        const auto bytes = std::span<const std::byte>{incoming.bytes};
+        const auto segment_size = incoming.segment_size;
+        if (segment_size == 0U || segment_size >= bytes.size())
+        {
+            co_await process_incoming_datagram(bytes, incoming.peer);
+            co_return;
+        }
+
+        // UDP_GRO preserves datagram order and reports one common segment
+        // length. Keep the pooled aggregate alive while each logical QUIC
+        // datagram is processed; no segment allocation or payload copy occurs.
+        for (std::size_t offset{}; offset < bytes.size(); offset += segment_size)
+        {
+            co_await process_incoming_datagram(
+                bytes.subspan(offset, std::min(segment_size, bytes.size() - offset)),
+                incoming.peer);
+        }
     }
 
     void record_receive_buffer(const udp_received_datagram& incoming) noexcept
@@ -2037,9 +2060,13 @@ private:
                 continue;
             }
 
+            std::size_t logical_datagrams{};
             for (std::size_t index{}; index < received->size(); ++index)
             {
                 auto& incoming = (*received)[index];
+                logical_datagrams += incoming.segment_size == 0U
+                    ? 1U
+                    : 1U + (incoming.bytes.size() - 1U) / incoming.segment_size;
                 record_receive_buffer(incoming);
                 co_await process_incoming(std::move(incoming));
                 if (cooperative_receive_fallback && index + 1U < received->size())
@@ -2051,7 +2078,7 @@ private:
             // after a saturated batch: a short batch will suspend naturally
             // on the next receive, while unconditionally posting here adds a
             // full reactor turn to every low-latency request/response.
-            if (received->size() == receive_batch_size && receive_batch_size > 1U)
+            if (logical_datagrams >= receive_batch_size && receive_batch_size > 1U)
                 co_await post_awaitable{context_};
         }
     }

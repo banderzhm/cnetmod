@@ -78,6 +78,11 @@ auto pmtud = server->set_path_mtu_discovery(
 1200 字节安全基线开始，只有 padded PING 被确认后才提升到探测值。公网部署应按实际
 链路选择保守上限，避免 IP 分片。
 
+Linux io_uring listener 会请求 UDP_GRO，并通过 `recvmmsg` 的 ancillary data 在一个池化接收块
+上零拷贝遍历多个逻辑 QUIC 数据报；旧内核或不支持该选项的网络栈自动回退到普通逐包
+接收。这里的合并只改变内核到用户态的交付次数，不改变 QUIC 包边界、认证、拥塞控制
+或恢复语义。业务 handler 不需要感知这一优化。
+
 QUIC 新连接默认使用 CUBIC 拥塞控制。真实网络仍按 RTT 和拥塞窗口 pacing；loopback
 没有物理瓶颈队列，因此只保留拥塞窗口限制，省去本机进程间通信的短定时器唤醒。
 

@@ -57,6 +57,10 @@ export struct socket_options
     std::optional<bool> ipv6_only = std::nullopt; // IPV6_V6ONLY; nullopt keeps OS default
     int recv_buffer_size = 0;                     // 0 = system default
     int send_buffer_size = 0;                     // 0 = system default
+    /// Ask Linux to coalesce adjacent UDP datagrams and report their segment
+    /// size through UDP_GRO ancillary data. Unsupported kernels retain normal
+    /// datagram delivery; callers can query the negotiated capability.
+    bool udp_receive_coalescing = false;
 #ifdef CNETMOD_PLATFORM_WINDOWS
     // Bind a UDP socket to a Windows networking processor. SIO_CPU_AFFINITY
     // permits processor-affine sockets to share one server port without
@@ -206,6 +210,13 @@ public:
 #endif
     }
 
+    /// Whether UDP receive coalescing was accepted by the native socket.
+    /// Other platforms and older Linux kernels always return false.
+    [[nodiscard]] auto udp_receive_coalescing_enabled() const noexcept -> bool
+    {
+        return udp_receive_coalescing_enabled_;
+    }
+
 #ifdef CNETMOD_PLATFORM_WINDOWS
     /// Internal IOCP association state.  A socket is permanently bound to one
     /// completion port, so native I/O must not repeat CreateIoCompletionPort
@@ -315,6 +326,7 @@ private:
 
     native_handle_t handle_ = invalid_handle;
     address_family family_ = address_family::unspecified;
+    bool udp_receive_coalescing_enabled_{};
 #ifdef CNETMOD_PLATFORM_WINDOWS
     bool skip_completion_on_success_{};
     bool registered_io_requested_{};

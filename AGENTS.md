@@ -1307,6 +1307,31 @@ export auto async_sendto(io_context& ctx, socket& sock,
 ```
 均有 `cancel_token` 取消版本。
 
+#### UDP 批量收发与 Linux UDP_GRO
+
+```cpp
+export struct udp_received_datagram {
+    udp_datagram_buffer bytes;
+    endpoint peer;
+    std::size_t segment_size{};
+};
+
+export auto async_recvfrom_batch(io_context& ctx, socket& sock,
+    std::size_t max_datagrams, std::size_t max_datagram_size)
+    -> task<expected<std::vector<udp_received_datagram>, error_code>>;
+```
+
+Linux io_uring 后端使用 `recvmmsg` 排空一次就绪通知后的数据报。普通接收的 `segment_size == 0`；
+当 socket 以 `socket_options{.udp_receive_coalescing = true}` 打开且内核接受 UDP_GRO
+时，一个池化接收块可以包含多个相邻 UDP 数据报，`segment_size` 是各段长度，最后一段
+可以更短。消费方必须按该字段遍历逻辑数据报，不能把整个缓冲区当成一个协议包。
+`max_datagram_size` 仍约束单个逻辑数据报；Linux 后端会为 GRO 物理超包自动使用完整
+UDP 接收块，调用方不应为了 GRO 人为放大协议允许的单包上限。
+
+HTTP/3 listener 已内置这种分段处理，并在 Linux io_uring 上自动请求 UDP_GRO；应用使用
+`http3_server` 时不需要手动拆包。内核不支持 UDP_GRO 时，socket 自动保留原有
+一缓冲区一数据报行为。直接使用批量 UDP API 的协议实现才需要读取 `segment_size`。
+
 ## 场景：创建事件循环
 
 ```cpp
@@ -1938,6 +1963,7 @@ kTLS 主要减少大块发送的用户态记录处理；小 HTTP 响应可能因
 | `ipv6_only` | `optional<bool>` | `nullopt` | IPV6_V6ONLY |
 | `recv_buffer_size` | `int` | `0` | 接收缓冲区（0=系统默认） |
 | `send_buffer_size` | `int` | `0` | 发送缓冲区（0=系统默认） |
+| `udp_receive_coalescing` | `bool` | `false` | Linux io_uring 的 UDP_GRO 接收合并；后端或内核不支持时保留普通数据报语义 |
 
 ### `socket`
 **签名**: `export class socket`
@@ -1952,6 +1978,7 @@ kTLS 主要减少大块发送的用户态记录处理；小 HTTP 响应可能因
 | `listen` | `auto listen(int backlog = 4096) -> expected<void, error_code>` | 监听；内核仍可按 `somaxconn` 截断队列长度 |
 | `set_non_blocking` | `auto set_non_blocking(bool) -> expected<void, error_code>` | 设置非阻塞 |
 | `apply_options` | `auto apply_options(const socket_options&) -> expected<void, error_code>` | 应用选项 |
+| `udp_receive_coalescing_enabled` | `auto udp_receive_coalescing_enabled() const noexcept -> bool` | 原生 socket 是否实际启用了 UDP_GRO |
 | `local_endpoint` | `auto local_endpoint() const -> expected<endpoint, error_code>` | 本地端点 |
 | `remote_endpoint` | `auto remote_endpoint() const -> expected<endpoint, error_code>` | 远端端点 |
 | `join_multicast_group` | `auto join_multicast_group(const ip_address&, ...) -> expected<void, error_code>` | 加入组播组 |
@@ -9054,6 +9081,11 @@ auto pmtud = server->set_path_mtu_discovery(
 接收缓冲区大小及向 peer 通告的 QUIC UDP payload 上限。发送路径仍从 RFC 9000 的
 1200 字节安全基线开始，只有 padded PING 被确认后才提升到探测值。公网部署应按实际
 链路选择保守上限，避免 IP 分片。
+
+Linux io_uring listener 会请求 UDP_GRO，并通过 `recvmmsg` 的 ancillary data 在一个池化接收块
+上零拷贝遍历多个逻辑 QUIC 数据报；旧内核或不支持该选项的网络栈自动回退到普通逐包
+接收。这里的合并只改变内核到用户态的交付次数，不改变 QUIC 包边界、认证、拥塞控制
+或恢复语义。业务 handler 不需要感知这一优化。
 
 QUIC 新连接默认使用 CUBIC 拥塞控制。真实网络仍按 RTT 和拥塞窗口 pacing；loopback
 没有物理瓶颈队列，因此只保留拥塞窗口限制，省去本机进程间通信的短定时器唤醒。
