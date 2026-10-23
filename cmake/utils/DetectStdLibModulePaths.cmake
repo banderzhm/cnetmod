@@ -277,8 +277,9 @@ function(configure_cxx_modules)
                 ${STDLIB_MODULE_DIRS}/std.cppm
                 ${STDLIB_MODULE_DIRS}/std.compat.cppm
         )
-    elseif(WIN32 AND STDLIB_MODULE_DIRS AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-        # Windows/MSVC: Visual Studio builds the STL modules for import std.
+    elseif(WIN32 AND STDLIB_MODULE_DIRS AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC"
+           AND NOT CMAKE_GENERATOR MATCHES "Ninja")
+        # The Visual Studio generator builds the STL modules for import std.
         # Adding std.ixx/std.compat.ixx to the project file set creates duplicate
         # STL module outputs and makes MSBuild rebuild module users every time.
         target_sources(${CFG_TARGET} PUBLIC
@@ -288,8 +289,21 @@ function(configure_cxx_modules)
                 ${CFG_MODULE_INTERFACE_FILES}
                 ${CFG_DEPENDENCY_MODULE_INTERFACE_FILES}
         )
+    elseif(WIN32 AND STDLIB_MODULE_DIRS AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+        # Ninja has no implicit MSVC STL-module provider. Keep the standard
+        # library module units in the public graph so CMake can validate that
+        # cnetmod's exported modules have a public provider for `import std`.
+        target_sources(${CFG_TARGET} PUBLIC
+            FILE_SET cxx_modules TYPE CXX_MODULES
+            BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR} ${STDLIB_MODULE_DIRS}
+            FILES
+                ${CFG_MODULE_INTERFACE_FILES}
+                ${CFG_DEPENDENCY_MODULE_INTERFACE_FILES}
+                ${STDLIB_MODULE_DIRS}/std.ixx
+                ${STDLIB_MODULE_DIRS}/std.compat.ixx
+        )
     elseif(WIN32 AND STDLIB_MODULE_DIRS)
-        # Windows non-MSVC toolchains: keep explicit standard-library modules.
+        # Windows non-MSVC toolchains keep explicit standard-library modules.
         target_sources(${CFG_TARGET} PUBLIC
             FILE_SET cxx_modules TYPE CXX_MODULES
             BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR} ${STDLIB_MODULE_DIRS}
