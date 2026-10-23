@@ -926,6 +926,69 @@ install(DIRECTORY "${CNETMOD_NLOHMANN_JSON_SOURCE_DIR}/include/nlohmann"
 # stdexec remains a private build-time implementation dependency.  It is not
 # installed because no public cnetmod module interface exposes its types.
 
+set(CNETMOD_PACKAGE_COMPONENTS core coro io executor json security)
+if(TARGET cnetmod_application)
+    list(APPEND CNETMOD_PACKAGE_COMPONENTS application)
+endif()
+if(TARGET cnetmod_orm)
+    list(APPEND CNETMOD_PACKAGE_COMPONENTS orm)
+endif()
+foreach(protocol IN LISTS CNETMOD_PROTOCOLS)
+    if(CNETMOD_ENABLE_${protocol})
+        string(TOLOWER "${protocol}" protocol_component)
+        list(APPEND CNETMOD_PACKAGE_COMPONENTS "${protocol_component}")
+    endif()
+endforeach()
+if(TARGET cnetmod_http_redis_cache)
+    list(APPEND CNETMOD_PACKAGE_COMPONENTS http_redis_cache)
+endif()
+list(REMOVE_DUPLICATES CNETMOD_PACKAGE_COMPONENTS)
+
+set(CNETMOD_PACKAGE_COMPONENTS_JSON "")
+foreach(component IN LISTS CNETMOD_PACKAGE_COMPONENTS)
+    if(CNETMOD_PACKAGE_COMPONENTS_JSON)
+        string(APPEND CNETMOD_PACKAGE_COMPONENTS_JSON ", ")
+    endif()
+    string(APPEND CNETMOD_PACKAGE_COMPONENTS_JSON "\"${component}\"")
+endforeach()
+
+if(MSVC)
+    set(CNETMOD_PACKAGE_STDLIB "msvc")
+    set(CNETMOD_PACKAGE_RUNTIME "md")
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set(CNETMOD_PACKAGE_STDLIB "libc++")
+    set(CNETMOD_PACKAGE_RUNTIME "native")
+else()
+    set(CNETMOD_PACKAGE_STDLIB "libstdc++")
+    set(CNETMOD_PACKAGE_RUNTIME "native")
+endif()
+set(CNETMOD_DISTRIBUTION_PLATFORM_BASELINE "native" CACHE STRING
+    "Minimum platform ABI recorded in the installed SDK manifest")
+if(CMAKE_CONFIGURATION_TYPES)
+    set(_cnetmod_default_distribution_configuration "multi-config")
+else()
+    set(_cnetmod_default_distribution_configuration "${CMAKE_BUILD_TYPE}")
+endif()
+set(CNETMOD_DISTRIBUTION_CONFIGURATION
+    "${_cnetmod_default_distribution_configuration}" CACHE STRING
+    "Configuration recorded in the installed SDK manifest")
+if(CNETMOD_DISTRIBUTION_CONFIGURATION STREQUAL "")
+    set(CNETMOD_DISTRIBUTION_CONFIGURATION "unknown")
+endif()
+string(TOLOWER "${CMAKE_SYSTEM_NAME}" CNETMOD_PACKAGE_SYSTEM)
+string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" CNETMOD_PACKAGE_PROCESSOR)
+string(TOLOWER "${CMAKE_CXX_COMPILER_ID}" CNETMOD_PACKAGE_COMPILER)
+set(CNETMOD_PACKAGE_ABI
+    "${CNETMOD_PACKAGE_SYSTEM}-${CNETMOD_PACKAGE_PROCESSOR}-${CNETMOD_PACKAGE_COMPILER}${CMAKE_CXX_COMPILER_VERSION}-${CNETMOD_PACKAGE_STDLIB}-${CNETMOD_PACKAGE_RUNTIME}-${CNETMOD_DISTRIBUTION_PLATFORM_BASELINE}")
+string(REGEX REPLACE "[^A-Za-z0-9.+_-]" "-" CNETMOD_PACKAGE_ABI
+    "${CNETMOD_PACKAGE_ABI}")
+set(CNETMOD_DISTRIBUTION_TARGET_ID "${CNETMOD_PACKAGE_ABI}" CACHE STRING
+    "Stable target identifier used by cnetmod release catalogs")
+
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/cnetmod-package-manifest.json.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/cnetmod-package-manifest.json"
+    @ONLY)
 configure_package_config_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/cnetmodConfig.cmake.in"
     "${CMAKE_CURRENT_BINARY_DIR}/cnetmodConfig.cmake"
@@ -952,11 +1015,16 @@ install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/cnetmodMimalloc.cmake"
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cnetmod"
 )
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/cnetmod-package-manifest.json"
+    DESTINATION "${CMAKE_INSTALL_DATADIR}/cnetmod")
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
+    DESTINATION "${CMAKE_INSTALL_DATADIR}/cnetmod/licenses")
 
 set(CPACK_PACKAGE_NAME "cnetmod")
 set(CPACK_PACKAGE_VENDOR "banderzhm")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
-set(CPACK_PACKAGE_FILE_NAME "cnetmod-${PROJECT_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+set(CPACK_PACKAGE_FILE_NAME "cnetmod-sdk-${PROJECT_VERSION}-${CNETMOD_PACKAGE_ABI}")
 set(CPACK_GENERATOR "ZIP")
 include(CPack)
 

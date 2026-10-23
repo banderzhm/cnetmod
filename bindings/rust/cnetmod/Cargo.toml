@@ -1,6 +1,6 @@
 [package]
 name = "cnetmod"
-version = "2.2.2"
+version = "2.2.3"
 edition = "2024"
 description = "Safe Rust bindings for cnetmod's caller-driven C ABI"
 license = "MIT"
