@@ -2008,13 +2008,21 @@ private:
         while (timers->active.load(std::memory_order_acquire))
         {
             discard_expired_reset_routes();
-            // RIO owns a persistent receive ring and can safely return a
-            // larger burst. The IOCP fallback drains a modest batch, then
-            // yields after every packet so session/control work cannot be
-            // starved by a permanently readable UDP socket.
+            // RIO and Linux readiness backends already return a bounded
+            // receive burst. Process that burst inline and yield once only
+            // when it is saturated; yielding after every packet turns one
+            // recvmmsg completion into a reactor round-trip per datagram.
+            // Keep the smaller, per-packet cooperative path solely for the
+            // Windows IOCP fallback, whose receives are submitted one by one.
+#ifdef CNETMOD_HAS_IOCP
             const bool registered_io = socket_.native_socket().registered_io_enabled();
+            const bool cooperative_receive_fallback = !registered_io;
             const auto receive_batch_size = registered_io ? std::size_t{32U}
                                                           : std::size_t{8U};
+#else
+            constexpr bool cooperative_receive_fallback = false;
+            constexpr auto receive_batch_size = std::size_t{8U};
+#endif
             auto received = co_await async_recvfrom_batch(context_,
                 socket_.native_socket(), receive_batch_size,
                 static_cast<std::size_t>(transport_config_.max_udp_payload_size),
@@ -2034,7 +2042,7 @@ private:
                 auto& incoming = (*received)[index];
                 record_receive_buffer(incoming);
                 co_await process_incoming(std::move(incoming));
-                if (!registered_io && index + 1U < received->size())
+                if (cooperative_receive_fallback && index + 1U < received->size())
                     co_await post_awaitable{context_};
             }
 
