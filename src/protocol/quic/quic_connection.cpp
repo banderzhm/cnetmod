@@ -46,6 +46,32 @@ void retired_stream_history::insert(stream_id id, final_sizes sizes)
 {
     auto& ranges = ranges_[id & 3U];
     const auto sequence = id / 4U;
+    const auto remember_sizes = [this, id, sizes]
+    {
+        if (!recent_)
+            recent_ = std::make_unique<std::array<final_size_slot, final_size_capacity>>();
+        auto& slot = (*recent_)[id % final_size_capacity];
+        if (!slot.used)
+        {
+            slot.used = true;
+            ++recent_count_;
+        }
+        slot.id = id;
+        slot.sizes = sizes;
+    };
+
+    // Request streams normally retire in increasing ID order. Avoid a
+    // lower_bound and its comparator traffic for that append/coalesce path;
+    // out-of-order completions still use the general range merge below.
+    if (!ranges.empty() && sequence > ranges.back().high)
+    {
+        if (ranges.back().high + 1U == sequence)
+            ranges.back().high = sequence;
+        else
+            ranges.push_back({sequence, sequence});
+        remember_sizes();
+        return;
+    }
     const auto next = std::lower_bound(ranges.begin(), ranges.end(), sequence,
         [](const closed_stream_range& range, std::uint64_t value)
         { return range.low < value; });
@@ -80,16 +106,7 @@ void retired_stream_history::insert(stream_id id, final_sizes sizes)
             closed_stream_range{sequence, sequence});
     }
 
-    if (!recent_)
-        recent_ = std::make_unique<std::array<final_size_slot, final_size_capacity>>();
-    auto& slot = (*recent_)[id % final_size_capacity];
-    if (!slot.used)
-    {
-        slot.used = true;
-        ++recent_count_;
-    }
-    slot.id = id;
-    slot.sizes = sizes;
+    remember_sizes();
 }
 
 auto retired_stream_history::contains(stream_id id) const -> bool
