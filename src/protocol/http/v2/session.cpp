@@ -264,7 +264,8 @@ void session::queue_response(std::uint32_t stream_id, server_response response, 
     // one to a stable owner without copying its allocation so the DATA frames
     // can use the same gather path as cached static bodies. The owner remains
     // attached to a pending response or to the in-flight borrowed segments.
-    if (gather_writer_ && !response.shared_body && response.body.empty() &&
+    if (gather_writer_ && !response.shared_body &&
+        response.borrowed_body_text.empty() && response.body.empty() &&
         response.body_text.size() >= borrowed_frame_threshold)
     {
         response.shared_body =
@@ -273,6 +274,8 @@ void session::queue_response(std::uint32_t stream_id, server_response response, 
     }
     const auto body = response.shared_body
         ? std::as_bytes(std::span{*response.shared_body})
+        : !response.borrowed_body_text.empty()
+        ? std::as_bytes(std::span{response.borrowed_body_text})
         : response.body_text.empty()
         ? std::span<const std::byte>{response.body}
         : std::as_bytes(std::span{response.body_text});
@@ -325,6 +328,11 @@ void session::queue_response(std::uint32_t stream_id, server_response response, 
         streams_.erase(stream_id);
     else
     {
+        if (!response.borrowed_body_text.empty())
+        {
+            response.body_text.assign(response.borrowed_body_text);
+            response.borrowed_body_text = {};
+        }
         auto [found, inserted] = streams_.try_emplace(stream_id, stream_id,
             static_cast<std::int32_t>(peer_.initial_window_size),
             static_cast<std::int32_t>(local_.initial_window_size), std::vector<header_field>{});
@@ -345,6 +353,8 @@ auto session::queue_response_data(std::uint32_t stream_id, server_response& resp
         return true;
     const auto body = response.shared_body
         ? std::as_bytes(std::span{*response.shared_body})
+        : !response.borrowed_body_text.empty()
+        ? std::as_bytes(std::span{response.borrowed_body_text})
         : response.body_text.empty()
         ? std::span<const std::byte>{response.body}
         : std::as_bytes(std::span{response.body_text});
@@ -544,7 +554,7 @@ auto session::write_response(std::uint32_t stream_id,
     if (response.body_source)
     {
         if (!response.body.empty() || !response.body_text.empty() ||
-            response.shared_body)
+            !response.borrowed_body_text.empty() || response.shared_body)
             co_return std::unexpected(
                 std::make_error_code(std::errc::invalid_argument));
         std::vector<header_field> headers;

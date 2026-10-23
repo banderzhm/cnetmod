@@ -44,6 +44,12 @@ public:
     void stop() override;
     [[nodiscard]] auto stopped() const noexcept -> bool override;
     [[nodiscard]] auto instance_id() const noexcept -> std::uint64_t;
+    [[nodiscard]] auto ring_initialized() const noexcept -> bool;
+    /// Retain a resource whose kernel registration belongs to this ring.
+    /// Call only from the thread currently driving this context. Resources
+    /// are released after io_uring_queue_exit(), so their destructors never
+    /// unregister ring state from a foreign thread.
+    void retain_owner_resource(std::shared_ptr<void> resource);
     [[nodiscard]] auto native_ring() noexcept -> ::io_uring*;
     void restart() override;
     [[nodiscard]] auto get_sqe() -> ::io_uring_sqe*;
@@ -78,6 +84,9 @@ private:
     static auto submit_batch_size_from_env() noexcept -> unsigned;
     static auto env_enabled(const char* name, bool default_value) noexcept -> bool;
     static auto cqe_tick_limit_from_env() noexcept -> unsigned;
+    /// Create the ring on its driving thread. SINGLE_ISSUER designates the
+    /// creating task as the only legal submitter.
+    void ensure_ring();
     [[nodiscard]] auto submit_pending() -> std::expected<int, std::error_code>;
     auto run_one_impl(bool blocking) -> std::size_t;
     void submit_wake_read();
@@ -86,6 +95,7 @@ private:
     ::io_uring ring_{};
     std::atomic<bool> stopped_{false};
     bool initialized_ = false;
+    unsigned queue_depth_ = 256;
     int pipe_fds_[2] = {-1, -1};
     char pipe_buf_ = 0;
     uring_overlapped wake_ov_{};
@@ -96,6 +106,7 @@ private:
     uring_cancel_request* cancel_tail_{};
     unsigned submit_batch_size_ = default_submit_batch_size_;
     unsigned cqe_tick_limit_ = default_cqe_tick_limit_;
+    std::vector<std::shared_ptr<void>> owner_resources_;
     inline static std::atomic<std::uint64_t> next_instance_id_{0};
     std::uint64_t instance_id_ = 0;
 };

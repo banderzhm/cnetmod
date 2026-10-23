@@ -18,45 +18,72 @@ namespace cnetmod {
 io_uring_context::io_uring_context(unsigned queue_depth)
     : instance_id_(next_instance_id_.fetch_add(1, std::memory_order_relaxed))
 {
+    queue_depth_ = queue_depth;
     submit_batch_size_ = submit_batch_size_from_env();
     cqe_tick_limit_ = cqe_tick_limit_from_env();
+    if (::pipe2(pipe_fds_, O_NONBLOCK | O_CLOEXEC) < 0)
+        throw std::system_error(errno, std::generic_category(), "pipe2 failed");
+}
+
+void io_uring_context::ensure_ring()
+{
+    if (initialized_)
+        return;
+
     int ret = 0;
 #ifdef IORING_SETUP_CQSIZE
-    ::io_uring_params params{};
-    params.flags = IORING_SETUP_CQSIZE;
-    params.cq_entries = queue_depth * 2;
+    const auto try_init = [this](unsigned flags)
+    {
+        ::io_uring_params params{};
+        params.flags = IORING_SETUP_CQSIZE | flags;
+        params.cq_entries = queue_depth_ * 2;
+        return ::io_uring_queue_init_params(queue_depth_, &ring_, &params);
+    };
+
+    bool attempted = false;
     #ifdef IORING_SETUP_COOP_TASKRUN
     const auto coop_taskrun =
         env_enabled("CNETMOD_IOURING_COOP_TASKRUN", true);
-    if (coop_taskrun)
-        params.flags |= IORING_SETUP_COOP_TASKRUN;
     #endif
-    ret = ::io_uring_queue_init_params(queue_depth, &ring_, &params);
-    if (ret == -EINVAL)
+
+    #if defined(IORING_SETUP_SINGLE_ISSUER) && defined(IORING_SETUP_DEFER_TASKRUN)
+    // A task may be resumed once before run() to submit its initial operation,
+    // then the context may be driven by another thread. SINGLE_ISSUER names
+    // the creating task, so only enable it after this thread is established as
+    // the context owner. Server worker loops enter through run_one_impl() and
+    // retain the fast DEFER_TASKRUN path; pre-run submissions use COOP/basic.
+    if (running_in_this_thread() &&
+        env_enabled("CNETMOD_IOURING_DEFER_TASKRUN", true))
     {
-    #ifdef IORING_SETUP_COOP_TASKRUN
+        unsigned flags = IORING_SETUP_SINGLE_ISSUER |
+            IORING_SETUP_DEFER_TASKRUN;
+        #ifdef IORING_SETUP_COOP_TASKRUN
         if (coop_taskrun)
-        {
-            params.flags = IORING_SETUP_CQSIZE;
-            ret = ::io_uring_queue_init_params(queue_depth, &ring_, &params);
-        }
-    #endif
+            flags |= IORING_SETUP_COOP_TASKRUN;
+        #endif
+        ret = try_init(flags);
+        attempted = true;
     }
-    if (ret == -EINVAL)
-        ret = ::io_uring_queue_init(queue_depth, &ring_, 0);
+    #endif
+
+    #ifdef IORING_SETUP_COOP_TASKRUN
+    if ((!attempted || ret == -EINVAL || ret == -EPERM) && coop_taskrun)
+    {
+        ret = try_init(IORING_SETUP_COOP_TASKRUN);
+        attempted = true;
+    }
+    #endif
+    if (!attempted || ret == -EINVAL || ret == -EPERM)
+        ret = try_init(0);
+    if (ret == -EINVAL || ret == -EPERM)
+        ret = ::io_uring_queue_init(queue_depth_, &ring_, 0);
 #else
-    ret = ::io_uring_queue_init(queue_depth, &ring_, 0);
+    ret = ::io_uring_queue_init(queue_depth_, &ring_, 0);
 #endif
     if (ret < 0)
         throw std::system_error(-ret, std::generic_category(),
             "io_uring_queue_init failed");
     initialized_ = true;
-    if (::pipe2(pipe_fds_, O_NONBLOCK | O_CLOEXEC) < 0)
-    {
-        ::io_uring_queue_exit(&ring_);
-        throw std::system_error(errno, std::generic_category(), "pipe2 failed");
-    }
-    submit_wake_read();
 }
 
 io_uring_context::~io_uring_context()
@@ -66,7 +93,14 @@ io_uring_context::~io_uring_context()
     if (pipe_fds_[1] >= 0)
         ::close(pipe_fds_[1]);
     if (initialized_)
+    {
         ::io_uring_queue_exit(&ring_);
+        initialized_ = false;
+    }
+    // Ring-owned registrations are released only after queue_exit. This is
+    // safe even when the context object itself is destroyed by its controller
+    // rather than by the worker that drove the ring.
+    owner_resources_.clear();
 }
 
 void io_uring_context::run()
@@ -108,8 +142,24 @@ auto io_uring_context::instance_id() const noexcept -> std::uint64_t
     return instance_id_;
 }
 
+auto io_uring_context::ring_initialized() const noexcept -> bool
+{
+    return initialized_;
+}
+
+void io_uring_context::retain_owner_resource(std::shared_ptr<void> resource)
+{
+    if (!resource)
+        return;
+    if (!running_in_this_thread())
+        throw std::logic_error(
+            "io_uring owner resources must be registered by the driving thread");
+    owner_resources_.push_back(std::move(resource));
+}
+
 auto io_uring_context::native_ring() noexcept -> ::io_uring*
 {
+    ensure_ring();
     return &ring_;
 }
 
@@ -120,11 +170,13 @@ void io_uring_context::restart()
 
 auto io_uring_context::get_sqe() -> ::io_uring_sqe*
 {
+    ensure_ring();
     return ::io_uring_get_sqe(&ring_);
 }
 
 auto io_uring_context::prepare_sqe() -> ::io_uring_sqe*
 {
+    ensure_ring();
     auto* sqe = ::io_uring_get_sqe(&ring_);
     if (sqe)
         ++pending_sqes_;
@@ -133,6 +185,7 @@ auto io_uring_context::prepare_sqe() -> ::io_uring_sqe*
 
 auto io_uring_context::flush() -> std::expected<int, std::error_code>
 {
+    ensure_ring();
     if (pending_sqes_ == 0 || pending_sqes_ < submit_batch_size_)
         return 0;
     const auto result = submit_pending();
@@ -141,6 +194,7 @@ auto io_uring_context::flush() -> std::expected<int, std::error_code>
 
 auto io_uring_context::flush_pending() -> std::expected<int, std::error_code>
 {
+    ensure_ring();
     if (pending_sqes_ == 0)
         return 0;
     const auto result = submit_pending();
@@ -154,6 +208,7 @@ auto io_uring_context::submit_batch_size() const noexcept -> unsigned
 
 auto io_uring_context::submit() -> std::expected<int, std::error_code>
 {
+    ensure_ring();
     return submit_pending();
 }
 
@@ -259,6 +314,7 @@ auto io_uring_context::submit_pending() -> std::expected<int, std::error_code>
 
 auto io_uring_context::run_one_impl(bool blocking) -> std::size_t
 {
+    ensure_ring();
     if (cancel_head_)
         drain_cancellations();
     if (pending_sqes_ > 0)

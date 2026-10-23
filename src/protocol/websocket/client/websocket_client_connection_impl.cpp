@@ -66,6 +66,21 @@ namespace {
 message_writer::message_writer(std::vector<std::byte>& output, bool mask,
     std::size_t limit) : output_(output), mask_(mask), limit_(limit) {}
 
+void message_writer::trust_input(opcode op,
+    std::span<const std::byte> payload) noexcept
+{
+    trusted_op_ = op;
+    trusted_data_ = payload.data();
+    trusted_size_ = payload.size();
+}
+
+void message_writer::clear_trusted_input() noexcept
+{
+    trusted_op_ = opcode::continuation;
+    trusted_data_ = nullptr;
+    trusted_size_ = 0;
+}
+
 auto message_writer::send(opcode op, std::span<const std::byte> payload)
     -> std::expected<void, std::error_code>
 {
@@ -74,7 +89,10 @@ auto message_writer::send(opcode op, std::span<const std::byte> payload)
     if (!error_ && (payload.size() > limit_ - 14 ||
         output_.size() > limit_ - 14 - payload.size()))
         error_ = std::make_error_code(std::errc::message_size);
-    if (!error_ && op == opcode::text && !valid_message_utf8(payload))
+    const bool validated_input = op == trusted_op_ &&
+        payload.data() == trusted_data_ && payload.size() == trusted_size_;
+    if (!error_ && op == opcode::text && !validated_input &&
+        !valid_message_utf8(payload))
         error_ = make_error_code(ws_errc::invalid_utf8);
     if (error_)
         return std::unexpected(error_);
@@ -189,7 +207,9 @@ auto connection::async_process_messages(message_handler_fn handler,
                         failure_close = close_code::invalid_payload;
                         break;
                     }
+                    writer.trust_input(message_op, message);
                     const auto handled = handler(message_op, message, writer);
+                    writer.clear_trusted_input();
                     if (!handled || writer.error_)
                     {
                         failure = writer.error_ ? writer.error_ : handled.error();

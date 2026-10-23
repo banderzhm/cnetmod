@@ -145,19 +145,47 @@ namespace detail {
         return out;
     }
 
-    auto method_path_key(std::optional<http_method> method, std::string_view path)
-        -> std::string
+    auto is_canonical_path(std::string_view path) noexcept -> bool
     {
-        return std::string(method ? method_to_string(*method) : "*") + " " +
-            std::string(path);
+        return path == "/" || (!path.empty() && path.front() == '/' &&
+            path.back() != '/' && path.find("//") == std::string_view::npos);
     }
 
-    auto method_bucket_key(std::optional<http_method> method,
-        std::string_view first) -> std::string
-    {
-        return method_path_key(method, first);
-    }
 } // namespace detail
+
+auto router::literal_bucket_hash::operator()(
+    const literal_bucket_key& key) const noexcept -> std::size_t
+{
+    return (*this)(literal_bucket_view{key.method, key.first});
+}
+
+auto router::literal_bucket_hash::operator()(
+    literal_bucket_view key) const noexcept -> std::size_t
+{
+    const auto method = key.method
+        ? static_cast<std::size_t>(*key.method) + 1U
+        : 0U;
+    const auto path = std::hash<std::string_view>{}(key.first);
+    return path ^ (method + 0x9e3779b9U + (path << 6U) + (path >> 2U));
+}
+
+auto router::literal_bucket_equal::operator()(const literal_bucket_key& left,
+    const literal_bucket_key& right) const noexcept -> bool
+{
+    return left.method == right.method && left.first == right.first;
+}
+
+auto router::literal_bucket_equal::operator()(const literal_bucket_key& left,
+    literal_bucket_view right) const noexcept -> bool
+{
+    return left.method == right.method && left.first == right.first;
+}
+
+auto router::literal_bucket_equal::operator()(literal_bucket_view left,
+    const literal_bucket_key& right) const noexcept -> bool
+{
+    return right.method == left.method && right.first == left.first;
+}
 
 auto route_params::get(std::string_view key) const noexcept
     -> std::string_view
@@ -943,11 +971,19 @@ auto router::add_route(std::optional<http_method> m, std::string_view p,
     e.score = detail::route_specificity(e.segments, !m, order);
     if (stat)
     {
-        exact_index_[canonical].push_back(idx);
+        auto& bucket = exact_index_[canonical];
+        if (m)
+        {
+            auto& slot = bucket.methods[static_cast<std::size_t>(*m)];
+            if (slot == no_route_index)
+                slot = idx;
+        }
+        else if (bucket.any == no_route_index)
+            bucket.any = idx;
         static_exact_indices_.push_back(idx);
     }
     else if (first)
-        first_literal_index_[detail::method_bucket_key(m, *first)].push_back(idx);
+        first_literal_index_[literal_bucket_key{m, *first}].push_back(idx);
     else
         generic_indices_.push_back(idx);
     return *this;
@@ -956,12 +992,12 @@ auto router::add_route(std::optional<http_method> m, std::string_view p,
 auto router::find_exact(http_method m, std::string_view p) const
     -> const route_entry*
 {
-    const route_entry* best = nullptr;
     // Static routes dominate ordinary HTTP service workloads. For a small
     // route table, compare the original request view directly and avoid
     // allocating a canonical path plus composite hash key per request.
     if (static_exact_indices_.size() <= 8U)
     {
+        const route_entry* best = nullptr;
         for (const auto index : static_exact_indices_)
         {
             const auto& entry = entries_[index];
@@ -975,14 +1011,12 @@ auto router::find_exact(http_method m, std::string_view p) const
     const auto it = exact_index_.find(p);
     if (it == exact_index_.end())
         return nullptr;
-    for (const auto i : it->second)
-    {
-        const auto& e = entries_[i];
-        if ((!e.method || *e.method == m) &&
-            (!best || detail::better_score(e.score, best->score)))
-            best = &e;
-    }
-    return best;
+    const auto method_index = it->second.methods[static_cast<std::size_t>(m)];
+    if (method_index != no_route_index)
+        return &entries_[method_index];
+    return it->second.any != no_route_index
+        ? &entries_[it->second.any]
+        : nullptr;
 }
 
 auto router::try_match(const std::vector<detail::segment>& s,
@@ -1030,9 +1064,12 @@ auto router::match_borrowed(http_method m, std::string_view p) const
     if (auto x = find_exact(m, p))
         return matched(*x, {});
     auto parts = detail::split_path(p);
-    auto canonical = detail::canonical_from_parts(parts);
-    if (auto x = find_exact(m, canonical))
-        return matched(*x, {});
+    if (!detail::is_canonical_path(p))
+    {
+        auto canonical = detail::canonical_from_parts(parts);
+        if (auto x = find_exact(m, canonical))
+            return matched(*x, {});
+    }
     const route_entry* best = nullptr;
     route_params bp;
     auto consider = [&](std::size_t i)
@@ -1048,7 +1085,7 @@ auto router::match_borrowed(http_method m, std::string_view p) const
     };
     auto bucket = [&](std::optional<http_method> x, std::string_view first)
     {
-        auto it = first_literal_index_.find(detail::method_bucket_key(x, first));
+        auto it = first_literal_index_.find(literal_bucket_view{x, first});
         if (it != first_literal_index_.end())
             for (auto i : it->second)
                 consider(i);

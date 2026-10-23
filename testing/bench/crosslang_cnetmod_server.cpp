@@ -123,7 +123,7 @@ auto main(int argc, char** argv) -> int
         server.set_response_header_options(
             {.emit_server = false, .emit_date = false});
     http::router router;
-    router.get("/hello", [minimal_headers = configuration->minimal_headers](http::request_context& request) -> cn::task<void>
+    router.get_sync("/hello", [minimal_headers = configuration->minimal_headers](http::request_context& request)
         {
             if (minimal_headers)
             {
@@ -132,7 +132,6 @@ auto main(int argc, char** argv) -> int
             }
             else
                 request.text(http::status::ok, "Hello, World!");
-            co_return;
         });
     server.set_router(std::move(router));
 

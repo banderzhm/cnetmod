@@ -790,11 +790,54 @@ private:
             return std::hash<std::string_view>{}(value);
         }
     };
-    /// Static routes keyed by canonical path; method filtering happens on
-    /// the (usually single) candidate list.
-    std::unordered_map<std::string, std::vector<std::size_t>, path_hash,
+    static constexpr auto exact_method_count =
+        static_cast<std::size_t>(http_method::PATCH) + 1U;
+    static constexpr auto no_route_index =
+        std::numeric_limits<std::size_t>::max();
+    struct exact_route_bucket
+    {
+        std::array<std::size_t, exact_method_count> methods{};
+        std::size_t any = no_route_index;
+
+        exact_route_bucket() noexcept
+        {
+            methods.fill(no_route_index);
+        }
+    };
+    /// Static routes need one path hash and one array lookup. The wildcard
+    /// slot preserves `any()` fallback without scanning a candidate vector.
+    std::unordered_map<std::string, exact_route_bucket, path_hash,
         std::equal_to<>> exact_index_;
-    std::unordered_map<std::string, std::vector<std::size_t>>
+    struct literal_bucket_view
+    {
+        std::optional<http_method> method;
+        std::string_view first;
+    };
+    struct literal_bucket_key
+    {
+        std::optional<http_method> method;
+        std::string first;
+    };
+    struct literal_bucket_hash
+    {
+        using is_transparent = void;
+        [[nodiscard]] auto operator()(const literal_bucket_key& key) const noexcept
+            -> std::size_t;
+        [[nodiscard]] auto operator()(literal_bucket_view key) const noexcept
+            -> std::size_t;
+    };
+    struct literal_bucket_equal
+    {
+        using is_transparent = void;
+        [[nodiscard]] auto operator()(const literal_bucket_key& left,
+            const literal_bucket_key& right) const noexcept -> bool;
+        [[nodiscard]] auto operator()(const literal_bucket_key& left,
+            literal_bucket_view right) const noexcept -> bool;
+        [[nodiscard]] auto operator()(literal_bucket_view left,
+            const literal_bucket_key& right) const noexcept -> bool;
+    };
+    std::unordered_map<literal_bucket_key, std::vector<std::size_t>,
+        literal_bucket_hash, literal_bucket_equal>
         first_literal_index_;
     std::vector<std::size_t> generic_indices_;
     std::uint64_t next_order_ = 0;

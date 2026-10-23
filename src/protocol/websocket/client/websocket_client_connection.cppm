@@ -46,10 +46,15 @@ public:
 private:
     friend class connection;
     message_writer(std::vector<std::byte>& output, bool mask, std::size_t limit);
+    void trust_input(opcode op, std::span<const std::byte> payload) noexcept;
+    void clear_trusted_input() noexcept;
     std::vector<std::byte>& output_;
     bool mask_;
     std::size_t limit_;
     std::error_code error_;
+    opcode trusted_op_{opcode::continuation};
+    const std::byte* trusted_data_{};
+    std::size_t trusted_size_{};
 };
 
 /// The payload is borrowed until the callback returns. Copy it before retaining

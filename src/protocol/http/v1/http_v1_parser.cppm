@@ -30,6 +30,9 @@ public:
     [[nodiscard]] auto body() const noexcept -> std::string_view;
     [[nodiscard]] auto take_body_chunk() -> std::string;
     [[nodiscard]] auto get_header(std::string_view) const -> std::string_view;
+    /// Preserve request-line and header views before receiving more bytes.
+    /// Complete buffered requests borrow the input buffer and avoid this copy.
+    void preserve_headers();
     /// Reset message state and retain bytes already received after the current
     /// message. Returns true when another message can be parsed immediately.
     [[nodiscard]] auto reset_for_next_message() noexcept -> bool;
@@ -96,6 +99,8 @@ private:
     /// Offset in buf_ where the current message starts. Pipelined requests
     /// advance it instead of moving the unread tail to the buffer front.
     std::size_t message_start_ = 0;
+    std::size_t header_end_ = 0;
+    bool headers_preserved_ = false;
     bool chunked_ = false, headers_ready_ = false, ready_ = false;
 };
 

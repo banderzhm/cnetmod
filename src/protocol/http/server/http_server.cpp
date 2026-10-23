@@ -56,6 +56,8 @@ namespace cnetmod::http {
 
 namespace detail {
 
+    std::atomic<std::uint64_t> next_static_file_state_id{1};
+
     struct cached_static_file
     {
         std::filesystem::path selected_path;
@@ -73,13 +75,41 @@ namespace detail {
     struct static_file_state
     {
         explicit static_file_state(static_file_options value)
-            : options(std::move(value)), entries(64U, 16U) {}
+            : identity(next_static_file_state_id.fetch_add(
+                  1, std::memory_order_relaxed)),
+              options(std::move(value)), entries(64U, 16U) {}
 
+        std::uint64_t identity;
         static_file_options options;
         concurrent_containers::striped_hash_map<std::string,
             std::shared_ptr<const cached_static_file>>
             entries;
     };
+
+    struct local_static_file_entry
+    {
+        const static_file_state* state{};
+        std::uint64_t identity{};
+        std::string relative;
+        std::string encoding;
+        std::shared_ptr<const cached_static_file> resource;
+    };
+
+    auto local_static_file_slot(const static_file_state& state,
+        std::string_view relative, std::string_view encoding) noexcept
+        -> local_static_file_entry&
+    {
+        // Request coroutines stay on their owning event-loop thread. A tiny
+        // direct-mapped cache therefore removes the shared striped-map lock and
+        // shared_ptr refcount from the static-file hit path without weakening
+        // cross-loop cache ownership or revalidation.
+        thread_local std::array<local_static_file_entry, 8> entries;
+        auto hash = std::hash<std::string_view>{}(relative);
+        hash ^= std::hash<std::string_view>{}(encoding) +
+            0x9e3779b97f4a7c15ULL + (hash << 6U) + (hash >> 2U);
+        hash ^= static_cast<std::size_t>(state.identity);
+        return entries[hash & (entries.size() - 1U)];
+    }
 
     struct static_file_stream
     {
@@ -215,27 +245,52 @@ namespace detail {
             else if (accepts_content_encoding(accepted, "gzip"))
                 requested_encoding = "gzip";
         }
-        auto key = rel_str;
-        key.push_back('\n');
-        key.append(requested_encoding);
         const auto now = std::chrono::steady_clock::now();
-        auto cached = state.entries.find(key).value_or(nullptr);
-        std::expected<std::shared_ptr<const cached_static_file>,
-            std::error_code>
-            resolved{cached};
-        if (!cached || now - cached->validated_at >= state.options.revalidate_interval)
-            resolved = co_await refresh_static_file(state, ctx, rel_str,
-                accepted, requested_encoding, std::move(key), now,
-                std::move(cached));
-        if (!resolved)
+        auto& local = local_static_file_slot(
+            state, rel_path, requested_encoding);
+        const auto local_hit = local.state == &state &&
+            local.identity == state.identity && local.relative == rel_path &&
+            local.encoding == requested_encoding && local.resource &&
+            now - local.resource->validated_at <
+                state.options.revalidate_interval;
+
+        std::shared_ptr<const cached_static_file> resolved_owner;
+        const cached_static_file* resolved_resource{};
+        if (local_hit)
+            resolved_resource = local.resource.get();
+        else
         {
-            if (resolved.error() == std::errc::no_such_file_or_directory)
-                ctx.not_found();
-            else
-                ctx.text(status::internal_server_error, "500 Cannot read file");
-            co_return;
+            auto key = rel_str;
+            key.push_back('\n');
+            key.append(requested_encoding);
+            auto cached = state.entries.find(key).value_or(nullptr);
+            std::expected<std::shared_ptr<const cached_static_file>,
+                std::error_code>
+                resolved{cached};
+            if (!cached || now - cached->validated_at >=
+                    state.options.revalidate_interval)
+                resolved = co_await refresh_static_file(state, ctx, rel_str,
+                    accepted, requested_encoding, std::move(key), now,
+                    std::move(cached));
+            if (!resolved)
+            {
+                if (resolved.error() ==
+                    std::errc::no_such_file_or_directory)
+                    ctx.not_found();
+                else
+                    ctx.text(status::internal_server_error,
+                        "500 Cannot read file");
+                co_return;
+            }
+            resolved_owner = std::move(*resolved);
+            local.state = &state;
+            local.identity = state.identity;
+            local.relative = rel_str;
+            local.encoding = requested_encoding;
+            local.resource = resolved_owner;
+            resolved_resource = resolved_owner.get();
         }
-        const auto& resource = **resolved;
+        const auto& resource = *resolved_resource;
         const auto file_size = resource.size;
 
         std::uint64_t range_start = 0;
@@ -544,13 +599,20 @@ namespace detail {
         };
     }
 
-    auto take_h2_response(response& output) -> v2::server_response
+    auto take_h2_response(response& output, bool borrow_body = false)
+        -> v2::server_response
     {
         v2::server_response result;
         result.status = static_cast<std::uint32_t>(output.status_code());
-        result.body_text = output.take_body();
         result.shared_body = output.take_shared_body();
         result.body_source = output.take_body_source();
+        if (!result.shared_body && !result.body_source)
+        {
+            if (borrow_body)
+                result.borrowed_body_text = output.body();
+            else
+                result.body_text = output.take_body();
+        }
         result.preencoded_headers = output.take_preencoded_h2_headers();
         if (result.preencoded_headers)
         {
@@ -756,7 +818,7 @@ struct server::recv_service_state
     struct shard
     {
         io_context* owner{};
-        std::shared_ptr<io_uring_recv_service> service;
+        std::weak_ptr<io_uring_recv_service> service;
     };
 
     /// One provided-buffer ring per event loop, shared by every server on
@@ -792,24 +854,15 @@ struct server::recv_service_state
         const auto group = static_cast<std::uint16_t>(
             next_group.fetch_add(1, std::memory_order_relaxed));
         auto created = std::make_shared<io_uring_recv_service>(uring, group, 8192, 256);
+        uring.retain_owner_resource(created);
         shared.loops.emplace_back(uring.instance_id(), created);
         return created;
     }
 
     void add(io_context& owner)
     {
-        auto* uring = dynamic_cast<io_uring_context*>(&owner);
-        if (!uring)
-            return;
-        try
-        {
-            shards.push_back({&owner, shared_service(*uring)});
-        }
-        catch (const std::exception& error)
-        {
-            logger::warn("HTTP multishot recv disabled for event loop: {}",
-                error.what());
-        }
+        if (dynamic_cast<io_uring_context*>(&owner))
+            shards.push_back({&owner, {}});
     }
 
     [[nodiscard]] auto find(io_context& owner) noexcept
@@ -817,7 +870,25 @@ struct server::recv_service_state
     {
         for (auto& shard : shards)
             if (shard.owner == &owner)
-                return shard.service.get();
+            {
+                if (auto existing = shard.service.lock())
+                    return existing.get();
+                if (!owner.running_in_this_thread())
+                    return nullptr;
+                try
+                {
+                    auto created = shared_service(
+                        static_cast<io_uring_context&>(owner));
+                    shard.service = created;
+                    return created.get();
+                }
+                catch (const std::exception& error)
+                {
+                    logger::warn("HTTP multishot recv disabled for event loop: {}",
+                        error.what());
+                    return nullptr;
+                }
+            }
         return nullptr;
     }
 
@@ -1428,7 +1499,10 @@ auto server::make_h2_streaming_handler(io_context& io, socket& client)
 auto server::make_h2_sync_handler(io_context& io, socket& client)
     -> v2::sync_server_handler
 {
-    return [this, &io, &client](v2::server_request& request,
+    auto output = std::make_shared<response>(status::ok,
+        http_version::http_2);
+    return [this, &io, &client, output = std::move(output)](
+               v2::server_request& request,
                cancel_token& cancellation)
                -> std::optional<v2::server_response>
     {
@@ -1465,22 +1539,22 @@ auto server::make_h2_sync_handler(io_context& io, socket& client)
             match->route->request_stream)
             return std::nullopt;
 
-        response output(status::ok, http_version::http_2);
+        output->reset(status::ok, http_version::http_2);
         if (response_headers_.emit_server)
-            output.set_header("Server", "cnetmod");
+            output->set_header("Server", "cnetmod");
         if (response_headers_.emit_date)
-            output.set_cached_date_header(date_cache_.get());
+            output->set_cached_date_header(date_cache_.get());
         const auto body = std::string_view{
             reinterpret_cast<const char*>(request.body.data()),
             request.body.size()};
         request_context context(io, client, method, uri,
             std::span<const request_header_view>{headers.data(), header_count},
-            body, output, std::move(match->params), {});
+            body, *output, std::move(match->params), {});
         if (cancellation.is_cancelled())
             context.cancel_pending_operations();
         match->route->sync_handler(context);
 
-        return detail::take_h2_response(output);
+        return detail::take_h2_response(*output, true);
     };
 }
 
@@ -1750,6 +1824,9 @@ auto server::handle_h1_clear(socket& client, io_context& io,
             if (mr && mr->route->request_stream)
             {
                 const auto options = *mr->route->request_stream;
+                // The body pump may append receive data while the handler is
+                // using request-line/header views.
+                parser.preserve_headers();
                 auto body_stream = std::make_shared<request_body_stream>(
                     options.chunk_capacity, options.max_bytes);
                 request_context rctx(io, client, parser, resp, std::move(rp),
