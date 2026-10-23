@@ -8358,6 +8358,19 @@ auto set_body_source(std::shared_ptr<response_body_source> source)
 `set_body_source()` 互斥，后调用者替换前一种响应体。提供
 `content_length` 时框架自动生成 `Content-Length`，并在发送结束时核对实际字节数。
 
+#### `response::set_shared_body`
+**签名**:
+```cpp
+auto set_shared_body(std::shared_ptr<const std::string> body) -> response&;
+auto set_shared_body_preserve_headers(
+    std::shared_ptr<const std::string> body) -> response&;
+```
+
+`set_shared_body()` 用于跨请求复用不可变响应体，并自动维护 `Content-Length`。
+`set_shared_body_preserve_headers()` 只替换响应体、不改动已有头，供框架在已经安装完整的
+协议预编码头块时使用；普通业务 handler 不应调用后者，否则容易漏写长度或制造
+`Content-Length`/chunked 冲突。`serve_dir()` 会自行选择正确入口。
+
 **示例**:
 ```cpp
 import std;
@@ -8721,6 +8734,8 @@ HTTP/1 明文、TLS 和 HTTP/2 由服务器传输层分别编码。不要为了�
 静态文件 handler 中直接调用 `raw_socket()`；那会绕过 TLS 加密与 HTTP/2
 帧编码。默认对不超过 1 MiB 的热点文件保留不可变共享响应体，HTTP/1 与 HTTP/2
 不会按请求重复打开、读取或复制文件；超过上限的文件仍按背压异步分块读取。
+HTTP/2 缓存命中还会复用不依赖动态表的 HPACK 固定响应头块，避免每个请求重复构造
+header map 和编码固定字段；这是静态资源元数据复用，不是缓存动态业务响应。
 缓存每 500 ms 重新核对文件大小和修改时间，因此替换或删除静态资源后无需重启。
 将 `cache_max_file_size` 设为 `0` 可关闭 body 缓存，将
 `revalidate_interval` 设为 `0ms` 可要求每次请求检查磁盘元数据。

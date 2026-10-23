@@ -46,6 +46,32 @@ void retired_stream_history::insert(stream_id id, final_sizes sizes)
 {
     auto& ranges = ranges_[id & 3U];
     const auto sequence = id / 4U;
+    const auto remember_sizes = [this, id, sizes]
+    {
+        if (!recent_)
+            recent_ = std::make_unique<std::array<final_size_slot, final_size_capacity>>();
+        auto& slot = (*recent_)[id % final_size_capacity];
+        if (!slot.used)
+        {
+            slot.used = true;
+            ++recent_count_;
+        }
+        slot.id = id;
+        slot.sizes = sizes;
+    };
+
+    // Request streams normally retire in increasing ID order. Avoid a
+    // lower_bound and its comparator traffic for that append/coalesce path;
+    // out-of-order completions still use the general range merge below.
+    if (!ranges.empty() && sequence > ranges.back().high)
+    {
+        if (ranges.back().high + 1U == sequence)
+            ranges.back().high = sequence;
+        else
+            ranges.push_back({sequence, sequence});
+        remember_sizes();
+        return;
+    }
     const auto next = std::lower_bound(ranges.begin(), ranges.end(), sequence,
         [](const closed_stream_range& range, std::uint64_t value)
         { return range.low < value; });
@@ -80,16 +106,7 @@ void retired_stream_history::insert(stream_id id, final_sizes sizes)
             closed_stream_range{sequence, sequence});
     }
 
-    if (!recent_)
-        recent_ = std::make_unique<std::array<final_size_slot, final_size_capacity>>();
-    auto& slot = (*recent_)[id % final_size_capacity];
-    if (!slot.used)
-    {
-        slot.used = true;
-        ++recent_count_;
-    }
-    slot.id = id;
-    slot.sizes = sizes;
+    remember_sizes();
 }
 
 auto retired_stream_history::contains(stream_id id) const -> bool
@@ -1364,6 +1381,7 @@ struct quic_connection::quic_connection_impl
     std::array<std::deque<std::vector<std::byte>>, encryption_level_count>
         retransmit_crypto_frames{};
     encryption_level receiving_level{encryption_level::initial};
+    bool post_handshake_data_pending{};
     std::optional<time_point> idle_deadline;
     // RFC 9000 §10.2: after receiving CONNECTION_CLOSE, endpoints enter
     // draining for at least three PTOs.  Keep an explicit deadline instead
@@ -2652,16 +2670,26 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
     if (ack_eliciting)
         record_ack_eliciting_packet(
             application_path.received_ack_eliciting_packet_numbers, packet_number);
-    auto post_handshake = impl_->tls->process_post_handshake();
-    if (!post_handshake)
-        co_return std::unexpected(post_handshake.error());
+    // BoringSSL requires this call after post-handshake CRYPTO data has been
+    // provided, not after every ordinary 1-RTT packet. Avoid entering TLS and
+    // clearing its thread-local error queue for ACK/STREAM-only traffic.
+    if (std::exchange(impl_->post_handshake_data_pending, false))
+    {
+        auto post_handshake = impl_->tls->process_post_handshake();
+        if (!post_handshake)
+            co_return std::unexpected(post_handshake.error());
+    }
     const auto now = received_at;
-    const auto validation_timeout = impl_->path_validation_timeout(application_path);
-    std::erase_if(impl_->pending_path_validations,
-        [now, validation_timeout](const auto& candidate)
-        {
-            return now - candidate.second.started >= validation_timeout;
-        });
+    if (!impl_->pending_path_validations.empty())
+    {
+        const auto validation_timeout =
+            impl_->path_validation_timeout(application_path);
+        std::erase_if(impl_->pending_path_validations,
+            [now, validation_timeout](const auto& candidate)
+            {
+                return now - candidate.second.started >= validation_timeout;
+            });
+    }
     if (impl_->tls->is_handshake_complete() &&
         !impl_->tls->received_transport_params().disable_active_migration &&
         sender != impl_->peer)
@@ -3327,6 +3355,8 @@ auto quic_connection::process_crypto_frame(const crypto_frame& frame) -> task<vo
             impl_->connection_state = connection_state::closing;
             co_return;
         }
+        if (impl_->receiving_level == encryption_level::application)
+            impl_->post_handshake_data_pending = true;
         next_offset += contiguous->second.size();
         fragments.erase(contiguous);
     }

@@ -202,6 +202,13 @@ TEST(response_shared_body_reuses_immutable_storage)
     resp.set_body(std::string_view{"replacement"});
     ASSERT_FALSE(resp.shared_body());
     ASSERT_EQ(resp.body(), std::string_view{"replacement"});
+
+    resp.reset();
+    resp.set_header("Content-Length", "11");
+    resp.set_shared_body_preserve_headers(
+        std::make_shared<const std::string>("cached-file"));
+    ASSERT_EQ(resp.get_header("Content-Length"), std::string_view{"11"});
+    ASSERT_EQ(resp.body(), std::string_view{"cached-file"});
 }
 
 TEST(response_body_source_is_exclusive_and_sets_length)

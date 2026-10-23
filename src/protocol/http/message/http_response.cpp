@@ -208,6 +208,15 @@ auto response::set_shared_body(std::shared_ptr<const std::string> body)
     return *this;
 }
 
+auto response::set_shared_body_preserve_headers(
+    std::shared_ptr<const std::string> body) -> response&
+{
+    body_.clear();
+    body_source_.reset();
+    shared_body_ = std::move(body);
+    return *this;
+}
+
 auto response::set_body_preserve_headers(std::string body) -> response&
 {
     shared_body_.reset();

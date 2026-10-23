@@ -265,6 +265,18 @@ namespace detail {
         }
 
         auto& resp = ctx.resp();
+        if (!is_range && resource.content && resp.version() == http_version::http_2 &&
+            resource.h2_headers)
+        {
+            // The immutable HPACK block already contains status, length,
+            // content type, range support, encoding and Vary. Building the
+            // dynamic header map first only to discard it in the H2 encoder
+            // adds several string/map allocations to every cache hit.
+            resp.set_status(status::ok);
+            resp.set_shared_body_preserve_headers(resource.content);
+            resp.set_preencoded_h2_headers(resource.h2_headers);
+            co_return;
+        }
         if (is_range)
         {
             resp.set_status(status::partial_content);

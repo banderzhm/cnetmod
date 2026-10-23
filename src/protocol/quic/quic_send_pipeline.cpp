@@ -825,7 +825,8 @@ void quic_stream_scheduler::set_priority(std::uint64_t stream,
 
 void quic_stream_scheduler::retire_stream(std::uint64_t stream) noexcept
 {
-    impl_->priorities.erase(stream);
+    if (!impl_->priorities.empty())
+        impl_->priorities.erase(stream);
 }
 
 void quic_stream_scheduler::discard_early_data() noexcept
