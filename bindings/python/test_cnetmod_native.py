@@ -11,7 +11,7 @@ module = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(module)
 
-assert module.version() == "2.2.1"
+assert module.version() == "2.2.2"
 try:
     module.request("INVALID", "https://example.com/")
 except ValueError:
