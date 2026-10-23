@@ -50,8 +50,15 @@ jobs:
           submodules: recursive
           ref: ${{ env.RELEASE_TAG }}
 
-      - name: Install CMake 4.2.3
-        run: choco install cmake --version=4.2.3 -y --force
+      - name: Install CMake 4.4.3
+        shell: pwsh
+        run: |
+          Invoke-WebRequest `
+            https://github.com/Kitware/CMake/releases/download/v4.4.3/cmake-4.4.3-windows-x86_64.zip `
+            -OutFile cmake.zip
+          Expand-Archive cmake.zip -DestinationPath "$env:RUNNER_TEMP/cmake"
+          "$env:RUNNER_TEMP/cmake/cmake-4.4.3-windows-x86_64/bin" |
+            Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v3
