@@ -351,6 +351,34 @@ auto set_body_source(std::shared_ptr<response_body_source> source)
 `set_body_source()` 互斥，后调用者替换前一种响应体。提供
 `content_length` 时框架自动生成 `Content-Length`，并在发送结束时核对实际字节数。
 
+#### `response::generate_body` / `response::transform_body`
+
+**签名**:
+```cpp
+template <typename Generator>
+auto generate_body(Generator&& generator)
+    -> std::expected<void, std::error_code>;
+
+template <typename Transformer>
+auto transform_body(Transformer&& transformer)
+    -> std::expected<bool, std::error_code>;
+```
+
+`generate_body()` 让 JSON/DTO 序列化器直接写入 response 持有的可复用字符串，避免先生成
+临时字符串再复制到响应体。generator 接收 `std::string&`，失败时框架清空不完整正文并
+恢复正确的 `Content-Length`。
+
+`transform_body()` 用于压缩、编码等“读取当前正文并生成替代正文”的场景。transformer
+接收 `std::string_view input, std::string& output`，返回 `true` 才提交 output；返回
+`false` 保留原正文，错误则原样返回。response 会在持久连接上分别保留原文和变换结果的
+缓冲容量。业务 handler 通常只需 `generate_body()`；压缩中间件已经自动使用
+`transform_body()`，不要在 handler 中重复压缩。
+
+内容可重复的动态响应还可同时设置 `compress_options::cache_capacity` 与
+`compress_options::cache_key`。缓存默认关闭；键必须包含所有会改变响应体的请求维度，
+不得只按路由缓存个性化响应。中间件命中后仍核对完整未压缩正文，数据变化会重新压缩，
+并以共享不可变正文发送缓存结果。
+
 #### `response::set_shared_body`
 **签名**:
 ```cpp

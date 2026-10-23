@@ -8385,6 +8385,34 @@ auto set_body_source(std::shared_ptr<response_body_source> source)
 `set_body_source()` 互斥，后调用者替换前一种响应体。提供
 `content_length` 时框架自动生成 `Content-Length`，并在发送结束时核对实际字节数。
 
+#### `response::generate_body` / `response::transform_body`
+
+**签名**:
+```cpp
+template <typename Generator>
+auto generate_body(Generator&& generator)
+    -> std::expected<void, std::error_code>;
+
+template <typename Transformer>
+auto transform_body(Transformer&& transformer)
+    -> std::expected<bool, std::error_code>;
+```
+
+`generate_body()` 让 JSON/DTO 序列化器直接写入 response 持有的可复用字符串，避免先生成
+临时字符串再复制到响应体。generator 接收 `std::string&`，失败时框架清空不完整正文并
+恢复正确的 `Content-Length`。
+
+`transform_body()` 用于压缩、编码等“读取当前正文并生成替代正文”的场景。transformer
+接收 `std::string_view input, std::string& output`，返回 `true` 才提交 output；返回
+`false` 保留原正文，错误则原样返回。response 会在持久连接上分别保留原文和变换结果的
+缓冲容量。业务 handler 通常只需 `generate_body()`；压缩中间件已经自动使用
+`transform_body()`，不要在 handler 中重复压缩。
+
+内容可重复的动态响应还可同时设置 `compress_options::cache_capacity` 与
+`compress_options::cache_key`。缓存默认关闭；键必须包含所有会改变响应体的请求维度，
+不得只按路由缓存个性化响应。中间件命中后仍核对完整未压缩正文，数据变化会重新压缩，
+并以共享不可变正文发送缓存结果。
+
 #### `response::set_shared_body`
 **签名**:
 ```cpp
@@ -10451,14 +10479,14 @@ executor.event_loop(), ...)`。`event_loop()` 必须在 request handler 所在�
 
 # 项目架构
 
-> cnetmod v2.1.0 — 基于 C++23 Modules 的跨平台异步网络库。
+> cnetmod v2.2.0 — 基于 C++23 Modules 的跨平台异步网络库。
 
 ## 项目概述
 
 | 属性 | 值 |
 |------|------|
 | 名称 | cnetmod |
-| 版本 | 2.1.0（唯一来源为根目录 `VERSION`） |
+| 版本 | 2.2.0（唯一来源为根目录 `VERSION`） |
 | 语言标准 | C++23（`CMAKE_CXX_STANDARD 23`） |
 | 构建系统 | CMake 3.28+，`CMAKE_CXX_SCAN_FOR_MODULES ON` |
 | 库类型 | 分层静态组件；`cnetmod::core` / `cnetmod::all` 是兼容聚合入口 |
@@ -10960,8 +10988,10 @@ bool skip(std::size_t n) noexcept;
 |---|---|---|
 | `develop` | 小平台功能完备性集成 | Linux 上的 `core`、`backend`、`complete` 三个配置 |
 | `release/2.1` | 2.1 版本线稳定与补丁 | Windows、Linux、macOS 全量构建与测试 |
+| `release/2.2` | 2.2 版本线稳定与补丁 | Windows、Linux、macOS 全量构建与测试 |
 | `main` | 随时可发布的稳定主线 | 受保护合并，禁止直接推送 |
 | `v2.1.0` | 不可变正式发布身份 | 版本契约、三平台 SDK、干净消费项目、校验和、SBOM、构建证明 |
+| `v2.2.0` | 当前不可变正式发布身份 | 版本契约、三平台 SDK、干净消费项目、校验和、SBOM、构建证明 |
 
 分支保护的具体策略维护在 `.github/BRANCHING.md`。版本标签必须从对应的
 `release/<major>.<minor>` 合并到 `main` 后创建。
@@ -10990,7 +11020,7 @@ share/cnetmod/licenses/LICENSE
 
 ```powershell
 cmake `
-  -DCNETMOD_VERSION=2.1.0 `
+  -DCNETMOD_VERSION=2.2.0 `
   -DCNETMOD_TARGET=windows-x86_64-msvc-v145-md-release `
   -DCNETMOD_PREFIX="$PWD/3rdparty/cnetmod" `
   -P cmake/cnetmod-fetch.cmake
@@ -11003,7 +11033,7 @@ cmake `
 ## CMake 消费
 
 ```cmake
-find_package(cnetmod 2.1 CONFIG REQUIRED COMPONENTS
+find_package(cnetmod 2.2 CONFIG REQUIRED COMPONENTS
     core application http mysql redis orm openai)
 
 target_link_libraries(my_backend PRIVATE
