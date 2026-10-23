@@ -133,9 +133,9 @@ jobs:
           chmod +x llvm.sh
           sudo ./llvm.sh 23 all
           sudo apt-get install -y libc++-23-dev libc++abi-23-dev
-          wget -q https://github.com/Kitware/CMake/releases/download/v4.2.3/cmake-4.2.3-linux-x86_64.sh
-          chmod +x cmake-4.2.3-linux-x86_64.sh
-          sudo ./cmake-4.2.3-linux-x86_64.sh --skip-license --prefix=/usr/local
+          wget -q https://github.com/Kitware/CMake/releases/download/v4.4.3/cmake-4.4.3-linux-x86_64.sh
+          chmod +x cmake-4.4.3-linux-x86_64.sh
+          sudo ./cmake-4.4.3-linux-x86_64.sh --skip-license --prefix=/usr/local
 
       - name: Configure SDK
         shell: bash
