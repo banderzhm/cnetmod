@@ -2680,12 +2680,16 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
             co_return std::unexpected(post_handshake.error());
     }
     const auto now = received_at;
-    const auto validation_timeout = impl_->path_validation_timeout(application_path);
-    std::erase_if(impl_->pending_path_validations,
-        [now, validation_timeout](const auto& candidate)
-        {
-            return now - candidate.second.started >= validation_timeout;
-        });
+    if (!impl_->pending_path_validations.empty())
+    {
+        const auto validation_timeout =
+            impl_->path_validation_timeout(application_path);
+        std::erase_if(impl_->pending_path_validations,
+            [now, validation_timeout](const auto& candidate)
+            {
+                return now - candidate.second.started >= validation_timeout;
+            });
+    }
     if (impl_->tls->is_handshake_complete() &&
         !impl_->tls->received_transport_params().disable_active_migration &&
         sender != impl_->peer)
