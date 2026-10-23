@@ -140,6 +140,13 @@ public:
     [[nodiscard]] auto process_datagram(std::span<const std::byte> datagram,
         const endpoint& sender) -> task<std::expected<void, std::error_code>>;
 
+    /// Internal listener receive-batch scope; applications must not call this
+    /// pair. The first call marks this connection so synchronous request
+    /// handlers queue responses without entering UDP I/O;
+    /// finish_receive_batch() restores normal flushing and sends the batch.
+    [[nodiscard]] auto begin_receive_batch() noexcept -> bool;
+    auto finish_receive_batch() -> task<void>;
+
     /// Advance PTO, idle and draining timers for a connection driven by a
     /// shared listener socket. Dedicated-socket connections do this in run().
     [[nodiscard]] auto async_poll_timers() -> task<void>;

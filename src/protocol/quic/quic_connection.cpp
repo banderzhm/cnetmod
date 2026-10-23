@@ -876,6 +876,7 @@ struct quic_connection::quic_connection_impl
     // bit and must never be a plain bool.
     async_mutex flush_mutex;
     std::atomic<bool> send_flush_requested{};
+    bool receive_batch_active{};
     auto can_start_requested_flush() -> bool
     {
         if (!send_flush_requested.load(std::memory_order_acquire) ||
@@ -1747,6 +1748,18 @@ auto quic_connection::process_datagram(std::span<const std::byte> datagram,
         !impl_->unreliable_send_frames.empty() || impl_->path_with_pending_ack())
         impl_->send_flush_requested.store(true, std::memory_order_release);
     co_return {};
+}
+
+auto quic_connection::begin_receive_batch() noexcept -> bool
+{
+    return !std::exchange(impl_->receive_batch_active, true);
+}
+
+auto quic_connection::finish_receive_batch() -> task<void>
+{
+    if (!std::exchange(impl_->receive_batch_active, false))
+        co_return;
+    co_await flush_after_direct_write();
 }
 
 auto quic_connection::async_poll_timers() -> task<void>
@@ -5592,6 +5605,8 @@ auto quic_connection::try_queue_send(stream_id sid,
 
 auto quic_connection::flush_after_direct_write() -> task<void>
 {
+    if (impl_->receive_batch_active)
+        co_return;
     // A coroutine that already owns the packet writer rechecks the request
     // bit before it releases ownership, so a loser needs no coroutine frame.
     if (impl_->can_start_requested_flush())

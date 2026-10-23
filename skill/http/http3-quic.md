@@ -83,6 +83,12 @@ Linux io_uring listener 会请求 UDP_GRO，并通过 `recvmmsg` 的 ancillary d
 接收。这里的合并只改变内核到用户态的交付次数，不改变 QUIC 包边界、认证、拥塞控制
 或恢复语义。业务 handler 不需要感知这一优化。
 
+listener 会先处理完一次有界接收批次，再按本批命中的连接统一产包和刷出。同步 handler
+产生的多个短响应因此可以进入同一个 QUIC 包，而不是每处理一个 UDP 数据报就立即进入
+一次发送系统调用。批次状态只属于连接所在的事件循环，不跨线程共享；异步 handler、
+拥塞控制、ACK/loss recovery 和流级取消语义保持不变。这是服务端内部调度能力，应用层
+不应直接调用 `quic_connection` 的 receive-batch 协调接口。
+
 QUIC 新连接默认使用 CUBIC 拥塞控制。真实网络仍按 RTT 和拥塞窗口 pacing；loopback
 没有物理瓶颈队列，因此只保留拥塞窗口限制，省去本机进程间通信的短定时器唤醒。
 

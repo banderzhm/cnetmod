@@ -1645,8 +1645,12 @@ private:
             co_await post_awaitable{context_};
     }
 
+    using receive_batch_connections =
+        std::vector<std::shared_ptr<quic::quic_connection>>;
+
     [[nodiscard]] auto process_incoming_datagram(std::span<const std::byte> buffer,
-        const endpoint& sender) -> task<void>
+        const endpoint& sender,
+        receive_batch_connections* batch_connections = nullptr) -> task<void>
     {
         if (!running_)
             co_return;
@@ -1773,26 +1777,33 @@ private:
         }
         if (!connection)
             co_return;
-        auto processed = co_await connection->process_datagram(buffer, sender);
+        auto* active_connection = std::addressof(connection);
+        if (batch_connections && connection->begin_receive_batch())
+        {
+            batch_connections->push_back(std::move(connection));
+            active_connection = std::addressof(batch_connections->back());
+        }
+        auto processed = co_await (*active_connection)->process_datagram(buffer, sender);
         if (!running_)
             co_return;
         if (!processed)
         {
 
-            refresh_connection_routes(connection);
+            refresh_connection_routes(*active_connection);
             co_return;
         }
-        ensure_http3_session(connection);
-        refresh_connection_routes(connection);
+        ensure_http3_session(*active_connection);
+        refresh_connection_routes(*active_connection);
     }
 
-    [[nodiscard]] auto process_incoming(udp_received_datagram incoming) -> task<void>
+    [[nodiscard]] auto process_incoming(udp_received_datagram incoming,
+        receive_batch_connections* batch_connections = nullptr) -> task<void>
     {
         const auto bytes = std::span<const std::byte>{incoming.bytes};
         const auto segment_size = incoming.segment_size;
         if (segment_size == 0U || segment_size >= bytes.size())
         {
-            co_await process_incoming_datagram(bytes, incoming.peer);
+            co_await process_incoming_datagram(bytes, incoming.peer, batch_connections);
             co_return;
         }
 
@@ -1803,7 +1814,7 @@ private:
         {
             co_await process_incoming_datagram(
                 bytes.subspan(offset, std::min(segment_size, bytes.size() - offset)),
-                incoming.peer);
+                incoming.peer, batch_connections);
         }
     }
 
@@ -2028,6 +2039,7 @@ private:
     [[nodiscard]] auto run_loop(std::shared_ptr<connection_timer_state> timers) -> task<void>
     {
         loop_completion_guard completion{timers->loop_completion};
+        receive_batch_connections batch_connections;
         while (timers->active.load(std::memory_order_acquire))
         {
             discard_expired_reset_routes();
@@ -2044,7 +2056,7 @@ private:
                                                           : std::size_t{8U};
 #else
             constexpr bool cooperative_receive_fallback = false;
-            constexpr auto receive_batch_size = std::size_t{8U};
+            constexpr auto receive_batch_size = std::size_t{16U};
 #endif
             auto received = co_await async_recvfrom_batch(context_,
                 socket_.native_socket(), receive_batch_size,
@@ -2060,6 +2072,8 @@ private:
                 continue;
             }
 
+            if (batch_connections.capacity() < received->size())
+                batch_connections.reserve(received->size());
             std::size_t logical_datagrams{};
             for (std::size_t index{}; index < received->size(); ++index)
             {
@@ -2068,10 +2082,14 @@ private:
                     ? 1U
                     : 1U + (incoming.bytes.size() - 1U) / incoming.segment_size;
                 record_receive_buffer(incoming);
-                co_await process_incoming(std::move(incoming));
+                co_await process_incoming(std::move(incoming), &batch_connections);
                 if (cooperative_receive_fallback && index + 1U < received->size())
                     co_await post_awaitable{context_};
             }
+
+            for (auto& connection : batch_connections)
+                co_await connection->finish_receive_batch();
+            batch_connections.clear();
 
             // A readiness backend can keep completing full receive batches
             // synchronously while the UDP socket remains readable. Yield only
