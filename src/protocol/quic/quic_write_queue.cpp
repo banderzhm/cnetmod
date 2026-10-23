@@ -11,14 +11,25 @@ namespace cnetmod::quic {
 
 void quic_write_completion::spin_lock::lock() noexcept
 {
-    while (flag_.test_and_set(std::memory_order_acquire))
-        flag_.wait(true, std::memory_order_relaxed);
+    std::uint32_t expected = 0U;
+    if (state_.compare_exchange_strong(expected, 1U, std::memory_order_acquire,
+            std::memory_order_relaxed))
+        return;
+    // Advertise a sleeper before waiting; the exchange is a full barrier, so
+    // an unlock that observes 1 cannot race past a contender about to sleep.
+    if (expected != 2U)
+        expected = state_.exchange(2U, std::memory_order_acquire);
+    while (expected != 0U)
+    {
+        state_.wait(2U, std::memory_order_relaxed);
+        expected = state_.exchange(2U, std::memory_order_acquire);
+    }
 }
 
 void quic_write_completion::spin_lock::unlock() noexcept
 {
-    flag_.clear(std::memory_order_release);
-    flag_.notify_one();
+    if (state_.exchange(0U, std::memory_order_release) == 2U)
+        state_.notify_one();
 }
 
 auto quic_write_completion::receiver::await_ready() noexcept -> bool

@@ -260,6 +260,17 @@ void session::queue_response(std::uint32_t stream_id, server_response response, 
 {
     if (!detached && !streams_.contains(stream_id))
         return;
+    // Dynamic responses normally arrive as an owning string. Promote a large
+    // one to a stable owner without copying its allocation so the DATA frames
+    // can use the same gather path as cached static bodies. The owner remains
+    // attached to a pending response or to the in-flight borrowed segments.
+    if (gather_writer_ && !response.shared_body && response.body.empty() &&
+        response.body_text.size() >= borrowed_frame_threshold)
+    {
+        response.shared_body =
+            std::make_shared<const std::string>(std::move(response.body_text));
+        response.body_text.clear();
+    }
     const auto body = response.shared_body
         ? std::as_bytes(std::span{*response.shared_body})
         : response.body_text.empty()

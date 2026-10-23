@@ -366,6 +366,10 @@ export struct udp_received_datagram
 {
     udp_datagram_buffer bytes;
     endpoint peer;
+    /// Linux UDP_GRO reports one receive buffer containing adjacent, equally
+    /// sized datagrams. Zero means ordinary one-buffer/one-datagram delivery;
+    /// otherwise each segment has this size except for a possible short tail.
+    std::size_t segment_size{};
 };
 
 export struct udp_send_datagram

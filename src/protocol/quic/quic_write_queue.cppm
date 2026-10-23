@@ -37,7 +37,9 @@ private:
         auto unlock() noexcept -> void;
 
     private:
-        std::atomic_flag flag_{};
+        // 0 = free, 1 = held, 2 = held with a sleeping contender. Unlock
+        // only enters the platform wait table when a contender slept.
+        std::atomic<std::uint32_t> state_{};
     };
 
     spin_lock lock_;

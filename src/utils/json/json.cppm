@@ -36,6 +36,115 @@ struct parse_options
 [[nodiscard]] auto write_document(const document& value, bool prettify = false)
     -> std::expected<std::string, std::error_code>;
 
+namespace detail {
+    /// Append-only output for the direct writer: bytes are written through a
+    /// raw pointer into reserved string storage, so each byte costs no size
+    /// check or out-of-line call; capacity grows geometrically.
+    class json_writer
+    {
+    public:
+        // Member functions defined in a named module's class are not
+        // implicitly inline, so the per-byte primitives say so explicitly;
+        // otherwise every put/append is an out-of-line call.
+        inline explicit json_writer(std::size_t initial = 256U)
+        {
+            resize_uninitialized(initial);
+        }
+
+        inline explicit json_writer(std::string& output,
+            std::size_t initial = 256U)
+            : output_(&output)
+        {
+            output.clear();
+            resize_uninitialized(std::max(initial, output.capacity()));
+        }
+
+        [[nodiscard]] inline auto size() const noexcept -> std::size_t { return size_; }
+
+        inline void reserve(std::size_t extra)
+        {
+            if (size_ + extra <= capacity_) [[likely]]
+                return;
+            grow(extra);
+        }
+
+        inline void put(char value)
+        {
+            reserve(1U);
+            data_[size_++] = value;
+        }
+
+        inline void put_unchecked(char value) noexcept { data_[size_++] = value; }
+
+        inline void append(const char* value, std::size_t count)
+        {
+            reserve(count);
+            std::memcpy(data_ + size_, value, count);
+            size_ += count;
+        }
+
+        inline void append(std::string_view value) { append(value.data(), value.size()); }
+
+        inline void append_unchecked(const char* value, std::size_t count) noexcept
+        {
+            std::memcpy(data_ + size_, value, count);
+            size_ += count;
+        }
+
+        /// Write position for formatting in place after reserve(); advance()
+        /// commits the bytes written there.
+        [[nodiscard]] inline auto cursor() noexcept -> char* { return data_ + size_; }
+        inline void advance(std::size_t count) noexcept { size_ += count; }
+
+        [[nodiscard]] inline auto take() && -> std::string
+        {
+            finish();
+            return std::move(owned_);
+        }
+
+        inline void finish()
+        {
+            output_->resize(size_);
+        }
+
+    private:
+        // Growth is rare; keep it out of the inlined fast paths.
+        void grow(std::size_t extra)
+        {
+            resize_uninitialized(std::max(capacity_ * 2U, size_ + extra));
+        }
+
+        // Only bytes below size_ are ever read, so the spare capacity need
+        // not be zero-filled first.
+        void resize_uninitialized(std::size_t capacity)
+        {
+            output_->resize_and_overwrite(capacity,
+                [](char*, std::size_t count) noexcept { return count; });
+            data_ = output_->data();
+            capacity_ = output_->size();
+        }
+
+        std::string owned_;
+        std::string* output_ = &owned_;
+        char* data_{};
+        std::size_t size_{};
+        std::size_t capacity_{};
+    };
+
+    // Direct serialization primitives. Their output is byte-identical to the
+    // document backend's compact dump: object keys in std::map order, quote,
+    // backslash, the short escapes for b f n r t and u00xx for the other controls, UTF-8
+    // passed through and rejected when malformed.
+    /// Appends `value` as a JSON string; false when it is not valid UTF-8.
+    [[nodiscard]] auto append_string(json_writer& out, std::string_view value) -> bool;
+    [[nodiscard]] auto append_double(json_writer& out, double value)
+        -> std::expected<void, std::error_code>;
+    [[nodiscard]] auto append_document(json_writer& out, const document& value)
+        -> std::expected<void, std::error_code>;
+    /// Copies already-valid JSON text, dropping whitespace outside strings.
+    void append_raw_json(json_writer& out, std::string_view text);
+} // namespace detail
+
 /**
  * @brief Backend-neutral JSON value tree.
  *
@@ -692,6 +801,20 @@ private:
     bool discarded_ = false;
 };
 
+/**
+ * @brief Non-owning view of JSON text that is already known to be valid.
+ *
+ * Use it to embed a value produced by a trusted encoder (for example a
+ * PostgreSQL json/jsonb column) without building a document. The writer
+ * copies the text once, dropping insignificant whitespace, so output stays
+ * compact. The caller guarantees validity; the text is not checked when
+ * written directly. It is parsed when converted to a document.
+ */
+struct raw_json
+{
+    std::string_view text;
+};
+
 using value = document;
 using raw_value = document;
 using array_type = document::array_type;
@@ -930,6 +1053,8 @@ namespace detail {
         using value_type = std::remove_cvref_t<T>;
         if constexpr (std::same_as<value_type, document>)
             return value;
+        else if constexpr (std::same_as<value_type, raw_json>)
+            return parse_document(value.text);
         else if constexpr (is_optional_v<value_type>)
             return value ? encode_value(*value, emit_nulls)
                          : std::expected<document, std::error_code>{document(nullptr)};
@@ -1143,6 +1268,306 @@ template <typename T>
     return detail::decode_value<T>(source, true, true);
 }
 
+namespace detail {
+    template <typename T> struct is_std_map : std::false_type
+    {
+    };
+
+    // std::map<std::string, V> with the standard ordering: iterated in the
+    // same key order as the backend's own object storage.
+    template <typename V, typename A>
+    struct is_std_map<std::map<std::string, V, std::less<>, A>> : std::true_type
+    {
+    };
+
+    template <typename V, typename A>
+    struct is_std_map<std::map<std::string, V, std::less<std::string>, A>> : std::true_type
+    {
+    };
+
+    template <typename T>
+    [[nodiscard]] auto write_value(json_writer& out, const T& value, bool emit_nulls)
+        -> std::expected<void, std::error_code>;
+
+    template <std::integral T>
+    void append_integer(json_writer& out, T value)
+    {
+        // Format straight into reserved output; 20 digits plus a sign.
+        constexpr std::size_t widest = 21U;
+        out.reserve(widest);
+        auto* const first = out.cursor();
+        const auto [end, error] = std::to_chars(first, first + widest, value);
+        out.advance(static_cast<std::size_t>(end - first));
+    }
+
+    /// The order sorted_field_order() describes, computed at compile time:
+    /// position P holds the field index to emit there, or the field count for
+    /// a position dropped because a later field repeats its name.
+    template <typename T>
+    [[nodiscard]] consteval auto compile_time_field_order()
+    {
+        constexpr auto fields = document_traits<T>::fields();
+        constexpr std::size_t count = std::tuple_size_v<std::remove_cvref_t<decltype(fields)>>;
+        std::array<std::string_view, count> names{};
+        [&]<std::size_t... I>(std::index_sequence<I...>)
+        {
+            ((names[I] = std::get<I>(fields).name), ...);
+        }(std::make_index_sequence<count>{});
+        std::array<std::size_t, count> indices{};
+        for (std::size_t index = 0; index < count; ++index)
+            indices[index] = index;
+        // Stable insertion sort: equal names keep declaration order.
+        for (std::size_t position = 1; position < count; ++position)
+            for (std::size_t at = position; at > 0 && names[indices[at]] < names[indices[at - 1U]]; --at)
+                std::swap(indices[at], indices[at - 1U]);
+        std::array<std::size_t, count> order{};
+        for (std::size_t position = 0; position < count; ++position)
+            order[position] = position + 1U < count &&
+                    names[indices[position + 1U]] == names[indices[position]]
+                ? count
+                : indices[position];
+        return order;
+    }
+
+    /// Field indices of T in the order their names sort, which is the order
+    /// the document backend's std::map emits them. A repeated name keeps only
+    /// its last field, as assignment into that map would.
+    template <typename T>
+    [[nodiscard]] auto sorted_field_order() -> const auto&
+    {
+        static constexpr std::size_t count = std::tuple_size_v<
+            std::remove_cvref_t<decltype(document_traits<T>::fields())>>;
+        static const auto order = []
+        {
+            const auto fields = document_traits<T>::fields();
+            std::array<std::string_view, count> names{};
+            [&]<std::size_t... I>(std::index_sequence<I...>)
+            {
+                ((names[I] = std::get<I>(fields).name), ...);
+            }(std::make_index_sequence<count>{});
+            std::array<std::size_t, count> indices{};
+            for (std::size_t index = 0; index < count; ++index)
+                indices[index] = index;
+            std::ranges::stable_sort(indices, [&](std::size_t lhs, std::size_t rhs)
+                { return names[lhs] < names[rhs]; });
+            std::vector<std::size_t> unique;
+            for (std::size_t position = 0; position < count; ++position)
+            {
+                const auto index = indices[position];
+                // Equal names are adjacent after the stable sort; the last
+                // declared field among them wins.
+                if (position + 1U < count && names[indices[position + 1U]] == names[index])
+                    continue;
+                unique.push_back(index);
+            }
+            return unique;
+        }();
+        return order;
+    }
+
+    template <typename T>
+    [[nodiscard]] auto write_object(json_writer& out, const T& value, bool emit_nulls)
+        -> std::expected<void, std::error_code>
+    {
+        using fields_type = std::remove_cvref_t<decltype(document_traits<T>::fields())>;
+        static constexpr std::size_t count = std::tuple_size_v<fields_type>;
+        static const fields_type fields = document_traits<T>::fields();
+        // Each member's `"name":` prefix, escaped once per type. An empty
+        // entry means the name itself is not valid UTF-8.
+        static const auto keys = []<std::size_t... I>(std::index_sequence<I...>)
+        {
+            std::array<std::string, count> result;
+            ([&]
+                {
+                    json_writer encoded{std::get<I>(fields).name.size() + 3U};
+                    if (append_string(encoded, std::get<I>(fields).name))
+                    {
+                        encoded.put(':');
+                        result[I] = std::move(encoded).take();
+                    }
+                }(),
+                ...);
+            return result;
+        }(std::make_index_sequence<count>{});
+        // The emission order is a compile-time constant, so every member is
+        // written by a direct, inlinable call instead of through a table of
+        // function pointers walked at run time.
+        static constexpr auto order = compile_time_field_order<T>();
+        const auto write_member = [&]<std::size_t I>(bool& first)
+            -> std::expected<void, std::error_code>
+        {
+            const auto& member = std::get<I>(fields);
+            const auto& field_value = value.*(member.member);
+            if constexpr (is_optional_v<std::remove_cvref_t<decltype(field_value)>>)
+                if (!field_value && !emit_nulls)
+                    return {};
+            const auto& key = keys[I];
+            if (key.empty())
+                return std::unexpected(make_error_code(errc::serialization_failed));
+            out.reserve(key.size() + 1U);
+            if (!std::exchange(first, false))
+                out.put_unchecked(',');
+            out.append_unchecked(key.data(), key.size());
+            return write_value(out, field_value, emit_nulls);
+        };
+        out.put('{');
+        bool first = true;
+        std::expected<void, std::error_code> result;
+        [&]<std::size_t... P>(std::index_sequence<P...>)
+        {
+            // Stops at the first failure; skipped positions hold `count`.
+            (void)((order[P] == count ||
+                       (result = write_member.template operator()<(order[P] < count ? order[P] : 0U)>(first))) &&
+                ...);
+        }(std::make_index_sequence<count>{});
+        if (!result)
+            return result;
+        out.put('}');
+        return {};
+    }
+
+    template <typename T>
+    [[nodiscard]] auto write_value(json_writer& out, const T& value, bool emit_nulls)
+        -> std::expected<void, std::error_code>
+    {
+        using value_type = std::remove_cvref_t<T>;
+        if constexpr (std::same_as<value_type, document>)
+            return append_document(out, value);
+        else if constexpr (std::same_as<value_type, raw_json>)
+        {
+            append_raw_json(out, value.text);
+            return {};
+        }
+        else if constexpr (is_optional_v<value_type>)
+        {
+            if (!value)
+            {
+                out.append("null");
+                return {};
+            }
+            return write_value(out, *value, emit_nulls);
+        }
+        else if constexpr (std::same_as<value_type, bool>)
+        {
+            out.append(value ? "true" : "false");
+            return {};
+        }
+        else if constexpr (std::integral<value_type>)
+        {
+            // The document backend stores every integer as int64 or uint64.
+            if constexpr (std::is_unsigned_v<value_type>)
+                append_integer(out, static_cast<std::uint64_t>(value));
+            else
+                append_integer(out, static_cast<std::int64_t>(value));
+            return {};
+        }
+        else if constexpr (std::floating_point<value_type>)
+            return append_double(out, static_cast<double>(value));
+        else if constexpr (StringLike<value_type>)
+        {
+            if (!append_string(out, std::string_view{value}))
+                return std::unexpected(make_error_code(errc::serialization_failed));
+            return {};
+        }
+        else if constexpr (std::same_as<value_type, std::filesystem::path>)
+        {
+            if (!append_string(out, value.string()))
+                return std::unexpected(make_error_code(errc::serialization_failed));
+            return {};
+        }
+        else if constexpr (std::is_enum_v<value_type>)
+        {
+            append_integer(out, static_cast<std::underlying_type_t<value_type>>(value));
+            return {};
+        }
+        else if constexpr (BackendDocumentMapped<value_type> ||
+            CustomDocumentMapped<value_type>)
+        {
+            auto encoded = encode_value(value, emit_nulls);
+            if (!encoded)
+                return std::unexpected(encoded.error());
+            return append_document(out, *encoded);
+        }
+        else if constexpr (FieldDocumentMapped<value_type>)
+            return write_object(out, value, emit_nulls);
+        else if constexpr (is_std_map<value_type>::value)
+        {
+            out.put('{');
+            bool first = true;
+            for (const auto& [key, entry] : value)
+            {
+                if (!std::exchange(first, false))
+                    out.put(',');
+                if (!append_string(out, std::string_view{key}))
+                    return std::unexpected(make_error_code(errc::serialization_failed));
+                out.put(':');
+                if (auto written = write_value(out, entry, emit_nulls); !written)
+                    return written;
+            }
+            out.put('}');
+            return {};
+        }
+        else if constexpr (AssociativeObject<value_type>)
+        {
+            // Other maps have no key order matching the backend's; keep its
+            // ordering by going through the document.
+            auto encoded = encode_value(value, emit_nulls);
+            if (!encoded)
+                return std::unexpected(encoded.error());
+            return append_document(out, *encoded);
+        }
+        else if constexpr (Sequence<value_type>)
+        {
+            out.put('[');
+            bool first = true;
+            for (const auto& entry : value)
+            {
+                if (!std::exchange(first, false))
+                    out.put(',');
+                if (auto written = write_value(out, entry, emit_nulls); !written)
+                    return written;
+            }
+            out.put(']');
+            return {};
+        }
+        else
+            return std::unexpected(make_error_code(errc::type_mismatch));
+    }
+
+    template <typename T>
+    [[nodiscard]] auto write_direct(const T& value, bool emit_nulls)
+        -> std::expected<std::string, std::error_code>
+    {
+        // Successive documents of one type are usually of similar size, so
+        // start from the last size this thread produced instead of growing
+        // from a small buffer through several reallocations.
+        thread_local std::size_t last_size = 512U;
+        json_writer out{std::max<std::size_t>(512U, last_size + last_size / 8U)};
+        if (auto written = write_value(out, value, emit_nulls); !written)
+            return std::unexpected(written.error());
+        last_size = out.size();
+        return std::move(out).take();
+    }
+
+    template <typename T>
+    [[nodiscard]] auto write_direct_to(
+        std::string& output, const T& value, bool emit_nulls)
+        -> std::expected<void, std::error_code>
+    {
+        thread_local std::size_t last_size = 512U;
+        json_writer out{
+            output, std::max<std::size_t>(512U, last_size + last_size / 8U)};
+        if (auto written = write_value(out, value, emit_nulls); !written)
+        {
+            output.clear();
+            return std::unexpected(written.error());
+        }
+        last_size = out.size();
+        out.finish();
+        return {};
+    }
+} // namespace detail
+
 struct default_codec
 {
     template <typename T>
@@ -1157,10 +1582,7 @@ struct default_codec
     template <typename T>
     [[nodiscard]] static auto encode(const T& value) -> std::expected<std::string, std::error_code>
     {
-        auto result = detail::encode_value(value, false);
-        if (!result)
-            return std::unexpected(result.error());
-        return write_document(*result);
+        return detail::write_direct(value, false);
     }
 };
 
@@ -1216,10 +1638,7 @@ struct explicit_null_codec
     template <typename T>
     [[nodiscard]] static auto encode(const T& value) -> std::expected<std::string, std::error_code>
     {
-        auto result = detail::encode_value(value, true);
-        if (!result)
-            return std::unexpected(result.error());
-        return write_document(*result);
+        return detail::write_direct(value, true);
     }
 };
 
@@ -1241,6 +1660,19 @@ requires codec_for<Codec, T>
 [[nodiscard]] auto write(const T& value) -> std::expected<std::string, std::error_code>
 {
     return Codec::template encode<T>(value);
+}
+
+/**
+ * @brief Serializes directly into caller-owned storage.
+ *
+ * Existing capacity is reused. This is the preferred path for reusable HTTP
+ * response builders and other connection-local output buffers.
+ */
+template <typename T>
+[[nodiscard]] auto write_to(std::string& output, const T& value)
+    -> std::expected<void, std::error_code>
+{
+    return detail::write_direct_to(output, value, false);
 }
 
 template <typename T>

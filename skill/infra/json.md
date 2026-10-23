@@ -75,6 +75,34 @@ Typed conversion supports nested mapped DTOs, optionals, enums, sequences, and
 string-keyed associative containers. Numeric decoding checks integral sign and
 range instead of silently narrowing.
 
+`write()` and `write_explicit_nulls()` serialize mapped DTOs directly into the
+output string without building a `document`. The output is byte-identical to
+`write_document(to_document(value))`: object keys in name order, the same
+string escapes, integers as written, doubles formatted by the backend, and
+`serialization_failed` for strings that are not valid UTF-8. Unordered maps and
+types with a custom `document_traits::encode` still go through a `document`.
+Do not hand-write JSON strings for speed; this path is the fast one.
+
+For a reusable response or connection buffer, use `write_to(output, value)`.
+It clears the logical contents but retains and reuses `output`'s capacity, and
+returns `expected<void, error_code>`. HTTP handlers can combine it with
+`response::generate_body()` so serialization writes directly into the response
+builder instead of allocating a temporary string:
+
+```cpp
+request.resp()
+    .set_status(cnetmod::http::status::ok)
+    .set_header("Content-Type", "application/json; charset=utf-8");
+auto written = request.resp().generate_body([&](std::string& output) {
+    return cnetmod::json::write_to(output, dto);
+});
+```
+
+`generate_body()` updates `Content-Length`; on serialization failure it drops
+the partial body and sets the length to zero. Prefer this path for repeated
+dynamic JSON responses. `write()` remains appropriate when the serialized value
+must be returned, cached, or passed independently of an HTTP response.
+
 ## ORM models and projections
 
 Do not add `CNETMOD_JSON` to a type already declared with `CNETMOD_MODEL` or
@@ -91,6 +119,28 @@ auto wire = cnetmod::json::write(user_record{42, "Ada"});
 This shared mapping covers ORM scalar fields, `DATE`, `DATETIME`, `TIME`, UUID,
 and nullable `DATETIME`. Database temporal values use their canonical
 timezone-free SQL text representation.
+
+## Embedding trusted JSON text
+
+`cnetmod::json::raw_json` is a non-owning view of JSON text that a trusted
+encoder has already produced, such as a PostgreSQL `json`/`jsonb` column. The
+direct writer copies it once and drops whitespace outside strings, so the output
+stays compact without building a document:
+
+```cpp
+struct item_row
+{
+    std::int64_t id{};
+    cnetmod::json::raw_json tags;
+};
+CNETMOD_JSON(item_row, CNETMOD_JSON_FIELD(id), CNETMOD_JSON_FIELD(tags))
+
+auto wire = cnetmod::json::write(item_row{.id = 7, .tags = {row[6].get_string()}});
+```
+
+The direct writer does not validate the text; never wrap request input or other
+untrusted strings. Conversion to a document (`to_document`) parses the text and
+reports invalid JSON. The view must outlive the write call.
 
 ## Application offload
 

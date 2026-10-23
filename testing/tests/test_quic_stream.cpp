@@ -563,6 +563,57 @@ TEST(quic_stream_receive_multiple_entries_then_partial_fin_and_overlap)
     if (eof) ASSERT_EQ(*eof, 0U);
 }
 
+TEST(quic_stream_in_order_receive_grows_compacts_and_migrates_on_overlap)
+{
+    cnetmod::quic::quic_stream stream{0, cnetmod::quic::quic_role::server, true};
+    stream.set_initial_receive_limit(1U << 20U);
+    stream.init();
+    // Many in-order frames, past the inline storage, read in odd-sized parts.
+    std::vector<std::byte> sent;
+    std::vector<std::byte> read;
+    std::uint64_t offset{};
+    std::array<std::byte, 37> output{};
+    for (int round = 0; round < 200; ++round)
+    {
+        std::vector<std::byte> chunk(static_cast<std::size_t>(23 + round % 97));
+        for (auto& byte : chunk)
+            byte = static_cast<std::byte>((sent.size() + (&byte - chunk.data())) * 7U);
+        ASSERT_TRUE(stream.push_received(offset, chunk, false).has_value());
+        offset += chunk.size();
+        sent.insert(sent.end(), chunk.begin(), chunk.end());
+        if (round % 3 == 0)
+        {
+            const auto got = cnetmod::sync_wait(stream.receive(cnetmod::buffer(output)));
+            ASSERT_TRUE(got.has_value());
+            read.insert(read.end(), output.begin(), output.begin() + static_cast<std::ptrdiff_t>(*got));
+        }
+    }
+    // An exact retransmission of unread bytes is accepted; a changed one is not.
+    const auto unread = read.size();
+    const std::span<const std::byte> again{sent.data() + unread, 10U};
+    ASSERT_TRUE(stream.push_received(unread, again, false).has_value());
+    std::vector<std::byte> changed(again.begin(), again.end());
+    changed[5] ^= std::byte{1};
+    ASSERT_FALSE(stream.push_received(unread, changed, false).has_value());
+    // A frame beyond a gap moves the in-order bytes into reassembly.
+    const std::array tail{std::byte{'y'}, std::byte{'z'}};
+    ASSERT_TRUE(stream.push_received(offset + 3U, tail, true).has_value());
+    const std::array gap{std::byte{'u'}, std::byte{'v'}, std::byte{'w'}};
+    ASSERT_TRUE(stream.push_received(offset, gap, false).has_value());
+    sent.insert(sent.end(), gap.begin(), gap.end());
+    sent.insert(sent.end(), tail.begin(), tail.end());
+    for (;;)
+    {
+        const auto got = cnetmod::sync_wait(stream.receive(cnetmod::buffer(output)));
+        ASSERT_TRUE(got.has_value());
+        if (*got == 0U)
+            break;
+        read.insert(read.end(), output.begin(), output.begin() + static_cast<std::ptrdiff_t>(*got));
+    }
+    ASSERT_TRUE(read == sent);
+    ASSERT_TRUE(stream.state() == cnetmod::quic::stream_state::half_closed_remote);
+}
+
 TEST(quic_stream_receive_gap_zero_output_then_exact_fin_after_local_close)
 {
     cnetmod::quic::quic_stream stream{0, cnetmod::quic::quic_role::server, true};

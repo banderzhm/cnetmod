@@ -78,6 +78,17 @@ auto pmtud = server->set_path_mtu_discovery(
 1200 字节安全基线开始，只有 padded PING 被确认后才提升到探测值。公网部署应按实际
 链路选择保守上限，避免 IP 分片。
 
+Linux io_uring listener 会请求 UDP_GRO，并通过 `recvmmsg` 的 ancillary data 在一个池化接收块
+上零拷贝遍历多个逻辑 QUIC 数据报；旧内核或不支持该选项的网络栈自动回退到普通逐包
+接收。这里的合并只改变内核到用户态的交付次数，不改变 QUIC 包边界、认证、拥塞控制
+或恢复语义。业务 handler 不需要感知这一优化。
+
+listener 会先处理完一次有界接收批次，再按本批命中的连接统一产包和刷出。同步 handler
+产生的多个短响应因此可以进入同一个 QUIC 包，而不是每处理一个 UDP 数据报就立即进入
+一次发送系统调用。批次状态只属于连接所在的事件循环，不跨线程共享；异步 handler、
+拥塞控制、ACK/loss recovery 和流级取消语义保持不变。这是服务端内部调度能力，应用层
+不应直接调用 `quic_connection` 的 receive-batch 协调接口。
+
 QUIC 新连接默认使用 CUBIC 拥塞控制。真实网络仍按 RTT 和拥塞窗口 pacing；loopback
 没有物理瓶颈队列，因此只保留拥塞窗口限制，省去本机进程间通信的短定时器唤醒。
 
@@ -136,10 +147,39 @@ Stream Cancellation 指令，避免保留阻塞 header section。
 
 ### 静态表编码
 
-服务端没有启用 QPACK 动态表（`set_qpack_settings` 保持默认 0）时，字段块只用静态表：
-每个字段一次哈希探测即可得到精确匹配或名称引用；`qpack_encoder::encode_into` 直接写入
-调用方缓冲，不产生临时块。动态表在每次响应都要单独回 Section Acknowledgement，实测
-吞吐反而下降 3.6 倍，因此默认保持关闭。
+QPACK 的两个方向分开配置：
+
+- `set_qpack_settings(capacity, blocked)` 通告本端**解码**表，允许客户端把重复的请求字段
+  （`:authority`、`user-agent` 等）编成一个字节的索引，省去每个请求的 Huffman 字面量解码。
+  解码侧的 Section Acknowledgement / Insert Count Increment 通过
+  `quic_connection::try_queue_send` 提交，不单独发包，而是搭载在随后的响应包上；
+  早期每个 ack 单独 `await async_send` 才导致动态表反而更慢。同一批并发请求的 ack
+  在 accept 循环挂起前合并成一次解码器流写入；只有单个在途请求时仍立即提交。
+- `set_qpack_encoder_table_limit(limit)` 限制本端**编码**响应时使用的动态表（不通告，
+  默认不限制）。设为 0 时无论对端允许多少都只用静态表：每个字段一次哈希探测，
+  `qpack_encoder::encode_into` 直接写入调用方缓冲，没有编码器流流量和每响应的表状态。
+  响应头只有少量短字段时这是更省 CPU 的选择。
+
+HttpArena H3 适配器使用 4 KB 解码表 + 编码表上限 0。
+
+### QPACK 逐字段解码
+
+同步请求适配器应使用 `qpack_decoder::decode_each()`，让解码字段直接进入请求对象，
+避免先构造 `std::vector<header_field>` 再搬运到 method/path/header map：
+
+```cpp
+auto decoded = decoder.decode_each(encoded,
+    h3::qpack_header_sink{
+        .context = &state,
+        .consume = consume_request_header,
+    },
+    stream_id);
+```
+
+`consume` 在 `decode_each()` 返回前同步执行，接收字段所有权；不得保存传入字段的引用。
+消费函数返回错误时解码立即停止，该 section 不生成 acknowledgement。需要跨协程保存字段、
+处理被动态表阻塞后完成的 header block，或作为客户端响应结果拥有字段集合时，继续使用
+`decode()` 的 `std::vector<header_field>` 返回值。热路径不得用 `std::function` 包装消费函数。
 
 ### 共享缓冲响应体
 

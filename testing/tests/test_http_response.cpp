@@ -144,6 +144,116 @@ TEST(response_set_body_string)
     ASSERT_EQ(resp.get_header("Content-Length"), std::string_view("6"));
 }
 
+TEST(response_generate_body_reuses_storage_and_discards_partial_failure)
+{
+    response resp;
+    const char* first_storage{};
+    auto generated = resp.generate_body([&](std::string& output)
+                                            -> std::expected<void, std::error_code>
+        {
+            output.assign(16U * 1024U, 'a');
+            first_storage = output.data();
+            return {};
+        });
+    ASSERT_TRUE(generated.has_value());
+    ASSERT_EQ(resp.body().size(), std::size_t{16U * 1024U});
+    ASSERT_EQ(resp.get_header("Content-Length"), std::string_view("16384"));
+
+    resp.reset();
+    const char* second_storage{};
+    generated = resp.generate_body([&](std::string& output)
+                                       -> std::expected<void, std::error_code>
+        {
+            output.assign(4096U, 'b');
+            second_storage = output.data();
+            return {};
+        });
+    ASSERT_TRUE(generated.has_value());
+    ASSERT_TRUE(second_storage == first_storage);
+    ASSERT_EQ(resp.get_header("Content-Length"), std::string_view("4096"));
+
+    generated = resp.generate_body([](std::string& output)
+                                       -> std::expected<void, std::error_code>
+        {
+            output = "partial";
+            return std::unexpected(
+                std::make_error_code(std::errc::invalid_argument));
+        });
+    ASSERT_FALSE(generated.has_value());
+    ASSERT_TRUE(resp.body().empty());
+    ASSERT_EQ(resp.get_header("Content-Length"), std::string_view("0"));
+}
+
+TEST(response_transform_body_reuses_both_buffers_and_commits_atomically)
+{
+    response resp;
+    const char* source_storage{};
+    auto generated = resp.generate_body([&](std::string& output)
+                                            -> std::expected<void, std::error_code>
+        {
+            output.assign(16U * 1024U, 'a');
+            source_storage = output.data();
+            return {};
+        });
+    ASSERT_TRUE(generated.has_value());
+
+    const char* encoded_storage{};
+    auto transformed = resp.transform_body(
+        [&](std::string_view input, std::string& output)
+            -> std::expected<bool, std::error_code>
+        {
+            ASSERT_EQ(input.size(), std::size_t{16U * 1024U});
+            output.assign(1024U, 'z');
+            encoded_storage = output.data();
+            return true;
+        });
+    ASSERT_TRUE(transformed.has_value() && *transformed);
+    ASSERT_EQ(resp.body().size(), std::size_t{1024U});
+    ASSERT_TRUE(std::ranges::all_of(resp.body(),
+        [](char value)
+        {
+            return value == 'z';
+        }));
+    ASSERT_EQ(resp.get_header("Content-Length"), std::string_view("1024"));
+
+    resp.reset();
+    const char* reused_source{};
+    generated = resp.generate_body([&](std::string& output)
+                                       -> std::expected<void, std::error_code>
+        {
+            output.assign(4096U, 'b');
+            reused_source = output.data();
+            return {};
+        });
+    ASSERT_TRUE(generated.has_value());
+    ASSERT_TRUE(reused_source == source_storage);
+
+    const char* reused_encoded{};
+    transformed = resp.transform_body(
+        [&](std::string_view, std::string& output)
+            -> std::expected<bool, std::error_code>
+        {
+            output.assign(512U, 'y');
+            reused_encoded = output.data();
+            return true;
+        });
+    ASSERT_TRUE(transformed.has_value() && *transformed);
+    ASSERT_TRUE(reused_encoded == encoded_storage);
+
+    resp.reset();
+    resp.set_body(std::string_view{"original"});
+    transformed = resp.transform_body(
+        [](std::string_view, std::string& output)
+            -> std::expected<bool, std::error_code>
+        {
+            output = "larger-output";
+            return false;
+        });
+    ASSERT_TRUE(transformed.has_value() && !*transformed);
+    ASSERT_EQ(resp.body(), std::string_view{"original"});
+    ASSERT_EQ(resp.get_header("Content-Length"), std::string_view{"8"});
+}
+
 TEST(response_shared_body_reuses_immutable_storage)
 {
     response resp;
@@ -162,6 +272,13 @@ TEST(response_shared_body_reuses_immutable_storage)
     resp.set_body(std::string_view{"replacement"});
     ASSERT_FALSE(resp.shared_body());
     ASSERT_EQ(resp.body(), std::string_view{"replacement"});
+
+    resp.reset();
+    resp.set_header("Content-Length", "11");
+    resp.set_shared_body_preserve_headers(
+        std::make_shared<const std::string>("cached-file"));
+    ASSERT_EQ(resp.get_header("Content-Length"), std::string_view{"11"});
+    ASSERT_EQ(resp.body(), std::string_view{"cached-file"});
 }
 
 TEST(response_body_source_is_exclusive_and_sets_length)

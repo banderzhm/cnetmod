@@ -136,6 +136,11 @@ public:
     /// default; a non-zero capacity requires a non-zero blocked-stream limit.
     auto set_qpack_settings(std::uint64_t max_table_capacity,
         std::uint64_t max_blocked_streams) -> std::expected<void, std::error_code>;
+    /// Cap the dynamic table our encoder uses for responses, independently
+    /// of what the peer's decoder allows. Zero keeps responses on the static
+    /// table (no encoder-stream traffic, no per-response table state).
+    auto set_qpack_encoder_table_limit(std::uint64_t capacity)
+        -> std::expected<void, std::error_code>;
     /// Configure cumulative DATA/body bounds before start(). Buffered requests
     /// also cap wire storage at max_bytes plus the allowed header bytes.
     auto set_request_body_limits(request_body_stream_options options)

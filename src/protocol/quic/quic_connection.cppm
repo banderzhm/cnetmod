@@ -74,9 +74,19 @@ private:
         std::uint64_t high{};
     };
 
+    struct final_size_slot
+    {
+        stream_id id{};
+        final_sizes sizes{};
+        bool used{};
+    };
+
     std::array<std::vector<closed_stream_range>, 4> ranges_;
-    std::map<stream_id, final_sizes> recent_;
-    std::deque<stream_id> order_;
+    // Direct-mapped by stream ID: a closed stream overwrites the slot of the
+    // one closed final_size_capacity IDs earlier, with no allocation per
+    // stream. Created on the first retirement.
+    std::unique_ptr<std::array<final_size_slot, final_size_capacity>> recent_;
+    std::size_t recent_count_{};
 };
 
 export class quic_connection
@@ -130,6 +140,13 @@ public:
     [[nodiscard]] auto process_datagram(std::span<const std::byte> datagram,
         const endpoint& sender) -> task<std::expected<void, std::error_code>>;
 
+    /// Internal listener receive-batch scope; applications must not call this
+    /// pair. The first call marks this connection so synchronous request
+    /// handlers queue responses without entering UDP I/O;
+    /// finish_receive_batch() restores normal flushing and sends the batch.
+    [[nodiscard]] auto begin_receive_batch() noexcept -> bool;
+    auto finish_receive_batch() -> task<void>;
+
     /// Advance PTO, idle and draining timers for a connection driven by a
     /// shared listener socket. Dedicated-socket connections do this in run().
     [[nodiscard]] auto async_poll_timers() -> task<void>;
@@ -177,6 +194,28 @@ public:
         std::shared_ptr<const std::string> shared_data,
         bool fin = false)
         -> task<std::expected<void, std::error_code>>;
+
+    /// Commits a stream write without sending a packet now: the bytes ride
+    /// on the next packet this connection builds (typically the response
+    /// produced right after). Intended for control data with no latency
+    /// requirement, such as QPACK decoder acknowledgements. Returns false,
+    /// leaving nothing committed, when the caller must use async_send.
+    [[nodiscard]] auto try_queue_send(stream_id sid,
+        std::span<const std::byte> data) -> bool;
+
+    /// Synchronous form of async_send for a peer-initiated stream: commits
+    /// the write under the state lock when it is free and no earlier write
+    /// is queued, without sending a packet; call flush_pending_writes() once
+    /// a batch of such writes is committed. Returns nullopt, leaving `data`
+    /// and `shared_data` untouched, when the caller must use async_send or
+    /// async_send_shared (also after a flow-control rejection).
+    [[nodiscard]] auto try_send_now(stream_id sid, std::vector<std::byte>& data,
+        const std::shared_ptr<const std::string>& shared_data, bool fin)
+        -> std::optional<std::expected<void, std::error_code>>;
+
+    /// Sends what the committed writes produced unless another coroutine
+    /// already owns the packet writer and will observe them.
+    auto flush_pending_writes() -> task<void>;
 
     /// Update the RFC 9218 scheduling policy for subsequent data on one
     /// stream. Calls are serialized by the connection's I/O domain; urgency
@@ -536,6 +575,18 @@ private:
         std::vector<std::byte>& prefix,
         const std::shared_ptr<const std::string>& shared_data, bool fin)
         -> std::expected<void, std::error_code>;
+    /// Applies a stream write inline when the state lock is free and no
+    /// producer command is queued ahead of it (which keeps per-stream FIFO
+    /// order). Returns nullopt when the caller must use the command queue;
+    /// the payload is then untouched. A flow-control rejection also leaves
+    /// it untouched so the caller can fragment it.
+    [[nodiscard]] auto try_apply_stream_write_now(stream_id sid,
+        std::vector<std::byte>& prefix,
+        const std::shared_ptr<const std::string>& shared_data, bool fin)
+        -> std::optional<std::expected<void, std::error_code>>;
+    /// Becomes the packet owner for writes committed inline, unless another
+    /// coroutine already owns it and will observe the published request.
+    auto flush_after_direct_write() -> task<void>;
     [[nodiscard]] auto apply_application_datagram(std::vector<std::byte> data)
         -> task<std::expected<void, std::error_code>>;
     [[nodiscard]] auto await_local_stream_send_authority(stream_id sid)

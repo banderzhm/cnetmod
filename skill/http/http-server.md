@@ -351,6 +351,47 @@ auto set_body_source(std::shared_ptr<response_body_source> source)
 `set_body_source()` 互斥，后调用者替换前一种响应体。提供
 `content_length` 时框架自动生成 `Content-Length`，并在发送结束时核对实际字节数。
 
+#### `response::generate_body` / `response::transform_body`
+
+**签名**:
+```cpp
+template <typename Generator>
+auto generate_body(Generator&& generator)
+    -> std::expected<void, std::error_code>;
+
+template <typename Transformer>
+auto transform_body(Transformer&& transformer)
+    -> std::expected<bool, std::error_code>;
+```
+
+`generate_body()` 让 JSON/DTO 序列化器直接写入 response 持有的可复用字符串，避免先生成
+临时字符串再复制到响应体。generator 接收 `std::string&`，失败时框架清空不完整正文并
+恢复正确的 `Content-Length`。
+
+`transform_body()` 用于压缩、编码等“读取当前正文并生成替代正文”的场景。transformer
+接收 `std::string_view input, std::string& output`，返回 `true` 才提交 output；返回
+`false` 保留原正文，错误则原样返回。response 会在持久连接上分别保留原文和变换结果的
+缓冲容量。业务 handler 通常只需 `generate_body()`；压缩中间件已经自动使用
+`transform_body()`，不要在 handler 中重复压缩。
+
+内容可重复的动态响应还可同时设置 `compress_options::cache_capacity` 与
+`compress_options::cache_key`。缓存默认关闭；键必须包含所有会改变响应体的请求维度，
+不得只按路由缓存个性化响应。中间件命中后仍核对完整未压缩正文，数据变化会重新压缩，
+并以共享不可变正文发送缓存结果。
+
+#### `response::set_shared_body`
+**签名**:
+```cpp
+auto set_shared_body(std::shared_ptr<const std::string> body) -> response&;
+auto set_shared_body_preserve_headers(
+    std::shared_ptr<const std::string> body) -> response&;
+```
+
+`set_shared_body()` 用于跨请求复用不可变响应体，并自动维护 `Content-Length`。
+`set_shared_body_preserve_headers()` 只替换响应体、不改动已有头，供框架在已经安装完整的
+协议预编码头块时使用；普通业务 handler 不应调用后者，否则容易漏写长度或制造
+`Content-Length`/chunked 冲突。`serve_dir()` 会自行选择正确入口。
+
 **示例**:
 ```cpp
 import std;
@@ -714,6 +755,8 @@ HTTP/1 明文、TLS 和 HTTP/2 由服务器传输层分别编码。不要为了�
 静态文件 handler 中直接调用 `raw_socket()`；那会绕过 TLS 加密与 HTTP/2
 帧编码。默认对不超过 1 MiB 的热点文件保留不可变共享响应体，HTTP/1 与 HTTP/2
 不会按请求重复打开、读取或复制文件；超过上限的文件仍按背压异步分块读取。
+HTTP/2 缓存命中还会复用不依赖动态表的 HPACK 固定响应头块，避免每个请求重复构造
+header map 和编码固定字段；这是静态资源元数据复用，不是缓存动态业务响应。
 缓存每 500 ms 重新核对文件大小和修改时间，因此替换或删除静态资源后无需重启。
 将 `cache_max_file_size` 设为 `0` 可关闭 body 缓存，将
 `revalidate_interval` 设为 `0ms` 可要求每次请求检查磁盘元数据。
@@ -822,6 +865,10 @@ SSE、手工流式输出或 chunked 响应时，框架先刷出此前普通响�
 返回部分写入时才进入完整写循环。这些均为传输层内部优化，应用不要为它们复制一套 handler。
 
 HTTP/2 的普通同步请求同样走内部借用式路由匹配，不复制已注册的 handler；请求上下文中的
+大块动态 `std::string` 响应会把所有权移动到连接写队列，并通过 vectored transport 直接发送
+DATA payload；无需为了零拷贝把每个 JSON 响应包装成 `shared_ptr`。不可变静态资源仍使用
+`set_shared_body()`，便于跨请求共享同一份内容。小响应继续复制进批量输出缓冲，避免为很小的
+payload 增加独立所有者和 gather segment 的管理成本。
 SSE、表单、追踪、取消与 request-scope 扩展状态仅在实际调用对应能力时创建。应用仍只使用
 公开的 `router::match()`、`request_context` 和 `get_sync()` 等接口，不得依赖这些内部视图，
 也不要为了追求吞吐绕过 endpoint metadata 或自行管理请求上下文生命周期。

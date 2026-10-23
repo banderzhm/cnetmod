@@ -1841,14 +1841,29 @@ auto drain_recvfrom_batch_now(socket& sock,
     std::array<::iovec, stack_batch_capacity> iovecs{};
     std::array<::sockaddr_storage, stack_batch_capacity> peers{};
     std::array<::mmsghdr, stack_batch_capacity> messages{};
+    struct alignas(::cmsghdr) control_block
+    {
+        std::array<std::byte, CMSG_SPACE(sizeof(std::uint16_t))> bytes{};
+    };
+    std::array<control_block, stack_batch_capacity> controls{};
+    const bool receive_coalesced = sock.udp_receive_coalescing_enabled();
+    constexpr std::size_t maximum_udp_payload = 65536U;
+    const auto receive_capacity = receive_coalesced
+        ? maximum_udp_payload
+        : max_datagram_size;
     for (std::size_t i = 0; i < count_to_receive; ++i)
     {
-        storage[i].bytes = udp_datagram_buffer{max_datagram_size};
+        storage[i].bytes = udp_datagram_buffer{receive_capacity};
         iovecs[i] = {storage[i].bytes.data(), storage[i].bytes.size()};
         messages[i].msg_hdr.msg_name = &peers[i];
         messages[i].msg_hdr.msg_namelen = sizeof(peers[i]);
         messages[i].msg_hdr.msg_iov = &iovecs[i];
         messages[i].msg_hdr.msg_iovlen = 1;
+        if (receive_coalesced)
+        {
+            messages[i].msg_hdr.msg_control = controls[i].bytes.data();
+            messages[i].msg_hdr.msg_controllen = controls[i].bytes.size();
+        }
     }
     const int count = ::recvmmsg(static_cast<int>(sock.native_handle()),
         messages.data(), static_cast<unsigned int>(count_to_receive),
@@ -1861,9 +1876,33 @@ auto drain_recvfrom_batch_now(socket& sock,
     }
     for (int i = 0; i < count; ++i)
     {
-        auto& packet = storage[static_cast<std::size_t>(i)];
-        packet.bytes.resize(messages[static_cast<std::size_t>(i)].msg_len);
-        packet.peer = endpoint_from_sockaddr(peers[static_cast<std::size_t>(i)]);
+        const auto index = static_cast<std::size_t>(i);
+        auto& message = messages[index];
+        if ((message.msg_hdr.msg_flags & MSG_TRUNC) != 0)
+            return std::unexpected(std::make_error_code(std::errc::message_size));
+        auto& packet = storage[index];
+        packet.bytes.resize(message.msg_len);
+        packet.peer = endpoint_from_sockaddr(peers[index]);
+        if (receive_coalesced)
+        {
+            for (auto* control = CMSG_FIRSTHDR(&message.msg_hdr); control != nullptr;
+                 control = CMSG_NXTHDR(&message.msg_hdr, control))
+            {
+                if (control->cmsg_level != IPPROTO_UDP || control->cmsg_type != UDP_GRO ||
+                    control->cmsg_len < CMSG_LEN(sizeof(std::uint16_t)))
+                    continue;
+                std::uint16_t segment_size{};
+                std::memcpy(&segment_size, CMSG_DATA(control), sizeof(segment_size));
+                if (segment_size != 0U && segment_size <= packet.bytes.size())
+                    packet.segment_size = segment_size;
+                break;
+            }
+        }
+        const auto logical_datagram_size = packet.segment_size == 0U
+            ? packet.bytes.size()
+            : packet.segment_size;
+        if (logical_datagram_size > max_datagram_size)
+            return std::unexpected(std::make_error_code(std::errc::message_size));
         result.push_back(std::move(packet));
     }
     return static_cast<std::size_t>(count);
@@ -1880,6 +1919,22 @@ auto async_recvfrom_batch(io_context& ctx, socket& sock,
 
     std::vector<udp_received_datagram> result;
     result.reserve(max_datagrams);
+
+    if (sock.udp_receive_coalescing_enabled())
+    {
+        for (;;)
+        {
+            auto drained = drain_recvfrom_batch_now(sock, result, max_datagrams,
+                max_datagram_size);
+            if (!drained)
+                co_return std::unexpected(drained.error());
+            if (!result.empty())
+                co_return result;
+            auto readable = co_await async_wait_readable(ctx, sock);
+            if (!readable)
+                co_return std::unexpected(readable.error());
+        }
+    }
 
     // Wait through io_uring for the first packet.  Once it completes the
     // socket is readable, so recvmmsg drains the rest without another event
@@ -1944,6 +1999,21 @@ auto async_recvfrom_batch(io_context& ctx, socket& sock,
 
     std::vector<udp_received_datagram> result;
     result.reserve(max_datagrams);
+    if (sock.udp_receive_coalescing_enabled())
+    {
+        for (;;)
+        {
+            auto drained = drain_recvfrom_batch_now(sock, result, max_datagrams,
+                max_datagram_size);
+            if (!drained)
+                co_return std::unexpected(drained.error());
+            if (!result.empty() || token.is_cancelled())
+                co_return result;
+            auto readable = co_await async_wait_readable(ctx, sock, token);
+            if (!readable)
+                co_return std::unexpected(readable.error());
+        }
+    }
     udp_received_datagram first{udp_datagram_buffer{max_datagram_size}, {}};
     auto received = co_await async_recvfrom(ctx, sock,
         mutable_buffer{first.bytes.data(), first.bytes.size()}, first.peer, token);

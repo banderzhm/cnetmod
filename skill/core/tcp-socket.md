@@ -102,6 +102,7 @@
 | `ipv6_only` | `optional<bool>` | `nullopt` | IPV6_V6ONLY |
 | `recv_buffer_size` | `int` | `0` | 接收缓冲区（0=系统默认） |
 | `send_buffer_size` | `int` | `0` | 发送缓冲区（0=系统默认） |
+| `udp_receive_coalescing` | `bool` | `false` | Linux io_uring 的 UDP_GRO 接收合并；后端或内核不支持时保留普通数据报语义 |
 
 ### `socket`
 **签名**: `export class socket`
@@ -116,6 +117,7 @@
 | `listen` | `auto listen(int backlog = 4096) -> expected<void, error_code>` | 监听；内核仍可按 `somaxconn` 截断队列长度 |
 | `set_non_blocking` | `auto set_non_blocking(bool) -> expected<void, error_code>` | 设置非阻塞 |
 | `apply_options` | `auto apply_options(const socket_options&) -> expected<void, error_code>` | 应用选项 |
+| `udp_receive_coalescing_enabled` | `auto udp_receive_coalescing_enabled() const noexcept -> bool` | 原生 socket 是否实际启用了 UDP_GRO |
 | `local_endpoint` | `auto local_endpoint() const -> expected<endpoint, error_code>` | 本地端点 |
 | `remote_endpoint` | `auto remote_endpoint() const -> expected<endpoint, error_code>` | 远端端点 |
 | `join_multicast_group` | `auto join_multicast_group(const ip_address&, ...) -> expected<void, error_code>` | 加入组播组 |

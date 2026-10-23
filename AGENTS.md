@@ -1307,6 +1307,31 @@ export auto async_sendto(io_context& ctx, socket& sock,
 ```
 均有 `cancel_token` 取消版本。
 
+#### UDP 批量收发与 Linux UDP_GRO
+
+```cpp
+export struct udp_received_datagram {
+    udp_datagram_buffer bytes;
+    endpoint peer;
+    std::size_t segment_size{};
+};
+
+export auto async_recvfrom_batch(io_context& ctx, socket& sock,
+    std::size_t max_datagrams, std::size_t max_datagram_size)
+    -> task<expected<std::vector<udp_received_datagram>, error_code>>;
+```
+
+Linux io_uring 后端使用 `recvmmsg` 排空一次就绪通知后的数据报。普通接收的 `segment_size == 0`；
+当 socket 以 `socket_options{.udp_receive_coalescing = true}` 打开且内核接受 UDP_GRO
+时，一个池化接收块可以包含多个相邻 UDP 数据报，`segment_size` 是各段长度，最后一段
+可以更短。消费方必须按该字段遍历逻辑数据报，不能把整个缓冲区当成一个协议包。
+`max_datagram_size` 仍约束单个逻辑数据报；Linux 后端会为 GRO 物理超包自动使用完整
+UDP 接收块，调用方不应为了 GRO 人为放大协议允许的单包上限。
+
+HTTP/3 listener 已内置这种分段处理，并在 Linux io_uring 上自动请求 UDP_GRO；应用使用
+`http3_server` 时不需要手动拆包。内核不支持 UDP_GRO 时，socket 自动保留原有
+一缓冲区一数据报行为。直接使用批量 UDP API 的协议实现才需要读取 `segment_size`。
+
 ## 场景：创建事件循环
 
 ```cpp
@@ -1938,6 +1963,7 @@ kTLS 主要减少大块发送的用户态记录处理；小 HTTP 响应可能因
 | `ipv6_only` | `optional<bool>` | `nullopt` | IPV6_V6ONLY |
 | `recv_buffer_size` | `int` | `0` | 接收缓冲区（0=系统默认） |
 | `send_buffer_size` | `int` | `0` | 发送缓冲区（0=系统默认） |
+| `udp_receive_coalescing` | `bool` | `false` | Linux io_uring 的 UDP_GRO 接收合并；后端或内核不支持时保留普通数据报语义 |
 
 ### `socket`
 **签名**: `export class socket`
@@ -1952,6 +1978,7 @@ kTLS 主要减少大块发送的用户态记录处理；小 HTTP 响应可能因
 | `listen` | `auto listen(int backlog = 4096) -> expected<void, error_code>` | 监听；内核仍可按 `somaxconn` 截断队列长度 |
 | `set_non_blocking` | `auto set_non_blocking(bool) -> expected<void, error_code>` | 设置非阻塞 |
 | `apply_options` | `auto apply_options(const socket_options&) -> expected<void, error_code>` | 应用选项 |
+| `udp_receive_coalescing_enabled` | `auto udp_receive_coalescing_enabled() const noexcept -> bool` | 原生 socket 是否实际启用了 UDP_GRO |
 | `local_endpoint` | `auto local_endpoint() const -> expected<endpoint, error_code>` | 本地端点 |
 | `remote_endpoint` | `auto remote_endpoint() const -> expected<endpoint, error_code>` | 远端端点 |
 | `join_multicast_group` | `auto join_multicast_group(const ip_address&, ...) -> expected<void, error_code>` | 加入组播组 |
@@ -5335,8 +5362,15 @@ struct connection_options {
     std::chrono::milliseconds connect_timeout{10000};
     std::size_t maximum_connect_attempts = 3;
     std::unordered_map<std::string, std::string> startup_parameters;
+    std::size_t statement_cache_capacity = 256;
 };
 ```
+
+`execute(parameterized_query)` 按 SQL 文本缓存命名预处理语句：首次执行发送
+Parse，确认 ParseComplete 后登记；之后同一 SQL 只发送 Bind/Execute，省去服务端
+每次解析和规划。缓存属于连接会话，断开或重连时清空；服务端报告语句不存在
+（26000）或计划失效（0A000）时剔除该项，下次重新 Parse。缓存满后新 SQL 回退为
+匿名语句，不淘汰已有项。参数是动态拼接 SQL 时应设为 0，避免占满缓存。
 
 ### `client` — 异步连接客户端
 
@@ -7575,20 +7609,35 @@ struct rate_limiter_options {
 srv.use(rate_limiter({.rate = 100.0, .burst = 200.0}));
 ```
 
-### 5. compress — gzip 压缩
+### 5. compress — gzip / Brotli 压缩
 
 **签名**: `auto compress(compress_options opts = {}) -> http::middleware_fn`
 
 ```cpp
 struct compress_options {
     std::size_t min_size = 1024;  // 小于此值不压缩
-    int level = 6;                // 压缩级别 1-9
+    int level = 6;                // gzip 压缩级别 1-9
+    int brotli_quality = -1;      // Brotli 质量 0-11；负数 = 只协商 gzip（默认）
+    int brotli_window = 18;       // Brotli 窗口 log2 字节
+    std::size_t max_concurrency = 4;
+    // dispatch / measurements 见源码
 };
 ```
 
 ```cpp
 srv.use(compress({.min_size = 512, .level = 6}));
+srv.use(compress({.min_size = 512, .brotli_quality = 2}));  // 客户端 br 权重不低于 gzip 时用 br
 ```
+
+开启 Brotli 需要构建时找到 libbrotli（`CNETMOD_HAS_BROTLI`）；未找到时该选项被忽略，仍按 gzip 协商。
+对 4–8 KB 的 JSON，Brotli q2 与 gzip 6 体积相近而 CPU 约为一半；q5 体积再小约 10%，CPU 为 gzip 6 的 1.5 倍。
+
+压缩任务在执行期间只读借用响应正文，dispatcher 返回前必须保证 operation 已结束；不要把
+operation 投递后提前返回。这样框架无需复制未压缩正文，压缩失败、取消或结果更大时仍能原样
+保留响应。gzip 工作区按实际执行线程复用，因此 Application 的 CPU dispatcher 和独立服务器
+的同步执行都不需要业务自行缓存 zlib 状态。Application 应使用
+`runtime.compression(options)`，由组合根显式接入受管 CPU 池；直接调用 `compress(options)`
+表示明确接受在当前事件循环同步压缩。
 
 ### 6. body_limit — 请求体限制
 
@@ -8336,6 +8385,47 @@ auto set_body_source(std::shared_ptr<response_body_source> source)
 `set_body_source()` 互斥，后调用者替换前一种响应体。提供
 `content_length` 时框架自动生成 `Content-Length`，并在发送结束时核对实际字节数。
 
+#### `response::generate_body` / `response::transform_body`
+
+**签名**:
+```cpp
+template <typename Generator>
+auto generate_body(Generator&& generator)
+    -> std::expected<void, std::error_code>;
+
+template <typename Transformer>
+auto transform_body(Transformer&& transformer)
+    -> std::expected<bool, std::error_code>;
+```
+
+`generate_body()` 让 JSON/DTO 序列化器直接写入 response 持有的可复用字符串，避免先生成
+临时字符串再复制到响应体。generator 接收 `std::string&`，失败时框架清空不完整正文并
+恢复正确的 `Content-Length`。
+
+`transform_body()` 用于压缩、编码等“读取当前正文并生成替代正文”的场景。transformer
+接收 `std::string_view input, std::string& output`，返回 `true` 才提交 output；返回
+`false` 保留原正文，错误则原样返回。response 会在持久连接上分别保留原文和变换结果的
+缓冲容量。业务 handler 通常只需 `generate_body()`；压缩中间件已经自动使用
+`transform_body()`，不要在 handler 中重复压缩。
+
+内容可重复的动态响应还可同时设置 `compress_options::cache_capacity` 与
+`compress_options::cache_key`。缓存默认关闭；键必须包含所有会改变响应体的请求维度，
+不得只按路由缓存个性化响应。中间件命中后仍核对完整未压缩正文，数据变化会重新压缩，
+并以共享不可变正文发送缓存结果。
+
+#### `response::set_shared_body`
+**签名**:
+```cpp
+auto set_shared_body(std::shared_ptr<const std::string> body) -> response&;
+auto set_shared_body_preserve_headers(
+    std::shared_ptr<const std::string> body) -> response&;
+```
+
+`set_shared_body()` 用于跨请求复用不可变响应体，并自动维护 `Content-Length`。
+`set_shared_body_preserve_headers()` 只替换响应体、不改动已有头，供框架在已经安装完整的
+协议预编码头块时使用；普通业务 handler 不应调用后者，否则容易漏写长度或制造
+`Content-Length`/chunked 冲突。`serve_dir()` 会自行选择正确入口。
+
 **示例**:
 ```cpp
 import std;
@@ -8699,6 +8789,8 @@ HTTP/1 明文、TLS 和 HTTP/2 由服务器传输层分别编码。不要为了�
 静态文件 handler 中直接调用 `raw_socket()`；那会绕过 TLS 加密与 HTTP/2
 帧编码。默认对不超过 1 MiB 的热点文件保留不可变共享响应体，HTTP/1 与 HTTP/2
 不会按请求重复打开、读取或复制文件；超过上限的文件仍按背压异步分块读取。
+HTTP/2 缓存命中还会复用不依赖动态表的 HPACK 固定响应头块，避免每个请求重复构造
+header map 和编码固定字段；这是静态资源元数据复用，不是缓存动态业务响应。
 缓存每 500 ms 重新核对文件大小和修改时间，因此替换或删除静态资源后无需重启。
 将 `cache_max_file_size` 设为 `0` 可关闭 body 缓存，将
 `revalidate_interval` 设为 `0ms` 可要求每次请求检查磁盘元数据。
@@ -8807,6 +8899,10 @@ SSE、手工流式输出或 chunked 响应时，框架先刷出此前普通响�
 返回部分写入时才进入完整写循环。这些均为传输层内部优化，应用不要为它们复制一套 handler。
 
 HTTP/2 的普通同步请求同样走内部借用式路由匹配，不复制已注册的 handler；请求上下文中的
+大块动态 `std::string` 响应会把所有权移动到连接写队列，并通过 vectored transport 直接发送
+DATA payload；无需为了零拷贝把每个 JSON 响应包装成 `shared_ptr`。不可变静态资源仍使用
+`set_shared_body()`，便于跨请求共享同一份内容。小响应继续复制进批量输出缓冲，避免为很小的
+payload 增加独立所有者和 gather segment 的管理成本。
 SSE、表单、追踪、取消与 request-scope 扩展状态仅在实际调用对应能力时创建。应用仍只使用
 公开的 `router::match()`、`request_context` 和 `get_sync()` 等接口，不得依赖这些内部视图，
 也不要为了追求吞吐绕过 endpoint metadata 或自行管理请求上下文生命周期。
@@ -9014,6 +9110,17 @@ auto pmtud = server->set_path_mtu_discovery(
 1200 字节安全基线开始，只有 padded PING 被确认后才提升到探测值。公网部署应按实际
 链路选择保守上限，避免 IP 分片。
 
+Linux io_uring listener 会请求 UDP_GRO，并通过 `recvmmsg` 的 ancillary data 在一个池化接收块
+上零拷贝遍历多个逻辑 QUIC 数据报；旧内核或不支持该选项的网络栈自动回退到普通逐包
+接收。这里的合并只改变内核到用户态的交付次数，不改变 QUIC 包边界、认证、拥塞控制
+或恢复语义。业务 handler 不需要感知这一优化。
+
+listener 会先处理完一次有界接收批次，再按本批命中的连接统一产包和刷出。同步 handler
+产生的多个短响应因此可以进入同一个 QUIC 包，而不是每处理一个 UDP 数据报就立即进入
+一次发送系统调用。批次状态只属于连接所在的事件循环，不跨线程共享；异步 handler、
+拥塞控制、ACK/loss recovery 和流级取消语义保持不变。这是服务端内部调度能力，应用层
+不应直接调用 `quic_connection` 的 receive-batch 协调接口。
+
 QUIC 新连接默认使用 CUBIC 拥塞控制。真实网络仍按 RTT 和拥塞窗口 pacing；loopback
 没有物理瓶颈队列，因此只保留拥塞窗口限制，省去本机进程间通信的短定时器唤醒。
 
@@ -9072,10 +9179,39 @@ Stream Cancellation 指令，避免保留阻塞 header section。
 
 ### 静态表编码
 
-服务端没有启用 QPACK 动态表（`set_qpack_settings` 保持默认 0）时，字段块只用静态表：
-每个字段一次哈希探测即可得到精确匹配或名称引用；`qpack_encoder::encode_into` 直接写入
-调用方缓冲，不产生临时块。动态表在每次响应都要单独回 Section Acknowledgement，实测
-吞吐反而下降 3.6 倍，因此默认保持关闭。
+QPACK 的两个方向分开配置：
+
+- `set_qpack_settings(capacity, blocked)` 通告本端**解码**表，允许客户端把重复的请求字段
+  （`:authority`、`user-agent` 等）编成一个字节的索引，省去每个请求的 Huffman 字面量解码。
+  解码侧的 Section Acknowledgement / Insert Count Increment 通过
+  `quic_connection::try_queue_send` 提交，不单独发包，而是搭载在随后的响应包上；
+  早期每个 ack 单独 `await async_send` 才导致动态表反而更慢。同一批并发请求的 ack
+  在 accept 循环挂起前合并成一次解码器流写入；只有单个在途请求时仍立即提交。
+- `set_qpack_encoder_table_limit(limit)` 限制本端**编码**响应时使用的动态表（不通告，
+  默认不限制）。设为 0 时无论对端允许多少都只用静态表：每个字段一次哈希探测，
+  `qpack_encoder::encode_into` 直接写入调用方缓冲，没有编码器流流量和每响应的表状态。
+  响应头只有少量短字段时这是更省 CPU 的选择。
+
+HttpArena H3 适配器使用 4 KB 解码表 + 编码表上限 0。
+
+### QPACK 逐字段解码
+
+同步请求适配器应使用 `qpack_decoder::decode_each()`，让解码字段直接进入请求对象，
+避免先构造 `std::vector<header_field>` 再搬运到 method/path/header map：
+
+```cpp
+auto decoded = decoder.decode_each(encoded,
+    h3::qpack_header_sink{
+        .context = &state,
+        .consume = consume_request_header,
+    },
+    stream_id);
+```
+
+`consume` 在 `decode_each()` 返回前同步执行，接收字段所有权；不得保存传入字段的引用。
+消费函数返回错误时解码立即停止，该 section 不生成 acknowledgement。需要跨协程保存字段、
+处理被动态表阻塞后完成的 header block，或作为客户端响应结果拥有字段集合时，继续使用
+`decode()` 的 `std::vector<header_field>` 返回值。热路径不得用 `std::function` 包装消费函数。
 
 ### 共享缓冲响应体
 
@@ -10343,14 +10479,14 @@ executor.event_loop(), ...)`。`event_loop()` 必须在 request handler 所在�
 
 # 项目架构
 
-> cnetmod v2.1.0 — 基于 C++23 Modules 的跨平台异步网络库。
+> cnetmod v2.2.0 — 基于 C++23 Modules 的跨平台异步网络库。
 
 ## 项目概述
 
 | 属性 | 值 |
 |------|------|
 | 名称 | cnetmod |
-| 版本 | 2.1.0（唯一来源为根目录 `VERSION`） |
+| 版本 | 2.2.0（唯一来源为根目录 `VERSION`） |
 | 语言标准 | C++23（`CMAKE_CXX_STANDARD 23`） |
 | 构建系统 | CMake 3.28+，`CMAKE_CXX_SCAN_FOR_MODULES ON` |
 | 库类型 | 分层静态组件；`cnetmod::core` / `cnetmod::all` 是兼容聚合入口 |
@@ -10852,8 +10988,10 @@ bool skip(std::size_t n) noexcept;
 |---|---|---|
 | `develop` | 小平台功能完备性集成 | Linux 上的 `core`、`backend`、`complete` 三个配置 |
 | `release/2.1` | 2.1 版本线稳定与补丁 | Windows、Linux、macOS 全量构建与测试 |
+| `release/2.2` | 2.2 版本线稳定与补丁 | Windows、Linux、macOS 全量构建与测试 |
 | `main` | 随时可发布的稳定主线 | 受保护合并，禁止直接推送 |
 | `v2.1.0` | 不可变正式发布身份 | 版本契约、三平台 SDK、干净消费项目、校验和、SBOM、构建证明 |
+| `v2.2.0` | 当前不可变正式发布身份 | 版本契约、三平台 SDK、干净消费项目、校验和、SBOM、构建证明 |
 
 分支保护的具体策略维护在 `.github/BRANCHING.md`。版本标签必须从对应的
 `release/<major>.<minor>` 合并到 `main` 后创建。
@@ -10882,7 +11020,7 @@ share/cnetmod/licenses/LICENSE
 
 ```powershell
 cmake `
-  -DCNETMOD_VERSION=2.1.0 `
+  -DCNETMOD_VERSION=2.2.0 `
   -DCNETMOD_TARGET=windows-x86_64-msvc-v145-md-release `
   -DCNETMOD_PREFIX="$PWD/3rdparty/cnetmod" `
   -P cmake/cnetmod-fetch.cmake
@@ -10895,7 +11033,7 @@ cmake `
 ## CMake 消费
 
 ```cmake
-find_package(cnetmod 2.1 CONFIG REQUIRED COMPONENTS
+find_package(cnetmod 2.2 CONFIG REQUIRED COMPONENTS
     core application http mysql redis orm openai)
 
 target_link_libraries(my_backend PRIVATE
@@ -11019,6 +11157,34 @@ Typed conversion supports nested mapped DTOs, optionals, enums, sequences, and
 string-keyed associative containers. Numeric decoding checks integral sign and
 range instead of silently narrowing.
 
+`write()` and `write_explicit_nulls()` serialize mapped DTOs directly into the
+output string without building a `document`. The output is byte-identical to
+`write_document(to_document(value))`: object keys in name order, the same
+string escapes, integers as written, doubles formatted by the backend, and
+`serialization_failed` for strings that are not valid UTF-8. Unordered maps and
+types with a custom `document_traits::encode` still go through a `document`.
+Do not hand-write JSON strings for speed; this path is the fast one.
+
+For a reusable response or connection buffer, use `write_to(output, value)`.
+It clears the logical contents but retains and reuses `output`'s capacity, and
+returns `expected<void, error_code>`. HTTP handlers can combine it with
+`response::generate_body()` so serialization writes directly into the response
+builder instead of allocating a temporary string:
+
+```cpp
+request.resp()
+    .set_status(cnetmod::http::status::ok)
+    .set_header("Content-Type", "application/json; charset=utf-8");
+auto written = request.resp().generate_body([&](std::string& output) {
+    return cnetmod::json::write_to(output, dto);
+});
+```
+
+`generate_body()` updates `Content-Length`; on serialization failure it drops
+the partial body and sets the length to zero. Prefer this path for repeated
+dynamic JSON responses. `write()` remains appropriate when the serialized value
+must be returned, cached, or passed independently of an HTTP response.
+
 ## ORM models and projections
 
 Do not add `CNETMOD_JSON` to a type already declared with `CNETMOD_MODEL` or
@@ -11035,6 +11201,28 @@ auto wire = cnetmod::json::write(user_record{42, "Ada"});
 This shared mapping covers ORM scalar fields, `DATE`, `DATETIME`, `TIME`, UUID,
 and nullable `DATETIME`. Database temporal values use their canonical
 timezone-free SQL text representation.
+
+## Embedding trusted JSON text
+
+`cnetmod::json::raw_json` is a non-owning view of JSON text that a trusted
+encoder has already produced, such as a PostgreSQL `json`/`jsonb` column. The
+direct writer copies it once and drops whitespace outside strings, so the output
+stays compact without building a document:
+
+```cpp
+struct item_row
+{
+    std::int64_t id{};
+    cnetmod::json::raw_json tags;
+};
+CNETMOD_JSON(item_row, CNETMOD_JSON_FIELD(id), CNETMOD_JSON_FIELD(tags))
+
+auto wire = cnetmod::json::write(item_row{.id = 7, .tags = {row[6].get_string()}});
+```
+
+The direct writer does not validate the text; never wrap request input or other
+untrusted strings. Conversion to a document (`to_document`) parses the text and
+reports invalid JSON. The view must outlive the write call.
 
 ## Application offload
 

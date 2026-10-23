@@ -398,16 +398,21 @@ auto run_udp_batch_layout_probe(cnetmod::io_context& context,
     std::string_view loopback_text, bool segmented = false)
     -> cnetmod::task<std::expected<void, std::error_code>>
 {
+    const bool constrained_wsl_ipv4 =
+        std::getenv("WSL_DISTRO_NAME") != nullptr && loopback_text == "127.0.0.1";
+    const auto full_payload_size = constrained_wsl_ipv4 ? 1400U : 1472U;
     std::array<std::size_t, 16> equal_sizes{};
-    equal_sizes.fill(1472U);
+    equal_sizes.fill(full_payload_size);
     if (auto result = co_await run_udp_batch_layout_case(context, loopback_text,
-            equal_sizes, false, false, segmented); !result)
+            equal_sizes, false, false, segmented);
+        !result)
         co_return result;
 #ifdef CNETMOD_HAS_IO_URING
     if (loopback_text == "127.0.0.1")
     {
         if (auto result = co_await run_udp_batch_layout_case(context, loopback_text,
-                equal_sizes, false, true, segmented); !result)
+                equal_sizes, false, true, segmented);
+            !result)
             co_return result;
     }
 #endif
@@ -416,19 +421,29 @@ auto run_udp_batch_layout_probe(cnetmod::io_context& context,
     // Short packets followed by full-size packets and zero-byte messages
     // must retain their individual lengths, payloads and destination order.
     std::array<std::size_t, 40> mixed_sizes{};
-    mixed_sizes.fill(1472U);
+    mixed_sizes.fill(full_payload_size);
     mixed_sizes[2] = 17U;
     mixed_sizes[10] = 0U;
     mixed_sizes[13] = 1U;
     mixed_sizes[24] = 0U;
     mixed_sizes[37] = 23U;
     if (auto result = co_await run_udp_batch_layout_case(context, loopback_text,
-            mixed_sizes, true, false, segmented); !result)
+            mixed_sizes, true, false, segmented);
+        !result)
         co_return result;
 
-    // Verify independent large datagrams whose aggregate exceeds 65507 bytes.
-    // Linux validation runs this in an isolated network namespace with lo up:
-    // WSL can route 127.0.0.1 through a host adapter that drops large packets.
+    // Verify independent datagrams whose aggregate exceeds 65507 bytes.
+    // Mirrored WSL policy-routes IPv4 localhost through a 1500-MTU host-facing
+    // adapter, so retain the aggregate-overflow contract there with safe-sized
+    // datagrams. IPv6 localhost and native Linux continue to verify 24 KiB
+    // individual payloads as well as an aggregate above the UDP ceiling.
+    if (constrained_wsl_ipv4)
+    {
+        std::array<std::size_t, 48> aggregate_sizes{};
+        aggregate_sizes.fill(1400U);
+        co_return co_await run_udp_batch_layout_case(context, loopback_text,
+            aggregate_sizes, false, false, segmented);
+    }
     constexpr std::array<std::size_t, 3> large_sizes{24000U, 24000U, 24000U};
     co_return co_await run_udp_batch_layout_case(context, loopback_text,
         large_sizes, false, false, segmented);
@@ -919,6 +934,24 @@ void check_udp_batch_would_block(batch_wait_probe probe, bool segmented = false)
     ASSERT_TRUE(would_block);
     if (!would_block)
         return;
+    // A failed 4 KiB write may still leave room for the five-byte probe below.
+    // Fill that tail one byte at a time so resuming the coroutine must enter
+    // the asynchronous EAGAIN path rather than completing synchronously.
+    const std::byte final_fill{};
+    would_block = false;
+    for (std::size_t attempt{}; attempt < 16384U; ++attempt)
+    {
+        const auto sent = ::send(sender_fd, &final_fill, sizeof(final_fill),
+            MSG_DONTWAIT | MSG_NOSIGNAL);
+        if (sent < 0)
+        {
+            would_block = errno == EAGAIN || errno == EWOULDBLOCK;
+            break;
+        }
+    }
+    ASSERT_TRUE(would_block);
+    if (!would_block)
+        return;
     running.handle().resume();
     // Comparing the helper's cnetmod-category would_block error against a
     // generic-category std::errc would incorrectly complete with an error here.
@@ -1220,6 +1253,72 @@ TEST(epoll_directional_waiters_preserve_read_write_cancel_and_hup)
 
 #ifdef CNETMOD_HAS_IO_URING
 namespace {
+auto run_udp_gro_probe(cnetmod::io_context& context)
+    -> cnetmod::task<std::expected<bool, std::error_code>>
+{
+    const auto loopback = cnetmod::ip_address::from_string("127.0.0.1");
+    if (!loopback)
+        co_return std::unexpected(loopback.error());
+
+    cnetmod::udp::udp_socket receiver{context};
+    if (const auto opened = receiver.open(cnetmod::endpoint{*loopback, 0U},
+            cnetmod::socket_options{.udp_receive_coalescing = true});
+        !opened)
+        co_return std::unexpected(opened.error());
+    if (!receiver.native_socket().udp_receive_coalescing_enabled())
+        co_return false;
+
+    cnetmod::udp::udp_socket sender{context};
+    if (const auto opened = sender.open(); !opened)
+        co_return std::unexpected(opened.error());
+    const auto peer = receiver.native_socket().local_endpoint();
+    if (!peer)
+        co_return std::unexpected(peer.error());
+    ::sockaddr_in destination{};
+    destination.sin_family = AF_INET;
+    destination.sin_port = htons(peer->port());
+    destination.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (::connect(static_cast<int>(sender.native_socket().native_handle()),
+            reinterpret_cast<const ::sockaddr*>(&destination), sizeof(destination)) != 0)
+        co_return std::unexpected(cnetmod::make_error_code(cnetmod::from_native_error(errno)));
+
+    constexpr std::size_t segment_size = 64U;
+    constexpr std::size_t segment_count = 4U;
+    std::array<std::byte, segment_size * segment_count> payload{};
+    for (std::size_t segment{}; segment < segment_count; ++segment)
+        std::fill_n(payload.begin() + static_cast<std::ptrdiff_t>(segment * segment_size),
+            segment_size, static_cast<std::byte>(segment + 1U));
+
+    ::iovec vector{payload.data(), payload.size()};
+    alignas(::cmsghdr) std::array<std::byte, CMSG_SPACE(sizeof(std::uint16_t))> control{};
+    ::msghdr message{};
+    message.msg_iov = &vector;
+    message.msg_iovlen = 1U;
+    message.msg_control = control.data();
+    message.msg_controllen = control.size();
+    auto* header = CMSG_FIRSTHDR(&message);
+    header->cmsg_level = IPPROTO_UDP;
+    header->cmsg_type = UDP_SEGMENT;
+    header->cmsg_len = CMSG_LEN(sizeof(std::uint16_t));
+    const auto native_segment_size = static_cast<std::uint16_t>(segment_size);
+    std::memcpy(CMSG_DATA(header), &native_segment_size, sizeof(native_segment_size));
+
+    if (::sendmsg(static_cast<int>(sender.native_socket().native_handle()), &message, 0) !=
+        static_cast<ssize_t>(payload.size()))
+        co_return std::unexpected(cnetmod::make_error_code(cnetmod::from_native_error(errno)));
+
+    cnetmod::cancel_token token;
+    const auto received = co_await cnetmod::with_timeout(context, std::chrono::seconds{2},
+        cnetmod::async_recvfrom_batch(context, receiver.native_socket(), 8U, segment_size, token),
+        token);
+    if (!received)
+        co_return std::unexpected(received.error());
+    if (received->size() != 1U || received->front().segment_size != segment_size ||
+        !std::ranges::equal(received->front().bytes, payload))
+        co_return std::unexpected(std::make_error_code(std::errc::protocol_error));
+    co_return true;
+}
+
 auto run_udp_segmented_native_options(cnetmod::io_context& context, bool cork)
     -> cnetmod::task<std::expected<void, std::error_code>>
 {
@@ -1283,6 +1382,25 @@ auto run_udp_segmented_native_options(cnetmod::io_context& context, bool cork)
     co_return {};
 }
 } // namespace
+
+TEST(udp_gro_preserves_coalesced_storage_and_segment_boundaries)
+{
+    cnetmod::net_init network;
+    auto context = cnetmod::make_io_context();
+    std::optional<std::expected<bool, std::error_code>> result;
+    auto wrapper = [&]() -> cnetmod::task<void>
+    {
+        result = co_await run_udp_gro_probe(*context);
+        context->stop();
+    };
+    auto running = wrapper();
+    running.handle().resume();
+    context->run();
+    ASSERT_TRUE(result.has_value());
+    if (result && !*result)
+        ASSERT_EQ(result->error().value(), 0);
+    ASSERT_TRUE(result && *result);
+}
 
 TEST(udp_segmented_batch_retains_native_cork_and_segment_options)
 {

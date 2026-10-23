@@ -17,7 +17,9 @@ import cnetmod.protocol.http.v3.static_files;
 namespace {
 
 auto handle_request(cnetmod::http::v3::http3_request& request,
-    cnetmod::http::v3::http3_response& response) -> std::error_code
+    cnetmod::http::v3::http3_response& response,
+    const std::shared_ptr<const cnetmod::http::v3::qpack_static_response_headers>&
+        baseline_headers) -> std::error_code
 {
     namespace http = cnetmod::http;
     const auto target = std::string_view{request.path};
@@ -55,7 +57,7 @@ auto handle_request(cnetmod::http::v3::http3_request& request,
             break;
         query.remove_prefix(next + 1);
     }
-    response.headers.emplace("content-type", "text/plain");
+    response.static_headers = baseline_headers;
     response.body = std::to_string(sum);
     return {};
 }
@@ -107,8 +109,25 @@ auto main(int argc, char** argv) -> int
     if (argc == 6)
         static_files = cnetmod::http::v3::serve_dir({.root = argv[5]});
 
+    const std::array<cnetmod::http::v3::header_field, 1> baseline_fields{{
+        {"content-type", "text/plain"},
+    }};
+    auto encoded_baseline_headers =
+        cnetmod::http::v3::qpack_static_response_headers::encode(
+            cnetmod::http::status::ok, baseline_fields);
+    if (!encoded_baseline_headers)
+    {
+        logger::error{"failed to encode baseline response headers: {}",
+            encoded_baseline_headers.error().message()};
+        return 1;
+    }
+    auto baseline_headers = std::make_shared<const cnetmod::http::v3::qpack_static_response_headers>(
+        std::move(*encoded_baseline_headers));
+
     cnetmod::http::v3::server_request_handler handler = [static_files =
-                                                                std::move(static_files)](
+                                                                std::move(static_files),
+                                                            baseline_headers =
+                                                                std::move(baseline_headers)](
                                                             cnetmod::http::v3::http3_request& request,
                                                             cnetmod::http::v3::http3_response& response) -> std::error_code
     {
@@ -120,7 +139,7 @@ auto main(int argc, char** argv) -> int
             if (*served)
                 return {};
         }
-        return handle_request(request, response);
+        return handle_request(request, response, baseline_headers);
     };
     cnetmod::server_context context{workers, workers};
     const cnetmod::endpoint endpoint{cnetmod::ipv4_address::any(), static_cast<std::uint16_t>(port)};
@@ -165,6 +184,28 @@ auto main(int argc, char** argv) -> int
     {
         logger::error{"HTTP/3 UDP payload setup failed: {}",
             configured.error().message()};
+        return 1;
+    }
+    // Let the client index its repeated request fields in our QPACK decoder
+    // table: literal Huffman decoding of every request was the largest item
+    // of the request path. The acknowledgements ride on the response packets.
+    // CNETMOD_QPACK_DECODER_CAPACITY=0 restores the static-only decoder.
+    std::uint64_t qpack_capacity = 4096U;
+    if (const auto* capacity = std::getenv("CNETMOD_QPACK_DECODER_CAPACITY"))
+        qpack_capacity = std::strtoull(capacity, nullptr, 10);
+    if (const auto configured = server->set_qpack_settings(qpack_capacity,
+            qpack_capacity == 0U ? 0U : 100U);
+        !configured)
+    {
+        logger::error{"HTTP/3 QPACK setup failed: {}", configured.error().message()};
+        return 1;
+    }
+    // Our answers are a few short fields that the static table already
+    // encodes in about two dozen bytes. Indexing them would add per-response
+    // table bookkeeping and encoder-stream writes for no CPU benefit.
+    if (const auto configured = server->set_qpack_encoder_table_limit(0U); !configured)
+    {
+        logger::error{"HTTP/3 QPACK encoder setup failed: {}", configured.error().message()};
         return 1;
     }
     if (const auto result = server->start(); !result)

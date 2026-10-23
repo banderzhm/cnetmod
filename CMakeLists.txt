@@ -678,6 +678,7 @@ endforeach()
 # keeps a runtime-only consumer from inheriting every optional protocol SDK.
 if(TARGET cnetmod_http)
     cnetmod_link_zlib(cnetmod_http)
+    cnetmod_link_brotli(cnetmod_http)
 endif()
 if(TARGET cnetmod_grpc)
     cnetmod_link_zlib(cnetmod_grpc)

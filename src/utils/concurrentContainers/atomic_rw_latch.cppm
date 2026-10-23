@@ -19,6 +19,12 @@ public:
 
     void lock() noexcept
     {
+        // Uncontended acquisition is one CAS; the two-step pending protocol
+        // below is only needed to keep readers from starving a writer.
+        std::uint32_t idle = 0U;
+        if (state_.compare_exchange_strong(idle, writer_bit,
+                std::memory_order_acquire, std::memory_order_relaxed))
+            return;
         for (;;)
         {
             auto observed = state_.load(std::memory_order_acquire);
@@ -38,14 +44,14 @@ public:
                     return;
                 continue;
             }
-            state_.wait(observed, std::memory_order_relaxed);
+            wait_for_change(observed);
         }
     }
 
     void unlock() noexcept
     {
-        state_.store(0U, std::memory_order_release);
-        state_.notify_all();
+        (void)state_.exchange(0U, std::memory_order_seq_cst);
+        notify_waiters();
     }
 
     void lock_shared() const noexcept
@@ -60,15 +66,15 @@ public:
                     return;
                 continue;
             }
-            state_.wait(observed, std::memory_order_relaxed);
+            wait_for_change(observed);
         }
     }
 
     void unlock_shared() const noexcept
     {
-        const auto previous = state_.fetch_sub(1U, std::memory_order_release);
+        const auto previous = state_.fetch_sub(1U, std::memory_order_seq_cst);
         if ((previous & reader_mask) == 1U)
-            state_.notify_all();
+            notify_waiters();
     }
 
 private:
@@ -77,7 +83,26 @@ private:
     static constexpr std::uint32_t writer_mask = writer_bit | writer_pending_bit;
     static constexpr std::uint32_t reader_mask = ~writer_mask;
 
+    // A contender counts itself before it sleeps and every release reads the
+    // count after changing the state (all sequentially consistent), so a
+    // release either sees the sleeper or the sleeper sees the new state.
+    // Uncontended releases therefore never enter the platform wait table.
+    void wait_for_change(std::uint32_t observed) const noexcept
+    {
+        waiters_.fetch_add(1U, std::memory_order_seq_cst);
+        if (state_.load(std::memory_order_seq_cst) == observed)
+            state_.wait(observed, std::memory_order_relaxed);
+        waiters_.fetch_sub(1U, std::memory_order_relaxed);
+    }
+
+    void notify_waiters() const noexcept
+    {
+        if (waiters_.load(std::memory_order_seq_cst) != 0U)
+            state_.notify_all();
+    }
+
     alignas(64) mutable std::atomic<std::uint32_t> state_{};
+    mutable std::atomic<std::uint32_t> waiters_{};
 };
 
 export class exclusive_latch_guard

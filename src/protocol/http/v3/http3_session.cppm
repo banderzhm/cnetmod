@@ -265,6 +265,10 @@ export struct http3_settings
     bool enable_connect_protocol{};
     bool enable_webtransport{};
     std::uint64_t webtransport_max_sessions{};
+    /// Local ceiling on the dynamic table our encoder uses for the peer's
+    /// decoder (not advertised). Zero encodes against the static table only.
+    std::uint64_t qpack_encoder_max_table_capacity{
+        std::numeric_limits<std::uint64_t>::max()};
 };
 
 export class http3_server_session
@@ -328,7 +332,36 @@ public:
         -> task<std::expected<std::pair<std::uint64_t, std::vector<std::byte>>, std::error_code>>;
 
 private:
-    auto service_peer_stream(stream_id id) -> task<void>;
+    /// Request-stream state handed from the inline path to the coroutine.
+    struct resumed_stream
+    {
+        dynamic_buffer wire;
+        bool fin{};
+        /// Set when the inline parse found the HEADERS blocked on QPACK.
+        std::shared_ptr<channel<std::monostate>> qpack_waiter;
+    };
+
+    /// Serves a complete request with a synchronous handler without a
+    /// coroutine when its bytes, both header locks and the transport allow
+    /// it; otherwise hands the stream, with what was read, to the coroutine.
+    void serve_peer_stream(stream_id id);
+    auto service_peer_stream(stream_id id, std::optional<resumed_stream> resumed = {})
+        -> task<void>;
+    /// Sends a handler's response: pushes, body validation, encoding, write.
+    auto send_response(stream_id id, http_method method, http3_response& response)
+        -> task<void>;
+    /// Coroutine tails of the inline path. Each owns the request stream and
+    /// releases it like service_peer_stream does.
+    auto respond_owned(stream_id id, http_method method, http3_response response)
+        -> task<void>;
+    auto send_encoded_owned(stream_id id, byte_buffer instructions,
+        std::vector<std::byte> encoded, std::shared_ptr<const std::string> shared_body)
+        -> task<void>;
+    auto close_owned(stream_id id, std::error_code error) -> task<void>;
+    auto cancel_owned(stream_id id, std::uint64_t code) -> task<void>;
+    /// Releases a request stream: retire it, update counters, shut down
+    /// after GOAWAY once idle.
+    void finish_peer_stream(stream_id id, bool unidirectional) noexcept;
     auto cancel_request(stream_id id) -> task<void>;
     quic_connection& conn_;
     server_request_handler handler_;
@@ -353,6 +386,15 @@ private:
     bool control_stream_sent_{};
     bool closing_{};
     std::size_t active_streams_{};
+    // True while run() dispatches the streams of one accept batch; it then
+    // commits the batch's QPACK decoder acknowledgements in one write.
+    bool batching_decoder_acks_{};
+    // Responses committed by the inline path; run() sends them once per
+    // accept batch.
+    bool inline_writes_pending_{};
+    // Receive buffer of the inline path, reused across requests; moved into
+    // the coroutine when a stream needs it.
+    std::optional<dynamic_buffer> inline_wire_;
     bool peer_control_stream_seen_{};
     bool peer_settings_seen_{};
     bool peer_datagram_enabled_{};
@@ -374,11 +416,14 @@ private:
     // The decoder completes those blocks asynchronously; retain the decoded
     // fields and wake the owning request coroutine without re-decoding (and
     // therefore without issuing a duplicate Header Acknowledgement).
-    cnetmod::flat_map<stream_id,
+    // QPACK-blocked streams churn independently and are erased out of order.
+    // A hash table avoids shifting shared owners on every completed stream.
+    static constexpr std::size_t qpack_state_capacity{128U};
+    std::unordered_map<stream_id,
         std::shared_ptr<channel<std::monostate>>>
-        qpack_waiters_;
-    cnetmod::flat_map<stream_id, std::deque<std::vector<header_field>>>
-        completed_headers_;
+        qpack_waiters_{qpack_state_capacity};
+    std::unordered_map<stream_id, std::deque<std::vector<header_field>>>
+        completed_headers_{qpack_state_capacity};
     // Request parsing only consumes completed QPACK blocks; an entry exists
     // only when the decoder actually completed a blocked block.  The common
     // unblocked request must not materialize an empty deque (deque's default
@@ -395,14 +440,18 @@ private:
     channel<std::monostate> webtransport_registration_{4096};
     std::atomic<std::size_t> pending_webtransport_streams_{};
     bool datagram_dispatcher_started_{};
-    async_wait_group peer_streams_;
+    // Owns every coroutine that references this session or its connection,
+    // including peer requests, server pushes, and datagram dispatch.
+    async_wait_group stream_tasks_;
 
+    void start_datagram_dispatcher();
     auto dispatch_datagrams() -> task<void>;
     auto apply_push_cancellations(const std::vector<std::uint64_t>& ids)
         -> task<void>;
     auto register_push_cancellation(std::uint64_t id,
         const std::shared_ptr<cnetmod::cancel_token>& token) -> task<void>;
     auto release_push_cancellation(std::uint64_t id) -> task<void>;
+    auto release_push_cancellation_owned(std::uint64_t id) -> task<void>;
     auto send_pushes(stream_id parent_stream,
         const std::vector<http3_push>& pushes)
         -> task<std::expected<void, std::error_code>>;
@@ -523,12 +572,13 @@ private:
     channel<std::monostate> push_promise_progress_{1024};
     cnetmod::flat_map<stream_id, std::uint64_t> peer_unidirectional_stream_types_;
     cnetmod::flat_map<stream_id, std::size_t> peer_unidirectional_stream_bytes_;
-    cnetmod::flat_map<stream_id,
+    static constexpr std::size_t qpack_state_capacity{128U};
+    std::unordered_map<stream_id,
         std::shared_ptr<channel<std::monostate>>>
-        qpack_waiters_;
-    cnetmod::flat_map<stream_id,
+        qpack_waiters_{qpack_state_capacity};
+    std::unordered_map<stream_id,
         std::deque<std::vector<header_field>>>
-        completed_headers_;
+        completed_headers_{qpack_state_capacity};
     cnetmod::flat_map<stream_id, std::shared_ptr<webtransport_session_state>>
         webtransport_sessions_;
     channel<std::pair<std::uint64_t, std::vector<std::byte>>> http_datagrams_{256};

@@ -901,6 +901,9 @@ public:
         options.reuse_port = shared_port_;
         options.recv_buffer_size = 4 * 1024 * 1024;
         options.send_buffer_size = 4 * 1024 * 1024;
+#ifdef CNETMOD_HAS_IO_URING
+        options.udp_receive_coalescing = true;
+#endif
         auto opened = socket_.open(endpoint_, options);
         if (!opened)
             return std::unexpected(opened.error());
@@ -1003,6 +1006,17 @@ public:
             shard->h3_settings_.qpack_max_table_capacity = max_table_capacity;
             shard->h3_settings_.qpack_blocked_streams = max_blocked_streams;
         }
+        return {};
+    }
+
+    auto set_qpack_encoder_table_limit(std::uint64_t capacity)
+        -> std::expected<void, std::error_code>
+    {
+        if (running_)
+            return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
+        h3_settings_.qpack_encoder_max_table_capacity = capacity;
+        for (auto& shard : shards_)
+            shard->h3_settings_.qpack_encoder_max_table_capacity = capacity;
         return {};
     }
 
@@ -1631,12 +1645,15 @@ private:
             co_await post_awaitable{context_};
     }
 
-    [[nodiscard]] auto process_incoming(udp_received_datagram incoming) -> task<void>
+    using receive_batch_connections =
+        std::vector<std::shared_ptr<quic::quic_connection>>;
+
+    [[nodiscard]] auto process_incoming_datagram(std::span<const std::byte> buffer,
+        const endpoint& sender,
+        receive_batch_connections* batch_connections = nullptr) -> task<void>
     {
         if (!running_)
             co_return;
-        auto& buffer = incoming.bytes;
-        const auto& sender = incoming.peer;
         if (buffer.empty())
             co_return;
 
@@ -1760,17 +1777,45 @@ private:
         }
         if (!connection)
             co_return;
-        auto processed = co_await connection->process_datagram(buffer, sender);
+        auto* active_connection = std::addressof(connection);
+        if (batch_connections && connection->begin_receive_batch())
+        {
+            batch_connections->push_back(std::move(connection));
+            active_connection = std::addressof(batch_connections->back());
+        }
+        auto processed = co_await (*active_connection)->process_datagram(buffer, sender);
         if (!running_)
             co_return;
         if (!processed)
         {
 
-            refresh_connection_routes(connection);
+            refresh_connection_routes(*active_connection);
             co_return;
         }
-        ensure_http3_session(connection);
-        refresh_connection_routes(connection);
+        ensure_http3_session(*active_connection);
+        refresh_connection_routes(*active_connection);
+    }
+
+    [[nodiscard]] auto process_incoming(udp_received_datagram incoming,
+        receive_batch_connections* batch_connections = nullptr) -> task<void>
+    {
+        const auto bytes = std::span<const std::byte>{incoming.bytes};
+        const auto segment_size = incoming.segment_size;
+        if (segment_size == 0U || segment_size >= bytes.size())
+        {
+            co_await process_incoming_datagram(bytes, incoming.peer, batch_connections);
+            co_return;
+        }
+
+        // UDP_GRO preserves datagram order and reports one common segment
+        // length. Keep the pooled aggregate alive while each logical QUIC
+        // datagram is processed; no segment allocation or payload copy occurs.
+        for (std::size_t offset{}; offset < bytes.size(); offset += segment_size)
+        {
+            co_await process_incoming_datagram(
+                bytes.subspan(offset, std::min(segment_size, bytes.size() - offset)),
+                incoming.peer, batch_connections);
+        }
     }
 
     void record_receive_buffer(const udp_received_datagram& incoming) noexcept
@@ -1994,16 +2039,25 @@ private:
     [[nodiscard]] auto run_loop(std::shared_ptr<connection_timer_state> timers) -> task<void>
     {
         loop_completion_guard completion{timers->loop_completion};
+        receive_batch_connections batch_connections;
         while (timers->active.load(std::memory_order_acquire))
         {
             discard_expired_reset_routes();
-            // RIO owns a persistent receive ring and can safely return a
-            // larger burst. The IOCP fallback drains a modest batch, then
-            // yields after every packet so session/control work cannot be
-            // starved by a permanently readable UDP socket.
+            // RIO and Linux readiness backends already return a bounded
+            // receive burst. Process that burst inline and yield once only
+            // when it is saturated; yielding after every packet turns one
+            // recvmmsg completion into a reactor round-trip per datagram.
+            // Keep the smaller, per-packet cooperative path solely for the
+            // Windows IOCP fallback, whose receives are submitted one by one.
+#ifdef CNETMOD_HAS_IOCP
             const bool registered_io = socket_.native_socket().registered_io_enabled();
+            const bool cooperative_receive_fallback = !registered_io;
             const auto receive_batch_size = registered_io ? std::size_t{32U}
                                                           : std::size_t{8U};
+#else
+            constexpr bool cooperative_receive_fallback = false;
+            constexpr auto receive_batch_size = std::size_t{16U};
+#endif
             auto received = co_await async_recvfrom_batch(context_,
                 socket_.native_socket(), receive_batch_size,
                 static_cast<std::size_t>(transport_config_.max_udp_payload_size),
@@ -2018,21 +2072,31 @@ private:
                 continue;
             }
 
+            if (batch_connections.capacity() < received->size())
+                batch_connections.reserve(received->size());
+            std::size_t logical_datagrams{};
             for (std::size_t index{}; index < received->size(); ++index)
             {
                 auto& incoming = (*received)[index];
+                logical_datagrams += incoming.segment_size == 0U
+                    ? 1U
+                    : 1U + (incoming.bytes.size() - 1U) / incoming.segment_size;
                 record_receive_buffer(incoming);
-                co_await process_incoming(std::move(incoming));
-                if (!registered_io && index + 1U < received->size())
+                co_await process_incoming(std::move(incoming), &batch_connections);
+                if (cooperative_receive_fallback && index + 1U < received->size())
                     co_await post_awaitable{context_};
             }
+
+            for (auto& connection : batch_connections)
+                co_await connection->finish_receive_batch();
+            batch_connections.clear();
 
             // A readiness backend can keep completing full receive batches
             // synchronously while the UDP socket remains readable. Yield only
             // after a saturated batch: a short batch will suspend naturally
             // on the next receive, while unconditionally posting here adds a
             // full reactor turn to every low-latency request/response.
-            if (received->size() == receive_batch_size && receive_batch_size > 1U)
+            if (logical_datagrams >= receive_batch_size && receive_batch_size > 1U)
                 co_await post_awaitable{context_};
         }
     }
@@ -2323,6 +2387,12 @@ auto http3_server::set_qpack_settings(std::uint64_t max_table_capacity,
     std::uint64_t max_blocked_streams) -> std::expected<void, std::error_code>
 {
     return impl_->set_qpack_settings(max_table_capacity, max_blocked_streams);
+}
+
+auto http3_server::set_qpack_encoder_table_limit(std::uint64_t capacity)
+    -> std::expected<void, std::error_code>
+{
+    return impl_->set_qpack_encoder_table_limit(capacity);
 }
 
 auto http3_server::set_request_body_limits(request_body_stream_options options)

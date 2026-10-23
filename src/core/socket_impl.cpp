@@ -19,6 +19,9 @@ module;
     #include <netinet/tcp.h>
     #include <sys/socket.h>
     #include <unistd.h>
+    #ifdef CNETMOD_PLATFORM_LINUX
+        #include <linux/udp.h>
+    #endif
 #endif
 
 module cnetmod.core.socket;
@@ -119,13 +122,14 @@ auto socket::from_native(native_handle_t handle) noexcept -> socket
 
 socket::socket(socket&& other) noexcept
 #ifdef CNETMOD_PLATFORM_WINDOWS
-    : handle_(other.handle_), family_(other.family_), skip_completion_on_success_(other.skip_completion_on_success_), registered_io_requested_(other.registered_io_requested_), registered_io_enabled_(other.registered_io_enabled_), iocp_association_(other.iocp_association_.load(std::memory_order_relaxed)), async_state_(std::move(other.async_state_))
+    : handle_(other.handle_), family_(other.family_), udp_receive_coalescing_enabled_(other.udp_receive_coalescing_enabled_), skip_completion_on_success_(other.skip_completion_on_success_), registered_io_requested_(other.registered_io_requested_), registered_io_enabled_(other.registered_io_enabled_), iocp_association_(other.iocp_association_.load(std::memory_order_relaxed)), async_state_(std::move(other.async_state_))
 #else
-    : handle_(other.handle_), family_(other.family_)
+    : handle_(other.handle_), family_(other.family_), udp_receive_coalescing_enabled_(other.udp_receive_coalescing_enabled_)
 #endif
 {
     other.handle_ = invalid_handle;
     other.family_ = address_family::unspecified;
+    other.udp_receive_coalescing_enabled_ = false;
 #ifdef CNETMOD_PLATFORM_WINDOWS
     other.skip_completion_on_success_ = false;
     other.registered_io_requested_ = false;
@@ -141,6 +145,7 @@ auto socket::operator=(socket&& other) noexcept -> socket&
         close();
         handle_ = other.handle_;
         family_ = other.family_;
+        udp_receive_coalescing_enabled_ = other.udp_receive_coalescing_enabled_;
 #ifdef CNETMOD_PLATFORM_WINDOWS
         skip_completion_on_success_ = other.skip_completion_on_success_;
         registered_io_requested_ = other.registered_io_requested_;
@@ -152,6 +157,7 @@ auto socket::operator=(socket&& other) noexcept -> socket&
 #endif
         other.handle_ = invalid_handle;
         other.family_ = address_family::unspecified;
+        other.udp_receive_coalescing_enabled_ = false;
 #ifdef CNETMOD_PLATFORM_WINDOWS
         other.skip_completion_on_success_ = false;
         other.registered_io_requested_ = false;
@@ -393,6 +399,23 @@ auto socket::apply_options(const socket_options& opts)
             return std::unexpected(make_error_code(from_native_error(last_error())));
     }
 
+#if defined(CNETMOD_PLATFORM_LINUX) && defined(CNETMOD_HAS_IO_URING)
+    if (opts.udp_receive_coalescing)
+    {
+        int enabled = 1;
+        if (::setsockopt(handle_, IPPROTO_UDP, UDP_GRO, &enabled, sizeof(enabled)) == 0)
+        {
+            udp_receive_coalescing_enabled_ = true;
+        }
+        else if (errno != ENOPROTOOPT && errno != EOPNOTSUPP && errno != EINVAL)
+        {
+            return std::unexpected(make_error_code(from_native_error(errno)));
+        }
+    }
+#else
+    (void)opts.udp_receive_coalescing;
+#endif
+
     return {};
 }
 
@@ -619,6 +642,7 @@ void socket::close() noexcept
     ::close(handle_);
 #endif
     handle_ = invalid_handle;
+    udp_receive_coalescing_enabled_ = false;
 #ifdef CNETMOD_PLATFORM_WINDOWS
     skip_completion_on_success_ = false;
     registered_io_requested_ = false;

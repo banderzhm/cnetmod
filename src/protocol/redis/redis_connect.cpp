@@ -39,8 +39,12 @@ auto client::connect(connect_options opts, cancel_token& cancellation)
     } guard{*this};
 
     opts_ = opts;
+    // Commands are small request/response exchanges; Nagle would hold a
+    // pipelined write behind the previous segment's delayed ACK.
+    happy_eyeballs_options connect_options;
+    connect_options.socket_opts.no_delay = true;
     auto connected = co_await async_connect_happy_eyeballs(
-        ctx_, opts.host, opts.port, {}, cancellation);
+        ctx_, opts.host, opts.port, connect_options, cancellation);
     if (!connected)
         co_return std::unexpected(connected.error());
     sock_ = std::move(connected->sock);

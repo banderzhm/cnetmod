@@ -2567,6 +2567,7 @@ TEST(application_module_composition_follows_service_factories)
     ASSERT_TRUE(route_saw_service);
 }
 
+#ifdef CNETMOD_HAS_YAML_CONFIGURATION
 TEST(application_configuration_reads_jwt_yaml_lifetimes)
 {
     const auto path = std::filesystem::temp_directory_path() /
@@ -2659,6 +2660,7 @@ services:
     ASSERT_EQ(host->configuration().services.at("primary").properties.at("password").get<std::string>(),
         "yaml-secret");
 }
+#endif
 
 TEST(application_task_supervisor_rejects_invalid_recovery_before_registration)
 {

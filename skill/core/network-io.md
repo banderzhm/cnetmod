@@ -161,6 +161,31 @@ export auto async_sendto(io_context& ctx, socket& sock,
 ```
 均有 `cancel_token` 取消版本。
 
+#### UDP 批量收发与 Linux UDP_GRO
+
+```cpp
+export struct udp_received_datagram {
+    udp_datagram_buffer bytes;
+    endpoint peer;
+    std::size_t segment_size{};
+};
+
+export auto async_recvfrom_batch(io_context& ctx, socket& sock,
+    std::size_t max_datagrams, std::size_t max_datagram_size)
+    -> task<expected<std::vector<udp_received_datagram>, error_code>>;
+```
+
+Linux io_uring 后端使用 `recvmmsg` 排空一次就绪通知后的数据报。普通接收的 `segment_size == 0`；
+当 socket 以 `socket_options{.udp_receive_coalescing = true}` 打开且内核接受 UDP_GRO
+时，一个池化接收块可以包含多个相邻 UDP 数据报，`segment_size` 是各段长度，最后一段
+可以更短。消费方必须按该字段遍历逻辑数据报，不能把整个缓冲区当成一个协议包。
+`max_datagram_size` 仍约束单个逻辑数据报；Linux 后端会为 GRO 物理超包自动使用完整
+UDP 接收块，调用方不应为了 GRO 人为放大协议允许的单包上限。
+
+HTTP/3 listener 已内置这种分段处理，并在 Linux io_uring 上自动请求 UDP_GRO；应用使用
+`http3_server` 时不需要手动拆包。内核不支持 UDP_GRO 时，socket 自动保留原有
+一缓冲区一数据报行为。直接使用批量 UDP API 的协议实现才需要读取 `segment_size`。
+
 ## 场景：创建事件循环
 
 ```cpp

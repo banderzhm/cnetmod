@@ -349,7 +349,8 @@ auto run_http_semantics(cnetmod::io_context& context, std::uint16_t port,
                         entered->store(true);
                         auto waited = co_await cnetmod::async_timer_wait(context,
                             mode == 0 ? std::chrono::milliseconds{30000}
-                                      : std::chrono::milliseconds{20}, child);
+                                      : std::chrono::milliseconds{20},
+                            child);
                         if (!waited)
                             co_return std::unexpected(waited.error());
                         if (mode == 2)
@@ -357,14 +358,14 @@ auto run_http_semantics(cnetmod::io_context& context, std::uint16_t port,
                         if (mode == 3)
                             co_return std::unexpected(std::make_error_code(std::errc::invalid_argument));
                         co_return {};
-                    }, *parent_token);
+                    },
+                    *parent_token);
                 if (std::chrono::steady_clock::now() - began > std::chrono::seconds{2})
                     state.fail("concurrent streaming cancellation did not complete promptly");
                 if (mode == 1 ? !concurrent : bool(concurrent))
                     state.fail("concurrent streaming handler returned wrong cancellation outcome");
                 if ((mode != 0 && parent_token->is_cancelled()) ||
-                    (mode == 3 && (!concurrent && concurrent.error() !=
-                        std::make_error_code(std::errc::invalid_argument))))
+                    (mode == 3 && (!concurrent && concurrent.error() != std::make_error_code(std::errc::invalid_argument))))
                     state.fail("internal streaming shutdown changed caller cancellation/error");
                 cnetmod::http::v3::http3_request reuse;
                 reuse.host = "127.0.0.1";
@@ -390,8 +391,7 @@ auto run_http_semantics(cnetmod::io_context& context, std::uint16_t port,
                         co_return std::unexpected(waited.error());
                     co_return {};
                 });
-            if (!malformed_handler_entered || malformed_stream || malformed_stream.error() !=
-                std::make_error_code(std::errc::message_size))
+            if (!malformed_handler_entered || malformed_stream || malformed_stream.error() != std::make_error_code(std::errc::message_size))
                 state.fail("streaming cleanup changed malformed response error");
 
             cnetmod::http::v3::http3_request trailer_request;
@@ -413,7 +413,9 @@ auto run_http_semantics(cnetmod::io_context& context, std::uint16_t port,
             auto parent = co_await streaming_client->send_request(push_request);
             if (!parent || parent->status != 200 || parent->body != "parent-ok")
             {
-                state.fail("HTTP/3 server-push parent response was invalid");
+                state.fail("HTTP/3 server-push parent response was invalid: " +
+                    (parent ? std::to_string(parent->status) + " / " + parent->body
+                            : parent.error().message()));
             }
             else
             {
@@ -540,8 +542,7 @@ auto run_http_semantics(cnetmod::io_context& context, std::uint16_t port,
             slow_request.host = "127.0.0.1";
             slow_request.port = port;
             slow_request.path = "/slow";
-            cnetmod::spawn(context, run_close_request(streaming_client,
-                streaming_tls, std::move(slow_request), close_request));
+            cnetmod::spawn(context, run_close_request(streaming_client, streaming_tls, std::move(slow_request), close_request));
             (void)co_await cnetmod::async_timer_wait(context,
                 std::chrono::milliseconds{25});
             co_await streaming_client->close();
@@ -619,7 +620,6 @@ auto run_http_semantics(cnetmod::io_context& context, std::uint16_t port,
         state.fail("cross-thread HTTP/3 cancellation unexpectedly completed");
     auto reused = co_await client.get(url("/get"));
     require_response(state, reused, 200, "get-ok", "reuse after cross-thread cancellation");
-
 
     co_await client.close_async();
     co_return;
@@ -953,7 +953,8 @@ auto run_multipath_timeout_smoke(cnetmod::io_context& context, std::uint16_t por
     // HTTP/3 fixture and turn this cancellation test into a real handshake.
     cnetmod::udp::udp_socket blackhole{context};
     if (const auto opened = blackhole.open(
-            {cnetmod::ipv4_address::loopback(), 0U}); !opened)
+            {cnetmod::ipv4_address::loopback(), 0U});
+        !opened)
     {
         state.fail("could not reserve HTTP/3 connect-close blackhole port");
         co_return;

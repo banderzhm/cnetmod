@@ -129,12 +129,14 @@ namespace detail {
     {
         static constexpr std::size_t slot_count = 256U;
         static constexpr std::uint8_t empty = 0xffU;
+
         struct name_run
         {
             std::string_view name;
             std::uint8_t first{};
             std::uint8_t count{};
         };
+
         std::array<std::uint8_t, slot_count> slots{};
         std::array<name_run, static_table.size()> runs{};
         std::array<std::uint8_t, static_table.size()> wire_indices{};
@@ -543,6 +545,7 @@ namespace detail {
 struct qpack_encoder::impl
 {
     std::uint64_t max_table_capacity{};
+    std::uint64_t local_table_limit{std::numeric_limits<std::uint64_t>::max()};
     byte_buffer pending_encoder_instructions;
     detail::dynamic_table dynamic_table;
     bool capacity_update_pending{true};
@@ -581,9 +584,17 @@ auto qpack_encoder::operator=(qpack_encoder&&) noexcept -> qpack_encoder& = defa
 
 void qpack_encoder::set_max_table_capacity(std::uint64_t capacity) noexcept
 {
+    capacity = std::min(capacity, impl_->local_table_limit);
     impl_->max_table_capacity = capacity;
     impl_->dynamic_table.set_capacity(capacity);
     impl_->capacity_update_pending = true;
+}
+
+void qpack_encoder::set_local_table_limit(std::uint64_t capacity) noexcept
+{
+    impl_->local_table_limit = capacity;
+    if (impl_->max_table_capacity > capacity)
+        set_max_table_capacity(capacity);
 }
 
 void qpack_encoder::set_max_blocked_streams(std::uint64_t maximum) noexcept
@@ -715,9 +726,9 @@ auto qpack_encoder::encode(std::span<const header_field> headers, std::uint64_t 
         const auto blocked_streams = std::ranges::count_if(impl_->outstanding_streams, [this](const auto& stream)
             {
                 return std::ranges::any_of(stream.second, [this](auto required)
-                {
-                    return required > impl_->acknowledged_insert_count;
-                });
+                    {
+                        return required > impl_->acknowledged_insert_count;
+                    });
             });
         may_reference_dynamic = std::cmp_less(blocked_streams, impl_->max_blocked_streams);
     }
@@ -978,7 +989,8 @@ auto qpack_decoder::process_encoder_instructions(byte_view data) -> std::expecte
     // individually valid insertions does not trip a cumulative traffic cap.
     constexpr auto storage_max = std::numeric_limits<std::size_t>::max();
     const auto unfinished_limit = impl_->max_table_capacity > (storage_max - 64U) / 4U
-        ? storage_max : static_cast<std::size_t>(impl_->max_table_capacity * 4U + 64U);
+        ? storage_max
+        : static_cast<std::size_t>(impl_->max_table_capacity * 4U + 64U);
     if (impl_->pending_encoder_stream_input.size() > unfinished_limit)
     {
         impl_->pending_encoder_stream_input.clear();
@@ -1022,6 +1034,36 @@ auto qpack_decoder::process_encoder_instructions(byte_view data) -> std::expecte
 auto qpack_decoder::decode(byte_view in, std::uint64_t stream_id)
     -> std::expected<std::vector<header_field>, std::error_code>
 {
+    std::vector<header_field> fields;
+    struct owning_sink_state
+    {
+        std::vector<header_field>& fields;
+        std::size_t initial_capacity;
+    } state{fields, std::min<std::size_t>(in.size(), 8U)};
+    const auto decoded = decode_each(in,
+        qpack_header_sink{
+            .context = &state,
+            .consume = [](void* context, header_field&& field)
+                -> std::expected<void, std::error_code>
+            {
+                auto& state = *static_cast<owning_sink_state*>(context);
+                if (state.fields.empty())
+                    state.fields.reserve(state.initial_capacity);
+                state.fields.push_back(std::move(field));
+                return {};
+            },
+        },
+        stream_id);
+    if (!decoded)
+        return std::unexpected(decoded.error());
+    return fields;
+}
+
+auto qpack_decoder::decode_each(byte_view in, qpack_header_sink sink,
+    std::uint64_t stream_id) -> std::expected<void, std::error_code>
+{
+    if (sink.consume == nullptr)
+        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
     const auto encoded = in;
     auto encoded_ric = detail::read_int(in, 8);
     if (in.empty())
@@ -1044,12 +1086,11 @@ auto qpack_decoder::decode(byte_view in, std::uint64_t stream_id)
         impl_->blocked_header_blocks.emplace(stream_id, byte_buffer{encoded.begin(), encoded.end()});
         return std::unexpected(std::make_error_code(std::errc::resource_unavailable_try_again));
     }
-    // A header representation occupies at least one byte, so the encoded
-    // block size is a safe upper bound for the number of decoded fields.
-    // Reserve the common HTTP/3 request shape up front; ordinary requests
-    // carry five to seven pseudo/application fields.
-    std::vector<header_field> out;
-    out.reserve(std::min<std::size_t>(in.size(), 8U));
+    const auto emit = [&sink](header_field field)
+        -> std::expected<void, std::error_code>
+    {
+        return sink.consume(sink.context, std::move(field));
+    };
     while (!in.empty())
     {
         auto f = std::to_integer<std::uint8_t>(in.front());
@@ -1063,7 +1104,8 @@ auto qpack_decoder::decode(byte_view in, std::uint64_t stream_id)
             {
                 if (*i >= detail::static_table.size())
                     return std::unexpected(detail::error());
-                out.push_back({std::string{detail::static_table[*i].name}, std::string{detail::static_table[*i].value}});
+                if (auto emitted = emit({std::string{detail::static_table[*i].name}, std::string{detail::static_table[*i].value}}); !emitted)
+                    return std::unexpected(emitted.error());
             }
             else
             {
@@ -1072,7 +1114,8 @@ auto qpack_decoder::decode(byte_view in, std::uint64_t stream_id)
                 const auto* entry = impl_->dynamic_table.by_absolute(base - *i);
                 if (entry == nullptr)
                     return std::unexpected(detail::error());
-                out.push_back(entry->field);
+                if (auto emitted = emit(entry->field); !emitted)
+                    return std::unexpected(emitted.error());
             }
         }
         else if ((f & 0xc0U) == 0x40U)
@@ -1086,7 +1129,8 @@ auto qpack_decoder::decode(byte_view in, std::uint64_t stream_id)
             {
                 if (*i >= detail::static_table.size())
                     return std::unexpected(detail::error());
-                out.push_back({std::string{detail::static_table[*i].name}, std::move(*v)});
+                if (auto emitted = emit({std::string{detail::static_table[*i].name}, std::move(*v)}); !emitted)
+                    return std::unexpected(emitted.error());
             }
             else
             {
@@ -1095,7 +1139,8 @@ auto qpack_decoder::decode(byte_view in, std::uint64_t stream_id)
                 const auto* entry = impl_->dynamic_table.by_absolute(base - *i);
                 if (entry == nullptr)
                     return std::unexpected(detail::error());
-                out.push_back({entry->field.name, std::move(*v)});
+                if (auto emitted = emit({entry->field.name, std::move(*v)}); !emitted)
+                    return std::unexpected(emitted.error());
             }
         }
         else if ((f & 0xe0U) == 0x20U)
@@ -1122,7 +1167,8 @@ auto qpack_decoder::decode(byte_view in, std::uint64_t stream_id)
             auto v = detail::read_string(in);
             if (!v)
                 return std::unexpected(v.error());
-            out.push_back({std::move(name), std::move(*v)});
+            if (auto emitted = emit({std::move(name), std::move(*v)}); !emitted)
+                return std::unexpected(emitted.error());
         }
         else if ((f & 0xf0U) == 0x10U)
         {
@@ -1132,7 +1178,8 @@ auto qpack_decoder::decode(byte_view in, std::uint64_t stream_id)
             const auto* entry = impl_->dynamic_table.by_absolute(base + *index + 1U);
             if (entry == nullptr)
                 return std::unexpected(detail::error());
-            out.push_back(entry->field);
+            if (auto emitted = emit(entry->field); !emitted)
+                return std::unexpected(emitted.error());
         }
         else if ((f & 0xf0U) == 0x00U)
         {
@@ -1143,7 +1190,8 @@ auto qpack_decoder::decode(byte_view in, std::uint64_t stream_id)
             const auto* entry = impl_->dynamic_table.by_absolute(base + *index + 1U);
             if (entry == nullptr)
                 return std::unexpected(detail::error());
-            out.push_back({entry->field.name, std::move(*value)});
+            if (auto emitted = emit({entry->field.name, std::move(*value)}); !emitted)
+                return std::unexpected(emitted.error());
         }
         else
             return std::unexpected(detail::error());
@@ -1154,7 +1202,7 @@ auto qpack_decoder::decode(byte_view in, std::uint64_t stream_id)
     // acknowledgement for a stream with no outstanding dynamic reference.
     if (*required != 0U)
         detail::append_int(impl_->pending_decoder_instructions, 0x80U, 7, stream_id);
-    return out;
+    return {};
 }
 
 auto qpack_decoder::lookup_by_name_value(std::string_view n, std::string_view v) -> std::optional<std::uint16_t>

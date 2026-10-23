@@ -15,6 +15,9 @@ namespace {
     {
         if (left.size() != right.size())
             return false;
+        // Names are almost always written in their canonical case.
+        if (std::memcmp(left.data(), right.data(), left.size()) == 0)
+            return true;
         for (std::size_t index{}; index < left.size(); ++index)
         {
             const auto lower = [](unsigned char value) noexcept
@@ -165,33 +168,37 @@ auto response::remove_header(std::string_view key) -> response&
 
 auto response::set_body(std::string_view body) -> response&
 {
+    restore_generation_buffer();
     shared_body_.reset();
     body_source_.reset();
     body_.assign(body);
+    refresh_content_length();
+    return *this;
+}
+
+void response::refresh_content_length()
+{
     std::array<char, 24> length{};
     const auto [end, error] = std::to_chars(
         length.data(), length.data() + length.size(), body_.size());
     if (error == std::errc{})
         set_common_header(0, {length.data(), end});
-    return *this;
 }
 
 auto response::set_body(std::string body) -> response&
 {
+    restore_generation_buffer();
     shared_body_.reset();
     body_source_.reset();
-    std::array<char, 24> length{};
-    const auto [end, error] = std::to_chars(
-        length.data(), length.data() + length.size(), body.size());
-    if (error == std::errc{})
-        set_common_header(0, {length.data(), end});
     body_ = std::move(body);
+    refresh_content_length();
     return *this;
 }
 
 auto response::set_shared_body(std::shared_ptr<const std::string> body)
     -> response&
 {
+    restore_generation_buffer();
     body_.clear();
     body_source_.reset();
     shared_body_ = std::move(body);
@@ -204,8 +211,19 @@ auto response::set_shared_body(std::shared_ptr<const std::string> body)
     return *this;
 }
 
+auto response::set_shared_body_preserve_headers(
+    std::shared_ptr<const std::string> body) -> response&
+{
+    restore_generation_buffer();
+    body_.clear();
+    body_source_.reset();
+    shared_body_ = std::move(body);
+    return *this;
+}
+
 auto response::set_body_preserve_headers(std::string body) -> response&
 {
+    restore_generation_buffer();
     shared_body_.reset();
     body_source_.reset();
     body_ = std::move(body);
@@ -215,6 +233,7 @@ auto response::set_body_preserve_headers(std::string body) -> response&
 auto response::set_body_source(std::shared_ptr<response_body_source> source)
     -> response&
 {
+    restore_generation_buffer();
     body_.clear();
     shared_body_.reset();
     body_source_ = std::move(source);
@@ -227,6 +246,7 @@ auto response::set_body_source(std::shared_ptr<response_body_source> source)
 
 void response::reset(int status_code, http_version version) noexcept
 {
+    restore_generation_buffer();
     status_code_ = status_code;
     status_msg_.clear();
     version_ = version;
@@ -248,6 +268,16 @@ void response::reset(int status_code, http_version version) noexcept
     body_source_.reset();
     preencoded_h2_headers_.reset();
     has_cached_date_header_ = false;
+}
+
+void response::restore_generation_buffer() noexcept
+{
+    if (body_is_transformed_)
+    {
+        body_.swap(transformed_body_);
+        body_is_transformed_ = false;
+    }
+    transformed_body_.clear();
 }
 
 auto response::set_cookie(std::string_view name, std::string_view value,
@@ -440,6 +470,56 @@ void response::append_serialized_headers_to(std::string& output,
         active &= static_cast<std::uint16_t>(active - 1U);
     }
     output.reserve(output.size() + reserve_size + common_size);
+    if (version_ == http_version::http_1_1 && status_msg_.empty() && status_code_ == 200)
+    {
+        // Hot path: the status line and every header are copied straight
+        // into storage sized exactly once, with no per-piece append calls.
+        constexpr std::string_view status_line{"HTTP/1.1 200 OK\r\n"};
+        constexpr std::string_view date_prefix{"Date: "};
+        std::size_t total = status_line.size() + 2U + common_size;
+        if (has_cached_date_header_)
+            total += date_prefix.size() + cached_date_header_.size() + 2U;
+        for (const auto& [key, value] : headers_)
+            total += key.size() + value.size() + 4U;
+        const auto start = output.size();
+        output.resize_and_overwrite(start + total,
+            [&](char* buffer, std::size_t) noexcept
+            {
+                char* cursor = buffer + start;
+                const auto put = [&cursor](std::string_view text) noexcept
+                {
+                    std::memcpy(cursor, text.data(), text.size());
+                    cursor += text.size();
+                };
+                put(status_line);
+                if (has_cached_date_header_)
+                {
+                    put(date_prefix);
+                    put({cached_date_header_.data(), cached_date_header_.size()});
+                    put("\r\n");
+                }
+                auto remaining = active_common_headers_;
+                while (remaining != 0)
+                {
+                    const auto slot = static_cast<std::size_t>(std::countr_zero(remaining));
+                    put(common_header_name(slot));
+                    put(": ");
+                    put(common_headers_[slot].value);
+                    put("\r\n");
+                    remaining &= static_cast<std::uint16_t>(remaining - 1U);
+                }
+                for (const auto& [key, value] : headers_)
+                {
+                    put(key);
+                    put(": ");
+                    put(value);
+                    put("\r\n");
+                }
+                put("\r\n");
+                return start + total;
+            });
+        return;
+    }
     if (version_ == http_version::http_1_1 && status_msg_.empty())
     {
         switch (status_code_)

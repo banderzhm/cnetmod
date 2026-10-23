@@ -521,15 +521,37 @@ auto client::execute(parameterized_query parameters) -> task<result_set>
     if (operation_in_progress_.test_and_set(std::memory_order_acquire))
         co_return make_error("another PostgreSQL operation is already in progress");
     operation_guard guard{operation_in_progress_};
-    const auto sql = normalized_sql(parameters.query);
+    auto sql = normalized_sql(parameters.query);
     if (detail::count_postgresql_parameters(sql) != parameters.args.size())
         co_return make_error("PostgreSQL parameter count mismatch");
-    auto messages = detail::extended_query_messages({}, sql, parameters.args, true);
+
+    // A cached text is only bound and executed; the server reuses its parse
+    // and plan. A new text is parsed under a fresh name in the same flight,
+    // so the first execution still costs one round trip.
+    const auto cached = statement_cache_.find(sql);
+    const bool reuse = cached != statement_cache_.end();
+    std::string name;
+    if (reuse)
+        name = cached->second;
+    else if (statement_cache_.size() < options_.statement_cache_capacity)
+        name = std::format("cnetmod_q{}", ++statement_counter_);
+    auto messages = detail::extended_query_messages(name, sql, parameters.args, !reuse);
     if (messages.size() > options_.maximum_message_size)
         co_return make_error("parameterized query exceeds maximum_message_size");
     if (!co_await write_all(messages))
         co_return make_error("failed to send parameterized query");
-    co_return co_await collect_results();
+    parse_completed_ = false;
+    auto result = co_await collect_results();
+    if (!name.empty())
+    {
+        // 26000: the statement no longer exists (DEALLOCATE / DISCARD).
+        // 0A000: its cached plan no longer matches the schema.
+        if (reuse && (result.sql_state == "26000" || result.sql_state == "0A000"))
+            statement_cache_.erase(sql);
+        else if (!reuse && parse_completed_)
+            statement_cache_.emplace(std::move(sql), std::move(name));
+    }
+    co_return result;
 }
 
 auto client::prepare(std::string_view sql, std::string name)
@@ -1062,13 +1084,26 @@ auto client::collect_results(Cancellation cancellation) -> task<result_set>
 {
     result_set result;
     std::vector<std::uint32_t> oids;
+    std::optional<detail::backend_message> owned;
     for (;;)
     {
-        auto message = co_await read_message(cancellation);
-        if (!message)
-            co_return make_error(message.error());
-        auto payload = std::span<const std::uint8_t>(message->payload);
-        if (message->type == 'T')
+        char type{};
+        std::span<const std::uint8_t> payload;
+        bool buffered = false;
+        if constexpr (std::same_as<Cancellation, std::nullptr_t>)
+            buffered = take_buffered_message(type, payload);
+        else
+            buffered = !cancellation->is_cancelled() && take_buffered_message(type, payload);
+        if (!buffered)
+        {
+            auto message = co_await read_message(cancellation);
+            if (!message)
+                co_return make_error(message.error());
+            owned = std::move(*message);
+            type = owned->type;
+            payload = owned->payload;
+        }
+        if (type == 'T')
         {
             if (payload.size() < 2)
                 co_return make_error("truncated RowDescription");
@@ -1108,7 +1143,7 @@ auto client::collect_results(Cancellation cancellation) -> task<result_set>
                 result.columns.push_back(std::move(column));
             }
         }
-        else if (message->type == 'D')
+        else if (type == 'D')
         {
             if (result.rows.size() >= options_.maximum_row_count)
                 co_return make_error("PostgreSQL row limit exceeded");
@@ -1139,7 +1174,7 @@ auto client::collect_results(Cancellation cancellation) -> task<result_set>
             }
             result.rows.push_back(std::move(values));
         }
-        else if (message->type == 'C')
+        else if (type == 'C')
         {
             std::size_t position{};
             auto tag = read_cstring(payload, position);
@@ -1156,7 +1191,7 @@ auto client::collect_results(Cancellation cancellation) -> task<result_set>
                 }
             }
         }
-        else if (message->type == 'E')
+        else if (type == 'E')
         {
             auto error = detail::parse_error(payload);
             result.error_msg = error.message.empty() ? "PostgreSQL query failed" : error.message;
@@ -1164,7 +1199,7 @@ auto client::collect_results(Cancellation cancellation) -> task<result_set>
                 result.error_msg += ": " + error.detail;
             result.sql_state = error.sql_state;
         }
-        else if (message->type == 'S')
+        else if (type == 'S')
         {
             std::size_t position{};
             auto key = read_cstring(payload, position);
@@ -1172,12 +1207,14 @@ auto client::collect_results(Cancellation cancellation) -> task<result_set>
             if (key && value)
                 parameters_.insert_or_assign(std::move(*key), std::move(*value));
         }
-        else if (message->type == 'K' && payload.size() == 8)
+        else if (type == 'K' && payload.size() == 8)
         {
             process_id_ = read_u32(payload.first(4));
             secret_key_ = read_u32(payload.subspan(4));
         }
-        else if (message->type == 'Z')
+        else if (type == '1')
+            parse_completed_ = true;
+        else if (type == 'Z')
         {
             transaction_failed_ = !payload.empty() && payload[0] == 'E';
             if (!result.rows.empty() && !result.rows.front().empty())
@@ -1353,6 +1390,22 @@ auto client::read_message(Cancellation cancellation) -> task<std::expected<detai
     co_return detail::parse_message(wire);
 }
 
+auto client::take_buffered_message(char& type, std::span<const std::uint8_t>& payload) noexcept -> bool
+{
+    const auto available = receive_end_ - receive_begin_;
+    if (available < 5)
+        return false;
+    const auto* header = receive_buffer_.data() + receive_begin_;
+    const auto length = read_u32(std::span<const std::uint8_t>(header + 1, 4));
+    // Invalid lengths are left for read_message, which reports and disconnects.
+    if (length < 4 || length > options_.maximum_message_size || available - 1 < length)
+        return false;
+    type = static_cast<char>(header[0]);
+    payload = std::span<const std::uint8_t>(header + 5, length - 4);
+    receive_begin_ += std::size_t{length} + 1;
+    return true;
+}
+
 void client::disconnect(std::error_code error) noexcept
 {
     receive_begin_ = receive_end_ = 0;
@@ -1361,6 +1414,8 @@ void client::disconnect(std::error_code error) noexcept
     transaction_failed_ = false;
     last_error_ = error;
     parameters_.clear();
+    // Server-side statements belong to the closed session.
+    statement_cache_.clear();
     process_id_ = 0;
     secret_key_ = 0;
 #ifdef CNETMOD_HAS_SSL

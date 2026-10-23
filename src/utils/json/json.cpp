@@ -142,12 +142,267 @@ auto parse_document(std::string_view input, parse_options options)
     }
 }
 
+namespace detail {
+    namespace {
+        // RFC 3629 well-formedness, the same set nlohmann's UTF-8 decoder
+        // accepts: no overlongs, surrogates or code points above U+10FFFF.
+        [[nodiscard]] auto utf8_sequence_length(std::string_view text, std::size_t at) noexcept
+            -> std::size_t
+        {
+            const auto byte = [&](std::size_t offset) noexcept -> unsigned
+            {
+                return static_cast<unsigned char>(text[at + offset]);
+            };
+            const auto remaining = text.size() - at;
+            const auto lead = byte(0);
+            const auto continuation = [&](std::size_t offset) noexcept
+            {
+                return (byte(offset) & 0xC0U) == 0x80U;
+            };
+            if (lead >= 0xC2U && lead <= 0xDFU)
+                return remaining >= 2U && continuation(1) ? 2U : 0U;
+            if (lead >= 0xE0U && lead <= 0xEFU)
+            {
+                if (remaining < 3U || !continuation(1) || !continuation(2))
+                    return 0U;
+                if ((lead == 0xE0U && byte(1) < 0xA0U) || (lead == 0xEDU && byte(1) >= 0xA0U))
+                    return 0U;
+                return 3U;
+            }
+            if (lead >= 0xF0U && lead <= 0xF4U)
+            {
+                if (remaining < 4U || !continuation(1) || !continuation(2) || !continuation(3))
+                    return 0U;
+                if ((lead == 0xF0U && byte(1) < 0x90U) || (lead == 0xF4U && byte(1) >= 0x90U))
+                    return 0U;
+                return 4U;
+            }
+            return 0U;
+        }
+    } // namespace
+
+    namespace
+    {
+        /// True when every byte of the word needs no escaping: not a control
+        /// byte, not a quote or backslash, and plain ASCII. A word may report
+        /// a false hit (borrow), never a false miss.
+        [[nodiscard]] inline auto plain_word(std::uint64_t word) noexcept -> bool
+        {
+            constexpr std::uint64_t ones = 0x0101010101010101ULL;
+            constexpr std::uint64_t highs = 0x8080808080808080ULL;
+            const auto quote = word ^ (ones * '"');
+            const auto backslash = word ^ (ones * '\\');
+            const auto flagged = ((word - ones * 0x20U) & ~word) | (word & highs) |
+                ((quote - ones) & ~quote) | ((backslash - ones) & ~backslash);
+            return (flagged & highs) == 0U;
+        }
+
+        /// Whole-string check for the common case of short identifiers and
+        /// labels. A tail shorter than a word is padded with spaces, which
+        /// are plain, so it is tested by the same word predicate.
+        [[nodiscard]] inline auto plain_ascii(std::string_view value) noexcept -> bool
+        {
+            std::size_t index = 0;
+            for (; value.size() - index >= 8U; index += 8U)
+            {
+                std::uint64_t word;
+                std::memcpy(&word, value.data() + index, sizeof word);
+                if (!plain_word(word))
+                    return false;
+            }
+            if (index == value.size())
+                return true;
+            std::uint64_t word = 0x2020202020202020ULL;
+            std::memcpy(&word, value.data() + index, value.size() - index);
+            return plain_word(word);
+        }
+    } // namespace
+
+    auto append_string(json_writer& out, std::string_view value) -> bool
+    {
+        // Quotes plus the unescaped bytes; escapes reserve their own room.
+        out.reserve(value.size() + 2U);
+        out.put_unchecked('"');
+        if (plain_ascii(value))
+        {
+            out.append_unchecked(value.data(), value.size());
+            out.put_unchecked('"');
+            return true;
+        }
+        std::size_t run = 0;
+        std::size_t index = 0;
+        const auto flush = [&]
+        {
+            out.append(value.data() + run, index - run);
+        };
+        while (index < value.size())
+        {
+            // Skip eight plain ASCII bytes at a time. A word is plain when no
+            // byte is below 0x20, at or above 0x80, a quote or a backslash;
+            // the test may report a false hit (borrow), never a false miss.
+            constexpr std::uint64_t ones = 0x0101010101010101ULL;
+            constexpr std::uint64_t highs = 0x8080808080808080ULL;
+            while (value.size() - index >= 8U)
+            {
+                std::uint64_t word;
+                std::memcpy(&word, value.data() + index, sizeof word);
+                const auto quote = word ^ (ones * '"');
+                const auto backslash = word ^ (ones * '\\');
+                const auto flagged = ((word - ones * 0x20U) & ~word) | (word & highs) |
+                    ((quote - ones) & ~quote) | ((backslash - ones) & ~backslash);
+                if ((flagged & highs) != 0U)
+                    break;
+                index += 8U;
+            }
+            if (index == value.size())
+                break;
+            const auto byte = static_cast<unsigned char>(value[index]);
+            if (byte >= 0x20U && byte != '"' && byte != '\\' && byte < 0x80U)
+            {
+                ++index;
+                continue;
+            }
+            if (byte >= 0x80U)
+            {
+                const auto length = utf8_sequence_length(value, index);
+                if (length == 0U)
+                    return false;
+                index += length;
+                continue;
+            }
+            flush();
+            switch (byte)
+            {
+            case '"': out.append("\\\""); break;
+            case '\\': out.append("\\\\"); break;
+            case '\b': out.append("\\b"); break;
+            case '\f': out.append("\\f"); break;
+            case '\n': out.append("\\n"); break;
+            case '\r': out.append("\\r"); break;
+            case '\t': out.append("\\t"); break;
+            default:
+            {
+                constexpr char hex[] = "0123456789abcdef";
+                const char escaped[] = {'\\', 'u', '0', '0', hex[byte >> 4U], hex[byte & 0x0FU]};
+                out.append(escaped, sizeof escaped);
+            }
+            }
+            run = ++index;
+        }
+        flush();
+        out.put('"');
+        return true;
+    }
+
+    void append_raw_json(json_writer& out, std::string_view text)
+    {
+        // The output is never longer than the input.
+        out.reserve(text.size());
+        auto* cursor = out.cursor();
+        auto* const begin = cursor;
+        bool in_string = false;
+        bool escaped = false;
+        for (const char byte : text)
+        {
+            if (in_string)
+            {
+                *cursor++ = byte;
+                if (escaped)
+                    escaped = false;
+                else if (byte == '\\')
+                    escaped = true;
+                else if (byte == '"')
+                    in_string = false;
+                continue;
+            }
+            if (byte == ' ' || byte == '\t' || byte == '\n' || byte == '\r')
+                continue;
+            *cursor++ = byte;
+            in_string = byte == '"';
+        }
+        out.advance(static_cast<std::size_t>(cursor - begin));
+    }
+
+    auto append_double(json_writer& out, double value)
+        -> std::expected<void, std::error_code>
+    {
+        // Floating point keeps the backend's own formatting (shortest
+        // round-trip digits, "null" for non-finite values).
+        try
+        {
+            out.append(nlohmann::json(value).dump());
+            return {};
+        }
+        catch (const nlohmann::json::exception&)
+        {
+            return std::unexpected(make_error_code(errc::serialization_failed));
+        }
+    }
+
+    auto append_document(json_writer& out, const document& value)
+        -> std::expected<void, std::error_code>
+    {
+        if (value.is_null())
+            out.append("null");
+        else if (value.is_boolean())
+            out.append(value.get<bool>() ? "true" : "false");
+        else if (value.is_uint64())
+            append_integer(out, value.get<std::uint64_t>());
+        else if (value.is_int64())
+            append_integer(out, value.get<std::int64_t>());
+        else if (value.is_double())
+            return append_double(out, value.get<double>());
+        else if (value.is_string())
+        {
+            if (!append_string(out, value.get_ref<const std::string&>()))
+                return std::unexpected(make_error_code(errc::serialization_failed));
+        }
+        else if (value.is_array())
+        {
+            out.put('[');
+            bool first = true;
+            for (const auto& entry : value.get_array())
+            {
+                if (!std::exchange(first, false))
+                    out.put(',');
+                if (auto written = append_document(out, entry); !written)
+                    return written;
+            }
+            out.put(']');
+        }
+        else
+        {
+            out.put('{');
+            bool first = true;
+            for (const auto& [key, entry] : value.get_object())
+            {
+                if (!std::exchange(first, false))
+                    out.put(',');
+                if (!append_string(out, key))
+                    return std::unexpected(make_error_code(errc::serialization_failed));
+                out.put(':');
+                if (auto written = append_document(out, entry); !written)
+                    return written;
+            }
+            out.put('}');
+        }
+        return {};
+    }
+} // namespace detail
+
 auto write_document(const document& value, bool prettify)
     -> std::expected<std::string, std::error_code>
 {
+    if (!prettify)
+    {
+        detail::json_writer out{256U};
+        if (auto written = detail::append_document(out, value); !written)
+            return std::unexpected(written.error());
+        return std::move(out).take();
+    }
     try
     {
-        return to_nlohmann(value).dump(prettify ? 2 : -1);
+        return to_nlohmann(value).dump(2);
     }
     catch (const nlohmann::json::exception&)
     {
