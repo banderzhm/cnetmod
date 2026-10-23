@@ -340,6 +340,7 @@ private:
         /// Set when the inline parse found the HEADERS blocked on QPACK.
         std::shared_ptr<channel<std::monostate>> qpack_waiter;
     };
+
     /// Serves a complete request with a synchronous handler without a
     /// coroutine when its bytes, both header locks and the transport allow
     /// it; otherwise hands the stream, with what was read, to the coroutine.
@@ -439,14 +440,18 @@ private:
     channel<std::monostate> webtransport_registration_{4096};
     std::atomic<std::size_t> pending_webtransport_streams_{};
     bool datagram_dispatcher_started_{};
-    async_wait_group peer_streams_;
+    // Owns every coroutine that references this session or its connection,
+    // including peer requests, server pushes, and datagram dispatch.
+    async_wait_group stream_tasks_;
 
+    void start_datagram_dispatcher();
     auto dispatch_datagrams() -> task<void>;
     auto apply_push_cancellations(const std::vector<std::uint64_t>& ids)
         -> task<void>;
     auto register_push_cancellation(std::uint64_t id,
         const std::shared_ptr<cnetmod::cancel_token>& token) -> task<void>;
     auto release_push_cancellation(std::uint64_t id) -> task<void>;
+    auto release_push_cancellation_owned(std::uint64_t id) -> task<void>;
     auto send_pushes(stream_id parent_stream,
         const std::vector<http3_push>& pushes)
         -> task<std::expected<void, std::error_code>>;

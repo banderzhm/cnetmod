@@ -551,6 +551,20 @@ namespace {
         stream_id id, std::deque<std::vector<header_field>>& completed_headers)
         -> std::expected<http3_request, std::error_code>;
 
+    auto decode_header_block(qpack_decoder& decoder, byte_view encoded,
+        stream_id id, std::deque<std::vector<header_field>>& completed_headers)
+        -> std::expected<std::vector<header_field>, std::error_code>
+    {
+        // The encoder-stream consumer materializes blocked sections in wire
+        // order. Every header-bearing frame, including PUSH_PROMISE, must
+        // consume that FIFO before attempting to decode the block again.
+        if (completed_headers.empty())
+            return decoder.decode(encoded, id);
+        auto fields = std::move(completed_headers.front());
+        completed_headers.pop_front();
+        return fields;
+    }
+
     auto response_from_frames(qpack_decoder& decoder, byte_view wire,
         stream_id id, std::deque<std::vector<header_field>>& completed_headers,
         cnetmod::flat_map<std::uint64_t, http3_request>* promised_pushes = nullptr,
@@ -576,14 +590,8 @@ namespace {
             {
                 if (trailers_seen)
                     return std::unexpected(std::make_error_code(std::errc::protocol_error));
-                std::expected<std::vector<header_field>, std::error_code> fields;
-                if (!completed_headers.empty())
-                {
-                    fields = std::move(completed_headers.front());
-                    completed_headers.pop_front();
-                }
-                else
-                    fields = decoder.decode(headers->encoded_headers, id);
+                auto fields = decode_header_block(decoder,
+                    headers->encoded_headers, id, completed_headers);
                 if (!fields)
                     return std::unexpected(fields.error());
                 const auto is_trailer = headers_seen;
@@ -621,7 +629,8 @@ namespace {
                     promise->promised_stream_id > **max_push_id ||
                     promised_pushes->contains(promise->promised_stream_id))
                     return std::unexpected(std::make_error_code(std::errc::protocol_error));
-                auto fields = decoder.decode(promise->encoded_headers, id);
+                auto fields = decode_header_block(decoder,
+                    promise->encoded_headers, id, completed_headers);
                 if (!fields)
                     return std::unexpected(fields.error());
                 completed_headers.push_back(std::move(*fields));
@@ -1500,13 +1509,13 @@ auto http3_server_session::run() -> task<void>
         if (!accepted)
             break;
 
-        // serve_peer_stream counts the stream in peer_streams_.
+        // serve_peer_stream counts the stream in stream_tasks_.
         // Keep each peer-stream coroutine owned by the I/O context instead of
         // an unowned eager detached frame.  A session can accept another
         // connection's stream while an earlier stream is suspended; ownership
         // through spawn() prevents that re-entrant interleaving from dropping
         // the later coroutine before its first receive awaiter is installed.
-        // peer_streams_ keeps this session alive until every spawned child
+        // stream_tasks_ keeps this session alive until every spawned child
         // invokes its scope guard.  The accept loop already runs on the
         // connection's context, so start the child inline instead of paying
         // a post-queue allocation and reactor hop for every request stream.
@@ -1517,7 +1526,7 @@ auto http3_server_session::run() -> task<void>
     if (std::exchange(inline_writes_pending_, false))
         co_await conn_.flush_pending_writes();
     close_qpack_waiters(qpack_waiters_);
-    co_await peer_streams_.wait();
+    co_await stream_tasks_.wait();
 }
 
 auto http3_server_session::cancel_request(stream_id id) -> task<void>
@@ -1550,7 +1559,7 @@ void http3_server_session::finish_peer_stream(stream_id id, bool unidirectional)
                 conn_.async_close({}, "peer completed HTTP/3 shutdown"));
         }
     }
-    peer_streams_.done();
+    stream_tasks_.done();
 }
 
 auto http3_server_session::service_peer_stream(stream_id id,
@@ -1875,11 +1884,7 @@ auto http3_server_session::service_peer_stream(stream_id id,
                 }
 
                 spawn(conn_.context(), consume_webtransport_close_capsules(conn_, session.state()));
-                if (!datagram_dispatcher_started_)
-                {
-                    datagram_dispatcher_started_ = true;
-                    spawn(conn_.context(), dispatch_datagrams());
-                }
+                start_datagram_dispatcher();
                 cancel_token request_token;
                 conn_.register_stream_cancellation(id, request_token);
                 scope_guard unregister{[this, id]
@@ -2532,7 +2537,7 @@ auto http3_server_session::cancel_owned(stream_id id, std::uint64_t code) -> tas
 
 void http3_server_session::serve_peer_stream(stream_id id)
 {
-    peer_streams_.add();
+    stream_tasks_.add();
     const bool unidirectional = (id & 0x02U) != 0U;
     // Only complete requests for a synchronous handler are served here; every
     // other stream kind keeps its coroutine.
@@ -3018,6 +3023,16 @@ auto http3_server_session::release_push_cancellation(std::uint64_t id)
     peer_cancelled_pushes_.erase(id);
 }
 
+auto http3_server_session::release_push_cancellation_owned(std::uint64_t id)
+    -> task<void>
+{
+    const auto finished = scope_guard{[this]
+        {
+            stream_tasks_.done();
+        }};
+    co_await release_push_cancellation(id);
+}
+
 auto http3_server_session::send_pushes(stream_id parent_stream,
     const std::vector<http3_push>& pushes)
     -> task<std::expected<void, std::error_code>>
@@ -3134,6 +3149,7 @@ auto http3_server_session::send_pushes(stream_id parent_stream,
         // coroutine.  Do not await it in the parent response path: doing so
         // postpones the parent HEADERS and makes CANCEL_PUSH impossible to
         // issue before DATA has already been emitted.
+        stream_tasks_.add();
         spawn(conn_.context(), send_push_body(push_id, *stream, push.response, expected_length, std::move(token)));
     }
     co_return {};
@@ -3144,6 +3160,10 @@ auto http3_server_session::send_push_body(std::uint64_t push_id,
     std::optional<std::uint64_t> expected_length,
     std::shared_ptr<cancel_token> token) -> task<void>
 {
+    const auto finished = scope_guard{[this]
+        {
+            stream_tasks_.done();
+        }};
     conn_.register_stream_cancellation(stream, *token);
     const auto unregister = scope_guard{[this, stream]
         {
@@ -3151,7 +3171,8 @@ auto http3_server_session::send_push_body(std::uint64_t push_id,
         }};
     const auto release = scope_guard{[this, push_id]
         {
-            spawn(conn_.context(), release_push_cancellation(push_id));
+            stream_tasks_.add();
+            spawn(conn_.context(), release_push_cancellation_owned(push_id));
         }};
 
     std::uint64_t sent_length{};
@@ -3700,19 +3721,28 @@ auto http3_server_session::receive_datagram()
 {
     if (!datagrams_enabled())
         co_return std::unexpected(std::make_error_code(std::errc::not_supported));
-    if (!datagram_dispatcher_started_)
-    {
-        datagram_dispatcher_started_ = true;
-        spawn(conn_.context(), dispatch_datagrams());
-    }
+    start_datagram_dispatcher();
     auto datagram = co_await http_datagrams_.receive();
     if (!datagram)
         co_return std::unexpected(std::make_error_code(std::errc::not_connected));
     co_return std::move(*datagram);
 }
 
+void http3_server_session::start_datagram_dispatcher()
+{
+    if (datagram_dispatcher_started_)
+        return;
+    datagram_dispatcher_started_ = true;
+    stream_tasks_.add();
+    spawn(conn_.context(), dispatch_datagrams());
+}
+
 auto http3_server_session::dispatch_datagrams() -> task<void>
 {
+    const auto finished = scope_guard{[this]
+        {
+            stream_tasks_.done();
+        }};
     while (!closing_ && !conn_.is_closed())
     {
         auto wire = co_await conn_.async_receive_datagram();
@@ -4253,13 +4283,8 @@ auto http3_client_session::send_request_streaming(const http3_request& request,
                     co_await qpack_mutex_.lock();
                     cnetmod::async_lock_guard qpack_guard{qpack_mutex_, std::adopt_lock};
                     auto& completed = completed_headers_[*stream];
-                    if (!completed.empty())
-                    {
-                        fields = std::move(completed.front());
-                        completed.pop_front();
-                    }
-                    else
-                        fields = decoder_.decode(frame->encoded_headers, *stream);
+                    fields = decode_header_block(decoder_,
+                        frame->encoded_headers, *stream, completed);
                     if (!fields && fields.error() == std::make_error_code(std::errc::resource_unavailable_try_again))
                         qpack_waiter = qpack_waiter_for(qpack_waiters_, *stream);
                     else
@@ -4330,10 +4355,16 @@ auto http3_client_session::send_request_streaming(const http3_request& request,
                     cnetmod::async_lock_guard qpack_guard{qpack_mutex_, std::adopt_lock};
                     if (promised_pushes_.contains(promise->promised_stream_id))
                         co_return std::unexpected(std::make_error_code(std::errc::protocol_error));
-                    auto fields = decoder_.decode(promise->encoded_headers, *stream);
-                    if (!fields)
-                        co_return std::unexpected(fields.error());
                     auto& completed = completed_headers_[*stream];
+                    auto fields = decode_header_block(decoder_,
+                        promise->encoded_headers, *stream, completed);
+                    if (!fields)
+                    {
+                        if (fields.error() == std::make_error_code(std::errc::resource_unavailable_try_again))
+                            qpack_waiter = qpack_waiter_for(
+                                qpack_waiters_, *stream);
+                        co_return std::unexpected(fields.error());
+                    }
                     completed.push_back(std::move(*fields));
                     const auto placeholder = encode_http3_frame(headers_frame{{}});
                     auto request = request_from_frames(decoder_,
