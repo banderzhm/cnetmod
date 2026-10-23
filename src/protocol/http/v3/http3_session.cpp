@@ -107,18 +107,22 @@ namespace {
             if (!token_.register_callback(this, notify))
                 notify(this);
         }
+
         auto await_ready() noexcept -> bool
         {
             return token_.complete_callback(this) || dispatched_;
         }
+
         void await_suspend(std::coroutine_handle<> waiter) noexcept
         {
             waiter_ = waiter;
         }
+
         void await_resume() noexcept
         {
             token_.finish_callback(this);
         }
+
     private:
         io_context& io_;
         cancel_token& token_;
@@ -166,20 +170,25 @@ namespace {
             if (!parent_.register_callback(this, notify))
                 notify(this);
         }
+
         auto await_ready() noexcept -> bool
         {
             return parent_.complete_callback(this) || dispatched_;
         }
+
         void await_suspend(std::coroutine_handle<> waiter) noexcept
         {
             waiter_ = waiter;
         }
+
         void await_resume() noexcept
         {
             parent_.finish_callback(this);
         }
+
         cancel_token handler;
         cancel_token pump;
+
     private:
         io_context& io_;
         cancel_token& parent_;
@@ -474,6 +483,70 @@ namespace {
         co_return result;
     }
 
+    struct request_header_state
+    {
+        http3_request& request;
+        bool is_trailer;
+        bool& method_seen;
+        bool& scheme_seen;
+        bool& path_seen;
+        bool& authority_seen;
+    };
+
+    auto consume_request_header(void* context, header_field&& field)
+        -> std::expected<void, std::error_code>
+    {
+        auto& state = *static_cast<request_header_state*>(context);
+        auto& request = state.request;
+        if (!state.is_trailer && field.name == ":method")
+        {
+            if (state.method_seen)
+                return std::unexpected(std::make_error_code(std::errc::protocol_error));
+            auto method = string_to_method(field.value);
+            if (!method)
+                return std::unexpected(std::make_error_code(std::errc::protocol_error));
+            request.method = *method;
+            state.method_seen = true;
+        }
+        else if (field.name == ":path")
+        {
+            if (state.is_trailer || state.path_seen)
+                return std::unexpected(std::make_error_code(std::errc::protocol_error));
+            request.path = std::move(field.value);
+            state.path_seen = true;
+        }
+        else if (field.name == ":scheme")
+        {
+            if (state.is_trailer || state.scheme_seen)
+                return std::unexpected(std::make_error_code(std::errc::protocol_error));
+            request.scheme = std::move(field.value);
+            state.scheme_seen = true;
+        }
+        else if (field.name == ":authority")
+        {
+            if (state.is_trailer || state.authority_seen)
+                return std::unexpected(std::make_error_code(std::errc::protocol_error));
+            request.host = std::move(field.value);
+            state.authority_seen = true;
+        }
+        else if (field.name == ":protocol")
+        {
+            // HTTP/3 does not require a particular ordering among request
+            // pseudo fields. Validate the CONNECT relation after the block.
+            if (state.is_trailer || !request.protocol.empty() || field.value.empty())
+                return std::unexpected(std::make_error_code(std::errc::protocol_error));
+            request.protocol = std::move(field.value);
+        }
+        else if (!field.name.starts_with(':'))
+        {
+            auto& target = state.is_trailer ? request.trailers : request.headers;
+            target.insert_or_assign(std::move(field.name), std::move(field.value));
+        }
+        else
+            return std::unexpected(std::make_error_code(std::errc::protocol_error));
+        return {};
+    }
+
     auto request_from_frames(qpack_decoder& decoder, byte_view wire,
         stream_id id, std::deque<std::vector<header_field>>& completed_headers)
         -> std::expected<http3_request, std::error_code>;
@@ -597,75 +670,34 @@ namespace {
             {
                 if (trailers_seen)
                     return std::unexpected(std::make_error_code(std::errc::protocol_error));
-                std::expected<std::vector<header_field>, std::error_code> fields;
+                const auto is_trailer = headers_seen;
+                request_header_state header_state{request, is_trailer,
+                    method_seen, scheme_seen, path_seen, authority_seen};
+                std::expected<void, std::error_code> consumed;
                 if (!completed_headers.empty())
                 {
-                    fields = std::move(completed_headers.front());
+                    auto fields = std::move(completed_headers.front());
                     completed_headers.pop_front();
+                    for (auto& field : fields)
+                    {
+                        consumed = consume_request_header(&header_state,
+                            std::move(field));
+                        if (!consumed)
+                            break;
+                    }
                 }
                 else
-                    fields = decoder.decode(headers->encoded_headers, id);
-                if (!fields)
                 {
-
-                    return std::unexpected(fields.error());
+                    consumed = decoder.decode_each(headers->encoded_headers,
+                        qpack_header_sink{
+                            .context = &header_state,
+                            .consume = consume_request_header,
+                        },
+                        id);
                 }
-                const auto is_trailer = headers_seen;
-                // `header_map` is a contiguous flat map. Reserve once from
-                // the already-decoded QPACK field count so normal request
-                // headers do not repeatedly move key/value strings while
-                // pseudo fields and application fields are classified.
-                auto& target_headers = is_trailer ? request.trailers : request.headers;
-                target_headers.reserve(target_headers.size() + fields->size());
-                for (auto& field : *fields)
+                if (!consumed)
                 {
-
-                    if (!is_trailer && field.name == ":method")
-                    {
-                        if (method_seen)
-                            return std::unexpected(std::make_error_code(std::errc::protocol_error));
-                        auto method = string_to_method(field.value);
-                        if (!method)
-                            return std::unexpected(std::make_error_code(std::errc::protocol_error));
-                        request.method = *method;
-                        method_seen = true;
-                    }
-                    else if (field.name == ":path")
-                    {
-                        if (is_trailer || path_seen)
-                            return std::unexpected(std::make_error_code(std::errc::protocol_error));
-                        request.path = std::move(field.value);
-                        path_seen = true;
-                    }
-                    else if (field.name == ":scheme")
-                    {
-                        if (is_trailer || scheme_seen)
-                            return std::unexpected(std::make_error_code(std::errc::protocol_error));
-                        request.scheme = std::move(field.value);
-                        scheme_seen = true;
-                    }
-                    else if (field.name == ":authority")
-                    {
-                        if (is_trailer || authority_seen)
-                            return std::unexpected(std::make_error_code(std::errc::protocol_error));
-                        request.host = std::move(field.value);
-                        authority_seen = true;
-                    }
-                    else if (field.name == ":protocol")
-                    {
-                        // HTTP/3 does not require a particular ordering among
-                        // request pseudo-header fields.  In particular,
-                        // wtransport may encode :protocol before :method.
-                        // Collect it first and validate the CONNECT relation
-                        // after the complete header block has been decoded.
-                        if (is_trailer || !request.protocol.empty() || field.value.empty())
-                            return std::unexpected(std::make_error_code(std::errc::protocol_error));
-                        request.protocol = std::move(field.value);
-                    }
-                    else if (!field.name.starts_with(':'))
-                        target_headers.insert_or_assign(std::move(field.name), std::move(field.value));
-                    else
-                        return std::unexpected(std::make_error_code(std::errc::protocol_error));
+                    return std::unexpected(consumed.error());
                 }
                 if (is_trailer)
                     trailers_seen = true;
@@ -713,9 +745,14 @@ namespace {
         }
         for (const auto& [name, value] : response.headers)
         {
-            if (name.starts_with(':') || std::ranges::equal(name, "transfer-encoding", {},
-                    [](unsigned char character) { return static_cast<char>(std::tolower(character)); },
-                    [](unsigned char character) { return static_cast<char>(std::tolower(character)); }))
+            if (name.starts_with(':') || std::ranges::equal(name, "transfer-encoding", {}, [](unsigned char character)
+                                             {
+                                                 return static_cast<char>(std::tolower(character));
+                                             },
+                                             [](unsigned char character)
+                                             {
+                                                 return static_cast<char>(std::tolower(character));
+                                             }))
                 continue;
             if (response.static_headers)
             {
@@ -759,9 +796,14 @@ namespace {
                 std::string{status_text.data(), static_cast<std::size_t>(status_end - status_text.data())}});
             for (const auto& [name, value] : response.headers)
             {
-                if (name.starts_with(':') || std::ranges::equal(name, "transfer-encoding", {},
-                        [](unsigned char character) { return static_cast<char>(std::tolower(character)); },
-                        [](unsigned char character) { return static_cast<char>(std::tolower(character)); }))
+                if (name.starts_with(':') || std::ranges::equal(name, "transfer-encoding", {}, [](unsigned char character)
+                                                 {
+                                                     return static_cast<char>(std::tolower(character));
+                                                 },
+                                                 [](unsigned char character)
+                                                 {
+                                                     return static_cast<char>(std::tolower(character));
+                                                 }))
                     continue;
                 fields_scratch.push_back({name, value});
             }
@@ -1515,7 +1557,7 @@ auto http3_server_session::service_peer_stream(stream_id id,
     std::optional<resumed_stream> resumed) -> task<void>
 {
     dynamic_buffer wire = resumed ? std::move(resumed->wire)
-        : dynamic_buffer{webtransport_handler_ ? stream_read_chunk_size : initial_request_read_size};
+                                  : dynamic_buffer{webtransport_handler_ ? stream_read_chunk_size : initial_request_read_size};
     // The inline path already reached FIN: the whole request is in `wire`.
     const bool received_fin = resumed && resumed->fin;
     std::shared_ptr<channel<std::monostate>> resumed_qpack_waiter =
@@ -1596,7 +1638,8 @@ auto http3_server_session::service_peer_stream(stream_id id,
 
         wire.commit(*received);
         const auto header_allowance = local_settings_.max_header_list_size == 0U
-            ? 65536U : local_settings_.max_header_list_size;
+            ? 65536U
+            : local_settings_.max_header_list_size;
         const auto maximum_wire = request_body_options_.max_bytes >
                 std::numeric_limits<std::uint64_t>::max() - header_allowance
             ? std::numeric_limits<std::uint64_t>::max()
@@ -2426,7 +2469,10 @@ auto http3_server_session::send_response(stream_id id, http_method method,
 auto http3_server_session::respond_owned(stream_id id, http_method method,
     http3_response response) -> task<void>
 {
-    scope_guard completion{[this, id] { finish_peer_stream(id, false); }};
+    scope_guard completion{[this, id]
+        {
+            finish_peer_stream(id, false);
+        }};
     co_await send_response(id, method, response);
 }
 
@@ -2437,7 +2483,10 @@ auto http3_server_session::send_encoded_owned(stream_id id, byte_buffer instruct
     // Entered with response_header_mutex_ held when `instructions` is not
     // empty: encoder instructions must reach the encoder stream in the order
     // the HEADERS that refer to them were encoded.
-    scope_guard completion{[this, id] { finish_peer_stream(id, false); }};
+    scope_guard completion{[this, id]
+        {
+            finish_peer_stream(id, false);
+        }};
     if (!instructions.empty())
     {
         async_lock_guard header_guard{response_header_mutex_, std::adopt_lock};
@@ -2465,13 +2514,19 @@ auto http3_server_session::send_encoded_owned(stream_id id, byte_buffer instruct
 
 auto http3_server_session::close_owned(stream_id id, std::error_code error) -> task<void>
 {
-    scope_guard completion{[this, id] { finish_peer_stream(id, false); }};
+    scope_guard completion{[this, id]
+        {
+            finish_peer_stream(id, false);
+        }};
     co_await conn_.async_close(error, "invalid HTTP/3 request stream");
 }
 
 auto http3_server_session::cancel_owned(stream_id id, std::uint64_t code) -> task<void>
 {
-    scope_guard completion{[this, id] { finish_peer_stream(id, false); }};
+    scope_guard completion{[this, id]
+        {
+            finish_peer_stream(id, false);
+        }};
     (void)co_await conn_.async_cancel_stream(id, code);
 }
 
@@ -2501,7 +2556,8 @@ void http3_server_session::serve_peer_stream(stream_id id)
     // Read what has arrived. A request that is not complete yet, or a read
     // that needs the coroutine, continues in service_peer_stream.
     const auto header_allowance = local_settings_.max_header_list_size == 0U
-        ? 65536U : local_settings_.max_header_list_size;
+        ? 65536U
+        : local_settings_.max_header_list_size;
     const auto maximum_wire = request_body_options_.max_bytes >
             std::numeric_limits<std::uint64_t>::max() - header_allowance
         ? std::numeric_limits<std::uint64_t>::max()
@@ -2512,8 +2568,7 @@ void http3_server_session::serve_peer_stream(stream_id id)
             ? initial_request_read_size - wire.readable_bytes()
             : stream_read_chunk_size;
         auto received = conn_.try_recv(id, wire.prepare(read_size));
-        if (!received || (!*received &&
-                received->error() == std::make_error_code(std::errc::operation_would_block)))
+        if (!received || (!*received && received->error() == std::make_error_code(std::errc::operation_would_block)))
         {
             hand_off(false);
             return;
@@ -2623,16 +2678,14 @@ void http3_server_session::serve_peer_stream(stream_id id)
     if (!instructions.empty())
     {
         // Keep the lock until the encoder stream carries the instructions.
-        spawn_local(conn_.context(), send_encoded_owned(id, std::move(instructions),
-            std::move(bytes), std::move(shared_body)));
+        spawn_local(conn_.context(), send_encoded_owned(id, std::move(instructions), std::move(bytes), std::move(shared_body)));
         return;
     }
     response_header_mutex_.unlock();
     auto sent = conn_.try_send_now(id, bytes, shared_body, true);
     if (!sent)
     {
-        spawn_local(conn_.context(), send_encoded_owned(id, {},
-            std::move(bytes), std::move(shared_body)));
+        spawn_local(conn_.context(), send_encoded_owned(id, {}, std::move(bytes), std::move(shared_body)));
         return;
     }
     if (!*sent)
@@ -3995,7 +4048,6 @@ auto http3_client_session::send_request_streaming(const http3_request& request,
             completed_headers_.erase(*stream);
         }};
 
-
     if (request.priority)
     {
         const auto updated = co_await update_priority(*stream, *request.priority);
@@ -4428,7 +4480,7 @@ auto http3_server_session::take_peer_unidirectional_consumed_bytes(stream_id id)
 {
     const auto cursor = peer_unidirectional_stream_bytes_.find(id);
     return cursor == peer_unidirectional_stream_bytes_.end() ? 0U
-        : std::exchange(cursor->second, 0U);
+                                                             : std::exchange(cursor->second, 0U);
 }
 
 auto http3_server_session::finish_peer_unidirectional_stream(stream_id id) -> task<void>
@@ -4450,7 +4502,7 @@ auto http3_client_session::take_peer_unidirectional_consumed_bytes(stream_id id)
 {
     const auto cursor = peer_unidirectional_stream_bytes_.find(id);
     return cursor == peer_unidirectional_stream_bytes_.end() ? 0U
-        : std::exchange(cursor->second, 0U);
+                                                             : std::exchange(cursor->second, 0U);
 }
 
 auto http3_client_session::finish_peer_unidirectional_stream(stream_id id) -> task<void>

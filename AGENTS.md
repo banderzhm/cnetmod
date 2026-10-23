@@ -9166,6 +9166,25 @@ QPACK 的两个方向分开配置：
 
 HttpArena H3 适配器使用 4 KB 解码表 + 编码表上限 0。
 
+### QPACK 逐字段解码
+
+同步请求适配器应使用 `qpack_decoder::decode_each()`，让解码字段直接进入请求对象，
+避免先构造 `std::vector<header_field>` 再搬运到 method/path/header map：
+
+```cpp
+auto decoded = decoder.decode_each(encoded,
+    h3::qpack_header_sink{
+        .context = &state,
+        .consume = consume_request_header,
+    },
+    stream_id);
+```
+
+`consume` 在 `decode_each()` 返回前同步执行，接收字段所有权；不得保存传入字段的引用。
+消费函数返回错误时解码立即停止，该 section 不生成 acknowledgement。需要跨协程保存字段、
+处理被动态表阻塞后完成的 header block，或作为客户端响应结果拥有字段集合时，继续使用
+`decode()` 的 `std::vector<header_field>` 返回值。热路径不得用 `std::function` 包装消费函数。
+
 ### 共享缓冲响应体
 
 服务端可将预加载的不可变内容放入 `response.shared_body`。多个响应共享原始存储，

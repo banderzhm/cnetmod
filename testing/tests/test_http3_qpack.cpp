@@ -8,6 +8,7 @@ namespace {
 using cnetmod::http::v3::header_field;
 using cnetmod::http::v3::qpack_decoder;
 using cnetmod::http::v3::qpack_encoder;
+using cnetmod::http::v3::qpack_header_sink;
 using cnetmod::http::v3::qpack_static_response_headers;
 
 auto fields(std::initializer_list<header_field> values) -> std::vector<header_field>
@@ -54,6 +55,69 @@ TEST(qpack_static_and_literal_header_block_round_trip)
     ASSERT_EQ((*decoded)[1].value, input[1].value);
 }
 
+TEST(qpack_decode_each_matches_owning_decode)
+{
+    qpack_encoder encoder;
+    const auto input = fields({{":method", "GET"}, {":path", "/direct"},
+        {"x-cnetmod-test", "plain"}});
+    const auto encoded = encoder.encode(input, 4);
+    ASSERT_TRUE(encoded.has_value());
+
+    qpack_decoder owning_decoder;
+    const auto owning = owning_decoder.decode(*encoded, 4);
+    ASSERT_TRUE(owning.has_value());
+
+    std::vector<header_field> streamed;
+    qpack_decoder streaming_decoder;
+    const auto decoded = streaming_decoder.decode_each(*encoded,
+        qpack_header_sink{
+            .context = &streamed,
+            .consume = [](void* context, header_field&& field)
+                -> std::expected<void, std::error_code>
+            {
+                static_cast<std::vector<header_field>*>(context)->push_back(
+                    std::move(field));
+                return {};
+            },
+        },
+        4);
+    ASSERT_TRUE(decoded.has_value());
+    ASSERT_EQ(streamed.size(), owning->size());
+    for (std::size_t index{}; index < streamed.size(); ++index)
+    {
+        ASSERT_EQ(streamed[index].name, (*owning)[index].name);
+        ASSERT_EQ(streamed[index].value, (*owning)[index].value);
+    }
+}
+
+TEST(qpack_decode_each_propagates_sink_error_without_section_ack)
+{
+    qpack_encoder encoder{1024};
+    qpack_decoder decoder{1024};
+    const auto encoded = encoder.encode(
+        fields({{"x-cnetmod-dynamic", "first-value"}}), 8);
+    ASSERT_TRUE(encoded.has_value());
+    ASSERT_TRUE(decoder.process_encoder_instructions(
+                           encoder.take_encoder_instructions())
+            .has_value());
+    (void)decoder.take_decoder_instructions();
+
+    auto rejected = std::make_error_code(std::errc::operation_canceled);
+    const auto decoded = decoder.decode_each(*encoded,
+        qpack_header_sink{
+            .context = &rejected,
+            .consume = [](void* context, header_field&&)
+                -> std::expected<void, std::error_code>
+            {
+                return std::unexpected(*static_cast<std::error_code*>(context));
+            },
+        },
+        8);
+    ASSERT_FALSE(decoded.has_value());
+    ASSERT_EQ(decoded.error(), rejected);
+    ASSERT_TRUE(decoder.take_decoder_instructions().empty());
+}
+
 TEST(qpack_dynamic_indexed_header_block_ric_base_and_ack)
 {
     qpack_encoder encoder{1024};
@@ -88,30 +152,32 @@ TEST(qpack_dynamic_header_blocks_remain_decodable_after_acknowledgement)
     encoder.set_max_blocked_streams(100U);
     decoder.set_max_blocked_streams(100U);
 
-    const auto first = fields({
-        {":method", "GET"}, {":scheme", "https"},
+    const auto first = fields({{":method", "GET"}, {":scheme", "https"},
         {":authority", "127.0.0.1"}, {":path", "/get"}});
     const auto first_block = encoder.encode(first, 0U);
     ASSERT_TRUE(first_block.has_value());
     ASSERT_TRUE(decoder.process_encoder_instructions(
-        encoder.take_encoder_instructions()).has_value());
+                           encoder.take_encoder_instructions())
+            .has_value());
     ASSERT_TRUE(decoder.decode(*first_block, 0U).has_value());
     ASSERT_TRUE(encoder.process_decoder_instructions(
-        decoder.take_decoder_instructions()).has_value());
+                           decoder.take_decoder_instructions())
+            .has_value());
 
-    const auto second = fields({
-        {":method", "POST"}, {":scheme", "https"},
+    const auto second = fields({{":method", "POST"}, {":scheme", "https"},
         {":authority", "127.0.0.1"}, {":path", "/post"},
         {"content-type", "text/plain"}, {"content-length", "9"}});
     const auto second_block = encoder.encode(second, 4U);
     ASSERT_TRUE(second_block.has_value());
     ASSERT_TRUE(decoder.process_encoder_instructions(
-        encoder.take_encoder_instructions()).has_value());
+                           encoder.take_encoder_instructions())
+            .has_value());
     const auto decoded = decoder.decode(*second_block, 4U);
     ASSERT_TRUE(decoded.has_value());
     ASSERT_EQ(decoded->size(), second.size());
     ASSERT_TRUE(encoder.process_decoder_instructions(
-        decoder.take_decoder_instructions()).has_value());
+                           decoder.take_decoder_instructions())
+            .has_value());
 }
 
 TEST(qpack_decoder_applies_local_maximum_table_capacity)
@@ -137,20 +203,24 @@ TEST(qpack_acknowledged_entries_stay_pinned_until_each_section_ack)
     const auto first = encoder.encode(original, 0U);
     ASSERT_TRUE(first.has_value());
     ASSERT_TRUE(decoder.process_encoder_instructions(
-        encoder.take_encoder_instructions()).has_value());
+                           encoder.take_encoder_instructions())
+            .has_value());
     // Acknowledging insertion is not acknowledgement of either field section.
     ASSERT_TRUE(encoder.process_decoder_instructions(
-        decoder.take_decoder_instructions()).has_value());
+                           decoder.take_decoder_instructions())
+            .has_value());
     const auto delayed = encoder.encode(original, 4U);
     ASSERT_TRUE(delayed.has_value());
     ASSERT_TRUE(decoder.decode(*first, 0U).has_value());
     ASSERT_TRUE(encoder.process_decoder_instructions(
-        decoder.take_decoder_instructions()).has_value());
+                           decoder.take_decoder_instructions())
+            .has_value());
     const auto replacement = encoder.encode(
         fields({{"x-replacement", std::string(40U, 'b')}}), 8U);
     ASSERT_TRUE(replacement.has_value());
     ASSERT_TRUE(decoder.process_encoder_instructions(
-        encoder.take_encoder_instructions()).has_value());
+                           encoder.take_encoder_instructions())
+            .has_value());
     const auto decoded = decoder.decode(*delayed, 4U);
     ASSERT_TRUE(decoded.has_value());
     if (!decoded)
@@ -202,7 +272,8 @@ TEST(qpack_small_table_does_not_evict_an_insert_in_the_same_section)
     const auto block = encoder.encode(input, 0U);
     ASSERT_TRUE(block.has_value());
     ASSERT_TRUE(decoder.process_encoder_instructions(
-        encoder.take_encoder_instructions()).has_value());
+                           encoder.take_encoder_instructions())
+            .has_value());
     const auto decoded = decoder.decode(*block, 0U);
     ASSERT_TRUE(decoded.has_value());
     if (!decoded)
@@ -223,22 +294,26 @@ TEST(qpack_section_ack_releases_only_the_oldest_section_on_a_stream)
     const auto headers = encoder.encode(input, 0U);
     ASSERT_TRUE(headers.has_value());
     ASSERT_TRUE(decoder.process_encoder_instructions(
-        encoder.take_encoder_instructions()).has_value());
+                           encoder.take_encoder_instructions())
+            .has_value());
     const auto trailers = encoder.encode(input, 0U);
     ASSERT_TRUE(trailers.has_value());
     ASSERT_TRUE(decoder.decode(*headers, 0U).has_value());
     ASSERT_TRUE(encoder.process_decoder_instructions(
-        decoder.take_decoder_instructions()).has_value());
+                           decoder.take_decoder_instructions())
+            .has_value());
     ASSERT_TRUE(encoder.encode(fields({{"x-new", std::string(40U, 'b')}}), 4U).has_value());
     ASSERT_TRUE(decoder.process_encoder_instructions(
-        encoder.take_encoder_instructions()).has_value());
+                           encoder.take_encoder_instructions())
+            .has_value());
     const auto decoded = decoder.decode(*trailers, 0U);
     ASSERT_TRUE(decoded.has_value());
     if (!decoded)
         return;
     ASSERT_EQ(decoded->front().value, input.front().value);
     ASSERT_TRUE(encoder.process_decoder_instructions(
-        decoder.take_decoder_instructions()).has_value());
+                           decoder.take_decoder_instructions())
+            .has_value());
 }
 
 TEST(qpack_huffman_strings_round_trip)
