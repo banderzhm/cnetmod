@@ -21,7 +21,7 @@
 | `release/2.2` | 2.2 版本线稳定与补丁 | Windows、Linux、macOS 全量构建与测试 |
 | `main` | 随时可发布的稳定主线 | 受保护合并，禁止直接推送 |
 | `v2.1.0` | 不可变正式发布身份 | 版本契约、三平台 SDK、干净消费项目、校验和、SBOM、构建证明 |
-| `v2.2.0` | 当前不可变正式发布身份 | 版本契约、三平台 SDK、干净消费项目、校验和、SBOM、构建证明 |
+| `v2.2.1` | 当前不可变正式发布身份 | 版本契约、三平台 SDK、干净消费项目、校验和、SBOM、构建证明 |
 
 分支保护的具体策略维护在 `.github/BRANCHING.md`。版本标签必须从对应的
 `release/<major>.<minor>` 合并到 `main` 后创建。
@@ -50,7 +50,7 @@ share/cnetmod/licenses/LICENSE
 
 ```powershell
 cmake `
-  -DCNETMOD_VERSION=2.2.0 `
+  -DCNETMOD_VERSION=2.2.1 `
   -DCNETMOD_TARGET=windows-x86_64-msvc-v145-md-release `
   -DCNETMOD_PREFIX="$PWD/3rdparty/cnetmod" `
   -P cmake/cnetmod-fetch.cmake
