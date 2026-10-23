@@ -144,10 +144,15 @@ void cubic_congestion_controller::on_packet_acked(std::uint64_t bytes)
 
     const auto now = std::chrono::steady_clock::now();
     if (!epoch_start_)
+    {
         epoch_start_ = now;
+        epoch_k_ = std::cbrt(
+            static_cast<double>(w_max_) * (1.0 - beta_) / cubic_c_);
+    }
     const auto elapsed = std::chrono::duration<double>(now - *epoch_start_).count();
-    const auto k = std::cbrt(static_cast<double>(w_max_) * (1.0 - beta_) / cubic_c_);
-    const auto target = cubic_c_ * std::pow(elapsed - k, 3.0) + static_cast<double>(w_max_);
+    const auto epoch_offset = elapsed - epoch_k_;
+    const auto target = cubic_c_ * epoch_offset * epoch_offset * epoch_offset +
+        static_cast<double>(w_max_);
     const auto reno_increment = std::max<std::uint64_t>(1U, (max_datagram_size_ * bytes) / cwnd_);
     if (target > static_cast<double>(cwnd_))
     {

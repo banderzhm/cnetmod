@@ -91,6 +91,7 @@ private:
     static constexpr double cubic_c_{0.4};
     std::chrono::steady_clock::duration smoothed_rtt_{std::chrono::milliseconds{100}};
     std::optional<std::chrono::steady_clock::time_point> epoch_start_;
+    double epoch_k_{};
     double pacing_rate_{static_cast<double>(cwnd_) * 10.0};
 };
 
