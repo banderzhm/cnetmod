@@ -361,7 +361,8 @@ auto io_uring_context::run_one_impl(bool blocking) -> std::size_t
         // kernel work. Merely peeking the CQ can therefore spin forever after
         // an earlier submission (connect, cancellation, exporter delivery,
         // and similar state machines all rely on repeated poll()).
-        (void)::io_uring_get_events(&ring_);
+        (void)::io_uring_enter(ring_.ring_fd, 0U, 0U,
+            IORING_ENTER_GETEVENTS, nullptr);
     }
     std::size_t handled = 0;
     unsigned reaped = 0;
