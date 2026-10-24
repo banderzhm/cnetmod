@@ -27,6 +27,9 @@ public:
     /// Transfer an owning header map; references into its cache move to the
     /// result. Later queries rebuild the cache without changing request framing.
     [[nodiscard]] auto take_headers() -> header_map;
+    /// Transfer compact request-head ownership after the request lifecycle has
+    /// ended. Request-line and header access are invalid until its next reset.
+    [[nodiscard]] auto take_header_snapshot() -> request_header_snapshot;
     [[nodiscard]] auto body() const noexcept -> std::string_view;
     [[nodiscard]] auto take_body_chunk() -> std::string;
     [[nodiscard]] auto get_header(std::string_view) const -> std::string_view;

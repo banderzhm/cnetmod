@@ -2009,10 +2009,13 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                 // Small HTTP responses normally complete in one send. Avoid the
                 // async_write_all coroutine frame on that hot path, retaining its
                 // correctness loop only for an actual partial write.
+                // Connection abort also shuts down the socket, which retires a
+                // pending SEND. Avoid registering the connection-level token
+                // for every ordinary response; request-scoped and streaming
+                // writes retain their explicit cancellation path.
                 auto written = co_await async_write(io, client,
                     const_buffer{pending_responses.data(),
-                        pending_responses.size()},
-                    cancellation);
+                        pending_responses.size()});
                 if (!written)
                     co_return;
                 if (*written < pending_responses.size())

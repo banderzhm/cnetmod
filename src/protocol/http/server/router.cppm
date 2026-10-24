@@ -58,6 +58,11 @@ export using sse_handler_fn =
 export using connection_upgrade_handler =
     std::function<task<void>(io_context&, socket, std::string)>;
 
+/// Protocol upgrade handler that receives compact ownership of the HTTP
+/// request headers after the complete route and middleware chain has returned.
+export using connection_upgrade_handler_with_headers = std::function<task<void>(
+    io_context&, socket, std::string, request_header_snapshot)>;
+
 /**
  * @brief Owns typed values whose lifetime is exactly one HTTP request.
  *
@@ -240,7 +245,7 @@ export struct route_params
 export class request_context
 {
 public:
-    request_context(io_context& ctx, socket& sock, const request_parser& parser,
+    request_context(io_context& ctx, socket& sock, request_parser& parser,
         response& resp, route_params params,
         std::shared_ptr<request_body_stream> body_stream = {});
     request_context(io_context& ctx, socket& sock, std::string_view method,
@@ -350,6 +355,7 @@ public:
      * code calling this primitive directly.
      */
     void upgrade_connection(connection_upgrade_handler handler);
+    void upgrade_connection(connection_upgrade_handler_with_headers handler);
     /// IP address of the TCP peer (the proxy when one is in front); empty
     /// when the socket has no peer. Use resolve_client_ip() for the client.
     [[nodiscard]] auto peer_address() const -> std::string;
@@ -424,6 +430,7 @@ private:
     void enable_connection_upgrade() noexcept;
     [[nodiscard]] auto take_connection_upgrade()
         -> connection_upgrade_handler;
+    [[nodiscard]] auto take_upgrade_headers() -> request_header_snapshot;
     void expire_sse() noexcept;
     auto write_sse_bytes(std::string_view bytes) -> task<bool>;
     auto write_sse_frame(std::string frame) -> task<bool>;
@@ -433,7 +440,7 @@ private:
     socket& sock_;
     response& resp_;
     route_params params_;
-    const request_parser* parser_{};
+    request_parser* parser_{};
     const header_map* headers_ptr_{};
     std::span<const request_header_view> header_views_{};
     mutable header_map materialized_headers_;
@@ -456,7 +463,7 @@ private:
         sse_stream_state sse_state = sse_stream_state::not_started;
         bool sse_chunked = false;
         stream_write_fn stream_writer;
-        connection_upgrade_handler connection_upgrade;
+        connection_upgrade_handler_with_headers connection_upgrade;
         deadline sse_deadline{};
         std::chrono::milliseconds sse_write_timeout{5000};
         cnetmod::cancel_token cancellation;

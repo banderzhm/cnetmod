@@ -9,6 +9,116 @@ import cnetmod.coro.task;
 
 namespace cnetmod::http {
 
+request_header_snapshot::request_header_snapshot(header_map headers)
+    : headers_(std::move(headers)), materialized_(true)
+{
+}
+
+request_header_snapshot::request_header_snapshot(
+    std::string storage, std::vector<field> fields)
+    : storage_(std::move(storage)), fields_(std::move(fields))
+{
+}
+
+auto request_header_snapshot::from_views(
+    std::span<const request_header_view> headers)
+    -> request_header_snapshot
+{
+    std::size_t storage_size{};
+    for (const auto header : headers)
+        storage_size += header.name.size() + header.value.size();
+
+    std::string storage;
+    storage.reserve(storage_size);
+    std::vector<field> fields;
+    fields.reserve(headers.size());
+    for (const auto header : headers)
+    {
+        const auto name_offset = storage.size();
+        storage.append(header.name);
+        const auto value_offset = storage.size();
+        storage.append(header.value);
+        fields.push_back({name_offset, header.name.size(), value_offset,
+            header.value.size()});
+    }
+    return request_header_snapshot{std::move(storage), std::move(fields)};
+}
+
+auto request_header_snapshot::name(const field& item) const noexcept
+    -> std::string_view
+{
+    return {storage_.data() + item.name_offset, item.name_size};
+}
+
+auto request_header_snapshot::value(const field& item) const noexcept
+    -> std::string_view
+{
+    return {storage_.data() + item.value_offset, item.value_size};
+}
+
+auto request_header_snapshot::get(std::string_view requested) const
+    -> std::string_view
+{
+    if (materialized_)
+    {
+        const auto found = headers_.find(requested);
+        return found == headers_.end() ? std::string_view{}
+                                       : std::string_view{found->second};
+    }
+
+    const case_insensitive_less less;
+    const field* first = nullptr;
+    for (const auto& item : fields_)
+    {
+        const auto field_name = name(item);
+        if (less(field_name, requested) || less(requested, field_name))
+            continue;
+        if (!first)
+        {
+            first = &item;
+            continue;
+        }
+        materialize();
+        const auto found = headers_.find(requested);
+        return found == headers_.end() ? std::string_view{}
+                                       : std::string_view{found->second};
+    }
+    return first ? value(*first) : std::string_view{};
+}
+
+auto request_header_snapshot::headers() const -> const header_map&
+{
+    materialize();
+    return headers_;
+}
+
+auto request_header_snapshot::empty() const noexcept -> bool
+{
+    return materialized_ ? headers_.empty() : fields_.empty();
+}
+
+void request_header_snapshot::materialize() const
+{
+    if (materialized_)
+        return;
+    headers_.clear();
+    headers_.reserve(fields_.size());
+    for (const auto& item : fields_)
+    {
+        const auto field_name = name(item);
+        const auto field_value = value(item);
+        auto found = headers_.find(field_name);
+        if (found == headers_.end())
+            headers_.emplace(std::string{field_name}, std::string{field_value});
+        else
+        {
+            found->second += ", ";
+            found->second += field_value;
+        }
+    }
+    materialized_ = true;
+}
+
 auto guess_mime_type(std::string_view extension) noexcept -> std::string_view
 {
     if (!extension.empty() && extension.front() == '.')

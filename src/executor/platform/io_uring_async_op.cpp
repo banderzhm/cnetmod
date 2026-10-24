@@ -235,6 +235,8 @@ namespace {
     // single-shot path below at compile time.
     #if defined(IORING_ACCEPT_MULTISHOT) && defined(IORING_CQE_F_MORE)
 
+    struct multishot_accept_waiter;
+
     struct multishot_accept_state
     {
         io_uring_context* context{};
@@ -242,9 +244,23 @@ namespace {
         int listener_fd = -1;
         uring_overlapped operation{};
         std::deque<int> accepted_fds;
-        uring_overlapped* waiter{};
+        multishot_accept_waiter* waiter{};
+        std::size_t pending_cancellations{};
+        std::size_t pending_completions{};
         bool active = false;
         bool unsupported = false;
+        bool cancelling = false;
+    };
+
+    struct multishot_accept_waiter
+    {
+        multishot_accept_state* state{};
+        cancel_token* token{};
+        std::coroutine_handle<> coroutine{};
+        post_node completion_post{};
+        post_node cancellation_post{};
+        uring_cancel_request cancellation{};
+        int32_t result{};
     };
 
     using multishot_accept_key = std::pair<std::uint64_t, int>;
@@ -270,6 +286,110 @@ namespace {
         return enabled;
     }
 
+    void retire_multishot_accept_state(multishot_accept_state& state)
+    {
+        if (state.active || state.unsupported || state.waiter ||
+            state.pending_cancellations != 0 || !state.accepted_fds.empty())
+            return;
+        if (state.pending_completions != 0)
+            return;
+        multishot_accept_states().erase(
+            {state.context_id, state.listener_fd});
+    }
+
+    void finish_multishot_accept_cancellation(
+        multishot_accept_waiter& waiter) noexcept
+    {
+        auto* state = waiter.state;
+        waiter.token->finish_callback(&waiter);
+        waiter.result = -ECANCELED;
+        --state->pending_cancellations;
+        const auto coroutine = waiter.coroutine;
+        retire_multishot_accept_state(*state);
+        coroutine.resume();
+    }
+
+    void on_multishot_accept_cancelled(uring_overlapped& operation,
+        int32_t, std::uint32_t) noexcept
+    {
+        auto& waiter = *static_cast<multishot_accept_waiter*>(
+            operation.completion_context);
+        finish_multishot_accept_cancellation(waiter);
+    }
+
+    void dispatch_multishot_accept_cancel(void* operation) noexcept
+    {
+        auto& waiter = *static_cast<multishot_accept_waiter*>(operation);
+        auto& state = *waiter.state;
+        if (state.waiter == &waiter)
+            state.waiter = nullptr;
+        state.cancelling = true;
+        while (!state.accepted_fds.empty())
+        {
+            ::close(state.accepted_fds.front());
+            state.accepted_fds.pop_front();
+        }
+        waiter.cancellation.target = &state.operation;
+        waiter.cancellation.operation.completion =
+            &on_multishot_accept_cancelled;
+        waiter.cancellation.operation.completion_context = &waiter;
+        state.context->enqueue_cancel(waiter.cancellation);
+    }
+
+    void notify_multishot_accept_cancel(void* operation) noexcept
+    {
+        auto& waiter = *static_cast<multishot_accept_waiter*>(operation);
+        waiter.state->context->post_node_raw(&waiter.cancellation_post);
+    }
+
+    void dispatch_multishot_accept_completion(void* operation) noexcept
+    {
+        auto& waiter = *static_cast<multishot_accept_waiter*>(operation);
+        auto* state = waiter.state;
+        --state->pending_completions;
+        const auto coroutine = waiter.coroutine;
+        coroutine.resume();
+        retire_multishot_accept_state(*state);
+    }
+
+    void defer_multishot_accept_completion(
+        multishot_accept_waiter& waiter) noexcept
+    {
+        ++waiter.state->pending_completions;
+        waiter.completion_post.callback =
+            &dispatch_multishot_accept_completion;
+        waiter.completion_post.callback_arg = &waiter;
+        waiter.state->context->defer_completion(waiter.completion_post);
+    }
+
+    struct multishot_accept_suspend
+    {
+        multishot_accept_waiter& waiter;
+
+        [[nodiscard]] auto await_ready() const noexcept -> bool
+        {
+            return false;
+        }
+
+        void await_suspend(std::coroutine_handle<> coroutine) noexcept
+        {
+            waiter.coroutine = coroutine;
+            if (!waiter.token)
+                return;
+            ++waiter.state->pending_cancellations;
+            waiter.cancellation_post.callback =
+                &dispatch_multishot_accept_cancel;
+            waiter.cancellation_post.callback_arg = &waiter;
+            if (!waiter.token->register_callback(
+                    &waiter, &notify_multishot_accept_cancel))
+            {
+                notify_multishot_accept_cancel(&waiter);
+            }
+        }
+
+        void await_resume() const noexcept {}
+    };
+
     void on_multishot_accept(uring_overlapped& operation, int32_t result,
         std::uint32_t flags)
     {
@@ -286,21 +406,32 @@ namespace {
         {
             auto* waiter = std::exchange(state.waiter, nullptr);
             waiter->result = result;
-            waiter->coroutine.resume();
+            if (!waiter->token || waiter->token->complete_callback(waiter))
+            {
+                if (waiter->token)
+                    --state.pending_cancellations;
+                defer_multishot_accept_completion(*waiter);
+            }
+            else if (result >= 0)
+            {
+                if (state.cancelling)
+                    ::close(result);
+                else
+                    state.accepted_fds.push_back(result);
+            }
         }
         else if (result >= 0)
         {
-            state.accepted_fds.push_back(result);
+            if (state.cancelling)
+                ::close(result);
+            else
+                state.accepted_fds.push_back(result);
         }
 
         // A terminal operation can no longer produce CQEs.  Drop its state once
         // there are no accepted descriptors to hand out.  Unsupported listeners
         // are retained so older kernels fall back only once per listener.
-        if (!state.active && !state.unsupported && state.accepted_fds.empty() &&
-            !state.waiter)
-        {
-            multishot_accept_states().erase({state.context_id, state.listener_fd});
-        }
+        retire_multishot_accept_state(state);
     }
 
     auto start_multishot_accept(multishot_accept_state& state)
@@ -316,6 +447,7 @@ namespace {
             SOCK_NONBLOCK | SOCK_CLOEXEC);
         ::io_uring_sqe_set_data(sqe, &state.operation);
         state.active = true;
+        state.cancelling = false;
 
         if (auto r = state.context->flush(); !r)
         {
@@ -323,6 +455,57 @@ namespace {
             return std::unexpected(r.error());
         }
         return {};
+    }
+
+    using accept_result = std::expected<socket, std::error_code>;
+
+    auto try_multishot_accept(io_uring_context& uring, socket& listener,
+        cancel_token* token) -> task<std::optional<accept_result>>
+    {
+        const auto key = multishot_accept_key{uring.instance_id(),
+            static_cast<int>(listener.native_handle())};
+        auto& states = multishot_accept_states();
+        auto [it, inserted] = states.try_emplace(key);
+        if (inserted)
+        {
+            it->second = std::make_unique<multishot_accept_state>();
+            it->second->context = &uring;
+            it->second->context_id = key.first;
+            it->second->listener_fd = key.second;
+        }
+        auto& state = *it->second;
+
+        if (!multishot_accept_enabled() || state.unsupported || state.waiter)
+            co_return std::nullopt;
+        if (!state.accepted_fds.empty())
+        {
+            const auto fd = state.accepted_fds.front();
+            state.accepted_fds.pop_front();
+            co_return accept_result{socket::from_native(fd)};
+        }
+        if (!state.active)
+        {
+            if (auto started = start_multishot_accept(state); !started)
+                co_return accept_result{
+                    std::unexpected(started.error())};
+        }
+
+        multishot_accept_waiter waiter{
+            .state = &state,
+            .token = token,
+        };
+        state.waiter = &waiter;
+        co_await multishot_accept_suspend{waiter};
+
+        if (token && token->is_cancelled())
+            co_return accept_result{std::unexpected(
+                make_error_code(errc::operation_aborted))};
+        if (waiter.result >= 0)
+            co_return accept_result{socket::from_native(waiter.result)};
+        if (state.unsupported)
+            co_return std::nullopt;
+        co_return accept_result{std::unexpected(
+            make_error_code(from_native_error(-waiter.result)))};
     }
 
     #endif
@@ -339,50 +522,9 @@ auto async_accept(io_context& ctx, socket& listener)
     auto& uring = static_cast<io_uring_context&>(ctx);
 
     #if defined(IORING_ACCEPT_MULTISHOT) && defined(IORING_CQE_F_MORE)
-    const auto key = multishot_accept_key{uring.instance_id(),
-        static_cast<int>(listener.native_handle())};
-    auto& states = multishot_accept_states();
-    auto [it, inserted] = states.try_emplace(key);
-    if (inserted)
-    {
-        it->second = std::make_unique<multishot_accept_state>();
-        it->second->context = &uring;
-        it->second->context_id = key.first;
-        it->second->listener_fd = key.second;
-    }
-    auto& state = *it->second;
-
-    if (multishot_accept_enabled() && !state.unsupported)
-    {
-        if (!state.accepted_fds.empty())
-        {
-            const auto fd = state.accepted_fds.front();
-            state.accepted_fds.pop_front();
-            co_return socket::from_native(fd);
-        }
-
-        // A shared multishot SQE has a single waiter.  A concurrent caller
-        // retains the established one-shot semantics rather than stealing a
-        // completion intended for the first caller.
-        if (!state.waiter)
-        {
-            if (!state.active)
-            {
-                if (auto r = start_multishot_accept(state); !r)
-                    co_return std::unexpected(r.error());
-            }
-
-            uring_overlapped waiter;
-            state.waiter = &waiter;
-            co_await uring_suspend{waiter};
-
-            if (waiter.result >= 0)
-                co_return socket::from_native(waiter.result);
-            if (!state.unsupported)
-                co_return std::unexpected(
-                    make_error_code(from_native_error(-waiter.result)));
-        }
-    }
+    if (auto accepted = co_await try_multishot_accept(
+            uring, listener, nullptr))
+        co_return std::move(*accepted);
     #endif
 
     co_return co_await one_shot_async_accept(uring, listener);
@@ -395,6 +537,12 @@ auto async_accept(io_context& ctx, socket& listener, cancel_token& token)
         co_return std::unexpected(make_error_code(errc::operation_aborted));
 
     auto& uring = static_cast<io_uring_context&>(ctx);
+
+    #if defined(IORING_ACCEPT_MULTISHOT) && defined(IORING_CQE_F_MORE)
+    if (auto accepted = co_await try_multishot_accept(
+            uring, listener, &token))
+        co_return std::move(*accepted);
+    #endif
 
     uring_overlapped ov;
 

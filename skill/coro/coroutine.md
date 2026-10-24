@@ -88,11 +88,12 @@ int main() {
 `io_context` 及生命周期要求见
 [Executor 与 Bridge](executor-bridge.md)。
 
-`task<T>` 的协程帧按 64 字节分配。这不是要求业务对象手工对齐，而是框架对优化
-构建的正确性保证：Clang 可能在 `x86-64-v3`/`native` 下对帧内聚合初始化生成
-AVX/AVX-512 对齐写入，普通 `operator new` 的 `max_align_t` 保证不足。不要删除或
-绕过 promise 的对齐分配；Release CPU 目标、LTO、mimalloc 开关组合必须保留真实
-并发请求测试，不能只验证编译通过。
+`task<T>` 的协程帧按编译目标选择对齐：普通目标使用 `max_align_t`，启用 AVX 时
+使用 32 字节，启用 AVX-512 时使用 64 字节。这不是要求业务对象手工对齐，而是
+框架对优化构建的正确性保证：Clang 可能在 `x86-64-v3`/`native` 下对帧内聚合
+初始化生成对齐向量写入；与此同时，普通目标不应被迫承担过对齐分配的开销。不要
+删除或绕过 promise 的目标感知对齐分配；Release CPU 目标、LTO、mimalloc 开关
+组合必须保留真实并发请求测试，不能只验证编译通过。
 
 ---
 

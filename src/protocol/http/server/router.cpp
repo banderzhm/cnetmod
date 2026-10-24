@@ -195,7 +195,7 @@ auto route_params::get(std::string_view key) const noexcept
 }
 
 request_context::request_context(io_context& c, socket& s,
-    const request_parser& p, response& r,
+    request_parser& p, response& r,
     route_params x, std::shared_ptr<request_body_stream> stream)
     : ctx_(c), sock_(s), resp_(r), params_(std::move(x)), parser_(&p),
       method_(p.method()), body_(p.body()), body_stream_(std::move(stream))
@@ -732,6 +732,19 @@ void request_context::upgrade_connection(connection_upgrade_handler handler)
 {
     if (!handler)
         throw std::invalid_argument("connection upgrade handler must not be empty");
+    upgrade_connection(connection_upgrade_handler_with_headers{
+        [handler = std::move(handler)](io_context& io, socket transport,
+            std::string received, request_header_snapshot) mutable -> task<void>
+        {
+            co_await handler(io, std::move(transport), std::move(received));
+        }});
+}
+
+void request_context::upgrade_connection(
+    connection_upgrade_handler_with_headers handler)
+{
+    if (!handler)
+        throw std::invalid_argument("connection upgrade handler must not be empty");
     if (!connection_upgrade_enabled_ || body_stream_)
         throw std::logic_error("this request transport cannot upgrade connections");
     extended().connection_upgrade = std::move(handler);
@@ -751,8 +764,28 @@ auto request_context::take_connection_upgrade()
     -> connection_upgrade_handler
 {
     auto* state = extended_if();
-    return state ? std::move(state->connection_upgrade)
-                 : connection_upgrade_handler{};
+    if (!state || !state->connection_upgrade)
+        return {};
+    auto handler = std::move(state->connection_upgrade);
+    auto headers = take_upgrade_headers();
+    return [handler = std::move(handler), headers = std::move(headers)](
+               io_context& io, socket transport,
+               std::string received) mutable -> task<void>
+    {
+        co_await handler(io, std::move(transport), std::move(received),
+            std::move(headers));
+    };
+}
+
+auto request_context::take_upgrade_headers() -> request_header_snapshot
+{
+    if (parser_)
+        return parser_->take_header_snapshot();
+    if (headers_ptr_)
+        return request_header_snapshot{*headers_ptr_};
+    if (header_views_materialized_)
+        return request_header_snapshot{std::move(materialized_headers_)};
+    return request_header_snapshot::from_views(header_views_);
 }
 
 auto request_context::peer_address() const -> std::string

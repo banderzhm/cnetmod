@@ -74,6 +74,10 @@ public:
     [[nodiscard]] auto submission_error() const noexcept -> std::error_code;
     /// Owner-thread only. SQ pressure never discards a cancellation request.
     void enqueue_cancel(uring_cancel_request& request);
+    /// Defer a caller-owned continuation until the current CQ batch has been
+    /// fully dispatched. Owner-thread only; unlike post_node_raw this does not
+    /// write the wake pipe.
+    void defer_completion(post_node& continuation) noexcept;
 
 protected:
     void wake() override;
@@ -82,7 +86,7 @@ private:
     static constexpr unsigned max_cqe_batch_ = 64;
     static constexpr unsigned default_cqe_tick_limit_ = 256;
     static constexpr unsigned max_cqe_tick_limit_ = 4096;
-    static constexpr unsigned default_submit_batch_size_ = 8;
+    static constexpr unsigned default_submit_batch_size_ = 16;
     static constexpr unsigned max_submit_batch_size_ = 128;
 
     static auto submit_batch_size_from_env() noexcept -> unsigned;
@@ -95,6 +99,7 @@ private:
     auto run_one_impl(bool blocking) -> std::size_t;
     void submit_wake_read();
     void drain_cancellations();
+    auto drain_deferred_completions() noexcept -> std::size_t;
 
     ::io_uring ring_{};
     std::atomic<bool> stopped_{false};
@@ -109,6 +114,7 @@ private:
     std::error_code submission_error_{};
     uring_cancel_request* cancel_head_{};
     uring_cancel_request* cancel_tail_{};
+    post_node* deferred_completion_head_{};
     unsigned submit_batch_size_ = default_submit_batch_size_;
     unsigned cqe_tick_limit_ = default_cqe_tick_limit_;
     std::vector<std::shared_ptr<void>> owner_resources_;

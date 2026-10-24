@@ -78,6 +78,9 @@ auto accept_upgrade(http::request_context& request,
 `101 Switching Protocols`，并让 HTTP server 在 handler 返回后安全移交连接。
 移交前会停止 HTTP 的持续接收，再把 HTTP parser 和 io_uring 已预读的尾部字节
 一并交给 `ws::connection`，因此客户端把第一帧和握手放在同一个 TCP 包中也不会丢帧。
+路由和全部中间件返回后，HTTP/1 parser 会把紧凑的请求头存储转移给
+`ws_context`；`get_header()` 直接查询紧凑字段，只有显式调用 `headers()` 时才构造
+完整 `header_map`。业务不需要也不应为了优化升级过程自行缓存请求头。
 
 该入口用于明文 HTTP/1.1 listener；同一 listener 仍可自动处理 h2c/gRPC。
 TLS/WSS 使用 `ws::server::set_ssl_context()` 的独立 listener。应用不要自行调用

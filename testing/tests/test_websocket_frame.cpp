@@ -1,9 +1,11 @@
 import std;
 import cnetmod.core.address;
 import cnetmod.core.buffer;
+import cnetmod.core.error;
 import cnetmod.core.net_init;
 import cnetmod.core.log;
 import cnetmod.core.socket;
+import cnetmod.coro.cancel;
 import cnetmod.coro.task;
 import cnetmod.io.io_context;
 import cnetmod.executor.pool;
@@ -164,23 +166,66 @@ void check_sharded_stop()
     require(completed, "stop joins all worker accept operations");
 }
 
+void check_cancelled_accept_releases_token()
+{
+    auto io = cnetmod::make_io_context();
+    auto listener = cnetmod::socket::create(cnetmod::address_family::ipv4,
+        cnetmod::socket_type::stream);
+    require(listener.has_value(), "cancellable accept listener socket");
+    require(listener->bind({cnetmod::ipv4_address::loopback(), 0}).has_value(),
+        "bind cancellable accept listener");
+    require(listener->listen().has_value(), "listen for cancellable accept");
+
+    cnetmod::cancel_token cancellation;
+    bool completed = false;
+    const auto accept = [&]() -> cnetmod::task<void>
+    {
+        const auto result = co_await cnetmod::async_accept(
+            *io, *listener, cancellation);
+        require(!result && result.error() ==
+                cnetmod::make_error_code(cnetmod::errc::operation_aborted),
+            "multishot accept reports cancellation");
+        require(!cancellation.pending_.load(std::memory_order_acquire),
+            "cancelled multishot accept retires token registration");
+        completed = true;
+        io->stop();
+    };
+    const auto cancel = [&]() -> cnetmod::task<void>
+    {
+        (void)co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{1});
+        cancellation.cancel();
+    };
+    cnetmod::spawn(*io, accept());
+    cnetmod::spawn(*io, cancel());
+    io->run();
+    require(completed, "cancellable multishot accept resumes exactly once");
+}
+
 void check_http_route_upgrade_preserves_first_frame()
 {
     cnetmod::server_context context(1, 1);
     cnetmod::http::server server(context);
     cnetmod::http::router routes;
+    std::atomic<bool> metadata_preserved = false;
     routes.get("/health", [](cnetmod::http::request_context& request)
         -> cnetmod::task<void>
         {
             request.text(cnetmod::http::status::ok, "ok");
             co_return;
         });
-    routes.get("/ws", [](cnetmod::http::request_context& request)
+    routes.get("/ws", [&metadata_preserved](cnetmod::http::request_context& request)
         -> cnetmod::task<void>
         {
             auto accepted = ws::accept_upgrade(request,
-                [](ws::ws_context& connection) -> cnetmod::task<void>
+                [&metadata_preserved](ws::ws_context& connection)
+                    -> cnetmod::task<void>
                 {
+                    const auto& headers = connection.headers();
+                    const auto found = headers.find("X-Upgrade-Metadata");
+                    metadata_preserved.store(
+                        connection.get_header("x-upgrade-metadata") == "available" &&
+                            found != headers.end() && found->second == "available",
+                        std::memory_order_release);
                     (void)co_await connection.raw_connection().async_process_messages(
                         [](ws::opcode op, std::span<const std::byte> payload,
                             ws::message_writer& output)
@@ -220,6 +265,7 @@ void check_http_route_upgrade_preserves_first_frame()
             "Host: localhost\r\n"
             "Upgrade: websocket\r\n"
             "Connection: Upgrade\r\n"
+            "X-Upgrade-Metadata: available\r\n"
             "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
             "Sec-WebSocket-Version: 13\r\n\r\n";
         request.append(reinterpret_cast<const char*>(frame.data()), frame.size());
@@ -244,6 +290,8 @@ void check_http_route_upgrade_preserves_first_frame()
             "HTTP route emits RFC 6455 accept key");
         require(wire.contains("hello"),
             "frame coalesced with handshake survives protocol transfer");
+        require(metadata_preserved.load(std::memory_order_acquire),
+            "upgrade transfers compact headers and materializes them lazily");
 
         const std::string unicode{"\xe2\x82\xac"};
         auto unicode_frame = ws::build_frame(ws::opcode::text,
@@ -285,6 +333,7 @@ auto main() -> int
         check_disconnected_operations();
         check_appended_frames();
         check_sharded_stop();
+        check_cancelled_accept_releases_token();
         check_http_route_upgrade_preserves_first_frame();
         logger::info{"WebSocket mask, frame reuse, boundaries and control regressions passed"};
     }

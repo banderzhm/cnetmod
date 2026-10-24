@@ -39,7 +39,7 @@ I/O 执行上下文抽象基类，封装平台特定 I/O 多路复用机制（IO
 创建平台默认的 io_context 实例。
 
 Linux `io_uring` 后端默认启用内核支持时的
-`IORING_SETUP_COOP_TASKRUN`，并将同一事件循环轮次内产生的 SQE 以最多 8 个为一批
+`IORING_SETUP_COOP_TASKRUN`，并将同一事件循环轮次内产生的 SQE 以最多 16 个为一批
 提交，减少短小网络操作产生的 `io_uring_enter`。事件循环在等待 CQE 前总会刷新剩余
 SQE，因此不会为了凑满批次而无限等待。可用
 `CNETMOD_IOURING_COOP_TASKRUN=0` 禁用 cooperative task running，或用
@@ -241,6 +241,13 @@ auto accept_loop(cn::io_context& ctx, cn::socket& listener) -> cn::task<void>
     }
 }
 ```
+
+Linux io_uring 后端会让普通和带 `cancel_token` 的 `async_accept()` 共享每个
+listener 的 multishot accept 订阅。取消等待会在所属事件循环撤销内核订阅并关闭
+尚未交付的已接受描述符；应用仍只需取消 token，不要用关闭或重建 listener 模拟取消。
+不支持 multishot 的内核会自动回退到单次 accept。
+同一 CQ 批次中的多个 accept 完成会先全部归集，再恢复一次等待协程，避免逐个 CQ
+形成递归恢复链；协议层不需要额外排空内核完成队列。
 
 ## 场景：async_connect
 

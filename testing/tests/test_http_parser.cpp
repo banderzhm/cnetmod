@@ -22,6 +22,25 @@ TEST(request_parser_transfers_headers_without_losing_parsed_state)
     ASSERT_EQ(owned.at("Host"), std::string("localhost"));
 }
 
+TEST(request_parser_transfers_compact_upgrade_headers)
+{
+    request_parser parser(32);
+    const std::string raw =
+        "GET /ws?room=one HTTP/1.1\r\n"
+        "Host: localhost\r\n"
+        "X-Value: first\r\n"
+        "X-Value: second\r\n\r\n"
+        "buffered-frame";
+    ASSERT_TRUE(parser.consume(raw.data(), raw.size()).has_value());
+
+    auto snapshot = parser.take_header_snapshot();
+    ASSERT_EQ(snapshot.get("host"), std::string_view("localhost"));
+    ASSERT_EQ(snapshot.get("X-VALUE"), std::string_view("first, second"));
+    ASSERT_EQ(snapshot.headers().at("X-Value"),
+        std::string("first, second"));
+    ASSERT_EQ(parser.take_buffered_data(), std::string("buffered-frame"));
+}
+
 // =============================================================================
 // request_parser — Basic GET
 // =============================================================================

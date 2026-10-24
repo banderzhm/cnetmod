@@ -216,6 +216,29 @@ auto request_parser::take_headers() -> header_map
     return std::exchange(headers_, header_map{});
 }
 
+auto request_parser::take_header_snapshot() -> request_header_snapshot
+{
+    if (headers_materialized_)
+    {
+        headers_materialized_ = false;
+        return request_header_snapshot{
+            std::exchange(headers_, header_map{})};
+    }
+
+    preserve_headers();
+    std::vector<request_header_snapshot::field> fields;
+    fields.reserve(header_fields_.size());
+    for (const auto& item : header_fields_)
+        fields.push_back({item.name_offset, item.name_size,
+            item.value_offset, item.value_size});
+    header_fields_.clear();
+    header_index_.clear();
+    common_headers_.fill(missing_header);
+    headers_preserved_ = false;
+    return request_header_snapshot{
+        std::exchange(header_storage_, std::string{}), std::move(fields)};
+}
+
 auto request_parser::body() const noexcept -> std::string_view
 {
     return body_;

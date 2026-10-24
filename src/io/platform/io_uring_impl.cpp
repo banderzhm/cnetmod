@@ -253,6 +253,35 @@ void io_uring_context::enqueue_cancel(uring_cancel_request& request)
     drain_cancellations();
 }
 
+void io_uring_context::defer_completion(post_node& continuation) noexcept
+{
+    continuation.next.store(deferred_completion_head_,
+        std::memory_order_relaxed);
+    deferred_completion_head_ = &continuation;
+}
+
+auto io_uring_context::drain_deferred_completions() noexcept -> std::size_t
+{
+    auto* chain = std::exchange(deferred_completion_head_, nullptr);
+    post_node* ordered = nullptr;
+    while (chain)
+    {
+        auto* next = chain->next.load(std::memory_order_relaxed);
+        chain->next.store(ordered, std::memory_order_relaxed);
+        ordered = chain;
+        chain = next;
+    }
+    std::size_t count{};
+    while (ordered)
+    {
+        auto* node = ordered;
+        ordered = node->next.load(std::memory_order_relaxed);
+        node->dispatch();
+        ++count;
+    }
+    return count;
+}
+
 void io_uring_context::drain_cancellations()
 {
     while (cancel_head_)
@@ -360,7 +389,8 @@ auto io_uring_context::run_one_impl(bool blocking) -> std::size_t
             submission_error_.message(), submission_error_.value()};
     // Blocking here after an unsuccessful submission could strand the only
     // operation capable of cancelling a blocked send. Keep retrying on ticks.
-    if (blocking && !fatal_submission_error && !cancel_head_ && pending_sqes_ == 0)
+    if (blocking && !fatal_submission_error && !cancel_head_ &&
+        pending_sqes_ == 0)
     {
         ::io_uring_cqe* cqe = nullptr;
         if (::io_uring_wait_cqe(&ring_, &cqe) < 0)
@@ -428,6 +458,8 @@ auto io_uring_context::run_one_impl(bool blocking) -> std::size_t
             ++handled;
         }
     }
+    if (deferred_completion_head_)
+        handled += drain_deferred_completions();
     return handled;
 }
 
