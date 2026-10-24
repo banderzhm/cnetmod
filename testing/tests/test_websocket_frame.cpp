@@ -181,12 +181,13 @@ void check_http_route_upgrade_preserves_first_frame()
             auto accepted = ws::accept_upgrade(request,
                 [](ws::ws_context& connection) -> cnetmod::task<void>
                 {
-                    auto message = co_await connection.recv();
-                    require(message.has_value(), "upgraded route receives first frame");
-                    auto sent = co_await connection.send_text(
-                        std::string_view{reinterpret_cast<const char*>(
-                            message->payload.data()), message->payload.size()});
-                    require(sent.has_value(), "upgraded route echoes first frame");
+                    (void)co_await connection.raw_connection().async_process_messages(
+                        [](ws::opcode op, std::span<const std::byte> payload,
+                            ws::message_writer& output)
+                            -> std::expected<void, std::error_code>
+                        {
+                            return output.send(op, payload);
+                        });
                 });
             if (!accepted)
                 request.text(cnetmod::http::status::bad_request,
@@ -243,6 +244,23 @@ void check_http_route_upgrade_preserves_first_frame()
             "HTTP route emits RFC 6455 accept key");
         require(wire.contains("hello"),
             "frame coalesced with handshake survives protocol transfer");
+
+        const std::string unicode{"\xe2\x82\xac"};
+        auto unicode_frame = ws::build_frame(ws::opcode::text,
+            std::as_bytes(std::span{unicode}), true);
+        require((co_await cnetmod::async_write_all(context.accept_io(), *peer,
+                     cnetmod::const_buffer{unicode_frame.data(),
+                         unicode_frame.size()}))
+                    .has_value(),
+            "write non-ASCII UTF-8 frame");
+        while (wire.find(unicode) == std::string::npos)
+        {
+            auto read = co_await cnetmod::async_read(context.accept_io(), *peer,
+                cnetmod::mutable_buffer{buffer.data(), buffer.size()});
+            require(read.has_value() && *read != 0,
+                "read non-ASCII UTF-8 echo");
+            wire.append(buffer.data(), *read);
+        }
         peer->close();
         server.stop();
         while (!listener.handle().done())

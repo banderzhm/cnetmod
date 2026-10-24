@@ -69,27 +69,7 @@ auto parse_frame_header(std::span<const std::byte> data)
 
 void apply_mask(std::span<std::byte> data, std::uint32_t key) noexcept
 {
-    const auto wide_key = static_cast<std::uint64_t>(key) |
-        (static_cast<std::uint64_t>(key) << 32);
-    while (data.size() >= 8)
-    {
-        std::uint64_t value;
-        std::memcpy(&value, data.data(), sizeof(value));
-        value ^= wide_key;
-        std::memcpy(data.data(), &value, sizeof(value));
-        data = data.subspan(8);
-    }
-    if (data.size() >= 4)
-    {
-        std::uint32_t value;
-        std::memcpy(&value, data.data(), sizeof(value));
-        value ^= key;
-        std::memcpy(data.data(), &value, sizeof(value));
-        data = data.subspan(4);
-    }
-    const auto mask = reinterpret_cast<const std::byte*>(&key);
-    for (std::size_t i = 0; i < data.size(); ++i)
-        data[i] ^= mask[i & 3];
+    (void)detail::apply_mask_impl<false>(data, key);
 }
 
 void append_frame_into(std::vector<std::byte>& frames, opcode op,

@@ -211,7 +211,12 @@ auto connection::async_process_messages(message_handler_fn handler,
                 }
                 auto payload = remaining.subspan(header_size,
                     static_cast<std::size_t>(header.payload_length));
-                if (header.masked)
+                const bool unfragmented_text = header.fin &&
+                    op == opcode::text && fragmented_op == opcode::continuation;
+                const bool validated_ascii = header.masked &&
+                    unfragmented_text &&
+                    detail::apply_mask_impl<true>(payload, header.masking_key);
+                if (header.masked && !unfragmented_text)
                     apply_mask(payload, header.masking_key);
                 ++result.processed;
                 if (is_control(op))
@@ -250,7 +255,7 @@ auto connection::async_process_messages(message_handler_fn handler,
                     }
                     if (header.fin)
                     {
-                        if (message_op == opcode::text &&
+                        if (message_op == opcode::text && !validated_ascii &&
                             !valid_message_utf8(message))
                         {
                             failure = make_error_code(ws_errc::invalid_utf8);
