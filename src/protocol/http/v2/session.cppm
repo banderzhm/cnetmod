@@ -63,6 +63,9 @@ struct server_response
     std::vector<header_field> trailers;
     std::vector<std::byte> body;
     std::string body_text;
+    /// Borrowed only by the synchronous server path. session::queue_response
+    /// consumes or promotes it before the handler's reusable builder is reset.
+    std::string_view borrowed_body_text;
     std::shared_ptr<const std::string> shared_body;
     std::shared_ptr<cnetmod::http::response_body_source> body_source;
     static_header_fields static_headers;

@@ -107,9 +107,12 @@ namespace detail {
 } // namespace detail
 
 ws_context::ws_context(connection& conn, std::string path,
-    http::header_map headers, std::string query,
+    http::request_header_snapshot headers, std::string query,
     detail::ws_route_params params)
-    : conn_(conn), path_(std::move(path)), headers_(std::move(headers)), query_(std::move(query)), params_(std::move(params)) {}
+    : conn_(conn), path_(std::move(path)), headers_(std::move(headers)),
+      query_(std::move(query)), params_(std::move(params))
+{
+}
 
 auto ws_context::path() const noexcept -> std::string_view
 {
@@ -121,15 +124,14 @@ auto ws_context::query_string() const noexcept -> std::string_view
     return query_;
 }
 
-auto ws_context::headers() const noexcept -> const http::header_map&
+auto ws_context::headers() const -> const http::header_map&
 {
-    return headers_;
+    return headers_.headers();
 }
 
 auto ws_context::get_header(std::string_view key) const -> std::string_view
 {
-    const auto it = headers_.find(std::string(key));
-    return it == headers_.end() ? std::string_view{} : std::string_view{it->second};
+    return headers_.get(key);
 }
 
 auto ws_context::param(std::string_view name) const noexcept
@@ -184,7 +186,6 @@ auto accept_upgrade(http::request_context& request,
 
     auto path = std::string{request.path()};
     auto query = std::string{request.query_string()};
-    auto headers = request.headers();
     detail::ws_route_params params;
     for (const auto& [name, value] : request.params().named)
         params.named.emplace(name, value);
@@ -200,9 +201,9 @@ auto accept_upgrade(http::request_context& request,
 
     request.upgrade_connection(
         [handler = std::move(handler), path = std::move(path),
-            query = std::move(query), headers = std::move(headers),
-            params = std::move(params)](io_context& io, socket transport,
-            std::string received) mutable -> task<void>
+            query = std::move(query), params = std::move(params)](
+            io_context& io, socket transport, std::string received,
+            http::request_header_snapshot headers) mutable -> task<void>
         {
             connection conn(io);
             conn.attach(std::move(transport), true,

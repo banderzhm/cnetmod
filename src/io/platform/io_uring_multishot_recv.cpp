@@ -74,6 +74,14 @@ auto io_uring_received_buffer::operator=(io_uring_received_buffer&& other) noexc
     return *this;
 }
 
+auto io_uring_received_buffer::data() noexcept -> mutable_buffer
+{
+    if (!owner_)
+        return {};
+    auto view = owner_->buffers_->buffer(buffer_id_);
+    return {view.data, size_};
+}
+
 auto io_uring_received_buffer::data() const noexcept -> const_buffer
 {
     if (!owner_)

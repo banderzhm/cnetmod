@@ -1,5 +1,8 @@
 module;
 #include <cnetmod/config.hpp>
+#if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING)
+    #include <liburing.h>
+#endif
 module cnetmod.protocol.websocket;
 
 import std;
@@ -9,6 +12,11 @@ import cnetmod.coro.cancel;
 import cnetmod.coro.task;
 import cnetmod.executor.async_op;
 import cnetmod.io.io_context;
+#if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING)
+import cnetmod.io.platform.io_uring;
+import cnetmod.io.platform.io_uring_recv_service;
+import cnetmod.io.platform.io_uring_multishot_recv;
+#endif
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
 #endif
@@ -58,23 +66,41 @@ namespace {
         const auto code = (std::to_integer<unsigned>(payload[0]) << 8) |
             std::to_integer<unsigned>(payload[1]);
         return ((code >= 1000 && code <= 1014 && code != 1004 &&
-                    code != 1005 && code != 1006) || (code >= 3000 && code <= 4999)) &&
+                    code != 1005 && code != 1006) ||
+                   (code >= 3000 && code <= 4999)) &&
             valid_message_utf8(payload.subspan(2));
     }
-}
+} // namespace
 
 message_writer::message_writer(std::vector<std::byte>& output, bool mask,
     std::size_t limit) : output_(output), mask_(mask), limit_(limit) {}
+
+void message_writer::trust_input(opcode op,
+    std::span<const std::byte> payload) noexcept
+{
+    trusted_op_ = op;
+    trusted_data_ = payload.data();
+    trusted_size_ = payload.size();
+}
+
+void message_writer::clear_trusted_input() noexcept
+{
+    trusted_op_ = opcode::continuation;
+    trusted_data_ = nullptr;
+    trusted_size_ = 0;
+}
 
 auto message_writer::send(opcode op, std::span<const std::byte> payload)
     -> std::expected<void, std::error_code>
 {
     if (!error_ && (op != opcode::text && op != opcode::binary))
         error_ = make_error_code(ws_errc::reserved_opcode);
-    if (!error_ && (payload.size() > limit_ - 14 ||
-        output_.size() > limit_ - 14 - payload.size()))
+    if (!error_ && (payload.size() > limit_ - 14 || output_.size() > limit_ - 14 - payload.size()))
         error_ = std::make_error_code(std::errc::message_size);
-    if (!error_ && op == opcode::text && !valid_message_utf8(payload))
+    const bool validated_input = op == trusted_op_ &&
+        payload.data() == trusted_data_ && payload.size() == trusted_size_;
+    if (!error_ && op == opcode::text && !validated_input &&
+        !valid_message_utf8(payload))
         error_ = make_error_code(ws_errc::invalid_utf8);
     if (error_)
         return std::unexpected(error_);
@@ -91,156 +117,409 @@ auto connection::async_process_messages(message_handler_fn handler,
         max_message_size > std::numeric_limits<std::size_t>::max() - 65536)
         co_return std::unexpected(std::make_error_code(std::errc::invalid_argument));
 
-    std::vector<std::byte> fragments;
-    auto fragmented_op = opcode::continuation;
-    message_writer writer(send_buf_, !is_server_, max_message_size + 65536);
-    send_buf_.clear();
-    send_buf_.reserve(256);
-    std::error_code failure;
-    std::uint16_t failure_close = close_code::protocol_error;
-    bool received_close = false;
-    while (connected_)
+#if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
+    defined(IORING_RECV_MULTISHOT) && defined(IORING_CQE_F_BUFFER) &&             \
+    defined(IORING_CQE_F_MORE)
+    std::shared_ptr<io_uring_recv_service> receive_service;
+    std::unique_ptr<io_uring_multishot_recv> receiver;
+    const bool multishot_eligible = !cancel_token_
+    #ifdef CNETMOD_HAS_SSL
+        && !secure_
+    #endif
+        && ctx_.running_in_this_thread() &&
+        dynamic_cast<io_uring_context*>(&ctx_) != nullptr;
+    auto start_receiver = [&]()
     {
-        unsigned processed = 0;
-        bool need_read = false;
-        std::size_t next_read = 1024;
-        while (recv_buf_.readable_bytes() && processed < 64)
+        if (!multishot_eligible || receiver)
+            return;
+        auto* uring = static_cast<io_uring_context*>(&ctx_);
+        try
         {
-            const auto readable = recv_buf_.data();
-            auto parsed = parse_frame_header(std::span{
-                static_cast<const std::byte*>(readable.data), readable.size});
-            if (!parsed)
+            receive_service = shared_io_uring_recv_service(*uring);
+            receiver = receive_service->make_receiver(sock_);
+        }
+        catch (...)
+        {
+            receiver.reset();
+            receive_service.reset();
+        }
+    };
+    auto process = [&]() -> task<std::expected<void, std::error_code>>
+    {
+#endif
+        struct parse_result
+        {
+            std::size_t consumed{};
+            std::size_t missing{};
+            unsigned processed{};
+            bool need_more{};
+        };
+
+        std::vector<std::byte> fragments;
+        auto fragmented_op = opcode::continuation;
+        message_writer writer(send_buf_, !is_server_, max_message_size + 65536);
+        send_buf_.clear();
+        send_buf_.reserve(256);
+        std::error_code failure;
+        std::uint16_t failure_close = close_code::protocol_error;
+        bool received_close = false;
+        auto write_submission_mode = write_submission::low_latency;
+
+        auto parse_available = [&](std::span<std::byte> input) -> parse_result
+        {
+            parse_result result;
+            while (result.consumed < input.size() && result.processed < 64 &&
+                send_buf_.size() < 65536)
             {
-                if (parsed.error() != make_error_code(ws_errc::need_more_data))
-                    failure = parsed.error();
-                else
-                    need_read = true;
-                break;
-            }
-            const auto [header, header_size] = *parsed;
-            const auto op = header.op;
-            if (header.rsv1 || header.rsv2 || header.rsv3 ||
-                (op != opcode::continuation && op != opcode::text && op != opcode::binary &&
-                    op != opcode::close && op != opcode::ping && op != opcode::pong) ||
-                header.masked != is_server_ ||
-                (!is_control(op) && ((op == opcode::continuation) !=
-                    (fragmented_op != opcode::continuation))))
-            {
-                failure = make_error_code(ws_errc::protocol_error);
-                break;
-            }
-            if (!is_control(op) && (header.payload_length > max_message_size ||
-                header.payload_length > max_message_size - fragments.size()))
-            {
-                failure = std::make_error_code(std::errc::message_size);
-                failure_close = close_code::message_too_big;
-                break;
-            }
-            const auto frame_size = header_size + static_cast<std::size_t>(header.payload_length);
-            if (readable.size < frame_size)
-            {
-                need_read = true;
-                next_read = std::clamp<std::size_t>(frame_size - readable.size, 1024, 65536);
-                break;
-            }
-            // This connection owns mutable storage. Borrowing never crosses a
-            // callback boundary or an I/O suspension that may grow the buffer.
-            auto payload = std::span{const_cast<std::byte*>(
-                static_cast<const std::byte*>(readable.data)) + header_size,
-                static_cast<std::size_t>(header.payload_length)};
-            if (header.masked)
-                apply_mask(payload, header.masking_key);
-            ++processed;
-            if (is_control(op))
-            {
-                if (op == opcode::close)
+                auto remaining = input.subspan(result.consumed);
+                auto parsed = parse_frame_header(
+                    std::span<const std::byte>{remaining});
+                if (!parsed)
                 {
-                    if (!valid_close_payload(payload))
-                    {
-                        failure = make_error_code(ws_errc::invalid_close_payload);
-                        if (payload.size() > 2 && !valid_message_utf8(payload.subspan(2)))
-                            failure_close = close_code::invalid_payload;
-                        break;
-                    }
-                    if (!close_sent_)
-                        append_frame_into(send_buf_, opcode::close, payload, !is_server_);
-                    close_sent_ = close_received_ = received_close = true;
+                    if (parsed.error() != make_error_code(ws_errc::need_more_data))
+                        failure = parsed.error();
+                    else
+                        result.need_more = true;
+                    break;
                 }
-                else if (op == opcode::ping)
-                    append_frame_into(send_buf_, opcode::pong, payload, !is_server_);
+                const auto [header, header_size] = *parsed;
+                const auto op = header.op;
+                const bool control = is_control(op);
+                if (header.rsv1 || header.rsv2 || header.rsv3 ||
+                    (op != opcode::continuation && op != opcode::text &&
+                        op != opcode::binary && op != opcode::close &&
+                        op != opcode::ping && op != opcode::pong) ||
+                    header.masked != is_server_ ||
+                    (!control && ((op == opcode::continuation) != (fragmented_op != opcode::continuation))))
+                {
+                    failure = make_error_code(ws_errc::protocol_error);
+                    break;
+                }
+                if (!control &&
+                    (header.payload_length > max_message_size ||
+                        header.payload_length > max_message_size - fragments.size()))
+                {
+                    failure = std::make_error_code(std::errc::message_size);
+                    failure_close = close_code::message_too_big;
+                    break;
+                }
+                const auto frame_size = header_size +
+                    static_cast<std::size_t>(header.payload_length);
+                if (remaining.size() < frame_size)
+                {
+                    result.need_more = true;
+                    result.missing = frame_size - remaining.size();
+                    break;
+                }
+                auto payload = remaining.subspan(header_size,
+                    static_cast<std::size_t>(header.payload_length));
+                const bool unfragmented_text = header.fin &&
+                    op == opcode::text && fragmented_op == opcode::continuation;
+                const bool validated_ascii = header.masked &&
+                    unfragmented_text &&
+                    detail::apply_mask_impl<true>(payload, header.masking_key);
+                if (header.masked && !unfragmented_text)
+                    apply_mask(payload, header.masking_key);
+                ++result.processed;
+                if (control)
+                {
+                    if (op == opcode::close)
+                    {
+                        if (!valid_close_payload(payload))
+                        {
+                            failure = make_error_code(ws_errc::invalid_close_payload);
+                            if (payload.size() > 2 &&
+                                !valid_message_utf8(payload.subspan(2)))
+                                failure_close = close_code::invalid_payload;
+                            break;
+                        }
+                        if (!close_sent_)
+                            append_frame_into(send_buf_, opcode::close,
+                                payload, !is_server_);
+                        close_sent_ = close_received_ = received_close = true;
+                    }
+                    else if (op == opcode::ping)
+                        append_frame_into(send_buf_, opcode::pong,
+                            payload, !is_server_);
+                }
+                else
+                {
+                    auto message_op = op;
+                    std::span<const std::byte> message = payload;
+                    if (!header.fin || op == opcode::continuation)
+                    {
+                        if (op != opcode::continuation)
+                            fragmented_op = op;
+                        fragments.insert(fragments.end(),
+                            payload.begin(), payload.end());
+                        message_op = fragmented_op;
+                        message = fragments;
+                    }
+                    if (header.fin)
+                    {
+                        if (message_op == opcode::text && !validated_ascii &&
+                            !valid_message_utf8(message))
+                        {
+                            failure = make_error_code(ws_errc::invalid_utf8);
+                            failure_close = close_code::invalid_payload;
+                            break;
+                        }
+                        writer.trust_input(message_op, message);
+                        const auto handled = handler(message_op, message, writer);
+                        writer.clear_trusted_input();
+                        if (!handled || writer.error_)
+                        {
+                            failure = writer.error_ ? writer.error_ : handled.error();
+                            failure_close = close_code::internal_error;
+                            break;
+                        }
+                        fragments.clear();
+                        fragmented_op = opcode::continuation;
+                    }
+                }
+                result.consumed += frame_size;
+                if (received_close)
+                    break;
             }
+            if (result.processed > 1)
+                write_submission_mode = write_submission::balanced;
+            return result;
+        };
+
+#if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
+    defined(IORING_RECV_MULTISHOT) && defined(IORING_CQE_F_BUFFER) &&             \
+    defined(IORING_CQE_F_MORE)
+        std::optional<io_uring_received_buffer> received_block;
+        std::size_t received_offset{};
+#endif
+        while (connected_)
+        {
+            bool need_read = false;
+            std::size_t next_read = 1024;
+            if (recv_buf_.readable_bytes())
+            {
+                const auto readable = recv_buf_.data();
+                auto parsed = parse_available(std::span{
+                    const_cast<std::byte*>(static_cast<const std::byte*>(readable.data)),
+                    readable.size});
+                recv_buf_.consume(parsed.consumed);
+#if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
+    defined(IORING_RECV_MULTISHOT) && defined(IORING_CQE_F_BUFFER) &&             \
+    defined(IORING_CQE_F_MORE)
+                // A one-shot read containing more than one frame identifies a
+                // batched peer. Keep the latency-oriented one-shot path for
+                // request/response echo, and enable provided buffers only when
+                // they can amortise the persistent receive machinery.
+                if (parsed.processed > 1)
+                    start_receiver();
+#endif
+                need_read = parsed.need_more;
+                if (parsed.missing)
+                    next_read = std::clamp<std::size_t>(parsed.missing, 1024, 65536);
+            }
+#if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
+    defined(IORING_RECV_MULTISHOT) && defined(IORING_CQE_F_BUFFER) &&             \
+    defined(IORING_CQE_F_MORE)
+            else if (received_block)
+            {
+                const auto data = received_block->data();
+                auto direct = std::span{
+                    static_cast<std::byte*>(data.data) + received_offset,
+                    data.size - received_offset};
+                const auto parsed = parse_available(direct);
+                received_offset += parsed.consumed;
+                if (parsed.need_more && received_offset < data.size)
+                {
+                    const auto tail = data.size - received_offset;
+                    auto writable = recv_buf_.prepare(tail);
+                    std::copy_n(direct.data() + parsed.consumed, tail,
+                        static_cast<std::byte*>(writable.data));
+                    recv_buf_.commit(tail);
+                    received_offset = data.size;
+                }
+                if (received_offset == data.size)
+                {
+                    received_block.reset();
+                    received_offset = 0;
+                }
+                need_read = parsed.need_more;
+            }
+#endif
             else
             {
-                auto message_op = op;
-                std::span<const std::byte> message = payload;
-                if (!header.fin || op == opcode::continuation)
+                need_read = true;
+            }
+
+            if (failure && !close_sent_)
+            {
+                const std::array code{static_cast<std::byte>(failure_close >> 8),
+                    static_cast<std::byte>(failure_close)};
+                append_frame_into(send_buf_, opcode::close, code, !is_server_);
+                close_sent_ = true;
+            }
+            if (!send_buf_.empty())
+            {
+                const auto written = co_await async_write_all(
+                    reinterpret_cast<const char*>(send_buf_.data()), send_buf_.size(),
+                    write_submission_mode);
+                send_buf_.clear();
+                if (!written)
                 {
-                    if (op != opcode::continuation)
-                        fragmented_op = op;
-                    fragments.insert(fragments.end(), payload.begin(), payload.end());
-                    message_op = fragmented_op;
-                    message = fragments;
-                }
-                if (header.fin)
-                {
-                    if (message_op == opcode::text && !valid_message_utf8(message))
-                    {
-                        failure = make_error_code(ws_errc::invalid_utf8);
-                        failure_close = close_code::invalid_payload;
-                        break;
-                    }
-                    const auto handled = handler(message_op, message, writer);
-                    if (!handled || writer.error_)
-                    {
-                        failure = writer.error_ ? writer.error_ : handled.error();
-                        failure_close = close_code::internal_error;
-                        break;
-                    }
-                    fragments.clear();
-                    fragmented_op = opcode::continuation;
+                    connected_ = false;
+                    co_return std::unexpected(written.error());
                 }
             }
-            recv_buf_.consume(frame_size);
-            if (received_close || send_buf_.size() >= 65536)
-                break;
-        }
-        if (failure && !close_sent_)
-        {
-            const std::array code{static_cast<std::byte>(failure_close >> 8),
-                static_cast<std::byte>(failure_close)};
-            append_frame_into(send_buf_, opcode::close, code, !is_server_);
-            close_sent_ = true;
-        }
-        if (!send_buf_.empty())
-        {
-            const auto written = co_await async_write_all(
-                reinterpret_cast<const char*>(send_buf_.data()), send_buf_.size());
-            send_buf_.clear();
-            if (!written)
+            if (failure || received_close)
             {
                 connected_ = false;
-                co_return std::unexpected(written.error());
+                if (failure)
+                    co_return std::unexpected(failure);
+                co_return {};
             }
+            if (recv_buf_.readable_bytes()
+#if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
+    defined(IORING_RECV_MULTISHOT) && defined(IORING_CQE_F_BUFFER) &&             \
+    defined(IORING_CQE_F_MORE)
+                || received_block
+#endif
+            )
+            {
+                if (!need_read)
+                    continue;
+            }
+
+#if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
+    defined(IORING_RECV_MULTISHOT) && defined(IORING_CQE_F_BUFFER) &&             \
+    defined(IORING_CQE_F_MORE)
+            if (receiver && cancel_token_)
+            {
+                (void)co_await receiver->async_stop();
+                receiver.reset();
+                receive_service.reset();
+            }
+            if (receiver)
+            {
+                auto block = co_await receiver->async_next();
+                if (!block)
+                {
+                    const auto error = block.error();
+                    if (error == std::errc::no_buffer_space ||
+                        error == std::errc::invalid_argument ||
+                        error == std::errc::operation_not_supported)
+                    {
+                        (void)co_await receiver->async_stop();
+                        receiver.reset();
+                        receive_service.reset();
+                        continue;
+                    }
+                    connected_ = false;
+                    co_return std::unexpected(error);
+                }
+                if (block->size() == 0)
+                {
+                    connected_ = false;
+                    co_return std::unexpected(make_error_code(errc::connection_reset));
+                }
+
+                if (!recv_buf_.readable_bytes())
+                {
+                    received_block.emplace(std::move(*block));
+                    received_offset = 0;
+                    continue;
+                }
+
+                const auto data = block->data();
+                const auto readable = recv_buf_.data();
+                std::size_t required{};
+                auto existing = std::span{
+                    static_cast<const std::byte*>(readable.data), readable.size};
+                auto header = parse_frame_header(existing);
+                if (header)
+                {
+                    const auto frame_size = header->second +
+                        static_cast<std::size_t>(header->first.payload_length);
+                    required = frame_size > existing.size()
+                        ? frame_size - existing.size()
+                        : 0;
+                }
+                else if (header.error() == make_error_code(ws_errc::need_more_data))
+                {
+                    std::array<std::byte, 14> prefix{};
+                    const auto prefix_size = std::min(existing.size(), prefix.size());
+                    std::copy_n(existing.data(), prefix_size, prefix.data());
+                    const auto supplement = std::min(data.size,
+                        prefix.size() - prefix_size);
+                    std::copy_n(static_cast<const std::byte*>(data.data),
+                        supplement, prefix.data() + prefix_size);
+                    auto combined = parse_frame_header(std::span<const std::byte>{
+                        prefix.data(), prefix_size + supplement});
+                    if (combined)
+                    {
+                        const auto frame_size = combined->second +
+                            static_cast<std::size_t>(combined->first.payload_length);
+                        required = frame_size > existing.size()
+                            ? frame_size - existing.size()
+                            : 0;
+                    }
+                    else
+                    {
+                        required = supplement;
+                    }
+                }
+                const auto copied = std::min(required, data.size);
+                if (copied)
+                {
+                    auto writable = recv_buf_.prepare(copied);
+                    std::copy_n(static_cast<const std::byte*>(data.data), copied,
+                        static_cast<std::byte*>(writable.data));
+                    recv_buf_.commit(copied);
+                }
+                if (copied < data.size)
+                {
+                    received_block.emplace(std::move(*block));
+                    received_offset = copied;
+                }
+                continue;
+            }
+#endif
+            auto writable = recv_buf_.prepare(next_read);
+            const auto read = co_await async_read_some(
+                static_cast<char*>(writable.data), writable.size);
+            if (!read || *read == 0)
+            {
+                connected_ = false;
+                co_return std::unexpected(read
+                        ? make_error_code(errc::connection_reset)
+                        : read.error());
+            }
+            recv_buf_.commit(*read);
         }
-        if (failure || received_close)
-        {
-            connected_ = false;
-            if (failure)
-                co_return std::unexpected(failure);
-            co_return {};
-        }
-        if (!need_read && recv_buf_.readable_bytes())
-            continue;
-        auto writable = recv_buf_.prepare(next_read);
-        const auto read = co_await async_read_some(static_cast<char*>(writable.data), writable.size);
-        if (!read || *read == 0)
-        {
-            connected_ = false;
-            co_return std::unexpected(read ? make_error_code(errc::connection_reset) : read.error());
-        }
-        recv_buf_.commit(*read);
+        co_return {};
+#if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
+    defined(IORING_RECV_MULTISHOT) && defined(IORING_CQE_F_BUFFER) &&             \
+    defined(IORING_CQE_F_MORE)
+    };
+
+    std::expected<void, std::error_code> result;
+    std::exception_ptr exception;
+    try
+    {
+        result = co_await process();
     }
-    co_return {};
+    catch (...)
+    {
+        exception = std::current_exception();
+    }
+    if (receiver)
+    {
+        const auto stopped = co_await receiver->async_stop();
+        if (!stopped && result)
+            result = std::unexpected(stopped.error());
+    }
+    if (exception)
+        std::rethrow_exception(exception);
+    co_return result;
+#endif
 }
 
 connection::connection(io_context& ctx) noexcept
@@ -769,7 +1048,8 @@ auto connection::async_read_some(char* buf, std::size_t len)
     co_return co_await cnetmod::async_read(ctx_, sock_, mutable_buffer{buf, len});
 }
 
-auto connection::async_write_all(const char* data, std::size_t len)
+auto connection::async_write_all(const char* data, std::size_t len,
+    write_submission submission)
     -> task<std::expected<void, std::error_code>>
 {
 #ifdef CNETMOD_HAS_SSL
@@ -784,7 +1064,7 @@ auto connection::async_write_all(const char* data, std::size_t len)
             ctx_, sock_, const_buffer{data, len}, *cancel_token_);
     }
     co_return co_await cnetmod::async_write_all(ctx_, sock_,
-        const_buffer{data, len});
+        const_buffer{data, len}, submission);
 }
 
 auto connection::handle_control_frame(const frame_header& hdr,

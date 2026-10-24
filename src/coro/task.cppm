@@ -19,21 +19,44 @@ public:
     // Clang can place vectorized aggregate initialization in a coroutine frame
     // and emit aligned AVX/AVX-512 stores for it. The ordinary allocation
     // function only guarantees max_align_t, which is insufficient for those
-    // frame slots on x86. Keep every task frame cache-line aligned so optimized
-    // CPU targets remain correct without disabling vector code generation.
+    // frame slots on x86. Keep every task frame aligned for the enabled vector
+    // ISA so optimized CPU targets remain correct without disabling vector code
+    // generation.
+    // Do not over-align generic builds: forcing every frame through aligned
+    // allocation is measurable on coroutine-heavy HTTP workloads. The
+    // compiler cannot emit AVX/AVX-512 frame stores unless that ISA is enabled,
+    // so match the allocation to the active target instead.
+#if defined(__AVX512F__)
+    static constexpr std::size_t frame_alignment = 64;
+#elif defined(__AVX__)
+    static constexpr std::size_t frame_alignment = 32;
+#else
+    static constexpr std::size_t frame_alignment = alignof(std::max_align_t);
+#endif
+
     static auto operator new(std::size_t size) -> void*
     {
-        return ::operator new(size, std::align_val_t{64});
+        if constexpr (frame_alignment <= __STDCPP_DEFAULT_NEW_ALIGNMENT__)
+            return ::operator new(size);
+        else
+            return ::operator new(size, std::align_val_t{frame_alignment});
     }
 
     static void operator delete(void* address) noexcept
     {
-        ::operator delete(address, std::align_val_t{64});
+        if constexpr (frame_alignment <= __STDCPP_DEFAULT_NEW_ALIGNMENT__)
+            ::operator delete(address);
+        else
+            ::operator delete(address, std::align_val_t{frame_alignment});
     }
 
     static void operator delete(void* address, std::size_t size) noexcept
     {
-        ::operator delete(address, size, std::align_val_t{64});
+        if constexpr (frame_alignment <= __STDCPP_DEFAULT_NEW_ALIGNMENT__)
+            ::operator delete(address, size);
+        else
+            ::operator delete(
+                address, size, std::align_val_t{frame_alignment});
     }
 
     auto initial_suspend() noexcept -> std::suspend_always;

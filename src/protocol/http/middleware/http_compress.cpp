@@ -143,13 +143,17 @@ namespace {
         return 1'000U;
     }
 
-    /// The client's quality for `coding` (0 when not acceptable), using the
-    /// wildcard entry when the coding is not listed.
-    auto coding_quality(std::string_view value, std::string_view wanted) noexcept
-        -> std::uint16_t
+    struct coding_preferences
     {
-        std::optional<std::uint16_t> explicit_quality;
+        std::optional<std::uint16_t> gzip_quality;
+        std::optional<std::uint16_t> brotli_quality;
         std::optional<std::uint16_t> wildcard_quality;
+    };
+
+    auto parse_coding_preferences(std::string_view value) noexcept
+        -> coding_preferences
+    {
+        coding_preferences result;
         while (!value.empty())
         {
             const auto comma = value.find(',');
@@ -163,14 +167,21 @@ namespace {
             const auto parameters = semicolon == std::string_view::npos
                 ? std::string_view{}
                 : item.substr(semicolon + 1);
-            if (equal_ascii(coding, wanted))
-                explicit_quality = quality(parameters);
+            if (equal_ascii(coding, "gzip"))
+                result.gzip_quality = quality(parameters);
+            else if (equal_ascii(coding, "br"))
+                result.brotli_quality = quality(parameters);
             else if (coding == "*")
-                wildcard_quality = quality(parameters);
+                result.wildcard_quality = quality(parameters);
         }
-        if (explicit_quality)
-            return *explicit_quality;
-        return wildcard_quality.value_or(0U);
+        return result;
+    }
+
+    auto selected_quality(const std::optional<std::uint16_t>& explicit_quality,
+        const std::optional<std::uint16_t>& wildcard_quality) noexcept
+        -> std::uint16_t
+    {
+        return explicit_quality.value_or(wildcard_quality.value_or(0U));
     }
 
     enum class content_coding : std::uint8_t
@@ -183,11 +194,14 @@ namespace {
     auto negotiate(std::string_view accept_encoding, const compress_options& options) noexcept
         -> content_coding
     {
-        const auto gzip = coding_quality(accept_encoding, "gzip");
+        const auto preferences = parse_coding_preferences(accept_encoding);
+        const auto gzip = selected_quality(
+            preferences.gzip_quality, preferences.wildcard_quality);
 #ifdef CNETMOD_HAS_BROTLI
         if (options.brotli_quality >= 0)
         {
-            const auto brotli = coding_quality(accept_encoding, "br");
+            const auto brotli = selected_quality(
+                preferences.brotli_quality, preferences.wildcard_quality);
             if (brotli > 0U && brotli >= gzip)
                 return content_coding::brotli;
         }
@@ -265,17 +279,37 @@ namespace {
         }
     }
 
-    auto is_compressible(std::string_view content_type) -> bool
+    auto starts_with_ascii(std::string_view value, std::string_view prefix) noexcept
+        -> bool
     {
-        std::string lowered;
-        lowered.reserve(content_type.size());
-        for (const auto character : content_type)
-            lowered.push_back(ascii_lower(character));
-        return lowered.starts_with("text/") ||
-            lowered.find("json") != std::string::npos ||
-            lowered.find("xml") != std::string::npos ||
-            lowered.find("javascript") != std::string::npos ||
-            lowered.find("svg") != std::string::npos;
+        return value.size() >= prefix.size() &&
+            std::ranges::equal(value.substr(0, prefix.size()), prefix,
+                [](char lhs, char rhs)
+                {
+                    return ascii_lower(lhs) == ascii_lower(rhs);
+                });
+    }
+
+    auto contains_ascii(std::string_view value, std::string_view needle) noexcept
+        -> bool
+    {
+        if (needle.empty())
+            return true;
+        if (needle.size() > value.size())
+            return false;
+        for (std::size_t offset = 0; offset <= value.size() - needle.size(); ++offset)
+            if (starts_with_ascii(value.substr(offset), needle))
+                return true;
+        return false;
+    }
+
+    auto is_compressible(std::string_view content_type) noexcept -> bool
+    {
+        return starts_with_ascii(content_type, "text/") ||
+            contains_ascii(content_type, "json") ||
+            contains_ascii(content_type, "xml") ||
+            contains_ascii(content_type, "javascript") ||
+            contains_ascii(content_type, "svg");
     }
 
     auto contains_header_token(std::string_view value, std::string_view token)
@@ -305,15 +339,21 @@ namespace {
                 std::string{existing} + ", " + std::string{token});
     }
 
+    using metric_attribute_view = std::pair<std::string_view, std::string_view>;
+
     void measure(const instrumentation::metric_sink& sink,
-        std::string name, double value, instrumentation::metric_kind kind,
-        std::vector<std::pair<std::string, std::string>> attributes = {}) noexcept
+        std::string_view name, double value, instrumentation::metric_kind kind,
+        std::initializer_list<metric_attribute_view> attribute_views = {}) noexcept
     {
         if (!sink)
             return;
         try
         {
-            sink({.name = std::move(name),
+            std::vector<std::pair<std::string, std::string>> attributes;
+            attributes.reserve(attribute_views.size());
+            for (const auto& [key, attribute_value] : attribute_views)
+                attributes.emplace_back(key, attribute_value);
+            sink({.name = std::string{name},
                 .value = value,
                 .kind = kind,
                 .attributes = std::move(attributes)});
@@ -324,7 +364,7 @@ namespace {
     }
 
     void count_outcome(const compress_options& options, content_coding coding,
-        std::string outcome) noexcept
+        std::string_view outcome) noexcept
     {
         measure(options.measurements,
             "http.server.response.compression.operations", 1.0,

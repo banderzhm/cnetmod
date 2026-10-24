@@ -398,6 +398,7 @@ TEST(http2_pending_responses_obey_stream_and_connection_send_windows)
     const std::array reset{std::byte{}, std::byte{}, std::byte{}, std::byte{8}};
     append(opening, {.type = frame_type::rst_stream, .stream_id = 5}, reset);
     std::size_t data_bytes{}, ended{}, stage{}, handled{};
+    std::string reusable_body(40000, 'f');
     const auto update = [&](std::uint32_t id, std::uint32_t credit)
     {
         const std::array payload{static_cast<std::byte>(credit >> 24),
@@ -504,7 +505,18 @@ TEST(http2_pending_responses_obey_stream_and_connection_send_windows)
                 }
             }
             if (header->type == frame_type::data)
+            {
+                const auto payload = wire.subspan(
+                    offset + frame_header_size, header->length);
+                const auto expected = header->stream_id == 1 ? std::byte{'f'}
+                    : header->stream_id == 3                  ? std::byte{'g'}
+                                                             : std::byte{'h'};
+                ASSERT_TRUE(std::ranges::all_of(payload, [expected](std::byte value)
+                    {
+                        return value == expected;
+                    }));
                 data_bytes += header->length;
+            }
             if ((header->type == frame_type::data || header->type == frame_type::headers) &&
                 (header->flags & 1U))
                 ++ended;
@@ -522,9 +534,16 @@ TEST(http2_pending_responses_obey_stream_and_connection_send_windows)
         [&](server_request& request, cnetmod::cancel_token&) -> std::optional<server_response>
         {
             ++handled;
+            // Reuse one synchronous response builder across streams. Every
+            // flow-controlled response must promote the borrowed view before
+            // the following request overwrites this storage.
+            const auto fill = request.stream_id == 1 ? 'f'
+                : request.stream_id == 3             ? 'g'
+                                                     : 'h';
+            std::ranges::fill(reusable_body, fill);
             return server_response{.headers = {{"x-stream", std::to_string(request.stream_id)}},
                 .trailers = {{"x-complete", std::to_string(request.stream_id)}},
-                .body_text = std::string(40000, 'f'),
+                .borrowed_body_text = reusable_body,
                 .static_headers = static_header_fields::from<fixed_headers>(),
                 .static_trailers = static_header_fields::from<fixed_trailers>()};
         },

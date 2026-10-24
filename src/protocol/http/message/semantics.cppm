@@ -498,6 +498,46 @@ export struct request_header_view
     std::string_view value;
 };
 
+/// Owning compact request headers for a protocol-upgraded connection.
+///
+/// HTTP/1 transfers its contiguous request-head storage into this object after
+/// the route and middleware chain have completed. Individual fields stay as
+/// offsets and the owning map is built only if a consumer asks for all headers.
+export class request_header_snapshot
+{
+public:
+    struct field
+    {
+        std::size_t name_offset{};
+        std::size_t name_size{};
+        std::size_t value_offset{};
+        std::size_t value_size{};
+    };
+
+    request_header_snapshot() = default;
+    request_header_snapshot(header_map headers);
+    request_header_snapshot(std::string storage, std::vector<field> fields);
+
+    [[nodiscard]] static auto from_views(
+        std::span<const request_header_view> headers)
+        -> request_header_snapshot;
+    [[nodiscard]] auto get(std::string_view name) const -> std::string_view;
+    [[nodiscard]] auto headers() const -> const header_map&;
+    [[nodiscard]] auto empty() const noexcept -> bool;
+
+private:
+    [[nodiscard]] auto name(const field& value) const noexcept
+        -> std::string_view;
+    [[nodiscard]] auto value(const field& item) const noexcept
+        -> std::string_view;
+    void materialize() const;
+
+    std::string storage_;
+    std::vector<field> fields_;
+    mutable header_map headers_;
+    mutable bool materialized_{};
+};
+
 // =============================================================================
 // Simple URL Structure
 // =============================================================================

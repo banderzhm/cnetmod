@@ -1185,12 +1185,18 @@ I/O 执行上下文抽象基类，封装平台特定 I/O 多路复用机制（IO
 创建平台默认的 io_context 实例。
 
 Linux `io_uring` 后端默认启用内核支持时的
-`IORING_SETUP_COOP_TASKRUN`，并将同一事件循环轮次内产生的 SQE 以最多 8 个为一批
+`IORING_SETUP_COOP_TASKRUN`，并将同一事件循环轮次内产生的 SQE 以最多 16 个为一批
 提交，减少短小网络操作产生的 `io_uring_enter`。事件循环在等待 CQE 前总会刷新剩余
 SQE，因此不会为了凑满批次而无限等待。可用
 `CNETMOD_IOURING_COOP_TASKRUN=0` 禁用 cooperative task running，或用
 `CNETMOD_IOURING_SUBMIT_BATCH=1..128` 覆盖批量大小；这些是诊断和平台调优开关，
 应用通常不应设置。旧内核不接受 cooperative task running 时会自动回退，不影响启动。
+
+支持 provided buffer ring 与 multishot recv 时，底层通过
+`shared_io_uring_recv_service(io_uring_context&)` 为每个事件循环持有一份共享接收服务。
+HTTP 与 WebSocket 等协议应从这里创建轻量 receiver，不得各自注册 buffer ring，也不得
+为每条连接创建接收服务。receiver 必须在销毁前 `co_await async_stop()`；完整的内核
+provided buffer 应直接解析，只有跨 buffer 的残帧可以复制到协议 carry 缓冲。
 
 ### `post_awaitable`
 **签名**: `export struct post_awaitable`
@@ -1279,9 +1285,20 @@ export auto async_write(io_context& ctx, socket& sock, const_buffer buf,
 ```cpp
 export auto async_write_all(io_context& ctx, socket& sock, const_buffer buf)
     -> task<expected<void, error_code>>;
+export enum class write_submission : std::uint8_t {
+    balanced,
+    low_latency
+};
+export auto async_write_all(io_context& ctx, socket& sock, const_buffer buf,
+    write_submission submission) -> task<expected<void, error_code>>;
 export auto async_write_all(io_context& ctx, socket& sock, const_buffer buf,
     cancel_token& token) -> task<expected<void, error_code>>;
 ```
+
+`write_submission::balanced` 保留事件循环的默认批量提交策略，适合吞吐优先或
+流水线写入。`low_latency` 是小型请求/响应写入的后端提示：io_uring 会使用更小的
+提交批次，其他后端保持原有行为。不要把它用于大块传输，也不要为了单个协议修改
+整个 `io_context` 的全局批量阈值。
 
 #### `async_read_until()`
 **签名**（字符串分隔符）:
@@ -1370,6 +1387,13 @@ auto accept_loop(cn::io_context& ctx, cn::socket& listener) -> cn::task<void>
     }
 }
 ```
+
+Linux io_uring 后端会让普通和带 `cancel_token` 的 `async_accept()` 共享每个
+listener 的 multishot accept 订阅。取消等待会在所属事件循环撤销内核订阅并关闭
+尚未交付的已接受描述符；应用仍只需取消 token，不要用关闭或重建 listener 模拟取消。
+不支持 multishot 的内核会自动回退到单次 accept。
+同一 CQ 批次中的多个 accept 完成会先全部归集，再恢复一次等待协程，避免逐个 CQ
+形成递归恢复链；协议层不需要额外排空内核完成队列。
 
 ## 场景：async_connect
 
@@ -2588,11 +2612,12 @@ int main() {
 `io_context` 及生命周期要求见
 [Executor 与 Bridge](executor-bridge.md)。
 
-`task<T>` 的协程帧按 64 字节分配。这不是要求业务对象手工对齐，而是框架对优化
-构建的正确性保证：Clang 可能在 `x86-64-v3`/`native` 下对帧内聚合初始化生成
-AVX/AVX-512 对齐写入，普通 `operator new` 的 `max_align_t` 保证不足。不要删除或
-绕过 promise 的对齐分配；Release CPU 目标、LTO、mimalloc 开关组合必须保留真实
-并发请求测试，不能只验证编译通过。
+`task<T>` 的协程帧按编译目标选择对齐：普通目标使用 `max_align_t`，启用 AVX 时
+使用 32 字节，启用 AVX-512 时使用 64 字节。这不是要求业务对象手工对齐，而是
+框架对优化构建的正确性保证：Clang 可能在 `x86-64-v3`/`native` 下对帧内聚合
+初始化生成对齐向量写入；与此同时，普通目标不应被迫承担过对齐分配的开销。不要
+删除或绕过 promise 的目标感知对齐分配；Release CPU 目标、LTO、mimalloc 开关
+组合必须保留真实并发请求测试，不能只验证编译通过。
 
 ---
 
@@ -8082,8 +8107,8 @@ HTTP accept 循环收到首个异步完成后，会限量排空最多 64 个已�
 非阻塞监听 socket 的 `accept`；没有排队连接时不会自旋。不要在业务层再创建并行
 accept 循环或重复实现这一批处理。
 
-在支持 provided buffer ring 与 multishot recv 的 io_uring 内核上，`server` 会为每个
-事件循环创建一份共享接收服务：注册缓冲区归事件循环所有，连接只持有轻量 receiver，
+在支持 provided buffer ring 与 multishot recv 的 io_uring 内核上，框架会为每个
+事件循环创建一份跨协议共享的接收服务：注册缓冲区归事件循环所有，连接只持有轻量 receiver，
 不会逐连接注册 buffer ring。能力不可用、ring 注册失败或某条 multishot 接收终止时，
 框架自动退回普通 `async_read`；应用层不需要环境变量，也不应自行创建接收适配器。
 HTTP/1 明文连接的首次探测缓冲在协议确定后立即释放；普通读取的 8 KiB 回退缓冲只在
@@ -10479,14 +10504,14 @@ executor.event_loop(), ...)`。`event_loop()` 必须在 request handler 所在�
 
 # 项目架构
 
-> cnetmod v2.2.3 — 基于 C++23 Modules 的跨平台异步网络库。
+> cnetmod v2.2.4 — 基于 C++23 Modules 的跨平台异步网络库。
 
 ## 项目概述
 
 | 属性 | 值 |
 |------|------|
 | 名称 | cnetmod |
-| 版本 | 2.2.3（唯一来源为根目录 `VERSION`） |
+| 版本 | 2.2.4（唯一来源为根目录 `VERSION`） |
 | 语言标准 | C++23（`CMAKE_CXX_STANDARD 23`） |
 | 构建系统 | CMake 3.28+，`CMAKE_CXX_SCAN_FOR_MODULES ON` |
 | 库类型 | 分层静态组件；`cnetmod::core` / `cnetmod::all` 是兼容聚合入口 |
@@ -10991,7 +11016,8 @@ bool skip(std::size_t n) noexcept;
 | `release/2.2` | 2.2 版本线稳定与补丁 | Windows、Linux、macOS 全量构建与测试 |
 | `main` | 随时可发布的稳定主线 | 受保护合并，禁止直接推送 |
 | `v2.1.0` | 不可变正式发布身份 | 版本契约、三平台 SDK、干净消费项目、校验和、SBOM、构建证明 |
-| `v2.2.3` | 当前不可变正式发布身份 | 版本契约、三平台 SDK、干净消费项目、校验和、SBOM、构建证明 |
+| `v2.2.3` | 最近的不可变正式发布身份 | 版本契约、三平台 SDK、干净消费项目、校验和、SBOM、构建证明 |
+| `v2.2.4` | 当前待发布版本 | 合并 `main` 并通过三平台门禁后创建不可变标签 |
 
 分支保护的具体策略维护在 `.github/BRANCHING.md`。版本标签必须从对应的
 `release/<major>.<minor>` 合并到 `main` 后创建。
@@ -11020,7 +11046,7 @@ share/cnetmod/licenses/LICENSE
 
 ```powershell
 cmake `
-  -DCNETMOD_VERSION=2.2.3 `
+  -DCNETMOD_VERSION=2.2.4 `
   -DCNETMOD_TARGET=windows-x86_64-msvc-v145-md-release `
   -DCNETMOD_PREFIX="$PWD/3rdparty/cnetmod" `
   -P cmake/cnetmod-fetch.cmake
@@ -17972,6 +17998,9 @@ auto accept_upgrade(http::request_context& request,
 `101 Switching Protocols`，并让 HTTP server 在 handler 返回后安全移交连接。
 移交前会停止 HTTP 的持续接收，再把 HTTP parser 和 io_uring 已预读的尾部字节
 一并交给 `ws::connection`，因此客户端把第一帧和握手放在同一个 TCP 包中也不会丢帧。
+路由和全部中间件返回后，HTTP/1 parser 会把紧凑的请求头存储转移给
+`ws_context`；`get_header()` 直接查询紧凑字段，只有显式调用 `headers()` 时才构造
+完整 `header_map`。业务不需要也不应为了优化升级过程自行缓存请求头。
 
 该入口用于明文 HTTP/1.1 listener；同一 listener 仍可自动处理 h2c/gRPC。
 TLS/WSS 使用 `ws::server::set_ssl_context()` 的独立 listener。应用不要自行调用
@@ -18001,6 +18030,13 @@ auto handshake_headers() const noexcept -> const http::header_map&;
 多 worker 的 Linux server 使用每 worker 的 SO_REUSEPORT listener，连接在接受它的
 事件循环处理；`stop()` 在对应事件循环取消 accept，并等待全部 listener 退出。
 默认启用 TCP_NODELAY，显式传入 `socket_options` 时遵循调用方选项。
+
+明文 Linux/io_uring 的消息处理会先走低延迟 one-shot 接收；当同一接收批次实际包含
+多个帧时，才自适应切换到事件循环共享的 multishot provided-buffer receiver。完整帧
+直接在 provided buffer 上解析并原地解掩码，只有跨 buffer 的残帧进入 carry 缓冲。
+单帧 request/response 不承担 multishot 的管理成本，pipeline 又不会把每个内核 buffer
+整体复制进 `dynamic_buffer`。TLS、取消模式和不支持 buffer ring 的平台继续使用普通
+异步读取；业务 handler 不应自行选择或包装这两条路径。
 
 ### `ws::client` — 高层客户端
 

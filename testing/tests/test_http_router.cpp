@@ -64,6 +64,15 @@ TEST(router_exact_match)
     ASSERT_TRUE(m2.has_value());
 }
 
+TEST(router_normalizes_noncanonical_exact_paths_without_penalizing_common_paths)
+{
+    router r;
+    r.get("/api/users", make_handler("users"));
+
+    ASSERT_TRUE(r.match(http_method::GET, "//api//users/").has_value());
+    ASSERT_TRUE(r.match(http_method::GET, "api/users").has_value());
+}
+
 TEST(router_no_match)
 {
     router r;
@@ -147,6 +156,27 @@ TEST(router_any_method)
     ASSERT_TRUE(r.match(http_method::DELETE_, "/health").has_value());
 }
 
+TEST(router_indexed_exact_routes_keep_method_and_any_precedence)
+{
+    router r;
+    for (int index = 0; index < 9; ++index)
+        r.get(std::format("/filler/{}", index), make_handler("filler"));
+    r.any("/target", make_handler("any"),
+        endpoint_metadata{endpoint_name{"target.any"}});
+    r.get("/target", make_handler("get"),
+        endpoint_metadata{endpoint_name{"target.get"}});
+
+    const auto get = r.match(http_method::GET, "/target");
+    ASSERT_TRUE(get.has_value());
+    ASSERT_TRUE(get->params.matched != nullptr);
+    ASSERT_EQ(get->params.matched->name, std::string{"target.get"});
+
+    const auto post = r.match(http_method::POST, "/target");
+    ASSERT_TRUE(post.has_value());
+    ASSERT_TRUE(post->params.matched != nullptr);
+    ASSERT_EQ(post->params.matched->name, std::string{"target.any"});
+}
+
 TEST(router_sync_handler_is_preserved_without_coroutine_adapter)
 {
     router routes;
@@ -186,6 +216,22 @@ TEST(router_param_multiple)
     ASSERT_TRUE(m.has_value());
     ASSERT_EQ(m->params.get("uid"), std::string_view("7"));
     ASSERT_EQ(m->params.get("pid"), std::string_view("99"));
+}
+
+TEST(router_preserves_routes_with_more_than_two_parameters)
+{
+    router r;
+    r.get("/org/:tenant/region/:region/team/:team/user/:user",
+        make_handler("hierarchy"));
+
+    auto m = r.match(http_method::GET,
+        "/org/acme/region/east/team/platform/user/42");
+    ASSERT_TRUE(m.has_value());
+    ASSERT_EQ(m->params.named.size(), std::size_t{4});
+    ASSERT_EQ(m->params.get("tenant"), std::string_view("acme"));
+    ASSERT_EQ(m->params.get("region"), std::string_view("east"));
+    ASSERT_EQ(m->params.get("team"), std::string_view("platform"));
+    ASSERT_EQ(m->params.get("user"), std::string_view("42"));
 }
 
 TEST(router_param_no_match_extra_segment)

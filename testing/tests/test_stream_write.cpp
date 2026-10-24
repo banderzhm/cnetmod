@@ -23,8 +23,10 @@ import cnetmod.io.io_context;
 import cnetmod.executor.async_op;
 import cnetmod.executor.pool;
 import cnetmod.coro.wait_group;
-#if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && defined(IORING_RECV_MULTISHOT)
+#ifdef CNETMOD_HAS_IO_URING
 import cnetmod.io.platform.io_uring;
+#endif
+#if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && defined(IORING_RECV_MULTISHOT)
 import cnetmod.io.platform.io_uring_recv_service;
 import cnetmod.io.platform.io_uring_multishot_recv;
 #endif
@@ -120,6 +122,16 @@ auto pair() -> std::array<cnetmod::socket, 2>
 
 auto run(cnetmod::io_context& io) -> cnetmod::task<void>
 {
+#ifdef CNETMOD_HAS_IO_URING
+    if (auto* uring = dynamic_cast<cnetmod::io_uring_context*>(&io))
+    {
+        const auto invalid_flush = uring->flush(0);
+        require(!invalid_flush &&
+                invalid_flush.error() ==
+                    std::make_error_code(std::errc::invalid_argument),
+            "zero io_uring submission threshold is rejected");
+    }
+#endif
     bool immediate = false;
     cnetmod::dispatch_guarded<observe_dispatch_failure>(io, mark_started(immediate));
     require(immediate, "owner dispatch starts inline");
@@ -180,6 +192,22 @@ auto run(cnetmod::io_context& io) -> cnetmod::task<void>
         (void)co_await cnetmod::async_sleep(io, std::chrono::milliseconds{1});
     if (reader_error)
         std::rethrow_exception(reader_error);
+
+    auto low_latency_sockets = pair();
+    constexpr std::string_view low_latency_payload{"low-latency-write"};
+    const auto low_latency_write = co_await cnetmod::async_write_all(io,
+        low_latency_sockets[0],
+        cnetmod::const_buffer{low_latency_payload.data(), low_latency_payload.size()},
+        cnetmod::write_submission::low_latency);
+    require(static_cast<bool>(low_latency_write), "low-latency write_all completes");
+    std::array<char, low_latency_payload.size()> low_latency_received{};
+    require(::recv(low_latency_sockets[1].native_handle(),
+                low_latency_received.data(), low_latency_received.size(), 0) ==
+            static_cast<ssize_t>(low_latency_received.size()),
+        "low-latency write_all sends the complete payload");
+    require(std::string_view{low_latency_received.data(), low_latency_received.size()} ==
+            low_latency_payload,
+        "low-latency write_all preserves payload bytes");
 
     // Force a pending write without a reader, then cancel after suspension.
     auto stalled = pair();

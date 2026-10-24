@@ -12,6 +12,9 @@ import cnetmod.core.socket;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.cancel;
+#ifdef CNETMOD_HAS_IO_URING
+import cnetmod.io.platform.io_uring;
+#endif
 
 namespace cnetmod {
 namespace detail {
@@ -180,6 +183,20 @@ auto async_write_all(io_context& ctx, socket& sock, const_buffer buf)
     }
 
     co_return {};
+}
+
+auto async_write_all(io_context& ctx, socket& sock, const_buffer buf,
+    write_submission submission)
+    -> task<std::expected<void, std::error_code>>
+{
+#ifdef CNETMOD_HAS_IO_URING
+    if (submission == write_submission::low_latency &&
+        dynamic_cast<io_uring_context*>(&ctx) != nullptr)
+        co_return co_await async_write_all_low_latency(ctx, sock, buf);
+#else
+    (void)submission;
+#endif
+    co_return co_await async_write_all(ctx, sock, buf);
 }
 
 auto async_write_all(io_context& ctx, socket& sock, const_buffer buf,

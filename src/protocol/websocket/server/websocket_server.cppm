@@ -70,12 +70,13 @@ namespace detail {
 export class ws_context
 {
 public:
-    ws_context(connection& conn, std::string path, http::header_map headers,
-        std::string query, detail::ws_route_params params);
+    ws_context(connection& conn, std::string path,
+        http::request_header_snapshot headers, std::string query,
+        detail::ws_route_params params);
 
     [[nodiscard]] auto path() const noexcept -> std::string_view;
     [[nodiscard]] auto query_string() const noexcept -> std::string_view;
-    [[nodiscard]] auto headers() const noexcept -> const http::header_map&;
+    [[nodiscard]] auto headers() const -> const http::header_map&;
 
     [[nodiscard]] auto get_header(std::string_view key) const -> std::string_view;
 
@@ -102,7 +103,7 @@ public:
 private:
     connection& conn_;
     std::string path_;
-    http::header_map headers_;
+    http::request_header_snapshot headers_;
     std::string query_;
     detail::ws_route_params params_;
 };

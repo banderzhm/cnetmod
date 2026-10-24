@@ -177,8 +177,16 @@ TEST(task_int_basic)
     ASSERT_EQ(result, 42);
 }
 
-TEST(task_coroutine_frames_are_cache_line_aligned)
+TEST(task_coroutine_frames_match_enabled_vector_isa_alignment)
 {
+#if defined(__AVX512F__)
+    constexpr std::size_t expected_alignment = 64U;
+#elif defined(__AVX__)
+    constexpr std::size_t expected_alignment = 32U;
+#else
+    constexpr std::size_t expected_alignment = alignof(std::max_align_t);
+#endif
+
     std::vector<task<int>> tasks;
     tasks.reserve(256);
     for (int index{}; index < 256; ++index)
@@ -188,7 +196,7 @@ TEST(task_coroutine_frames_are_cache_line_aligned)
     {
         const auto address = reinterpret_cast<std::uintptr_t>(
             operation.handle().address());
-        ASSERT_EQ(address % 64U, 0U);
+        ASSERT_EQ(address % expected_alignment, 0U);
     }
 }
 

@@ -78,6 +78,9 @@ auto accept_upgrade(http::request_context& request,
 `101 Switching Protocols`，并让 HTTP server 在 handler 返回后安全移交连接。
 移交前会停止 HTTP 的持续接收，再把 HTTP parser 和 io_uring 已预读的尾部字节
 一并交给 `ws::connection`，因此客户端把第一帧和握手放在同一个 TCP 包中也不会丢帧。
+路由和全部中间件返回后，HTTP/1 parser 会把紧凑的请求头存储转移给
+`ws_context`；`get_header()` 直接查询紧凑字段，只有显式调用 `headers()` 时才构造
+完整 `header_map`。业务不需要也不应为了优化升级过程自行缓存请求头。
 
 该入口用于明文 HTTP/1.1 listener；同一 listener 仍可自动处理 h2c/gRPC。
 TLS/WSS 使用 `ws::server::set_ssl_context()` 的独立 listener。应用不要自行调用
@@ -107,6 +110,13 @@ auto handshake_headers() const noexcept -> const http::header_map&;
 多 worker 的 Linux server 使用每 worker 的 SO_REUSEPORT listener，连接在接受它的
 事件循环处理；`stop()` 在对应事件循环取消 accept，并等待全部 listener 退出。
 默认启用 TCP_NODELAY，显式传入 `socket_options` 时遵循调用方选项。
+
+明文 Linux/io_uring 的消息处理会先走低延迟 one-shot 接收；当同一接收批次实际包含
+多个帧时，才自适应切换到事件循环共享的 multishot provided-buffer receiver。完整帧
+直接在 provided buffer 上解析并原地解掩码，只有跨 buffer 的残帧进入 carry 缓冲。
+单帧 request/response 不承担 multishot 的管理成本，pipeline 又不会把每个内核 buffer
+整体复制进 `dynamic_buffer`。TLS、取消模式和不支持 buffer ring 的平台继续使用普通
+异步读取；业务 handler 不应自行选择或包装这两条路径。
 
 ### `ws::client` — 高层客户端
 

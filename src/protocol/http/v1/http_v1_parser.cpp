@@ -183,7 +183,7 @@ auto request_parser::headers_ready() const noexcept -> bool
 
 auto request_parser::method() const noexcept -> std::string_view
 {
-    const auto& storage = headers_ready_ ? header_storage_ : buf_;
+    const auto& storage = headers_preserved_ ? header_storage_ : buf_;
     return {storage.data() + method_offset_, method_size_};
 }
 
@@ -194,7 +194,7 @@ auto request_parser::method_enum() const noexcept -> std::optional<http_method>
 
 auto request_parser::uri() const noexcept -> std::string_view
 {
-    const auto& storage = headers_ready_ ? header_storage_ : buf_;
+    const auto& storage = headers_preserved_ ? header_storage_ : buf_;
     return {storage.data() + uri_offset_, uri_size_};
 }
 
@@ -214,6 +214,29 @@ auto request_parser::take_headers() -> header_map
     materialize_headers();
     headers_materialized_ = false;
     return std::exchange(headers_, header_map{});
+}
+
+auto request_parser::take_header_snapshot() -> request_header_snapshot
+{
+    if (headers_materialized_)
+    {
+        headers_materialized_ = false;
+        return request_header_snapshot{
+            std::exchange(headers_, header_map{})};
+    }
+
+    preserve_headers();
+    std::vector<request_header_snapshot::field> fields;
+    fields.reserve(header_fields_.size());
+    for (const auto& item : header_fields_)
+        fields.push_back({item.name_offset, item.name_size,
+            item.value_offset, item.value_size});
+    header_fields_.clear();
+    header_index_.clear();
+    common_headers_.fill(missing_header);
+    headers_preserved_ = false;
+    return request_header_snapshot{
+        std::exchange(header_storage_, std::string{}), std::move(fields)};
 }
 
 auto request_parser::body() const noexcept -> std::string_view
@@ -269,6 +292,8 @@ void request_parser::reset_message_state() noexcept
     body_.clear();
     state_ = state::request_line;
     header_bytes_ = body_bytes_remaining_ = body_bytes_received_ = 0;
+    header_end_ = 0;
+    headers_preserved_ = false;
     chunked_ = headers_ready_ = ready_ = false;
 }
 
@@ -376,46 +401,42 @@ auto request_parser::header_name(std::size_t index) const noexcept
     -> std::string_view
 {
     const auto& field = header_fields_[index];
-    return {header_storage_.data() + field.name_offset, field.name_size};
+    const auto& storage = headers_preserved_ ? header_storage_ : buf_;
+    return {storage.data() + field.name_offset, field.name_size};
 }
 
 auto request_parser::header_value(std::size_t index) const noexcept
     -> std::string_view
 {
     const auto& field = header_fields_[index];
-    return {header_storage_.data() + field.value_offset, field.value_size};
+    const auto& storage = headers_preserved_ ? header_storage_ : buf_;
+    return {storage.data() + field.value_offset, field.value_size};
+}
+
+void request_parser::preserve_headers()
+{
+    if (headers_preserved_ || !headers_ready_)
+        return;
+
+    header_storage_.assign(
+        buf_.data() + message_start_, header_end_ - message_start_);
+    method_offset_ -= message_start_;
+    uri_offset_ -= message_start_;
+    for (auto& field : header_fields_)
+    {
+        field.name_offset -= message_start_;
+        field.value_offset -= message_start_;
+    }
+    headers_preserved_ = true;
 }
 
 void request_parser::finalize_headers()
 {
-    const auto header_end = read_pos_;
-    const auto header_size = header_end - message_start_;
-    const auto remainder = buf_.size() - header_end;
-    if (message_start_ == 0 && remainder <= header_size)
-    {
-        header_storage_.clear();
-        header_storage_.swap(buf_);
-        // The header backing allocation is transferred, not copied. Only bytes
-        // already received after the header boundary need to move into the
-        // body parser's buffer.
-        buf_.assign(header_storage_.data() + header_end, remainder);
-        header_storage_.resize(header_end);
-        read_pos_ = 0;
-    }
-    else
-    {
-        // A pipelined batch leaves more bytes after this header block than
-        // the block holds: copy the block out instead of the batch, and keep
-        // parsing the rest in place. Offsets become relative to the copy.
-        header_storage_.assign(buf_.data() + message_start_, header_size);
-        method_offset_ -= message_start_;
-        uri_offset_ -= message_start_;
-        for (auto& field : header_fields_)
-        {
-            field.name_offset -= message_start_;
-            field.value_offset -= message_start_;
-        }
-    }
+    // Keep complete requests in the receive buffer. Most requests are already
+    // fully buffered, so copying their headers into a second string only adds
+    // allocator and memory-bandwidth cost. consume() preserves the header block
+    // lazily before an append can invalidate its views.
+    header_end_ = read_pos_;
 
     std::size_t capacity = 8;
     while (capacity < header_fields_.size() * 2)
@@ -565,6 +586,8 @@ auto request_parser::consume(const char* data, std::size_t len)
 {
     if (ready_)
         return std::size_t{0};
+    if (len != 0 && headers_ready_ && !headers_preserved_)
+        preserve_headers();
     compact_buffer();
     if (len != 0)
         buf_.append(data, len);

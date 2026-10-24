@@ -48,8 +48,8 @@ HTTP accept 循环收到首个异步完成后，会限量排空最多 64 个已�
 非阻塞监听 socket 的 `accept`；没有排队连接时不会自旋。不要在业务层再创建并行
 accept 循环或重复实现这一批处理。
 
-在支持 provided buffer ring 与 multishot recv 的 io_uring 内核上，`server` 会为每个
-事件循环创建一份共享接收服务：注册缓冲区归事件循环所有，连接只持有轻量 receiver，
+在支持 provided buffer ring 与 multishot recv 的 io_uring 内核上，框架会为每个
+事件循环创建一份跨协议共享的接收服务：注册缓冲区归事件循环所有，连接只持有轻量 receiver，
 不会逐连接注册 buffer ring。能力不可用、ring 注册失败或某条 multishot 接收终止时，
 框架自动退回普通 `async_read`；应用层不需要环境变量，也不应自行创建接收适配器。
 HTTP/1 明文连接的首次探测缓冲在协议确定后立即释放；普通读取的 8 KiB 回退缓冲只在

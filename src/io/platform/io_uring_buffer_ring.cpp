@@ -76,7 +76,12 @@ io_uring_buffer_ring::~io_uring_buffer_ring()
 {
     if (ring_)
     {
-        (void)::io_uring_unregister_buf_ring(context_->native_ring(), group_id_);
+        // Context-owned rings are retained until queue_exit(), at which point
+        // the kernel has already discarded the registration. Independently
+        // owned rings still unregister while their context is active.
+        if (context_->ring_initialized())
+            (void)::io_uring_unregister_buf_ring(
+                context_->native_ring(), group_id_);
         std::free(ring_);
     }
 }
