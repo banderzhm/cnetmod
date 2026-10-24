@@ -192,6 +192,19 @@ auto io_uring_context::flush() -> std::expected<int, std::error_code>
     return result ? *result : 0;
 }
 
+auto io_uring_context::flush(unsigned threshold)
+    -> std::expected<int, std::error_code>
+{
+    ensure_ring();
+    if (threshold == 0)
+        return std::unexpected(
+            std::make_error_code(std::errc::invalid_argument));
+    if (pending_sqes_ == 0 || pending_sqes_ < threshold)
+        return 0;
+    const auto result = submit_pending();
+    return result ? *result : 0;
+}
+
 auto io_uring_context::flush_pending() -> std::expected<int, std::error_code>
 {
     ensure_ring();

@@ -99,10 +99,28 @@ export auto async_write(io_context& ctx, socket& sock, const_buffer buf,
 export auto async_write_all(io_context& ctx, socket& sock, const_buffer buf)
     -> task<std::expected<void, std::error_code>>;
 
+/// Submission policy for small request/response writes. `low_latency` allows
+/// backends to submit a smaller batch without changing the context-wide policy.
+export enum class write_submission : std::uint8_t
+{
+    balanced,
+    low_latency
+};
+
+export auto async_write_all(io_context& ctx, socket& sock, const_buffer buf,
+    write_submission submission)
+    -> task<std::expected<void, std::error_code>>;
+
 /// Cancellable async write all bytes in a buffer
 export auto async_write_all(io_context& ctx, socket& sock, const_buffer buf,
     cancel_token& token)
     -> task<std::expected<void, std::error_code>>;
+
+#ifdef CNETMOD_HAS_IO_URING
+auto async_write_all_low_latency(
+    io_context& ctx, socket& sock, const_buffer buf)
+    -> task<std::expected<void, std::error_code>>;
+#endif
 
 #ifdef CNETMOD_PLATFORM_LINUX
 /// Wait for a non-blocking socket to become readable without consuming bytes.

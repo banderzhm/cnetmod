@@ -1285,9 +1285,20 @@ export auto async_write(io_context& ctx, socket& sock, const_buffer buf,
 ```cpp
 export auto async_write_all(io_context& ctx, socket& sock, const_buffer buf)
     -> task<expected<void, error_code>>;
+export enum class write_submission : std::uint8_t {
+    balanced,
+    low_latency
+};
+export auto async_write_all(io_context& ctx, socket& sock, const_buffer buf,
+    write_submission submission) -> task<expected<void, error_code>>;
 export auto async_write_all(io_context& ctx, socket& sock, const_buffer buf,
     cancel_token& token) -> task<expected<void, error_code>>;
 ```
+
+`write_submission::balanced` 保留事件循环的默认批量提交策略，适合吞吐优先或
+流水线写入。`low_latency` 是小型请求/响应写入的后端提示：io_uring 会使用更小的
+提交批次，其他后端保持原有行为。不要把它用于大块传输，也不要为了单个协议修改
+整个 `io_context` 的全局批量阈值。
 
 #### `async_read_until()`
 **签名**（字符串分隔符）:

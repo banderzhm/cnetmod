@@ -163,6 +163,7 @@ auto connection::async_process_messages(message_handler_fn handler,
         std::error_code failure;
         std::uint16_t failure_close = close_code::protocol_error;
         bool received_close = false;
+        auto write_submission_mode = write_submission::low_latency;
 
         auto parse_available = [&](std::span<std::byte> input) -> parse_result
         {
@@ -183,17 +184,18 @@ auto connection::async_process_messages(message_handler_fn handler,
                 }
                 const auto [header, header_size] = *parsed;
                 const auto op = header.op;
+                const bool control = is_control(op);
                 if (header.rsv1 || header.rsv2 || header.rsv3 ||
                     (op != opcode::continuation && op != opcode::text &&
                         op != opcode::binary && op != opcode::close &&
                         op != opcode::ping && op != opcode::pong) ||
                     header.masked != is_server_ ||
-                    (!is_control(op) && ((op == opcode::continuation) != (fragmented_op != opcode::continuation))))
+                    (!control && ((op == opcode::continuation) != (fragmented_op != opcode::continuation))))
                 {
                     failure = make_error_code(ws_errc::protocol_error);
                     break;
                 }
-                if (!is_control(op) &&
+                if (!control &&
                     (header.payload_length > max_message_size ||
                         header.payload_length > max_message_size - fragments.size()))
                 {
@@ -219,7 +221,7 @@ auto connection::async_process_messages(message_handler_fn handler,
                 if (header.masked && !unfragmented_text)
                     apply_mask(payload, header.masking_key);
                 ++result.processed;
-                if (is_control(op))
+                if (control)
                 {
                     if (op == opcode::close)
                     {
@@ -279,6 +281,8 @@ auto connection::async_process_messages(message_handler_fn handler,
                 if (received_close)
                     break;
             }
+            if (result.processed > 1)
+                write_submission_mode = write_submission::balanced;
             return result;
         };
 
@@ -356,7 +360,8 @@ auto connection::async_process_messages(message_handler_fn handler,
             if (!send_buf_.empty())
             {
                 const auto written = co_await async_write_all(
-                    reinterpret_cast<const char*>(send_buf_.data()), send_buf_.size());
+                    reinterpret_cast<const char*>(send_buf_.data()), send_buf_.size(),
+                    write_submission_mode);
                 send_buf_.clear();
                 if (!written)
                 {
@@ -1043,7 +1048,8 @@ auto connection::async_read_some(char* buf, std::size_t len)
     co_return co_await cnetmod::async_read(ctx_, sock_, mutable_buffer{buf, len});
 }
 
-auto connection::async_write_all(const char* data, std::size_t len)
+auto connection::async_write_all(const char* data, std::size_t len,
+    write_submission submission)
     -> task<std::expected<void, std::error_code>>
 {
 #ifdef CNETMOD_HAS_SSL
@@ -1058,7 +1064,7 @@ auto connection::async_write_all(const char* data, std::size_t len)
             ctx_, sock_, const_buffer{data, len}, *cancel_token_);
     }
     co_return co_await cnetmod::async_write_all(ctx_, sock_,
-        const_buffer{data, len});
+        const_buffer{data, len}, submission);
 }
 
 auto connection::handle_control_frame(const frame_header& hdr,

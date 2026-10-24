@@ -118,7 +118,8 @@ public:
 private:
     auto async_read_some(char* buffer, std::size_t length)
         -> task<std::expected<std::size_t, std::error_code>>;
-    auto async_write_all(const char* data, std::size_t length)
+    auto async_write_all(const char* data, std::size_t length,
+        write_submission submission = write_submission::low_latency)
         -> task<std::expected<void, std::error_code>>;
     auto handle_control_frame(const frame_header& header,
         const std::vector<std::byte>& payload)

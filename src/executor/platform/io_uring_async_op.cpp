@@ -603,6 +603,36 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf,
     co_return static_cast<std::size_t>(ov.result);
 }
 
+auto async_write_all_low_latency(
+    io_context& ctx, socket& sock, const_buffer buf)
+    -> task<std::expected<void, std::error_code>>
+{
+    constexpr unsigned low_latency_submit_threshold = 2U;
+    auto& uring = static_cast<io_uring_context&>(ctx);
+    auto* data = static_cast<const std::byte*>(buf.data);
+    std::size_t written = 0;
+    while (written < buf.size)
+    {
+        uring_overlapped operation;
+        auto* sqe = uring.prepare_sqe();
+        if (!sqe)
+            co_return std::unexpected(make_error_code(errc::no_buffer_space));
+        ::io_uring_prep_send(sqe, static_cast<int>(sock.native_handle()),
+            data + written, buf.size - written, MSG_NOSIGNAL);
+        ::io_uring_sqe_set_data(sqe, &operation);
+        if (auto result = uring.flush(low_latency_submit_threshold); !result)
+            co_return std::unexpected(result.error());
+        co_await uring_suspend{operation};
+        if (operation.result < 0)
+            co_return std::unexpected(
+                make_error_code(from_native_error(-operation.result)));
+        if (operation.result == 0)
+            co_return std::unexpected(make_error_code(errc::broken_pipe));
+        written += static_cast<std::size_t>(operation.result);
+    }
+    co_return {};
+}
+
 auto async_wait_readable(io_context& ctx, socket& sock)
     -> task<std::expected<void, std::error_code>>
 {

@@ -57,6 +57,10 @@ public:
     /// Prepared operations retain their buffers until CQE completion. Submission
     /// failures are deferred (zero submitted); inspect submission_error().
     [[nodiscard]] auto flush() -> std::expected<int, std::error_code>;
+    /// Submit once at least `threshold` SQEs are pending. A zero threshold is
+    /// invalid and returns invalid_argument without touching the ring.
+    [[nodiscard]] auto flush(unsigned threshold)
+        -> std::expected<int, std::error_code>;
     [[nodiscard]] auto flush_pending() -> std::expected<int, std::error_code>;
     [[nodiscard]] auto submit_batch_size() const noexcept -> unsigned;
     /// Explicit synchronous submission reports errors without retiring SQEs.
