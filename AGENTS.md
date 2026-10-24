@@ -1185,7 +1185,7 @@ I/O 执行上下文抽象基类，封装平台特定 I/O 多路复用机制（IO
 创建平台默认的 io_context 实例。
 
 Linux `io_uring` 后端默认启用内核支持时的
-`IORING_SETUP_COOP_TASKRUN`，并将同一事件循环轮次内产生的 SQE 以最多 8 个为一批
+`IORING_SETUP_COOP_TASKRUN`，并将同一事件循环轮次内产生的 SQE 以最多 16 个为一批
 提交，减少短小网络操作产生的 `io_uring_enter`。事件循环在等待 CQE 前总会刷新剩余
 SQE，因此不会为了凑满批次而无限等待。可用
 `CNETMOD_IOURING_COOP_TASKRUN=0` 禁用 cooperative task running，或用
@@ -1387,6 +1387,13 @@ auto accept_loop(cn::io_context& ctx, cn::socket& listener) -> cn::task<void>
     }
 }
 ```
+
+Linux io_uring 后端会让普通和带 `cancel_token` 的 `async_accept()` 共享每个
+listener 的 multishot accept 订阅。取消等待会在所属事件循环撤销内核订阅并关闭
+尚未交付的已接受描述符；应用仍只需取消 token，不要用关闭或重建 listener 模拟取消。
+不支持 multishot 的内核会自动回退到单次 accept。
+同一 CQ 批次中的多个 accept 完成会先全部归集，再恢复一次等待协程，避免逐个 CQ
+形成递归恢复链；协议层不需要额外排空内核完成队列。
 
 ## 场景：async_connect
 
@@ -2605,11 +2612,12 @@ int main() {
 `io_context` 及生命周期要求见
 [Executor 与 Bridge](executor-bridge.md)。
 
-`task<T>` 的协程帧按 64 字节分配。这不是要求业务对象手工对齐，而是框架对优化
-构建的正确性保证：Clang 可能在 `x86-64-v3`/`native` 下对帧内聚合初始化生成
-AVX/AVX-512 对齐写入，普通 `operator new` 的 `max_align_t` 保证不足。不要删除或
-绕过 promise 的对齐分配；Release CPU 目标、LTO、mimalloc 开关组合必须保留真实
-并发请求测试，不能只验证编译通过。
+`task<T>` 的协程帧按编译目标选择对齐：普通目标使用 `max_align_t`，启用 AVX 时
+使用 32 字节，启用 AVX-512 时使用 64 字节。这不是要求业务对象手工对齐，而是
+框架对优化构建的正确性保证：Clang 可能在 `x86-64-v3`/`native` 下对帧内聚合
+初始化生成对齐向量写入；与此同时，普通目标不应被迫承担过对齐分配的开销。不要
+删除或绕过 promise 的目标感知对齐分配；Release CPU 目标、LTO、mimalloc 开关
+组合必须保留真实并发请求测试，不能只验证编译通过。
 
 ---
 
@@ -10496,14 +10504,14 @@ executor.event_loop(), ...)`。`event_loop()` 必须在 request handler 所在�
 
 # 项目架构
 
-> cnetmod v2.2.3 — 基于 C++23 Modules 的跨平台异步网络库。
+> cnetmod v2.2.4 — 基于 C++23 Modules 的跨平台异步网络库。
 
 ## 项目概述
 
 | 属性 | 值 |
 |------|------|
 | 名称 | cnetmod |
-| 版本 | 2.2.3（唯一来源为根目录 `VERSION`） |
+| 版本 | 2.2.4（唯一来源为根目录 `VERSION`） |
 | 语言标准 | C++23（`CMAKE_CXX_STANDARD 23`） |
 | 构建系统 | CMake 3.28+，`CMAKE_CXX_SCAN_FOR_MODULES ON` |
 | 库类型 | 分层静态组件；`cnetmod::core` / `cnetmod::all` 是兼容聚合入口 |
@@ -11008,7 +11016,8 @@ bool skip(std::size_t n) noexcept;
 | `release/2.2` | 2.2 版本线稳定与补丁 | Windows、Linux、macOS 全量构建与测试 |
 | `main` | 随时可发布的稳定主线 | 受保护合并，禁止直接推送 |
 | `v2.1.0` | 不可变正式发布身份 | 版本契约、三平台 SDK、干净消费项目、校验和、SBOM、构建证明 |
-| `v2.2.3` | 当前不可变正式发布身份 | 版本契约、三平台 SDK、干净消费项目、校验和、SBOM、构建证明 |
+| `v2.2.3` | 最近的不可变正式发布身份 | 版本契约、三平台 SDK、干净消费项目、校验和、SBOM、构建证明 |
+| `v2.2.4` | 当前待发布版本 | 合并 `main` 并通过三平台门禁后创建不可变标签 |
 
 分支保护的具体策略维护在 `.github/BRANCHING.md`。版本标签必须从对应的
 `release/<major>.<minor>` 合并到 `main` 后创建。
@@ -11037,7 +11046,7 @@ share/cnetmod/licenses/LICENSE
 
 ```powershell
 cmake `
-  -DCNETMOD_VERSION=2.2.3 `
+  -DCNETMOD_VERSION=2.2.4 `
   -DCNETMOD_TARGET=windows-x86_64-msvc-v145-md-release `
   -DCNETMOD_PREFIX="$PWD/3rdparty/cnetmod" `
   -P cmake/cnetmod-fetch.cmake
@@ -17989,6 +17998,9 @@ auto accept_upgrade(http::request_context& request,
 `101 Switching Protocols`，并让 HTTP server 在 handler 返回后安全移交连接。
 移交前会停止 HTTP 的持续接收，再把 HTTP parser 和 io_uring 已预读的尾部字节
 一并交给 `ws::connection`，因此客户端把第一帧和握手放在同一个 TCP 包中也不会丢帧。
+路由和全部中间件返回后，HTTP/1 parser 会把紧凑的请求头存储转移给
+`ws_context`；`get_header()` 直接查询紧凑字段，只有显式调用 `headers()` 时才构造
+完整 `header_map`。业务不需要也不应为了优化升级过程自行缓存请求头。
 
 该入口用于明文 HTTP/1.1 listener；同一 listener 仍可自动处理 h2c/gRPC。
 TLS/WSS 使用 `ws::server::set_ssl_context()` 的独立 listener。应用不要自行调用
