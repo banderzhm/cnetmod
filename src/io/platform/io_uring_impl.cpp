@@ -6,6 +6,7 @@ module;
 #include <errno.h>
 #include <fcntl.h>
 #include <liburing.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 
 module cnetmod.io.platform.io_uring;
@@ -361,8 +362,8 @@ auto io_uring_context::run_one_impl(bool blocking) -> std::size_t
         // kernel work. Merely peeking the CQ can therefore spin forever after
         // an earlier submission (connect, cancellation, exporter delivery,
         // and similar state machines all rely on repeated poll()).
-        (void)::io_uring_enter(ring_.ring_fd, 0U, 0U,
-            IORING_ENTER_GETEVENTS, nullptr);
+        (void)::syscall(SYS_io_uring_enter, ring_.ring_fd, 0U, 0U,
+            IORING_ENTER_GETEVENTS, nullptr, 0U);
     }
     std::size_t handled = 0;
     unsigned reaped = 0;
