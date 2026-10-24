@@ -32,6 +32,7 @@ void io_uring_context::ensure_ring()
         return;
 
     int ret = 0;
+    bool defer_taskrun_enabled = false;
 #ifdef IORING_SETUP_CQSIZE
     const auto try_init = [this](unsigned flags)
     {
@@ -64,6 +65,7 @@ void io_uring_context::ensure_ring()
         #endif
         ret = try_init(flags);
         attempted = true;
+        defer_taskrun_enabled = ret >= 0;
     }
     #endif
 
@@ -72,18 +74,26 @@ void io_uring_context::ensure_ring()
     {
         ret = try_init(IORING_SETUP_COOP_TASKRUN);
         attempted = true;
+        defer_taskrun_enabled = false;
     }
     #endif
     if (!attempted || ret == -EINVAL || ret == -EPERM)
+    {
         ret = try_init(0);
+        defer_taskrun_enabled = false;
+    }
     if (ret == -EINVAL || ret == -EPERM)
+    {
         ret = ::io_uring_queue_init(queue_depth_, &ring_, 0);
+        defer_taskrun_enabled = false;
+    }
 #else
     ret = ::io_uring_queue_init(queue_depth_, &ring_, 0);
 #endif
     if (ret < 0)
         throw std::system_error(-ret, std::generic_category(),
             "io_uring_queue_init failed");
+    defer_taskrun_enabled_ = defer_taskrun_enabled;
     initialized_ = true;
 }
 
@@ -97,6 +107,7 @@ io_uring_context::~io_uring_context()
     {
         ::io_uring_queue_exit(&ring_);
         initialized_ = false;
+        defer_taskrun_enabled_ = false;
     }
     // Ring-owned registrations are released only after queue_exit. This is
     // safe even when the context object itself is destroyed by its controller
@@ -355,7 +366,7 @@ auto io_uring_context::run_one_impl(bool blocking) -> std::size_t
         if (::io_uring_wait_cqe(&ring_, &cqe) < 0)
             return 0;
     }
-    else if (!blocking && !fatal_submission_error)
+    else if (!blocking && !fatal_submission_error && defer_taskrun_enabled_)
     {
         // DEFER_TASKRUN rings do not necessarily publish completions until an
         // io_uring_enter call gives the owner thread a chance to run deferred

@@ -99,6 +99,7 @@ private:
     ::io_uring ring_{};
     std::atomic<bool> stopped_{false};
     bool initialized_ = false;
+    bool defer_taskrun_enabled_ = false;
     unsigned queue_depth_ = 256;
     int pipe_fds_[2] = {-1, -1};
     char pipe_buf_ = 0;
