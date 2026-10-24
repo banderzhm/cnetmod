@@ -934,21 +934,33 @@ void check_udp_batch_would_block(batch_wait_probe probe, bool segmented = false)
     ASSERT_TRUE(would_block);
     if (!would_block)
         return;
-    // A failed 4 KiB write may still leave room for the five-byte probe below.
-    // Fill that tail one byte at a time so resuming the coroutine must enter
-    // the asynchronous EAGAIN path rather than completing synchronously.
+    // A failed 4 KiB write does not prove stable backpressure: ACK processing
+    // can briefly reopen a few bytes in the sender while the receiver's window
+    // is still closing. Fill the tail one byte at a time and require a sustained
+    // EAGAIN interval. This keeps the five-byte probe pending until the test
+    // deliberately drains the peer instead of racing TCP window updates.
     const std::byte final_fill{};
-    would_block = false;
-    for (std::size_t attempt{}; attempt < 16384U; ++attempt)
+    constexpr std::size_t stable_eagain_count = 32U;
+    std::size_t consecutive_eagain{};
+    const auto saturation_deadline = std::chrono::steady_clock::now() +
+        std::chrono::seconds{2};
+    while (consecutive_eagain < stable_eagain_count &&
+        std::chrono::steady_clock::now() < saturation_deadline)
     {
         const auto sent = ::send(sender_fd, &final_fill, sizeof(final_fill),
             MSG_DONTWAIT | MSG_NOSIGNAL);
-        if (sent < 0)
+        if (sent == static_cast<ssize_t>(sizeof(final_fill)))
         {
-            would_block = errno == EAGAIN || errno == EWOULDBLOCK;
-            break;
+            consecutive_eagain = 0U;
+            continue;
         }
+        ASSERT_TRUE(sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK));
+        if (sent >= 0 || (errno != EAGAIN && errno != EWOULDBLOCK))
+            break;
+        ++consecutive_eagain;
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
     }
+    would_block = consecutive_eagain == stable_eagain_count;
     ASSERT_TRUE(would_block);
     if (!would_block)
         return;

@@ -354,6 +354,15 @@ auto io_uring_context::run_one_impl(bool blocking) -> std::size_t
         if (::io_uring_wait_cqe(&ring_, &cqe) < 0)
             return 0;
     }
+    else if (!blocking && !fatal_submission_error)
+    {
+        // DEFER_TASKRUN rings do not necessarily publish completions until an
+        // io_uring_enter call gives the owner thread a chance to run deferred
+        // kernel work. Merely peeking the CQ can therefore spin forever after
+        // an earlier submission (connect, cancellation, exporter delivery,
+        // and similar state machines all rely on repeated poll()).
+        (void)::io_uring_get_events(&ring_);
+    }
     std::size_t handled = 0;
     unsigned reaped = 0;
     while (reaped < cqe_tick_limit_)
