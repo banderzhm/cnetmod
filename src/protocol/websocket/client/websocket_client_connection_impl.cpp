@@ -28,26 +28,6 @@ namespace {
     {
         for (std::size_t i = 0; i < text.size();)
         {
-            if (text.size() - i >= sizeof(std::uint64_t))
-            {
-                std::uint64_t ascii;
-                std::memcpy(&ascii, text.data() + i, sizeof(ascii));
-                if ((ascii & 0x8080808080808080ULL) == 0)
-                {
-                    i += sizeof(ascii);
-                    continue;
-                }
-            }
-            if (text.size() - i >= sizeof(std::uint32_t))
-            {
-                std::uint32_t ascii;
-                std::memcpy(&ascii, text.data() + i, sizeof(ascii));
-                if ((ascii & 0x80808080U) == 0)
-                {
-                    i += sizeof(ascii);
-                    continue;
-                }
-            }
             const auto first = std::to_integer<unsigned char>(text[i++]);
             if (first < 0x80)
                 continue;
