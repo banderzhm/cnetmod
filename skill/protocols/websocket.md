@@ -108,6 +108,13 @@ auto handshake_headers() const noexcept -> const http::header_map&;
 事件循环处理；`stop()` 在对应事件循环取消 accept，并等待全部 listener 退出。
 默认启用 TCP_NODELAY，显式传入 `socket_options` 时遵循调用方选项。
 
+明文 Linux/io_uring 的消息处理会先走低延迟 one-shot 接收；当同一接收批次实际包含
+多个帧时，才自适应切换到事件循环共享的 multishot provided-buffer receiver。完整帧
+直接在 provided buffer 上解析并原地解掩码，只有跨 buffer 的残帧进入 carry 缓冲。
+单帧 request/response 不承担 multishot 的管理成本，pipeline 又不会把每个内核 buffer
+整体复制进 `dynamic_buffer`。TLS、取消模式和不支持 buffer ring 的平台继续使用普通
+异步读取；业务 handler 不应自行选择或包装这两条路径。
+
 ### `ws::client` — 高层客户端
 
 ```cpp

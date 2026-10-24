@@ -35,6 +35,7 @@ public:
     io_uring_received_buffer(io_uring_received_buffer&& other) noexcept;
     auto operator=(io_uring_received_buffer&& other) noexcept -> io_uring_received_buffer&;
 
+    [[nodiscard]] auto data() noexcept -> mutable_buffer;
     [[nodiscard]] auto data() const noexcept -> const_buffer;
     [[nodiscard]] auto size() const noexcept -> std::size_t;
     void release() noexcept;

@@ -1192,6 +1192,12 @@ SQE，因此不会为了凑满批次而无限等待。可用
 `CNETMOD_IOURING_SUBMIT_BATCH=1..128` 覆盖批量大小；这些是诊断和平台调优开关，
 应用通常不应设置。旧内核不接受 cooperative task running 时会自动回退，不影响启动。
 
+支持 provided buffer ring 与 multishot recv 时，底层通过
+`shared_io_uring_recv_service(io_uring_context&)` 为每个事件循环持有一份共享接收服务。
+HTTP 与 WebSocket 等协议应从这里创建轻量 receiver，不得各自注册 buffer ring，也不得
+为每条连接创建接收服务。receiver 必须在销毁前 `co_await async_stop()`；完整的内核
+provided buffer 应直接解析，只有跨 buffer 的残帧可以复制到协议 carry 缓冲。
+
 ### `post_awaitable`
 **签名**: `export struct post_awaitable`
 
@@ -8082,8 +8088,8 @@ HTTP accept 循环收到首个异步完成后，会限量排空最多 64 个已�
 非阻塞监听 socket 的 `accept`；没有排队连接时不会自旋。不要在业务层再创建并行
 accept 循环或重复实现这一批处理。
 
-在支持 provided buffer ring 与 multishot recv 的 io_uring 内核上，`server` 会为每个
-事件循环创建一份共享接收服务：注册缓冲区归事件循环所有，连接只持有轻量 receiver，
+在支持 provided buffer ring 与 multishot recv 的 io_uring 内核上，框架会为每个
+事件循环创建一份跨协议共享的接收服务：注册缓冲区归事件循环所有，连接只持有轻量 receiver，
 不会逐连接注册 buffer ring。能力不可用、ring 注册失败或某条 multishot 接收终止时，
 框架自动退回普通 `async_read`；应用层不需要环境变量，也不应自行创建接收适配器。
 HTTP/1 明文连接的首次探测缓冲在协议确定后立即释放；普通读取的 8 KiB 回退缓冲只在
@@ -18001,6 +18007,13 @@ auto handshake_headers() const noexcept -> const http::header_map&;
 多 worker 的 Linux server 使用每 worker 的 SO_REUSEPORT listener，连接在接受它的
 事件循环处理；`stop()` 在对应事件循环取消 accept，并等待全部 listener 退出。
 默认启用 TCP_NODELAY，显式传入 `socket_options` 时遵循调用方选项。
+
+明文 Linux/io_uring 的消息处理会先走低延迟 one-shot 接收；当同一接收批次实际包含
+多个帧时，才自适应切换到事件循环共享的 multishot provided-buffer receiver。完整帧
+直接在 provided buffer 上解析并原地解掩码，只有跨 buffer 的残帧进入 carry 缓冲。
+单帧 request/response 不承担 multishot 的管理成本，pipeline 又不会把每个内核 buffer
+整体复制进 `dynamic_buffer`。TLS、取消模式和不支持 buffer ring 的平台继续使用普通
+异步读取；业务 handler 不应自行选择或包装这两条路径。
 
 ### `ws::client` — 高层客户端
 

@@ -46,6 +46,12 @@ SQE，因此不会为了凑满批次而无限等待。可用
 `CNETMOD_IOURING_SUBMIT_BATCH=1..128` 覆盖批量大小；这些是诊断和平台调优开关，
 应用通常不应设置。旧内核不接受 cooperative task running 时会自动回退，不影响启动。
 
+支持 provided buffer ring 与 multishot recv 时，底层通过
+`shared_io_uring_recv_service(io_uring_context&)` 为每个事件循环持有一份共享接收服务。
+HTTP 与 WebSocket 等协议应从这里创建轻量 receiver，不得各自注册 buffer ring，也不得
+为每条连接创建接收服务。receiver 必须在销毁前 `co_await async_stop()`；完整的内核
+provided buffer 应直接解析，只有跨 buffer 的残帧可以复制到协议 carry 缓冲。
+
 ### `post_awaitable`
 **签名**: `export struct post_awaitable`
 

@@ -17,7 +17,7 @@ import cnetmod.io.platform.io_uring_multishot_recv;
 namespace cnetmod {
 
 #if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
-    defined(IORING_RECV_MULTISHOT) && defined(IORING_CQE_F_BUFFER) &&            \
+    defined(IORING_RECV_MULTISHOT) && defined(IORING_CQE_F_BUFFER) &&             \
     defined(IORING_CQE_F_MORE)
 
 /// Context-scoped owner for a shared provided-buffer ring.
@@ -39,6 +39,12 @@ private:
     io_uring_context* context_{};
     io_uring_buffer_ring buffers_;
 };
+
+/// Returns the process-wide receive service shard owned by this event loop.
+/// The io_context retains the service for its full lifetime; callers may keep
+/// only the returned shared handle while creating receive streams.
+export auto shared_io_uring_recv_service(io_uring_context& context)
+    -> std::shared_ptr<io_uring_recv_service>;
 
 #endif
 

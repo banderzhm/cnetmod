@@ -821,44 +821,6 @@ struct server::recv_service_state
         std::weak_ptr<io_uring_recv_service> service;
     };
 
-    /// One provided-buffer ring per event loop, shared by every server on
-    /// that loop. A process commonly runs several listeners (plain, h2c, TLS)
-    /// on the same workers; a ring per server multiplied the 2 MiB of
-    /// receive blocks by the listener count without adding capacity.
-    struct loop_registry
-    {
-        concurrent_containers::atomic_rw_latch latch;
-        std::vector<std::pair<std::uint64_t, std::weak_ptr<io_uring_recv_service>>> loops;
-    };
-
-    static auto registry() -> loop_registry&
-    {
-        static loop_registry instance;
-        return instance;
-    }
-
-    static auto shared_service(io_uring_context& uring)
-        -> std::shared_ptr<io_uring_recv_service>
-    {
-        auto& shared = registry();
-        concurrent_containers::exclusive_latch_guard lock{shared.latch};
-        std::erase_if(shared.loops, [](const auto& entry)
-            {
-                return entry.second.expired();
-            });
-        for (const auto& [id, service] : shared.loops)
-            if (id == uring.instance_id())
-                if (auto existing = service.lock())
-                    return existing;
-        static std::atomic<std::uint32_t> next_group{1};
-        const auto group = static_cast<std::uint16_t>(
-            next_group.fetch_add(1, std::memory_order_relaxed));
-        auto created = std::make_shared<io_uring_recv_service>(uring, group, 8192, 256);
-        uring.retain_owner_resource(created);
-        shared.loops.emplace_back(uring.instance_id(), created);
-        return created;
-    }
-
     void add(io_context& owner)
     {
         if (dynamic_cast<io_uring_context*>(&owner))
@@ -877,7 +839,7 @@ struct server::recv_service_state
                     return nullptr;
                 try
                 {
-                    auto created = shared_service(
+                    auto created = shared_io_uring_recv_service(
                         static_cast<io_uring_context&>(owner));
                     shard.service = created;
                     return created.get();
