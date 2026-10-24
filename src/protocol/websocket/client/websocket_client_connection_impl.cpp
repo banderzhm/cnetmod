@@ -28,6 +28,26 @@ namespace {
     {
         for (std::size_t i = 0; i < text.size();)
         {
+            if (text.size() - i >= sizeof(std::uint64_t))
+            {
+                std::uint64_t ascii;
+                std::memcpy(&ascii, text.data() + i, sizeof(ascii));
+                if ((ascii & 0x8080808080808080ULL) == 0)
+                {
+                    i += sizeof(ascii);
+                    continue;
+                }
+            }
+            if (text.size() - i >= sizeof(std::uint32_t))
+            {
+                std::uint32_t ascii;
+                std::memcpy(&ascii, text.data() + i, sizeof(ascii));
+                if ((ascii & 0x80808080U) == 0)
+                {
+                    i += sizeof(ascii);
+                    continue;
+                }
+            }
             const auto first = std::to_integer<unsigned char>(text[i++]);
             if (first < 0x80)
                 continue;
@@ -70,29 +90,87 @@ namespace {
                    (code >= 3000 && code <= 4999)) &&
             valid_message_utf8(payload.subspan(2));
     }
+
+    auto write_unmasked_frame(std::span<std::byte> output, opcode op,
+        std::span<const std::byte> payload) noexcept -> std::size_t
+    {
+        std::size_t header_size = 2;
+        std::uint8_t encoded_size{};
+        if (payload.size() <= 125)
+        {
+            encoded_size = static_cast<std::uint8_t>(payload.size());
+        }
+        else if (payload.size() <= 0xffff)
+        {
+            encoded_size = 126;
+            header_size += 2;
+        }
+        else
+        {
+            encoded_size = 127;
+            header_size += 8;
+        }
+
+        output[0] = static_cast<std::byte>(
+            0x80U | static_cast<std::uint8_t>(op));
+        output[1] = static_cast<std::byte>(encoded_size);
+        std::size_t offset = 2;
+        if (encoded_size == 126)
+        {
+            output[offset++] = static_cast<std::byte>(payload.size() >> 8);
+            output[offset++] = static_cast<std::byte>(payload.size());
+        }
+        else if (encoded_size == 127)
+        {
+            const auto size = static_cast<std::uint64_t>(payload.size());
+            for (int shift = 56; shift >= 0; shift -= 8)
+                output[offset++] = static_cast<std::byte>(size >> shift);
+        }
+        if (!payload.empty())
+            std::memmove(output.data() + header_size,
+                payload.data(), payload.size());
+        return header_size + payload.size();
+    }
 } // namespace
 
 message_writer::message_writer(std::vector<std::byte>& output, bool mask,
     std::size_t limit) : output_(output), mask_(mask), limit_(limit) {}
 
 void message_writer::trust_input(opcode op,
-    std::span<const std::byte> payload) noexcept
+    std::span<const std::byte> payload, bool defer_exact_output) noexcept
 {
     trusted_op_ = op;
     trusted_data_ = payload.data();
     trusted_size_ = payload.size();
+    defer_exact_output_ = defer_exact_output;
+    exact_output_deferred_ = false;
 }
 
-void message_writer::clear_trusted_input() noexcept
+auto message_writer::finish_trusted_input() noexcept -> bool
 {
+    const bool deferred = exact_output_deferred_;
     trusted_op_ = opcode::continuation;
     trusted_data_ = nullptr;
     trusted_size_ = 0;
+    defer_exact_output_ = false;
+    exact_output_deferred_ = false;
+    return deferred;
+}
+
+void message_writer::materialize_deferred_output()
+{
+    if (!exact_output_deferred_)
+        return;
+    append_frame_into(output_, trusted_op_,
+        {trusted_data_, trusted_size_}, mask_);
+    exact_output_deferred_ = false;
+    defer_exact_output_ = false;
 }
 
 auto message_writer::send(opcode op, std::span<const std::byte> payload)
     -> std::expected<void, std::error_code>
 {
+    materialize_deferred_output();
     if (!error_ && (op != opcode::text && op != opcode::binary))
         error_ = make_error_code(ws_errc::reserved_opcode);
     if (!error_ && (payload.size() > limit_ - 14 || output_.size() > limit_ - 14 - payload.size()))
@@ -104,6 +182,11 @@ auto message_writer::send(opcode op, std::span<const std::byte> payload)
         error_ = make_error_code(ws_errc::invalid_utf8);
     if (error_)
         return std::unexpected(error_);
+    if (validated_input && defer_exact_output_)
+    {
+        exact_output_deferred_ = true;
+        return {};
+    }
     append_frame_into(output_, op, payload, mask_);
     return {};
 }
@@ -111,9 +194,23 @@ auto message_writer::send(opcode op, std::span<const std::byte> payload)
 auto connection::async_process_messages(message_handler_fn handler,
     std::size_t max_message_size) -> task<std::expected<void, std::error_code>>
 {
+    return async_process_messages_impl(
+        std::move(handler), false, max_message_size);
+}
+
+auto connection::async_echo_messages(std::size_t max_message_size)
+    -> task<std::expected<void, std::error_code>>
+{
+    return async_process_messages_impl({}, true, max_message_size);
+}
+
+auto connection::async_process_messages_impl(message_handler_fn handler,
+    bool echo_messages, std::size_t max_message_size)
+    -> task<std::expected<void, std::error_code>>
+{
     if (!connected_)
         co_return std::unexpected(make_error_code(ws_errc::not_connected));
-    if (!handler || max_message_size == 0 ||
+    if ((!echo_messages && !handler) || max_message_size == 0 ||
         max_message_size > std::numeric_limits<std::size_t>::max() - 65536)
         co_return std::unexpected(std::make_error_code(std::errc::invalid_argument));
 
@@ -151,6 +248,7 @@ auto connection::async_process_messages(message_handler_fn handler,
         {
             std::size_t consumed{};
             std::size_t missing{};
+            std::size_t direct_output{};
             unsigned processed{};
             bool need_more{};
         };
@@ -167,6 +265,14 @@ auto connection::async_process_messages(message_handler_fn handler,
         auto parse_available = [&](std::span<std::byte> input) -> parse_result
         {
             parse_result result;
+            auto materialize_direct_output = [&]
+            {
+                if (!result.direct_output)
+                    return;
+                send_buf_.insert(send_buf_.begin(), input.begin(),
+                    input.begin() + static_cast<std::ptrdiff_t>(result.direct_output));
+                result.direct_output = 0;
+            };
             while (result.consumed < input.size() && result.processed < 64 &&
                 send_buf_.size() < 65536)
             {
@@ -227,13 +333,19 @@ auto connection::async_process_messages(message_handler_fn handler,
                             break;
                         }
                         if (!close_sent_)
+                        {
+                            materialize_direct_output();
                             append_frame_into(send_buf_, opcode::close,
                                 payload, !is_server_);
+                        }
                         close_sent_ = close_received_ = received_close = true;
                     }
                     else if (op == opcode::ping)
+                    {
+                        materialize_direct_output();
                         append_frame_into(send_buf_, opcode::pong,
                             payload, !is_server_);
+                    }
                 }
                 else
                 {
@@ -257,14 +369,44 @@ auto connection::async_process_messages(message_handler_fn handler,
                             failure_close = close_code::invalid_payload;
                             break;
                         }
-                        writer.trust_input(message_op, message);
-                        const auto handled = handler(message_op, message, writer);
-                        writer.clear_trusted_input();
-                        if (!handled || writer.error_)
+                        const bool direct_candidate = is_server_ &&
+                            send_buf_.empty() && message.data() == payload.data() &&
+                            message.size() == payload.size() &&
+                            result.consumed + frame_size == input.size();
+                        if (echo_messages)
                         {
-                            failure = writer.error_ ? writer.error_ : handled.error();
-                            failure_close = close_code::internal_error;
-                            break;
+                            if (direct_candidate)
+                            {
+                                result.direct_output += write_unmasked_frame(
+                                    input.subspan(result.direct_output),
+                                    message_op, message);
+                            }
+                            else
+                            {
+                                materialize_direct_output();
+                                append_frame_into(send_buf_, message_op,
+                                    message, !is_server_);
+                            }
+                        }
+                        else
+                        {
+                            writer.trust_input(message_op, message, direct_candidate);
+                            const auto handled = handler(message_op, message, writer);
+                            const bool direct = writer.finish_trusted_input();
+                            if (direct)
+                            {
+                                result.direct_output += write_unmasked_frame(
+                                    input.subspan(result.direct_output),
+                                    message_op, message);
+                            }
+                            if (!handled || writer.error_)
+                            {
+                                failure = writer.error_ ? writer.error_ : handled.error();
+                                failure_close = close_code::internal_error;
+                                break;
+                            }
+                            if (!direct && !send_buf_.empty())
+                                materialize_direct_output();
                         }
                         fragments.clear();
                         fragmented_op = opcode::continuation;
@@ -285,6 +427,13 @@ auto connection::async_process_messages(message_handler_fn handler,
 #endif
         while (connected_)
         {
+            std::span<const std::byte> direct_output;
+            std::size_t buffered_consumed{};
+#if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
+    defined(IORING_RECV_MULTISHOT) && defined(IORING_CQE_F_BUFFER) &&             \
+    defined(IORING_CQE_F_MORE)
+            bool release_received_block = false;
+#endif
             bool need_read = false;
             std::size_t next_read = 1024;
             if (recv_buf_.readable_bytes())
@@ -293,7 +442,9 @@ auto connection::async_process_messages(message_handler_fn handler,
                 auto parsed = parse_available(std::span{
                     const_cast<std::byte*>(static_cast<const std::byte*>(readable.data)),
                     readable.size});
-                recv_buf_.consume(parsed.consumed);
+                direct_output = {
+                    static_cast<const std::byte*>(readable.data), parsed.direct_output};
+                buffered_consumed = parsed.consumed;
 #if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
     defined(IORING_RECV_MULTISHOT) && defined(IORING_CQE_F_BUFFER) &&             \
     defined(IORING_CQE_F_MORE)
@@ -318,6 +469,7 @@ auto connection::async_process_messages(message_handler_fn handler,
                     static_cast<std::byte*>(data.data) + received_offset,
                     data.size - received_offset};
                 const auto parsed = parse_available(direct);
+                direct_output = {direct.data(), parsed.direct_output};
                 received_offset += parsed.consumed;
                 if (parsed.need_more && received_offset < data.size)
                 {
@@ -329,10 +481,7 @@ auto connection::async_process_messages(message_handler_fn handler,
                     received_offset = data.size;
                 }
                 if (received_offset == data.size)
-                {
-                    received_block.reset();
-                    received_offset = 0;
-                }
+                    release_received_block = true;
                 need_read = parsed.need_more;
             }
 #endif
@@ -348,6 +497,17 @@ auto connection::async_process_messages(message_handler_fn handler,
                 append_frame_into(send_buf_, opcode::close, code, !is_server_);
                 close_sent_ = true;
             }
+            if (!direct_output.empty())
+            {
+                const auto written = co_await async_write_all(
+                    reinterpret_cast<const char*>(direct_output.data()),
+                    direct_output.size());
+                if (!written)
+                {
+                    connected_ = false;
+                    co_return std::unexpected(written.error());
+                }
+            }
             if (!send_buf_.empty())
             {
                 const auto written = co_await async_write_all(
@@ -359,6 +519,17 @@ auto connection::async_process_messages(message_handler_fn handler,
                     co_return std::unexpected(written.error());
                 }
             }
+            if (buffered_consumed)
+                recv_buf_.consume(buffered_consumed);
+#if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
+    defined(IORING_RECV_MULTISHOT) && defined(IORING_CQE_F_BUFFER) &&             \
+    defined(IORING_CQE_F_MORE)
+            if (release_received_block)
+            {
+                received_block.reset();
+                received_offset = 0;
+            }
+#endif
             if (failure || received_close)
             {
                 connected_ = false;

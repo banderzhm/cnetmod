@@ -18,12 +18,7 @@ namespace ws = cn::ws;
 namespace {
 auto echo(ws::ws_context& ctx) -> cn::task<void>
 {
-    (void)co_await ctx.raw_connection().async_process_messages(
-        [](ws::opcode op, std::span<const std::byte> payload, ws::message_writer& output)
-            -> std::expected<void, std::error_code>
-        {
-            return output.send(op, payload);
-        });
+    (void)co_await ctx.raw_connection().async_echo_messages();
 }
 
 template <typename T>

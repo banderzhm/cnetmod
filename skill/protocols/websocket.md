@@ -145,6 +145,10 @@ auto connection::async_process_messages(message_handler_fn handler,
     std::size_t max_message_size = 16 * 1024 * 1024)
     -> task<std::expected<void, std::error_code>>;
 
+auto connection::async_echo_messages(
+    std::size_t max_message_size = 16 * 1024 * 1024)
+    -> task<std::expected<void, std::error_code>>;
+
 auto message_writer::send(opcode op, std::span<const std::byte> payload)
     -> std::expected<void, std::error_code>;
 ```
@@ -155,6 +159,10 @@ auto message_writer::send(opcode op, std::span<const std::byte> payload)
 | `payload` | 借用视图，仅在本次回调返回前有效；需要保存时自行复制 |
 | `message_writer` | 回调中发送 text/binary，允许发送零条或多条；每条仍编码为独立帧 |
 | `max_message_size` | 完整消息和分片累计上限，默认 16 MiB；超限发送 1009 关闭帧 |
+
+纯回显服务应直接使用 `async_echo_messages()`。它与通用消息循环共享同一套协议
+校验、控制帧和关闭处理，但不经过 `std::function` 与 `message_writer`；单个完整帧
+可在接收缓冲区内就地转换成服务端帧，批量和分片输入仍使用有界聚合输出路径。
 
 循环仅合并已经接收的完整消息产生的输出，不等待凑满一批，也不增加定时延迟。
 下一帧头或 payload 尚不完整时，先写完已有响应再等待输入。发送缓冲属于连接，
@@ -167,12 +175,7 @@ auto message_writer::send(opcode op, std::span<const std::byte> payload)
 ```cpp
 auto echo(ws::ws_context& ctx) -> cn::task<void>
 {
-    (void)co_await ctx.raw_connection().async_process_messages(
-        [](ws::opcode op, std::span<const std::byte> payload, ws::message_writer& output)
-            -> std::expected<void, std::error_code>
-        {
-            return output.send(op, payload);
-        });
+    (void)co_await ctx.raw_connection().async_echo_messages();
 }
 ```
 
