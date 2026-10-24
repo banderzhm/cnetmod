@@ -43,14 +43,11 @@ export class message_writer
 public:
     auto send(opcode op, std::span<const std::byte> payload)
         -> std::expected<void, std::error_code>;
-
 private:
     friend class connection;
     message_writer(std::vector<std::byte>& output, bool mask, std::size_t limit);
-    void trust_input(opcode op, std::span<const std::byte> payload,
-        bool defer_exact_output) noexcept;
-    [[nodiscard]] auto finish_trusted_input() noexcept -> bool;
-    void materialize_deferred_output();
+    void trust_input(opcode op, std::span<const std::byte> payload) noexcept;
+    void clear_trusted_input() noexcept;
     std::vector<std::byte>& output_;
     bool mask_;
     std::size_t limit_;
@@ -58,8 +55,6 @@ private:
     opcode trusted_op_{opcode::continuation};
     const std::byte* trusted_data_{};
     std::size_t trusted_size_{};
-    bool defer_exact_output_{};
-    bool exact_output_deferred_{};
 };
 
 /// The payload is borrowed until the callback returns. Copy it before retaining
@@ -100,8 +95,6 @@ public:
     auto async_process_messages(message_handler_fn handler,
         std::size_t max_message_size = 16 * 1024 * 1024)
         -> task<std::expected<void, std::error_code>>;
-    auto async_echo_messages(std::size_t max_message_size = 16 * 1024 * 1024)
-        -> task<std::expected<void, std::error_code>>;
     auto async_close(std::uint16_t code = close_code::normal,
         std::string_view reason = "")
         -> task<std::expected<void, std::error_code>>;
@@ -123,9 +116,6 @@ public:
 #endif
 
 private:
-    auto async_process_messages_impl(message_handler_fn handler,
-        bool echo_messages, std::size_t max_message_size)
-        -> task<std::expected<void, std::error_code>>;
     auto async_read_some(char* buffer, std::size_t length)
         -> task<std::expected<std::size_t, std::error_code>>;
     auto async_write_all(const char* data, std::size_t length)
