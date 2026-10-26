@@ -34,6 +34,36 @@ namespace {
     }
 } // namespace
 
+prepared_response::prepared_response(int status_code, std::string content_type,
+    std::string body)
+    : status_code_(status_code),
+      content_type_(std::move(content_type)),
+      body_(std::make_shared<const std::string>(std::move(body)))
+{
+    content_length_ = std::to_string(body_->size());
+    response encoded{status_code_};
+    encoded.set_header("Content-Type", content_type_);
+    encoded.set_shared_body(body_);
+    encoded_h1_ =
+        std::make_shared<const std::string>(encoded.serialize());
+}
+
+auto prepared_response::status_code() const noexcept -> int
+{
+    return status_code_;
+}
+
+auto prepared_response::content_type() const noexcept -> std::string_view
+{
+    return content_type_;
+}
+
+auto prepared_response::body() const noexcept
+    -> const std::shared_ptr<const std::string>&
+{
+    return body_;
+}
+
 response::response() = default;
 
 response::response(int status_code, http_version version)
@@ -41,18 +71,21 @@ response::response(int status_code, http_version version)
 
 auto response::set_status(int code) noexcept -> response&
 {
+    invalidate_prepared_h1();
     status_code_ = code;
     return *this;
 }
 
 auto response::set_status_message(std::string_view msg) -> response&
 {
+    invalidate_prepared_h1();
     status_msg_ = std::string(msg);
     return *this;
 }
 
 auto response::set_version(http_version version) noexcept -> response&
 {
+    invalidate_prepared_h1();
     version_ = version;
     return *this;
 }
@@ -60,6 +93,7 @@ auto response::set_version(http_version version) noexcept -> response&
 auto response::set_header(std::string_view key, std::string_view value)
     -> response&
 {
+    invalidate_prepared_h1();
     if (const auto slot = common_header_slot(key))
         return set_common_header(*slot, value);
     if (header_equal(key, "Date"))
@@ -72,6 +106,7 @@ auto response::set_header(std::string_view key, std::string_view value)
 auto response::set_header_owned(std::string_view key, std::string value)
     -> response&
 {
+    invalidate_prepared_h1();
     if (const auto slot = common_header_slot(key))
         return set_common_header_owned(*slot, std::move(value));
     if (header_equal(key, "Date"))
@@ -84,6 +119,7 @@ auto response::set_header_owned(std::string_view key, std::string value)
 auto response::append_header(std::string_view key, std::string_view value)
     -> response&
 {
+    invalidate_prepared_h1();
     if (const auto slot = common_header_slot(key))
     {
         auto& header = common_headers_[*slot];
@@ -126,6 +162,7 @@ auto response::append_header(std::string_view key, std::string_view value)
 auto response::set_trailer(std::string_view key, std::string_view value)
     -> response&
 {
+    invalidate_prepared_h1();
     trailers_[std::string(key)] = std::string(value);
     return *this;
 }
@@ -133,6 +170,7 @@ auto response::set_trailer(std::string_view key, std::string_view value)
 auto response::append_trailer(std::string_view key, std::string_view value)
     -> response&
 {
+    invalidate_prepared_h1();
     auto it = trailers_.find(std::string(key));
     if (it != trailers_.end())
     {
@@ -148,6 +186,7 @@ auto response::append_trailer(std::string_view key, std::string_view value)
 
 auto response::remove_header(std::string_view key) -> response&
 {
+    invalidate_prepared_h1();
     if (const auto slot = common_header_slot(key))
     {
         common_headers_[*slot].present = false;
@@ -168,6 +207,7 @@ auto response::remove_header(std::string_view key) -> response&
 
 auto response::set_body(std::string_view body) -> response&
 {
+    invalidate_prepared_h1();
     restore_generation_buffer();
     shared_body_.reset();
     body_source_.reset();
@@ -187,6 +227,7 @@ void response::refresh_content_length()
 
 auto response::set_body(std::string body) -> response&
 {
+    invalidate_prepared_h1();
     restore_generation_buffer();
     shared_body_.reset();
     body_source_.reset();
@@ -198,6 +239,7 @@ auto response::set_body(std::string body) -> response&
 auto response::set_shared_body(std::shared_ptr<const std::string> body)
     -> response&
 {
+    invalidate_prepared_h1();
     restore_generation_buffer();
     body_.clear();
     body_source_.reset();
@@ -214,6 +256,7 @@ auto response::set_shared_body(std::shared_ptr<const std::string> body)
 auto response::set_shared_body_preserve_headers(
     std::shared_ptr<const std::string> body) -> response&
 {
+    invalidate_prepared_h1();
     restore_generation_buffer();
     body_.clear();
     body_source_.reset();
@@ -223,6 +266,7 @@ auto response::set_shared_body_preserve_headers(
 
 auto response::set_body_preserve_headers(std::string body) -> response&
 {
+    invalidate_prepared_h1();
     restore_generation_buffer();
     shared_body_.reset();
     body_source_.reset();
@@ -233,6 +277,7 @@ auto response::set_body_preserve_headers(std::string body) -> response&
 auto response::set_body_source(std::shared_ptr<response_body_source> source)
     -> response&
 {
+    invalidate_prepared_h1();
     restore_generation_buffer();
     body_.clear();
     shared_body_.reset();
@@ -244,8 +289,30 @@ auto response::set_body_source(std::shared_ptr<response_body_source> source)
     return *this;
 }
 
+auto response::set_prepared(const prepared_response& value) -> response&
+{
+    const auto can_reuse_h1 = version_ == http_version::http_1_1 &&
+        header_count() == 0U;
+    invalidate_prepared_h1();
+    restore_generation_buffer();
+    status_code_ = value.status_code_;
+    body_.clear();
+    body_source_.reset();
+    shared_body_ = value.body_;
+    set_common_header(0U, value.content_length_);
+    set_common_header(1U, value.content_type_);
+    if (can_reuse_h1)
+    {
+        if (prepared_h1_ != value.encoded_h1_)
+            prepared_h1_ = value.encoded_h1_;
+        prepared_h1_valid_ = true;
+    }
+    return *this;
+}
+
 void response::reset(int status_code, http_version version) noexcept
 {
+    invalidate_prepared_h1();
     restore_generation_buffer();
     status_code_ = status_code;
     status_msg_.clear();
@@ -331,6 +398,7 @@ auto response::body() const noexcept -> std::string_view
 
 auto response::take_headers() -> header_map
 {
+    invalidate_prepared_h1();
     materialize_headers();
     headers_snapshot_valid_ = false;
     return std::move(headers_snapshot_);
@@ -344,11 +412,13 @@ auto response::header_count() const noexcept -> std::size_t
 
 auto response::take_trailers() noexcept -> header_map
 {
+    invalidate_prepared_h1();
     return std::move(trailers_);
 }
 
 auto response::take_body() noexcept -> std::string
 {
+    invalidate_prepared_h1();
     return std::move(body_);
 }
 
@@ -361,6 +431,7 @@ auto response::shared_body() const noexcept
 auto response::take_shared_body() noexcept
     -> std::shared_ptr<const std::string>
 {
+    invalidate_prepared_h1();
     return std::exchange(shared_body_, {});
 }
 
@@ -373,6 +444,7 @@ auto response::body_source() const noexcept
 auto response::take_body_source() noexcept
     -> std::shared_ptr<response_body_source>
 {
+    invalidate_prepared_h1();
     return std::exchange(body_source_, {});
 }
 
@@ -422,6 +494,7 @@ auto response::serialize() const -> std::string
 
 void response::set_cached_date_header(std::array<char, 29U> value) noexcept
 {
+    invalidate_prepared_h1();
     cached_date_header_ = value;
     has_cached_date_header_ = true;
     common_headers_[6].present = false;
@@ -445,6 +518,11 @@ void response::serialize_to(std::string& output) const
 
 void response::append_serialized_to(std::string& output) const
 {
+    if (prepared_h1_valid_ && prepared_h1_)
+    {
+        output += *prepared_h1_;
+        return;
+    }
     const auto body_view = body();
     append_serialized_headers_to(output, body_view.size());
     output += body_view;
@@ -660,6 +738,11 @@ auto response::common_header_name(std::size_t slot) noexcept
 void response::invalidate_headers_snapshot() noexcept
 {
     headers_snapshot_valid_ = false;
+}
+
+void response::invalidate_prepared_h1() noexcept
+{
+    prepared_h1_valid_ = false;
 }
 
 void response::materialize_headers() const

@@ -289,6 +289,7 @@ public:
     [[nodiscard]] auto scope() const noexcept -> const request_scope&;
     void text(int status_code, std::string_view text_body);
     void json(int status_code, std::string_view json_body);
+    void respond(const prepared_response& value);
     /// Takes ownership of an already-serialized body instead of copying it.
     /// Constrained to std::string rvalues so literals and views keep using
     /// the string_view overload without ambiguity.
@@ -676,6 +677,13 @@ public:
     auto any_sync(std::string_view pattern, sync_handler_fn fn,
         endpoint_metadata metadata = {}) -> router&;
 
+    /// Register an immutable GET response. Without middleware, transports may
+    /// deliver it without constructing a request context or invoking a
+    /// type-erased handler; with middleware it retains normal response
+    /// semantics through the generated synchronous handler.
+    auto get_prepared(std::string_view pattern, prepared_response value,
+        endpoint_metadata metadata = {}) -> router&;
+
     /**
      * @brief Registers a POST route whose body is delivered incrementally.
      */
@@ -751,6 +759,7 @@ private:
         handler_fn handler;
         sync_handler_fn sync_handler;
         std::optional<request_body_stream_options> request_stream;
+        std::shared_ptr<const prepared_response> prepared;
         detail::route_score score;
         std::uint64_t order = 0;
         std::shared_ptr<const endpoint> described;
@@ -772,7 +781,8 @@ private:
     auto add_route(std::optional<http_method> method, std::string_view pattern,
         handler_fn fn, endpoint_metadata metadata,
         std::optional<request_body_stream_options> request_stream = {},
-        sync_handler_fn sync_handler = {}) -> router&;
+        sync_handler_fn sync_handler = {},
+        std::shared_ptr<const prepared_response> prepared = {}) -> router&;
     [[nodiscard]] auto find_exact(http_method method,
         std::string_view canonical_path) const
         -> const route_entry*;

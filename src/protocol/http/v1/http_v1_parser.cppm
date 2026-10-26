@@ -71,6 +71,8 @@ private:
         -> std::string_view;
     [[nodiscard]] auto find_header(std::string_view name) const noexcept
         -> std::size_t;
+    [[nodiscard]] auto common_header_value(std::size_t slot,
+        std::string_view name) const -> std::string_view;
     void compact_buffer();
     void reset_message_state() noexcept;
 
@@ -90,6 +92,7 @@ private:
     std::string buf_, body_;
     std::string header_storage_;
     std::size_t method_offset_{}, method_size_{}, uri_offset_{}, uri_size_{};
+    std::optional<http_method> method_enum_;
     http_version version_ = http_version::http_1_1;
     std::vector<header_field> header_fields_;
     std::vector<std::size_t> header_index_;

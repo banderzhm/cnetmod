@@ -327,6 +327,40 @@ auto handler = [](request_context& ctx) -> task<void> {
 #### `request_context::not_found`
 **签名**: `void not_found()`
 
+#### `prepared_response` / `router::get_prepared`
+**签名**:
+```cpp
+class prepared_response {
+    prepared_response(int status_code, std::string content_type,
+        std::string body);
+};
+
+void request_context::respond(const prepared_response& value);
+auto router::get_prepared(std::string_view pattern,
+    prepared_response value, endpoint_metadata metadata = {}) -> router&;
+```
+
+用于状态码、媒体类型和正文都固定，且会跨请求反复发送的小响应。对象在启动期构造一次；
+每次调用仍会把标准 `response` 的状态、头和共享正文填完整，因此中间件与 HTTP/2 仍看到
+普通响应语义。只有 HTTP/1.1、应用响应尚无动态头、且后续中间件没有修改响应时，传输层
+才复用预编码字节；设置 Cookie、Date、Server、自定义头，或修改状态与正文都会自动使
+预编码结果失效并回退普通序列化。
+
+不要用它缓存个性化正文，也不要把手写的原始 HTTP 报文作为正文。动态 JSON 应继续使用
+DTO/JSON 序列化和 `generate_body()`；静态文件使用 `serve_dir()`。
+
+固定 GET 端点优先直接注册：
+
+```cpp
+routes.get_prepared("/health",
+    prepared_response{status::ok, "text/plain", "ok"});
+```
+
+`get_prepared()` 是显式能力，不会根据 handler 的内容猜测或隐式缓存。没有中间件时，
+HTTP/1.1 与 HTTP/2 可以跳过 `request_context` 和类型擦除 handler；存在中间件时则自动
+通过普通同步 handler 执行，访问策略和响应修改仍然生效。只有响应由 handler 运行期选择
+时，才直接调用 `request.respond(prepared)`。
+
 #### `response::set_cookie`
 **签名**:
 ```cpp
@@ -808,6 +842,7 @@ cnetmod::http::v3::server_request_handler handler =
 |---------|---------|
 | 先 `use()` 注册中间件，再 `set_router()` | 在 `run()` 之后注册路由 |
 | 用 `ctx.json()` 返回 JSON | 手动拼接 `Content-Type` header |
+| 固定 GET 小响应使用 `get_prepared()` | 在 handler 中硬编码完整 HTTP 报文 |
 | 用 `ctx.get_header()` 读取已知 header | 为读取单个值调用 `ctx.headers()` 物化整张表 |
 | 使用 `save_upload()` 处理大文件上传 | 在 handler 中手动读取整个 body 到内存 |
 | 大响应使用 `response_body_source` 或 `serve_dir()` | handler 直接写 `raw_socket()` 绕过 TLS/H2 |

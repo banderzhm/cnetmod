@@ -7645,17 +7645,34 @@ struct compress_options {
     int brotli_quality = -1;      // Brotli 质量 0-11；负数 = 只协商 gzip（默认）
     int brotli_window = 18;       // Brotli 窗口 log2 字节
     std::size_t max_concurrency = 4;
-    // dispatch / measurements 见源码
+    std::size_t cache_capacity = 0; // 0 = 不缓存压缩结果
+    compression_cache_key cache_key;
+    compression_dispatch dispatch;
+    instrumentation::metric_sink measurements;
 };
 ```
 
 ```cpp
 srv.use(compress({.min_size = 512, .level = 6}));
 srv.use(compress({.min_size = 512, .brotli_quality = 2}));  // 客户端 br 权重不低于 gzip 时用 br
+
+// 正文每次仍由 handler 实时生成；仅复用内容未变化时的压缩结果。
+srv.use(compress({
+    .min_size = 512,
+    .cache_capacity = 32,
+    .cache_key = [](const http::request_context& request)
+        -> std::optional<std::string>
+    {
+        return std::string{request.uri()};
+    },
+}));
 ```
 
 开启 Brotli 需要构建时找到 libbrotli（`CNETMOD_HAS_BROTLI`）；未找到时该选项被忽略，仍按 gzip 协商。
-对 4–8 KB 的 JSON，Brotli q2 与 gzip 6 体积相近而 CPU 约为一半；q5 体积再小约 10%，CPU 为 gzip 6 的 1.5 倍。
+生产环境的动态 JSON/HTML 响应建议从 `brotli_quality = 5` 开始，再用本应用的代表性正文比较
+4-6 档的吞吐和压缩率；Brotli 的质量档位并不保证耗时严格单调，低档不一定更快。7-11 档
+更适合离线生成静态资源，不建议直接放在请求事件循环内。对 CPU 开销敏感的应用应配置
+`dispatch`，或通过 `runtime.compression(options)` 投递到 Application 管理的 CPU 池。
 
 压缩任务在执行期间只读借用响应正文，dispatcher 返回前必须保证 operation 已结束；不要把
 operation 投递后提前返回。这样框架无需复制未压缩正文，压缩失败、取消或结果更大时仍能原样
@@ -7663,6 +7680,12 @@ operation 投递后提前返回。这样框架无需复制未压缩正文，压�
 的同步执行都不需要业务自行缓存 zlib 状态。Application 应使用
 `runtime.compression(options)`，由组合根显式接入受管 CPU 池；直接调用 `compress(options)`
 表示明确接受在当前事件循环同步压缩。
+
+压缩结果缓存必须显式同时设置 `cache_capacity` 与 `cache_key`。key 要包含所有会改变正文的
+请求属性（例如路径参数、查询参数、租户、语言和权限范围）；不要把个性化响应只按路由缓存。
+中间件会把协商出的 gzip/Brotli 编码加入内部 key，并在命中后比较本次未压缩正文；正文变化时
+会重新压缩，因此它不是响应序列化缓存，也不会绕过 handler。固定或低频变化的 JSON、静态元
+数据等响应适合开启；高基数、每次变化的响应保持默认关闭，避免缓存查找和内存成本。
 
 ### 6. body_limit — 请求体限制
 
@@ -8386,6 +8409,40 @@ auto handler = [](request_context& ctx) -> task<void> {
 #### `request_context::not_found`
 **签名**: `void not_found()`
 
+#### `prepared_response` / `router::get_prepared`
+**签名**:
+```cpp
+class prepared_response {
+    prepared_response(int status_code, std::string content_type,
+        std::string body);
+};
+
+void request_context::respond(const prepared_response& value);
+auto router::get_prepared(std::string_view pattern,
+    prepared_response value, endpoint_metadata metadata = {}) -> router&;
+```
+
+用于状态码、媒体类型和正文都固定，且会跨请求反复发送的小响应。对象在启动期构造一次；
+每次调用仍会把标准 `response` 的状态、头和共享正文填完整，因此中间件与 HTTP/2 仍看到
+普通响应语义。只有 HTTP/1.1、应用响应尚无动态头、且后续中间件没有修改响应时，传输层
+才复用预编码字节；设置 Cookie、Date、Server、自定义头，或修改状态与正文都会自动使
+预编码结果失效并回退普通序列化。
+
+不要用它缓存个性化正文，也不要把手写的原始 HTTP 报文作为正文。动态 JSON 应继续使用
+DTO/JSON 序列化和 `generate_body()`；静态文件使用 `serve_dir()`。
+
+固定 GET 端点优先直接注册：
+
+```cpp
+routes.get_prepared("/health",
+    prepared_response{status::ok, "text/plain", "ok"});
+```
+
+`get_prepared()` 是显式能力，不会根据 handler 的内容猜测或隐式缓存。没有中间件时，
+HTTP/1.1 与 HTTP/2 可以跳过 `request_context` 和类型擦除 handler；存在中间件时则自动
+通过普通同步 handler 执行，访问策略和响应修改仍然生效。只有响应由 handler 运行期选择
+时，才直接调用 `request.respond(prepared)`。
+
 #### `response::set_cookie`
 **签名**:
 ```cpp
@@ -8867,6 +8924,7 @@ cnetmod::http::v3::server_request_handler handler =
 |---------|---------|
 | 先 `use()` 注册中间件，再 `set_router()` | 在 `run()` 之后注册路由 |
 | 用 `ctx.json()` 返回 JSON | 手动拼接 `Content-Type` header |
+| 固定 GET 小响应使用 `get_prepared()` | 在 handler 中硬编码完整 HTTP 报文 |
 | 用 `ctx.get_header()` 读取已知 header | 为读取单个值调用 `ctx.headers()` 物化整张表 |
 | 使用 `save_upload()` 处理大文件上传 | 在 handler 中手动读取整个 body 到内存 |
 | 大响应使用 `response_body_source` 或 `serve_dir()` | handler 直接写 `raw_socket()` 绕过 TLS/H2 |

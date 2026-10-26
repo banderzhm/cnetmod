@@ -193,6 +193,32 @@ TEST(router_sync_handler_is_preserved_without_coroutine_adapter)
     ASSERT_FALSE(static_cast<bool>(matched->handler));
 }
 
+TEST(router_prepared_response_retains_normal_sync_handler_semantics)
+{
+    router routes;
+    routes.get_prepared("/health",
+        prepared_response{status::ok, "text/plain", "ok"},
+        endpoint_metadata{endpoint_name{"health"}});
+
+    auto matched = routes.match(http_method::GET, "/health");
+    ASSERT_TRUE(matched.has_value());
+    ASSERT_TRUE(static_cast<bool>(matched->sync_handler));
+    ASSERT_TRUE(matched->params.matched != nullptr);
+    ASSERT_EQ(matched->params.matched->name, std::string{"health"});
+
+    auto io = cnetmod::make_io_context();
+    cnetmod::socket socket;
+    header_map headers;
+    response output;
+    request_context request{
+        *io, socket, "GET", "/health", headers, {}, output, {}};
+    matched->sync_handler(request);
+    ASSERT_EQ(output.status_code(), status::ok);
+    ASSERT_EQ(output.get_header("Content-Type"),
+        std::string_view{"text/plain"});
+    ASSERT_EQ(output.body(), std::string_view{"ok"});
+}
+
 // =============================================================================
 // Param match (:id)
 // =============================================================================

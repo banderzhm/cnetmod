@@ -357,7 +357,7 @@ auto request_context::client_address() const -> std::string
 auto request_context::method_enum() const noexcept
     -> std::optional<http_method>
 {
-    return string_to_method(method_);
+    return parser_ ? parser_->method_enum() : string_to_method(method_);
 }
 
 auto request_context::path() const noexcept -> std::string_view
@@ -494,6 +494,11 @@ void request_context::json(int s, std::string_view b)
     resp_.set_status(s);
     resp_.set_header("Content-Type", "application/json; charset=utf-8");
     resp_.set_body(std::string(b));
+}
+
+void request_context::respond(const prepared_response& value)
+{
+    resp_.set_prepared(value);
 }
 
 void request_context::json_owned(int s, std::string b)
@@ -886,6 +891,19 @@ auto router::any_sync(std::string_view p, sync_handler_fn f,
     return add_sync(std::nullopt, p, std::move(f), std::move(metadata));
 }
 
+auto router::get_prepared(std::string_view path, prepared_response value,
+    endpoint_metadata metadata) -> router&
+{
+    auto prepared =
+        std::make_shared<const prepared_response>(std::move(value));
+    auto handler = [prepared](request_context& request)
+    {
+        request.respond(*prepared);
+    };
+    return add_route(http_method::GET, path, {}, std::move(metadata), {},
+        std::move(handler), std::move(prepared));
+}
+
 auto request_context::body_stream_error() const noexcept -> std::error_code
 {
     return body_stream_ ? body_stream_->error() : std::error_code{};
@@ -977,7 +995,8 @@ auto router::add_sse(http_method m, std::string_view p, sse_handler_fn f,
 auto router::add_route(std::optional<http_method> m, std::string_view p,
     handler_fn f, endpoint_metadata metadata,
     std::optional<request_body_stream_options> request_stream,
-    sync_handler_fn sync_handler) -> router&
+    sync_handler_fn sync_handler,
+    std::shared_ptr<const prepared_response> prepared) -> router&
 {
     if (!f && !sync_handler)
         throw std::invalid_argument("route handler must not be empty");
@@ -998,7 +1017,7 @@ auto router::add_route(std::optional<http_method> m, std::string_view p,
         described->name = name->value;
     described->metadata = std::move(metadata);
     entries_.push_back({m, std::move(segs), canonical, std::move(f),
-        std::move(sync_handler), request_stream, {}, order,
+        std::move(sync_handler), request_stream, std::move(prepared), {}, order,
         std::move(described)});
     auto& e = entries_.back();
     e.score = detail::route_specificity(e.segments, !m, order);
