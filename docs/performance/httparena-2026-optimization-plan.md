@@ -108,7 +108,7 @@ Current evidence:
 
 ### G2 - Implement a cnetmod-native Gateway-H3 path
 
-**Status:** pending G1
+**Status:** in progress
 
 Code review finding:
 
@@ -138,6 +138,21 @@ Acceptance:
 - Match or exceed the selected external edge baseline.
 - Stable memory at 64 and 256 connections.
 - Disconnect, timeout, cancellation, and upstream failure tests pass.
+
+Progress on 2026-10-26:
+
+- Added an explicit `bounded_client_pool` while preserving the legacy idle
+  cache API. The new pool is owned per event loop and provides a hard client
+  limit, bounded FIFO waiters, acquisition timeout, cancellation, overload
+  errors, RAII leases, discard-on-transport-failure, and orderly shutdown.
+- Added deterministic tests for FIFO handoff, timeout cleanup, cancellation,
+  overload rejection, and shutdown with checked-out leases. The pool test also
+  passed 100 consecutive executions under Clang 23 Release.
+- A two-million-iteration Release microbenchmark measured 32.88-33.67 ns per
+  uncontended bounded acquire/release, or about 29.7-30.4 million leases per
+  second. The legacy unbounded idle cache measured 2.88-2.93 ns per operation.
+  The approximately 30 ns capacity-control cost is far below one network I/O
+  operation and is acceptable for the gateway path.
 
 ### H3-1 - Reduce small-response QUIC submission cost
 

@@ -29,7 +29,7 @@ endif()
 
 if(CNETMOD_ENABLE_HTTP)
     list(APPEND BENCH_TARGETS bench_http_observation bench_http_baseline bench_http_disabled
-        bench_http_parser)
+        bench_http_parser bench_http_client_pool)
     set(bench_http_baseline_SOURCE bench_http_observation.cpp)
     set(bench_http_disabled_SOURCE bench_http_observation.cpp)
 endif()
@@ -89,6 +89,8 @@ foreach(bench_name ${BENCH_TARGETS})
         target_link_libraries(${bench_name} PRIVATE cnetmod_grpc)
     elseif(bench_name MATCHES "^bench_ws_(codec|server)$")
         target_link_libraries(${bench_name} PRIVATE cnetmod_websocket)
+    elseif(bench_name STREQUAL "bench_http_client_pool")
+        target_link_libraries(${bench_name} PRIVATE cnetmod_http)
     elseif(bench_name STREQUAL "crosslang_cnetmod_server" OR
             bench_name STREQUAL "arena_h3_server")
         # The cross-language server exercises the HTTP stack directly. Keep

@@ -48,6 +48,7 @@ set(TEST_SOURCES
     test_http_swagger.cpp
     test_http_utils.cpp
     http_client_test.cpp
+    test_http_client_pool.cpp
     test_http_ip_filter.cpp
     test_http_jwt_auth.cpp
     test_http_rate_limiter.cpp
