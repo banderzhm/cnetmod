@@ -44,6 +44,7 @@ set(TEST_SOURCES
     test_http_compress.cpp
     test_http_parser.cpp
     test_http_router.cpp
+    test_http_reverse_proxy.cpp
     test_http_sse.cpp
     test_http_swagger.cpp
     test_http_utils.cpp

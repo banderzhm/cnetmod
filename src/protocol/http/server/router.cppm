@@ -290,6 +290,7 @@ public:
     void text(int status_code, std::string_view text_body);
     void json(int status_code, std::string_view json_body);
     void respond(const prepared_response& value);
+
     /// Takes ownership of an already-serialized body instead of copying it.
     /// Constrained to std::string rvalues so literals and views keep using
     /// the string_view overload without ambiguity.
@@ -299,6 +300,7 @@ public:
     {
         json_owned(status_code, std::move(json_body));
     }
+
     void json_owned(int status_code, std::string json_body);
     void html(int status_code, std::string_view html_body);
     void redirect(std::string_view location, int code = 302);
@@ -380,7 +382,7 @@ public:
      * registration, including exceptional completion resumed by cancellation.
      */
     template <class Factory>
-    auto with_deadline(Factory operation)
+    auto with_deadline(cnetmod::deadline child_deadline, Factory operation)
         -> decltype(cnetmod::with_deadline(std::declval<io_context&>(),
             std::declval<cnetmod::deadline>(), std::declval<Factory&>()))
     {
@@ -392,7 +394,8 @@ public:
         std::exception_ptr failure;
         try
         {
-            result.emplace(co_await cnetmod::with_deadline(ctx_, deadline_,
+            result.emplace(co_await cnetmod::with_deadline(ctx_,
+                deadline_.constrain(child_deadline),
                 std::invoke(operation, token), token));
         }
         catch (...)
@@ -404,6 +407,15 @@ public:
         if (failure)
             std::rethrow_exception(failure);
         co_return std::move(*result);
+    }
+
+    template <class Factory>
+    auto with_deadline(Factory operation)
+        -> decltype(cnetmod::with_deadline(std::declval<io_context&>(),
+            std::declval<cnetmod::deadline>(), std::declval<Factory&>()))
+    {
+        co_return co_await with_deadline(
+            deadline_, std::move(operation));
     }
 
     [[nodiscard]] auto trace_id() const noexcept -> std::string_view;
@@ -458,6 +470,7 @@ private:
     bool connection_upgrade_enabled_{};
 
     struct operation_registration;
+
     struct extended_state
     {
         std::optional<form_data> form_cache;
@@ -797,20 +810,24 @@ private:
     unmatched_handler_fn unmatched_;
     sse_stream_options sse_defaults_{};
     std::vector<std::size_t> static_exact_indices_;
+
     /// Transparent string hashing so a request path can be looked up as a
     /// view, without building a key string per request.
     struct path_hash
     {
         using is_transparent = void;
+
         [[nodiscard]] auto operator()(std::string_view value) const noexcept -> std::size_t
         {
             return std::hash<std::string_view>{}(value);
         }
     };
+
     static constexpr auto exact_method_count =
         static_cast<std::size_t>(http_method::PATCH) + 1U;
     static constexpr auto no_route_index =
         std::numeric_limits<std::size_t>::max();
+
     struct exact_route_bucket
     {
         std::array<std::size_t, exact_method_count> methods{};
@@ -821,20 +838,25 @@ private:
             methods.fill(no_route_index);
         }
     };
+
     /// Static routes need one path hash and one array lookup. The wildcard
     /// slot preserves `any()` fallback without scanning a candidate vector.
     std::unordered_map<std::string, exact_route_bucket, path_hash,
-        std::equal_to<>> exact_index_;
+        std::equal_to<>>
+        exact_index_;
+
     struct literal_bucket_view
     {
         std::optional<http_method> method;
         std::string_view first;
     };
+
     struct literal_bucket_key
     {
         std::optional<http_method> method;
         std::string first;
     };
+
     struct literal_bucket_hash
     {
         using is_transparent = void;
@@ -843,6 +865,7 @@ private:
         [[nodiscard]] auto operator()(literal_bucket_view key) const noexcept
             -> std::size_t;
     };
+
     struct literal_bucket_equal
     {
         using is_transparent = void;
@@ -853,6 +876,7 @@ private:
         [[nodiscard]] auto operator()(literal_bucket_view left,
             const literal_bucket_key& right) const noexcept -> bool;
     };
+
     std::unordered_map<literal_bucket_key, std::vector<std::size_t>,
         literal_bucket_hash, literal_bucket_equal>
         first_literal_index_;

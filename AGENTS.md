@@ -8722,6 +8722,10 @@ HTTP 响应。`callback(event)` 借用流对象，不能超过 route handler、`
 当前 socket 操作、关闭连接并将状态置为 `failed`。普通 `request_timeout` 中间件检测到 SSE
 已提交后不会写入 504；SSE 使用自己的总时限。生产者访问下游时应使用
 `request_context::with_deadline()`，让下游操作同样受总时限和请求取消约束。
+需要为某一阶段设置更短预算时，使用
+`with_deadline(deadline::after(stage_timeout), factory)`；它会取阶段 deadline 与请求
+总 deadline 中更早的一个，并给 factory 独立、与请求取消联动的 `cancel_token`。不要为了
+连接池租约、数据库或上游 HTTP 阶段另起一个脱离请求生命周期的 timer。
 
 #### `sse::event`
 ```cpp
@@ -9065,6 +9069,58 @@ payload 增加独立所有者和 gather segment 的管理成本。
 SSE、表单、追踪、取消与 request-scope 扩展状态仅在实际调用对应能力时创建。应用仍只使用
 公开的 `router::match()`、`request_context` 和 `get_sync()` 等接口，不得依赖这些内部视图，
 也不要为了追求吞吐绕过 endpoint metadata 或自行管理请求上下文生命周期。
+
+---
+
+### 反向代理与 API Gateway
+
+`reverse_proxy` 是显式启用的独立模块：
+
+```cpp
+import cnetmod.protocol.http;
+import cnetmod.protocol.http.reverse_proxy;
+```
+
+它负责把一个 `request_context` 转发到固定 upstream，并统一处理：
+
+- 每事件循环的 `bounded_client_pool`、FIFO 等待、容量上限与租约超时；
+- 下游取消和绝对 deadline 向 upstream I/O 传播；
+- RFC hop-by-hop header 以及 `Connection` 动态列出的 header 清理；
+- `X-Forwarded-For`、`X-Forwarded-Host`、`X-Forwarded-Proto` 策略；
+- upstream 过载、连接失败和超时到 503、502、504 的稳定映射；
+- upstream response header/body/trailer 向当前 response 的所有权转移。
+
+```cpp
+cnetmod::http::reverse_proxy_options options;
+options.upstream = "http://127.0.0.1:8081/api";
+options.downstream_scheme = "https";
+options.pool.maximum_clients = 128;
+options.pool.maximum_waiters = 512;
+options.pool.acquire_timeout = std::chrono::milliseconds{100};
+options.pool.client.request_timeout = std::chrono::seconds{5};
+options.pool.client.version_pref =
+    cnetmod::http::http_version_preference::http1_only;
+
+auto proxy = cnetmod::http::reverse_proxy::create(io, std::move(options));
+if (!proxy)
+    return proxy.error();
+
+routes.any("/api/*path",
+    [&proxy](cnetmod::http::request_context& request)
+        -> cnetmod::task<void>
+    {
+        co_await (*proxy)->forward(request);
+    });
+
+// 停止 listener 并等现有 handler 退出后：
+co_await (*proxy)->close();
+```
+
+多事件循环服务器必须为每个 worker、每个 upstream 创建一份 `reverse_proxy`，并按
+`request.io_ctx()` 选择对应实例；禁止把内部可变 HTTP client 跨 worker 共享。默认
+`forwarded_headers = replace`，不会信任客户端伪造的 `X-Forwarded-For`。只有当前入口
+确实位于可信代理之后时才选择 `append`。静态文件应在 router 中先由 `serve_dir()`
+处理，不要让静态资源绕行 upstream。
 
 ---
 

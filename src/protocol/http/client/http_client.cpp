@@ -635,21 +635,16 @@ auto client::send_http1_impl(const request& req, cancel_token& token)
     request_data += version_to_string(req.version());
     request_data += "\r\n";
 
-    bool has_content_length = false;
-    bool has_transfer_encoding = false;
+    const bool has_content_length =
+        req.headers().find("Content-Length") != req.headers().end();
+    bool has_transfer_encoding =
+        req.headers().find("Transfer-Encoding") != req.headers().end();
     for (const auto& [key, value] : req.headers())
     {
         request_data += key;
         request_data += ": ";
         request_data += value;
         request_data += "\r\n";
-        std::string lower_key;
-        lower_key.reserve(key.size());
-        for (const auto ch : key)
-            lower_key.push_back(static_cast<char>(std::tolower(
-                static_cast<unsigned char>(ch))));
-        has_content_length |= lower_key == "content-length";
-        has_transfer_encoding |= lower_key == "transfer-encoding";
     }
 
     if (req.get_header("Host").empty())

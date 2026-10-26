@@ -153,6 +153,19 @@ Progress on 2026-10-26:
   second. The legacy unbounded idle cache measured 2.88-2.93 ns per operation.
   The approximately 30 ns capacity-control cost is far below one network I/O
   operation and is acceptable for the gateway path.
+- Added the explicit `cnetmod.protocol.http.reverse_proxy` module. It keeps one
+  pool per event loop, forwards request cancellation and deadlines, strips both
+  standard and `Connection`-named hop headers without a temporary container,
+  applies a non-trusting forwarded-header policy, and moves upstream responses
+  into the downstream response builder. It maps capacity, transport failure,
+  and deadline failure to 503, 502, and 504 respectively.
+- A real two-server integration test now covers frontend-to-proxy-to-backend
+  POST forwarding, body/status/header transfer, spoofed forwarding-header
+  replacement, dynamic hop-header removal, and a connected upstream that
+  exceeds its deadline. The timeout path cancels upstream I/O and returns 504.
+- Removed one temporary lowercase `std::string` allocation per outbound HTTP/1
+  header by using the existing case-insensitive header index for framing-field
+  detection. The existing HTTP client, router, pool, and proxy tests pass.
 
 ### H3-1 - Reduce small-response QUIC submission cost
 
