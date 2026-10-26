@@ -5,6 +5,10 @@ import cnetmod.core.error;
 import cnetmod.coro.cancel;
 import cnetmod.coro.timer;
 
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+import cnetmod.protocol.http.v3.session;
+#endif
+
 namespace cnetmod::http {
 namespace {
 
@@ -24,6 +28,15 @@ namespace {
                 return false;
         }
         return true;
+    }
+
+    void lowercase_ascii(std::string& value) noexcept
+    {
+        for (auto& character : value)
+        {
+            if (character >= 'A' && character <= 'Z')
+                character = static_cast<char>(character + ('a' - 'A'));
+        }
     }
 
     auto is_standard_hop_header(std::string_view name) noexcept -> bool
@@ -208,6 +221,112 @@ namespace {
             : deadline{};
     }
 
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+    class cancellation_link final
+    {
+    public:
+        cancellation_link(cancel_token& parent, cancel_token& child) noexcept
+            : parent_(parent), child_(child)
+        {
+            if (!parent_.register_callback(this, [](void* value) noexcept
+                    {
+                        static_cast<cancellation_link*>(value)->child_.cancel();
+                    }))
+                child_.cancel();
+        }
+
+        ~cancellation_link()
+        {
+            (void)parent_.complete_callback(this);
+            parent_.finish_callback(this);
+        }
+
+        cancellation_link(const cancellation_link&) = delete;
+        auto operator=(const cancellation_link&) -> cancellation_link& = delete;
+
+    private:
+        cancel_token& parent_;
+        cancel_token& child_;
+    };
+
+    void copy_http3_request(v3::http3_request& input, request& output,
+        const reverse_proxy_options& options)
+    {
+        const auto connection = input.headers.find("Connection");
+        const auto connection_fields = connection == input.headers.end()
+            ? std::string_view{}
+            : std::string_view{connection->second};
+        for (auto& [name, value] : input.headers)
+        {
+            if (is_hop_header(name, connection_fields) ||
+                ascii_equal(name, "X-Forwarded-For") ||
+                ascii_equal(name, "X-Forwarded-Host") ||
+                ascii_equal(name, "X-Forwarded-Proto") ||
+                ascii_equal(name, "Host"))
+                continue;
+            output.set_header_owned(std::move(name), std::move(value));
+        }
+        input.headers.clear();
+
+        if (options.preserve_host && !input.host.empty())
+            output.set_header("Host", input.host);
+        if (options.forwarded_headers != forwarded_header_policy::omit)
+        {
+            if (!input.host.empty())
+                output.set_header("X-Forwarded-Host", input.host);
+            const auto scheme = options.downstream_scheme.empty()
+                ? std::string_view{input.scheme}
+                : std::string_view{options.downstream_scheme};
+            if (!scheme.empty())
+                output.set_header("X-Forwarded-Proto", scheme);
+        }
+    }
+
+    void transfer_http3_response(response& upstream,
+        v3::http3_response& downstream, http_method request_method)
+    {
+        const auto head_content_length = request_method == http_method::HEAD
+            ? std::string{upstream.get_header("Content-Length")}
+            : std::string{};
+        downstream.status = upstream.status_code();
+        upstream.take_headers(
+            [&](std::string name, std::string value)
+            {
+                if (!is_standard_hop_header(name) &&
+                    !ascii_equal(name, "Content-Length"))
+                {
+                    lowercase_ascii(name);
+                    downstream.headers[std::move(name)] = std::move(value);
+                }
+            });
+        if (request_method == http_method::HEAD)
+        {
+            if (!head_content_length.empty())
+                downstream.headers["content-length"] = head_content_length;
+        }
+        else if (auto shared = upstream.take_shared_body())
+            downstream.shared_body = std::move(shared);
+        else if (auto source = upstream.take_body_source())
+            downstream.body_source = std::move(source);
+        else
+            downstream.body = upstream.take_body();
+        auto trailers = upstream.take_trailers();
+        for (auto& [name, value] : trailers)
+        {
+            lowercase_ascii(name);
+            downstream.trailers[std::move(name)] = std::move(value);
+        }
+    }
+
+    void set_http3_error(v3::http3_response& response, int status_code,
+        std::string_view message)
+    {
+        response.status = status_code;
+        response.headers["content-type"] = "text/plain";
+        response.body.assign(message);
+    }
+#endif
+
 } // namespace
 
 auto reverse_proxy::create(io_context& context, reverse_proxy_options options)
@@ -232,7 +351,7 @@ auto reverse_proxy::create(io_context& context, reverse_proxy_options options)
 
 reverse_proxy::reverse_proxy(io_context& context,
     reverse_proxy_options options, std::string normalized_upstream)
-    : options_(std::move(options)), upstream_(std::move(normalized_upstream)), pool_(context, options_.pool)
+    : context_(context), options_(std::move(options)), upstream_(std::move(normalized_upstream)), pool_(context, options_.pool)
 {
 }
 
@@ -301,6 +420,66 @@ auto reverse_proxy::forward(request_context& context) -> task<void>
     }
     transfer_response(*result, context.resp(), *method);
 }
+
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+auto reverse_proxy::forward(v3::http3_request& input,
+    v3::http3_response& output, cancel_token& cancellation)
+    -> task<std::expected<void, std::error_code>>
+{
+    request outgoing{input.method,
+        append_upstream_uri(upstream_, input.path)};
+    copy_http3_request(input, outgoing, options_);
+    if (input.body_source)
+        outgoing.set_body_source(std::move(input.body_source));
+    else if (!input.body.empty())
+        outgoing.set_body(std::move(input.body));
+
+    cancel_token acquire_cancellation;
+    cancellation_link acquire_link{cancellation, acquire_cancellation};
+    auto lease = options_.pool.acquire_timeout >
+            std::chrono::milliseconds::zero()
+        ? co_await with_timeout(context_, options_.pool.acquire_timeout,
+              pool_.acquire(acquire_cancellation), acquire_cancellation)
+        : co_await pool_.acquire(acquire_cancellation);
+    if (!lease)
+    {
+        if (cancellation.is_cancelled())
+            co_return std::unexpected(
+                std::make_error_code(std::errc::operation_canceled));
+        set_http3_error(output,
+            is_timeout(lease.error()) ? status::gateway_timeout
+                                      : status::service_unavailable,
+            is_timeout(lease.error()) ? "upstream lease timed out"
+                                      : "upstream capacity unavailable");
+        co_return {};
+    }
+
+    cancel_token send_cancellation;
+    cancellation_link send_link{cancellation, send_cancellation};
+    auto result = options_.pool.client.request_timeout >
+            std::chrono::milliseconds::zero()
+        ? co_await with_timeout(context_,
+              options_.pool.client.request_timeout,
+              lease->get().send(outgoing, send_cancellation),
+              send_cancellation)
+        : co_await lease->get().send(outgoing, send_cancellation);
+    if (!result)
+    {
+        lease->discard();
+        if (cancellation.is_cancelled())
+            co_return std::unexpected(
+                std::make_error_code(std::errc::operation_canceled));
+        set_http3_error(output,
+            is_timeout(result.error()) ? status::gateway_timeout
+                                       : status::bad_gateway,
+            is_timeout(result.error()) ? "upstream request timed out"
+                                       : "upstream request failed");
+        co_return {};
+    }
+    transfer_http3_response(*result, output, input.method);
+    co_return {};
+}
+#endif
 
 auto reverse_proxy::close() -> task<void>
 {

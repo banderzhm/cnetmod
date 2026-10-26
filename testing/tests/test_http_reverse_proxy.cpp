@@ -1,13 +1,20 @@
 #include "test_framework.hpp"
 
+#include <cnetmod/config.hpp>
+
 import std;
 import cnetmod.core.net_init;
+import cnetmod.coro.cancel;
 import cnetmod.coro.spawn;
 import cnetmod.coro.task;
 import cnetmod.coro.timer;
 import cnetmod.io.io_context;
 import cnetmod.protocol.http;
 import cnetmod.protocol.http.reverse_proxy;
+
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+import cnetmod.protocol.http.v3.session;
+#endif
 
 namespace {
 
@@ -158,6 +165,96 @@ TEST(reverse_proxy_forwards_request_and_filters_hop_headers)
     ASSERT_TRUE(frontend_loop.handle().done());
     ASSERT_TRUE(backend_loop.handle().done());
 }
+
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+TEST(reverse_proxy_bridges_http3_request_to_http_upstream)
+{
+    cnetmod::net_init network;
+    auto context = cnetmod::make_io_context();
+
+    bool backend_valid = false;
+    cnetmod::http::server backend{*context};
+    cnetmod::http::router routes;
+    routes.post("/from-h3",
+        [&](cnetmod::http::request_context& request) -> cnetmod::task<void>
+        {
+            backend_valid = request.body() == "h3 payload" &&
+                request.get_header("X-Hop").empty() &&
+                request.get_header("X-Forwarded-For").empty() &&
+                request.get_header("X-Forwarded-Host") == "gateway.test" &&
+                request.get_header("X-Forwarded-Proto") == "https";
+            request.resp().set_status(202);
+            request.resp().set_header("X-Upstream", "h3-bridge");
+            request.resp().set_body(std::string_view{"bridged"});
+            co_return;
+        });
+    backend.set_router(std::move(routes));
+    ASSERT_TRUE(backend.listen("127.0.0.1", 0).has_value());
+    const auto endpoint = backend.local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+
+    cnetmod::http::reverse_proxy_options options;
+    options.upstream =
+        std::format("http://127.0.0.1:{}", endpoint->port());
+    options.downstream_scheme = "https";
+    options.pool.client.version_pref =
+        cnetmod::http::http_version_preference::http1_only;
+    auto proxy = cnetmod::http::reverse_proxy::create(
+        *context, std::move(options));
+    ASSERT_TRUE(proxy.has_value());
+
+    auto backend_loop = backend.run();
+    backend_loop.handle().resume();
+    cnetmod::http::v3::http3_response response;
+    bool forwarded = false;
+    auto exercise = [&]() -> cnetmod::task<void>
+    {
+        cnetmod::http::v3::http3_request request;
+        request.method = cnetmod::http::http_method::POST;
+        request.path = "/from-h3";
+        request.scheme = "https";
+        request.host = "gateway.test";
+        request.headers["Connection"] = "X-Hop";
+        request.headers["X-Hop"] = "must-not-forward";
+        request.headers["X-Forwarded-For"] = "198.51.100.9";
+        request.body = "h3 payload";
+        cnetmod::cancel_token cancellation;
+        const auto result =
+            co_await (*proxy)->forward(request, response, cancellation);
+        forwarded = result.has_value();
+
+        co_await (*proxy)->close();
+        backend.stop();
+        backend.abort_connections();
+        while (!backend_loop.handle().done() ||
+            backend.active_connections() != 0)
+            co_await cnetmod::async_sleep(
+                *context, std::chrono::milliseconds{1});
+        context->stop();
+    };
+
+    auto running = exercise();
+    running.handle().resume();
+    context->run();
+    ASSERT_TRUE(running.handle().done());
+    running.handle().promise().result();
+
+    ASSERT_TRUE(forwarded);
+    ASSERT_TRUE(backend_valid);
+    ASSERT_EQ(response.status, 202);
+    ASSERT_EQ(response.body, "bridged");
+    ASSERT_EQ(response.headers["x-upstream"], "h3-bridge");
+    for (const auto& [name, value] : response.headers)
+    {
+        (void)value;
+        ASSERT_TRUE(std::ranges::none_of(name,
+            [](char character)
+            {
+                return character >= 'A' && character <= 'Z';
+            }));
+    }
+}
+#endif
 
 } // namespace
 

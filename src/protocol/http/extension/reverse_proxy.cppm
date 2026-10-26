@@ -5,11 +5,16 @@ module;
 export module cnetmod.protocol.http.reverse_proxy;
 
 import std;
+import cnetmod.coro.cancel;
 import cnetmod.coro.task;
 import cnetmod.io.io_context;
 import cnetmod.protocol.http;
 import cnetmod.protocol.http.client.pool;
 import cnetmod.protocol.http.semantics;
+
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+import cnetmod.protocol.http.v3.session;
+#endif
 
 export namespace cnetmod::http {
 
@@ -49,6 +54,11 @@ public:
     auto operator=(const reverse_proxy&) -> reverse_proxy& = delete;
 
     [[nodiscard]] auto forward(request_context& context) -> task<void>;
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+    [[nodiscard]] auto forward(v3::http3_request& request,
+        v3::http3_response& response, cancel_token& cancellation)
+        -> task<std::expected<void, std::error_code>>;
+#endif
     [[nodiscard]] auto close() -> task<void>;
 
     [[nodiscard]] auto pool() noexcept -> bounded_client_pool&;
@@ -57,6 +67,7 @@ private:
     reverse_proxy(io_context& context, reverse_proxy_options options,
         std::string normalized_upstream);
 
+    io_context& context_;
     reverse_proxy_options options_;
     std::string upstream_;
     bounded_client_pool pool_;

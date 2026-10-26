@@ -166,6 +166,13 @@ Progress on 2026-10-26:
 - Removed one temporary lowercase `std::string` allocation per outbound HTTP/1
   header by using the existing case-insensitive header index for framing-field
   detection. The existing HTTP client, router, pool, and proxy tests pass.
+- Added the native HTTP/3-to-upstream bridge on the same `reverse_proxy`.
+  Owned HTTP/3 headers and bodies move into the outbound request, downstream
+  stream cancellation reaches pool waits and upstream I/O, and the upstream
+  response moves directly into `http3_response`. A minimal Clang 23 Release
+  build with HTTP, TLS, QUIC, BoringSSL and ORM disabled now compiles the full
+  bridge; an integration test exercises HTTP/3 request objects against a real
+  HTTP/1 upstream.
 
 ### H3-1 - Reduce small-response QUIC submission cost
 

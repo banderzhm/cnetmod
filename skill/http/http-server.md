@@ -923,7 +923,8 @@ import cnetmod.protocol.http;
 import cnetmod.protocol.http.reverse_proxy;
 ```
 
-它负责把一个 `request_context` 转发到固定 upstream，并统一处理：
+它负责把 HTTP/1.1、HTTP/2 的 `request_context`，或 HTTP/3 的
+`http3_request`，转发到固定 upstream，并统一处理：
 
 - 每事件循环的 `bounded_client_pool`、FIFO 等待、容量上限与租约超时；
 - 下游取消和绝对 deadline 向 upstream I/O 传播；
@@ -957,6 +958,27 @@ routes.any("/api/*path",
 // 停止 listener 并等现有 handler 退出后：
 co_await (*proxy)->close();
 ```
+
+启用 QUIC 时，同一个每-worker实例可以直接用于 HTTP/3 异步 handler；不需要先把
+HTTP/3 请求复制成 `request_context`：
+
+```cpp
+cnetmod::http::v3::async_server_request_handler handler =
+    [&proxy](cnetmod::http::v3::http3_request& request,
+        cnetmod::http::v3::http3_response& response,
+        cnetmod::cancel_token& cancellation)
+        -> cnetmod::task<std::expected<void, std::error_code>>
+    {
+        co_return co_await (*proxy)->forward(
+            request, response, cancellation);
+    };
+```
+
+HTTP/3 入口会移动其已拥有的 header/body 到 upstream 请求，并把 upstream
+response 的 header/body/trailer 所有权直接转入 HTTP/3 response。下游流取消会立即
+传播给连接池等待与 upstream I/O；租约、请求超时分别稳定映射为 503/504 与 502/504。
+HTTP/3 请求对象没有 TCP peer address，因此该重载不会伪造 `X-Forwarded-For`；需要
+客户端地址时，应由 HTTP/3 server 在获得可信连接元数据后显式注入。
 
 多事件循环服务器必须为每个 worker、每个 upstream 创建一份 `reverse_proxy`，并按
 `request.io_ctx()` 选择对应实例；禁止把内部可变 HTTP client 跨 worker 共享。默认
