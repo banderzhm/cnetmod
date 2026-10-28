@@ -4,10 +4,14 @@
 
 import std;
 import cnetmod.core.net_init;
+import cnetmod.core.socket;
+import cnetmod.core.address;
+import cnetmod.core.buffer;
 import cnetmod.coro.cancel;
 import cnetmod.coro.spawn;
 import cnetmod.coro.task;
 import cnetmod.coro.timer;
+import cnetmod.executor.async_op;
 import cnetmod.io.io_context;
 import cnetmod.protocol.http;
 import cnetmod.protocol.http.reverse_proxy;
@@ -17,6 +21,68 @@ import cnetmod.protocol.http.v3.session;
 #endif
 
 namespace {
+
+TEST(http_client_reconnects_after_http10_default_close)
+{
+    cnetmod::net_init network;
+    auto context = cnetmod::make_io_context();
+    auto listener = cnetmod::socket::create(
+        cnetmod::address_family::ipv4, cnetmod::socket_type::stream);
+    ASSERT_TRUE(listener.has_value());
+    ASSERT_TRUE(listener->bind({cnetmod::ipv4_address::loopback(), 0}).has_value());
+    ASSERT_TRUE(listener->listen().has_value());
+    const auto endpoint = listener->local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+
+    bool backend_valid = true;
+    auto backend = [&]() -> cnetmod::task<void>
+    {
+        for (unsigned request_index = 0; request_index < 2U; ++request_index)
+        {
+            auto peer = co_await cnetmod::async_accept(*context, *listener);
+            if (!peer)
+            {
+                backend_valid = false;
+                co_return;
+            }
+            std::array<char, 1024> bytes{};
+            auto received = co_await cnetmod::async_read(*context, *peer,
+                cnetmod::mutable_buffer{bytes.data(), bytes.size()});
+            backend_valid = backend_valid && received && *received != 0U &&
+                std::string_view{bytes.data(), *received}.contains("GET / HTTP/1.1");
+            constexpr std::string_view reply =
+                "HTTP/1.0 200 OK\r\nContent-Length: 2\r\n\r\nok";
+            const auto written = co_await cnetmod::async_write_all(*context, *peer,
+                cnetmod::const_buffer{reply.data(), reply.size()});
+            backend_valid = backend_valid && written.has_value();
+            peer->close();
+        }
+    };
+
+    bool client_valid = false;
+    auto exercise = [&]() -> cnetmod::task<void>
+    {
+        cnetmod::http::client_options options;
+        options.version_pref =
+            cnetmod::http::http_version_preference::http1_only;
+        cnetmod::http::client client{*context, std::move(options)};
+        const auto target = std::format("http://127.0.0.1:{}/",
+            endpoint->port());
+        cnetmod::http::request first{cnetmod::http::http_method::GET, target};
+        cnetmod::http::request second{cnetmod::http::http_method::GET, target};
+        const auto first_result = co_await client.send(first);
+        const auto second_result = co_await client.send(second);
+        client_valid = first_result && second_result &&
+            first_result->body() == "ok" && second_result->body() == "ok";
+        context->stop();
+    };
+
+    cnetmod::spawn(*context, backend());
+    cnetmod::spawn(*context, exercise());
+    context->run();
+    ASSERT_TRUE(backend_valid);
+    ASSERT_TRUE(client_valid);
+}
 
 TEST(reverse_proxy_rejects_invalid_upstream_origins)
 {

@@ -1114,9 +1114,30 @@ auto client::send_http1_impl(const request& req, cancel_token& token)
         }
     }
 
-    // Handle Connection header
-    auto connection = resp.get_header("Connection");
-    if (close_delimited || !options_.keep_alive || connection == "close")
+    // HTTP/1.0 closes by default unless the peer explicitly opts into
+    // persistence.  Connection tokens are case-insensitive in every HTTP/1.x
+    // version, so do not leave a remotely closed socket in the reuse path.
+    const auto connection = resp.get_header("Connection");
+    const auto connection_is = [connection](std::string_view expected) noexcept
+    {
+        return connection.size() == expected.size() &&
+            std::ranges::equal(connection, expected,
+                [](char left, char right) noexcept
+                {
+                    const auto lower = [](char value) noexcept
+                    {
+                        return value >= 'A' && value <= 'Z'
+                            ? static_cast<char>(value + ('a' - 'A'))
+                            : value;
+                    };
+                    return lower(left) == lower(right);
+                });
+    };
+    const bool http10_default_close =
+        resp.version() == http_version::http_1_0 &&
+        !connection_is("keep-alive");
+    if (close_delimited || !options_.keep_alive || http10_default_close ||
+        connection_is("close"))
     {
         close();
     }
