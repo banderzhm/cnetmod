@@ -63,7 +63,7 @@ construction, JSON, and static-body paths should be isolated first.
 
 ### G1 - Establish the Gateway-H3 edge baseline
 
-**Status:** in progress
+**Status:** complete
 
 The published cnetmod adapter places Caddy in front of the cnetmod backend. Its
 CPU breakdown shows the edge consuming far more CPU than the backend, so the
@@ -105,10 +105,16 @@ Current evidence:
   63-65% and PostgreSQL used 24-26%. The edge exhausted roughly four cores;
   the backend remained substantially underutilized. This confirms that the
   existing external Gateway-H3 stack is edge-bound on this machine too.
+- The cnetmod-native edge completed three Release runs with the official URI
+  mix at both scored connection counts. At 64 connections the runs reached
+  32.07K, 43.72K, and 48.23K requests per second. At 256 connections they
+  reached 31.33K, 44.20K, and 44.95K requests per second.
+- All six native-edge runs completed without failed requests, protocol errors,
+  or timeouts. The native edge therefore replaces Caddy for this adapter.
 
 ### G2 - Implement a cnetmod-native Gateway-H3 path
 
-**Status:** in progress
+**Status:** complete
 
 Code review finding:
 
@@ -173,6 +179,14 @@ Progress on 2026-10-26:
   build with HTTP, TLS, QUIC, BoringSSL and ORM disabled now compiles the full
   bridge; an integration test exercises HTTP/3 request objects against a real
   HTTP/1 upstream.
+- HTTP/3 response headers and trailers are normalized to lowercase before
+  QPACK encoding. This prevents uppercase HTTP/1 header names from producing a
+  malformed HTTP/3 response.
+- HTTP/1.0 default-close responses no longer leave a remotely closed socket in
+  the reuse path. A two-connection regression test covers reconnection.
+- The HttpArena adapter owns one bounded proxy per worker loop, serves static
+  files at the H3 edge, and forwards dynamic routes to the cnetmod backend.
+  Its lazy pool limits are derived from the maximum official stream load.
 
 ### H3-1 - Reduce small-response QUIC submission cost
 
@@ -326,3 +340,4 @@ increasing generator lag enough to invalidate the comparison.
 |---|---|---|---|
 | 2026-10-26 | G1 | Controlled three-run A/B showed Caddy decisively ahead of Nginx QUIC at both 64 and 256 connections | Reject Nginx replacement; profile the existing edge and backend |
 | 2026-10-26 | G1 | Caddy consumed about 3.7-4.2 cores while the backend consumed 0.6 core in 30-second 64/256-connection samples | Existing stack is edge-bound; advance to the native gateway design |
+| 2026-10-28 | G2 | Native edge completed six official-mix runs at 64 and 256 connections with no failed requests | Replace Caddy with the cnetmod HTTP/3 gateway adapter |
