@@ -188,6 +188,20 @@ Progress on 2026-10-26:
   files at the H3 edge, and forwards dynamic routes to the cnetmod backend.
   Its lazy pool limits are derived from the maximum official stream load.
 
+### H3-0 - Remove unconditional query decoding
+
+**Status:** complete
+
+The HTTP/3 benchmark handler now parses ordinary numeric query values directly
+from the request buffer. Values containing percent escapes or `+` keep the
+existing URL-decoding path, so encoded input retains the same behavior.
+
+On the local Arch/Clang 23 Release build, with four server cores and four
+separate load-generator cores, the paired baseline-h3 median increased from
+about 1.36M to 1.46M requests per second. All measured requests completed with
+2xx responses and no failures. The QUIC frame, packet, stream, loss, congestion,
+early-data, QPACK, and HTTP/3 frame unit suites also pass.
+
 ### H3-1 - Reduce small-response QUIC submission cost
 
 **Status:** pending
