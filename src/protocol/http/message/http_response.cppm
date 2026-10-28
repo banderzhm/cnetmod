@@ -63,6 +63,10 @@ public:
     /// allocation when a server-side cache has just produced the value.
     auto set_header_owned(std::string_view key, std::string value) -> response&;
 
+    /// Set Content-Type through its fixed response slot. This is the common
+    /// text/JSON/HTML response path and avoids generic header-name dispatch.
+    auto set_content_type(std::string_view value) -> response&;
+
     auto append_header(std::string_view key, std::string_view value)
         -> response&;
 
@@ -269,6 +273,11 @@ public:
     [[nodiscard]] auto cached_date_header() const noexcept -> std::string_view;
 
 private:
+    friend class server;
+
+    [[nodiscard]] auto has_content_length() const noexcept -> bool;
+    [[nodiscard]] auto is_streamed() const noexcept -> bool;
+
     static constexpr std::size_t common_header_count = 10;
 
     struct common_header_value

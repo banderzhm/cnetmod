@@ -270,6 +270,77 @@ Acceptance:
 - Improve baseline and limited-connection medians.
 - Router, middleware, 404/405, keep-alive, pipeline, and response tests pass.
 
+Fixed-header dispatch result on 2026-10-28:
+
+- The HTTP/1 server now reads `Connection`, `Content-Length`, and the internal
+  streaming marker through their existing fixed slots. Text, JSON, and HTML
+  helpers also set `Content-Type` through its fixed response slot. Generic
+  header APIs remain unchanged for application code.
+- Three alternating Clang 23 Release runs used four server cores, four separate
+  load-generator cores, 512 keep-alive connections, and six seconds per run.
+  The median server task-clock decreased from 9009.9 to 8570.5 ns per completed
+  request, a 4.88% reduction. Median throughput increased from 258,216 to
+  265,843 requests per second, a 2.95% increase. Every request succeeded.
+- This comparison validates the fixed-slot change on the local H1 harness. It
+  is not presented as an official HttpArena score.
+
+Ring-fd registration result on 2026-10-28:
+
+- A `perf record` run showed that the remaining H1 cost was spread across TCP,
+  io_uring submission, fd lookup, virtual-network locking, and scheduling. No
+  parser or router function accounted for a comparable block of CPU time.
+- The Linux backend now registers its ring fd with
+  `IORING_REGISTER_RING_FDS` when the kernel accepts it. Both liburing submits
+  and the explicit DEFER_TASKRUN enter path use the registered descriptor. An
+  unsupported kernel keeps the existing descriptor path.
+- Four alternating Clang 23 Release runs used four server cores, four separate
+  load-generator cores, 512 keep-alive connections, and five seconds per run.
+  Median throughput increased from 278,146 to 281,274 requests per second,
+  a 1.12% increase. Median server task-clock decreased from 7886.0 to
+  7681.2 ns per completed request, a 2.60% reduction. Every request succeeded.
+- Moving common-header classification from finalization into line parsing was
+  also tested. Its three-run median changed throughput by only 0.54% and
+  task-clock by -0.05%, within the observed local variance, so that experiment
+  was removed.
+
+Cross-profile gate for ring-fd registration on 2026-10-28:
+
+- Every comparison used the same Clang 23 Release binary. The diagnostic
+  `CNETMOD_IOURING_REGISTER_RING_FD=0` switch selected the old fd path, so the
+  comparison did not include compile or link variation.
+- The original in-process cross-profile harness reported -0.91% for H2C and
+  -0.25% for WebSocket. Those two results shared CPU time with their load
+  generators and were not accepted as a release gate. Independent load
+  generators were then pinned to CPUs 16-31 while 16 server workers were
+  pinned to CPUs 0-15.
+- Two independent H2C pairs used h2load with 1024 connections, 100 concurrent
+  streams per connection, 16 client threads, and 15-second samples. Registered
+  ring-fd runs reached 6,535,332 and 6,430,187 requests per second. The matching
+  unregistered runs reached 5,406,959 and 6,247,075 requests per second. Both
+  pairs improved; the smaller paired gain was 2.93%. Every request succeeded.
+  HTTP/2 over TLS retained its earlier +0.84% throughput and +0.76% CPU-time
+  result.
+- Two independent WebSocket pairs used 512 connections, 16 client threads,
+  16-byte echo messages, and 15-second samples. Median throughput increased
+  from 346,160 to 357,778 messages per second, a 3.36% increase. Median p99
+  latency decreased from 9.999 to 9.082 milliseconds, a 9.17% reduction.
+  WebSocket over TLS retained its earlier 1.87% gain, and unary gRPC retained
+  its 1.73% gain. Every request or message completed successfully.
+- Five completed alternating HTTP/3 runs used four connections, four streams
+  per connection, and a fresh server for each sample. Registered-ring runs
+  were above the unregistered median in both completed samples; median p99
+  latency decreased from 1179 to 1044 microseconds. A sixth sample was excluded
+  because the temporary fixture did not restart cleanly, before it produced a
+  measurement.
+- The complete enabled-protocol test configuration passed all 116 executed
+  tests. Three environment-dependent tests were skipped. This set includes
+  HTTP/1.1, HTTP/2, HTTP/3, QUIC recovery and PMTU, WebSocket, gRPC, reverse
+  proxy, Redis, PostgreSQL transport, observability, TLS shutdown, and the
+  application layer. A separate Redis live-service integration test also
+  passed against a temporary local Valkey instance.
+- No measured profile crossed the 1% median-regression gate. Keep the
+  fallback-safe ring registration change.
+
 ### H1-2 - Batch parser and output work for pipelines
 
 **Status:** pending H1-1
@@ -369,3 +440,6 @@ increasing generator lag enough to invalidate the comparison.
 | 2026-10-26 | G1 | Controlled three-run A/B showed Caddy decisively ahead of Nginx QUIC at both 64 and 256 connections | Reject Nginx replacement; profile the existing edge and backend |
 | 2026-10-26 | G1 | Caddy consumed about 3.7-4.2 cores while the backend consumed 0.6 core in 30-second 64/256-connection samples | Existing stack is edge-bound; advance to the native gateway design |
 | 2026-10-28 | G2 | Native edge completed six official-mix runs at 64 and 256 connections with no failed requests | Replace Caddy with the cnetmod HTTP/3 gateway adapter |
+| 2026-10-28 | H1-1 | Fixed-slot header access reduced median server CPU per H1 request by 4.88% and increased median throughput by 2.95% in three alternating local runs | Keep the change and run the HTTP regression gate |
+| 2026-10-28 | shared io_uring | Registered ring fd reduced median server CPU per request by 2.60% and increased H1 throughput by 1.12% in four alternating local runs | Keep the fallback-safe backend change; continue with connection-fd cost |
+| 2026-10-28 | shared io_uring gate | Independent pinned load generators confirmed at least +2.93% H2C throughput, +3.36% median WS throughput and -9.17% median WS p99; H2 TLS, WSS, gRPC and H3 also passed their gates | Cross-profile gate passed; retain the change |

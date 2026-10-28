@@ -49,6 +49,13 @@ public:
     void reset() noexcept;
 
 private:
+    friend class server;
+
+    /// Return the Connection header from its fixed parser slot. The server
+    /// uses this after every request, so it must not repeat generic name
+    /// dispatch on the keep-alive path.
+    [[nodiscard]] auto connection_header() const -> std::string_view;
+
     enum class state
     {
         request_line,

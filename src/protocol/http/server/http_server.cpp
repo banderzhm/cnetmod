@@ -1856,7 +1856,7 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                 co_await when_all(invoke_handler(), pump_body());
                 if (body_stream->error() ==
                         std::make_error_code(std::errc::message_size) &&
-                    resp.get_header("X-Streamed") != "1")
+                    !resp.is_streamed())
                     rctx.text(status::payload_too_large,
                         "Request body exceeds the route limit");
                 connection_upgrade = rctx.take_connection_upgrade();
@@ -1927,7 +1927,7 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                 if (parser.version() != http_version::http_1_1 ||
                     resp.status_code() != status::switching_protocols ||
                     !resp.body().empty() || resp.body_source() ||
-                    resp.get_header("X-Streamed") == "1")
+                    resp.is_streamed())
                     co_return;
 #if defined(CNETMOD_HAS_IO_URING) &&             \
     defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
@@ -1972,10 +1972,10 @@ auto server::handle_h1_clear(socket& client, io_context& io,
             }
             // Check if chunked encoding is needed
             bool use_chunked = false;
-            if (!has_body_source && resp.get_header("X-Streamed") != "1")
+            if (!has_body_source && !resp.is_streamed())
             {
                 // If no Content-Length and body not empty, use chunked
-                if (resp.get_header("Content-Length").empty() && !resp.body().empty() &&
+                if (!resp.has_content_length() && !resp.body().empty() &&
                     parser.version() == http_version::http_1_1)
                 {
                     use_chunked = true;
@@ -2006,7 +2006,7 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                 }
             }
 
-            auto conn_hdr = parser.get_header("Connection");
+            auto conn_hdr = parser.connection_header();
             if (parser.version() == http_version::http_1_1)
             {
                 keep_alive = (conn_hdr != "close");
@@ -2267,7 +2267,7 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
             co_await when_all(invoke_handler(), pump_body());
             if (body_stream->error() ==
                     std::make_error_code(std::errc::message_size) &&
-                resp.get_header("X-Streamed") != "1")
+                !resp.is_streamed())
                 rctx.text(status::payload_too_large,
                     "Request body exceeds the route limit");
         }
@@ -2320,10 +2320,10 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
         }
         // Check if chunked encoding is needed
         bool use_chunked = false;
-        if (!has_body_source && resp.get_header("X-Streamed") != "1")
+        if (!has_body_source && !resp.is_streamed())
         {
             // If no Content-Length and body not empty, use chunked
-            if (resp.get_header("Content-Length").empty() && !resp.body().empty() &&
+            if (!resp.has_content_length() && !resp.body().empty() &&
                 parser.version() == http_version::http_1_1)
             {
                 use_chunked = true;
@@ -2365,7 +2365,7 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
             }
         }
 
-        auto conn_hdr = parser.get_header("Connection");
+        auto conn_hdr = parser.connection_header();
         if (parser.version() == http_version::http_1_1)
         {
             keep_alive = (conn_hdr != "close");

@@ -485,14 +485,14 @@ auto request_context::scope() const noexcept -> const request_scope&
 void request_context::text(int s, std::string_view b)
 {
     resp_.set_status(s);
-    resp_.set_header("Content-Type", "text/plain; charset=utf-8");
+    resp_.set_content_type("text/plain; charset=utf-8");
     resp_.set_body(std::string(b));
 }
 
 void request_context::json(int s, std::string_view b)
 {
     resp_.set_status(s);
-    resp_.set_header("Content-Type", "application/json; charset=utf-8");
+    resp_.set_content_type("application/json; charset=utf-8");
     resp_.set_body(std::string(b));
 }
 
@@ -504,14 +504,14 @@ void request_context::respond(const prepared_response& value)
 void request_context::json_owned(int s, std::string b)
 {
     resp_.set_status(s);
-    resp_.set_header("Content-Type", "application/json; charset=utf-8");
+    resp_.set_content_type("application/json; charset=utf-8");
     resp_.set_body(std::move(b));
 }
 
 void request_context::html(int s, std::string_view b)
 {
     resp_.set_status(s);
-    resp_.set_header("Content-Type", "text/html; charset=utf-8");
+    resp_.set_content_type("text/html; charset=utf-8");
     resp_.set_body(std::string(b));
 }
 

@@ -1191,6 +1191,10 @@ SQE，因此不会为了凑满批次而无限等待。可用
 `CNETMOD_IOURING_COOP_TASKRUN=0` 禁用 cooperative task running，或用
 `CNETMOD_IOURING_SUBMIT_BATCH=1..128` 覆盖批量大小；这些是诊断和平台调优开关，
 应用通常不应设置。旧内核不接受 cooperative task running 时会自动回退，不影响启动。
+事件循环还会尝试通过 `IORING_REGISTER_RING_FDS` 注册自身的 ring fd，减少每次
+`io_uring_enter` 对普通进程 fd 的查找。内核或 liburing 不支持该能力时，初始化会静默
+保留普通 fd 路径。`CNETMOD_IOURING_REGISTER_RING_FD=0` 只用于回归对照和平台诊断；
+应用不应依赖是否注册成功来改变业务逻辑。
 
 支持 provided buffer ring 与 multishot recv 时，底层通过
 `shared_io_uring_recv_service(io_uring_context&)` 为每个事件循环持有一份共享接收服务。
@@ -8484,6 +8488,14 @@ auto handler = [](request_context& ctx) -> task<void> {
 
 #### `request_context::not_found`
 **签名**: `void not_found()`
+
+#### `response::set_content_type`
+**签名**: `auto set_content_type(std::string_view value) -> response&`
+
+需要直接操作 `response` 时，用这个入口设置 `Content-Type`。它与
+`set_header("Content-Type", value)` 的结果一致，但直接使用框架已有的固定头槽位。
+常规文本、JSON 和 HTML 响应继续优先使用 `request_context::text/json/html()`；这些
+便捷方法已经走同一入口。
 
 #### `prepared_response` / `router::get_prepared`
 **签名**:

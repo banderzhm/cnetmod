@@ -94,6 +94,13 @@ void io_uring_context::ensure_ring()
         throw std::system_error(-ret, std::generic_category(),
             "io_uring_queue_init failed");
     defer_taskrun_enabled_ = defer_taskrun_enabled;
+    // Registering the ring descriptor lets liburing submit without resolving
+    // the ordinary process fd on every io_uring_enter. Unsupported kernels
+    // return an error here and keep the normal descriptor path unchanged.
+#ifdef IORING_REGISTER_RING_FDS
+    if (env_enabled("CNETMOD_IOURING_REGISTER_RING_FD", true))
+        ring_fd_registered_ = ::io_uring_register_ring_fd(&ring_) == 1;
+#endif
     initialized_ = true;
 }
 
@@ -105,6 +112,13 @@ io_uring_context::~io_uring_context()
         ::close(pipe_fds_[1]);
     if (initialized_)
     {
+        if (ring_fd_registered_)
+        {
+#ifdef IORING_REGISTER_RING_FDS
+            (void)::io_uring_unregister_ring_fd(&ring_);
+#endif
+            ring_fd_registered_ = false;
+        }
         ::io_uring_queue_exit(&ring_);
         initialized_ = false;
         defer_taskrun_enabled_ = false;
@@ -403,8 +417,17 @@ auto io_uring_context::run_one_impl(bool blocking) -> std::size_t
         // kernel work. Merely peeking the CQ can therefore spin forever after
         // an earlier submission (connect, cancellation, exporter delivery,
         // and similar state machines all rely on repeated poll()).
-        (void)::syscall(SYS_io_uring_enter, ring_.ring_fd, 0U, 0U,
-            IORING_ENTER_GETEVENTS, nullptr, 0U);
+        auto enter_flags = static_cast<unsigned>(IORING_ENTER_GETEVENTS);
+        auto enter_fd = ring_.ring_fd;
+#ifdef IORING_ENTER_REGISTERED_RING
+        if (ring_fd_registered_)
+        {
+            enter_fd = ring_.enter_ring_fd;
+            enter_flags |= IORING_ENTER_REGISTERED_RING;
+        }
+#endif
+        (void)::syscall(SYS_io_uring_enter, enter_fd, 0U, 0U,
+            enter_flags, nullptr, 0U);
     }
     std::size_t handled = 0;
     unsigned reaped = 0;

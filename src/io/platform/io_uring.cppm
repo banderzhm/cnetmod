@@ -105,6 +105,7 @@ private:
     std::atomic<bool> stopped_{false};
     bool initialized_ = false;
     bool defer_taskrun_enabled_ = false;
+    bool ring_fd_registered_ = false;
     unsigned queue_depth_ = 256;
     int pipe_fds_[2] = {-1, -1};
     char pipe_buf_ = 0;

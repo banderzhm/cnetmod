@@ -327,6 +327,14 @@ auto handler = [](request_context& ctx) -> task<void> {
 #### `request_context::not_found`
 **签名**: `void not_found()`
 
+#### `response::set_content_type`
+**签名**: `auto set_content_type(std::string_view value) -> response&`
+
+需要直接操作 `response` 时，用这个入口设置 `Content-Type`。它与
+`set_header("Content-Type", value)` 的结果一致，但直接使用框架已有的固定头槽位。
+常规文本、JSON 和 HTML 响应继续优先使用 `request_context::text/json/html()`；这些
+便捷方法已经走同一入口。
+
 #### `prepared_response` / `router::get_prepared`
 **签名**:
 ```cpp

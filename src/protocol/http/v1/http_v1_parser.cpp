@@ -266,6 +266,11 @@ auto request_parser::get_header(std::string_view k) const -> std::string_view
     return header_value(index);
 }
 
+auto request_parser::connection_header() const -> std::string_view
+{
+    return common_header_value(1U, "Connection");
+}
+
 void request_parser::reset() noexcept
 {
     buf_.clear();

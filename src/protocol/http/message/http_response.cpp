@@ -116,6 +116,12 @@ auto response::set_header_owned(std::string_view key, std::string value)
     return *this;
 }
 
+auto response::set_content_type(std::string_view value) -> response&
+{
+    invalidate_prepared_h1();
+    return set_common_header(1U, value);
+}
+
 auto response::append_header(std::string_view key, std::string_view value)
     -> response&
 {
@@ -483,6 +489,17 @@ auto response::get_header(std::string_view key) const -> std::string_view
     auto it = headers_.find(key);
     return it != headers_.end() ? std::string_view(it->second)
                                 : std::string_view{};
+}
+
+auto response::has_content_length() const noexcept -> bool
+{
+    return (active_common_headers_ & (1U << 0U)) != 0U;
+}
+
+auto response::is_streamed() const noexcept -> bool
+{
+    const auto& header = common_headers_[5U];
+    return header.present && header.value == "1";
 }
 
 auto response::serialize() const -> std::string

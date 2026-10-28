@@ -124,6 +124,13 @@ TEST(response_get_header_missing)
     ASSERT_TRUE(resp.get_header("Nonexistent").empty());
 }
 
+TEST(response_content_type_slot_preserves_generic_semantics)
+{
+    response resp;
+    resp.set_content_type("text/plain");
+    ASSERT_EQ(resp.get_header("Content-Type"), std::string_view{"text/plain"});
+}
+
 // =============================================================================
 // set_body auto Content-Length
 // =============================================================================
