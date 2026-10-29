@@ -236,6 +236,14 @@ TEST(json_writer_rejects_malformed_utf8)
         std::string{"[\"\xF0\x9F\x98\x80\"]"});
 }
 
+TEST(json_writer_sanitizes_malformed_utf8_and_truncates_safely)
+{
+    const std::string malformed{"A\0B\xF0\x9F\x98\x80\xFF", 9};
+    const auto sanitized = cnetmod::json::sanitize_utf8(malformed, 7);
+    ASSERT_EQ(sanitized, std::string{"A B\xF0\x9F\x98\x80"});
+    ASSERT_TRUE(cnetmod::json::write(sanitized).has_value());
+}
+
 TEST(json_writer_escapes_every_position_like_a_byte_reference)
 {
     // Independent byte-at-a-time escaper; the writer scans eight bytes at once.

@@ -15720,8 +15720,14 @@ struct connect_options {
     std::string tls_ca_file;
     int timeout_seconds = 120;
     std::vector<std::pair<std::string, std::string>> extra_headers;
+    std::string proxy_host;
+    std::uint16_t proxy_port = 0;
+    std::string proxy_username;
+    std::string proxy_password;
 };
 ```
+
+`proxy_host` 为空时直连；非空时需要启用 `CNETMOD_ENABLE_SOCKS5` 并设置端口。配置账号密码时，代理必须选择用户名密码认证。代理转发目标域名，TLS 仍校验 API 目标主机。当前 SOCKS5 握手内部尚不支持取消或独立超时。
 
 #### `message` — 对话协议消息
 
@@ -15777,6 +15783,7 @@ struct chat_response {
 | `connect` | `auto connect(connect_options[, cancel_token&]) -> task<std::expected<void, std::string>>` | 连接 API；可取消重载覆盖 TCP 建连与 TLS 握手 |
 | `chat` | `auto chat(chat_request) -> task<std::expected<chat_response, std::string>>` | Chat Completions |
 | `responses` | `auto responses(response_request) -> task<std::expected<response_result, std::string>>` | Responses API |
+| `responses_stream` | `auto responses_stream(response_request, async_response_delta_fn[, cancel_token&]) -> task<std::expected<response_result, std::string>>` | Responses SSE；异步回调接收文本增量，返回完整结果 |
 | `chat_stream` | `auto chat_stream(chat_request, on_chunk_fn[, cancel_token&]) -> task<std::expected<std::string, std::string>>` | SSE 流式，可取消 |
 | `chat_stream_async` | `auto chat_stream_async(chat_request, async_chunk_fn[, cancel_token&]) -> task<...>` | 异步回调流式，可取消 |
 | `list_models` | `auto list_models() -> task<std::expected<std::vector<model_info>, std::string>>` | 列出模型 |
@@ -16080,6 +16087,23 @@ cn::openai::response_request req{
 auto response = co_await client.responses(std::move(req));
 if (response)
     cn::logger::info{"Response: {}", response->output_text};
+```
+
+流式调用使用相同的 `response_request`。回调接收文本增量，返回 `false` 可终止接收；成功后返回的 `response_result` 包含完整文本、工具调用和用量。可传入 `cancel_token` 取消请求。
+
+```cpp
+cn::openai::response_request req{
+    .model = "gpt-6.1-terra",
+    .input = {cn::openai::message::user("Explain asynchronous I/O")},
+};
+cn::cancel_token cancellation;
+auto response = co_await client.responses_stream(std::move(req),
+    [](std::string_view delta) -> cn::task<bool> {
+        cn::logger::info{"{}", delta};
+        co_return true;
+    }, cancellation);
+if (response)
+    cn::logger::info{"Output tokens: {}", response->token_usage.completion_tokens};
 ```
 
 ### 场景：流式 Chat（SSE）

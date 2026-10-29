@@ -77,6 +77,14 @@ public:
     auto responses(response_request req)
         -> task<std::expected<response_result, std::string>>;
 
+    /// Receives output text deltas. Returning false aborts the stream.
+    using async_response_delta_fn = std::function<task<bool>(std::string_view)>;
+    auto responses_stream(response_request req, async_response_delta_fn on_delta)
+        -> task<std::expected<response_result, std::string>>;
+    auto responses_stream(response_request req, async_response_delta_fn on_delta,
+        cancel_token& cancellation)
+        -> task<std::expected<response_result, std::string>>;
+
     // ── Streaming chat (SSE) ───────────────────────────────────────
 
     /// Streaming Chat Completions — SSE chunk-by-chunk callback, returns complete
@@ -166,7 +174,16 @@ private:
         std::string content_type;
         bool chunked = false;
         std::optional<std::size_t> content_length;
+        bool connection_close = false;
     };
+
+    auto begin_response_stream(response_request& req, cancel_token& cancellation)
+        -> task<std::expected<response_header, std::string>>;
+    auto read_response_error_body(const response_header& header,
+        cancel_token& cancellation) -> task<std::expected<std::string, std::string>>;
+    auto read_response_stream(const response_header& header,
+        async_response_delta_fn& on_delta, cancel_token& cancellation)
+        -> task<std::expected<response_result, std::string>>;
 
     // ── Transport layer ──
 
@@ -181,6 +198,13 @@ private:
     auto do_read_some() -> task<std::optional<std::string>>;
     auto do_read_some(cancel_token& token)
         -> task<std::expected<std::string, std::error_code>>;
+
+    auto connect_direct(cancel_token& cancellation)
+        -> task<std::expected<void, std::string>>;
+    auto connect_proxy(cancel_token& cancellation)
+        -> task<std::expected<void, std::string>>;
+    auto start_tls(cancel_token& cancellation)
+        -> task<std::expected<void, std::string>>;
 
     // ── Path / Common headers ──
 

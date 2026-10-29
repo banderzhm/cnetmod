@@ -103,6 +103,12 @@ endif()
 if(CNETMOD_ENABLE_WEBSOCKET)
     list(APPEND TEST_SOURCES test_websocket_frame.cpp)
 endif()
+if(CNETMOD_ENABLE_OPENAI AND CNETMOD_ENABLE_SOCKS5)
+    list(APPEND TEST_SOURCES test_openai_proxy.cpp)
+endif()
+if(CNETMOD_ENABLE_OPENAI)
+    list(APPEND TEST_SOURCES test_openai_responses_stream.cpp)
+endif()
 
 # Filter out QUIC/HTTP3 tests if QUIC not available
 if(NOT CNETMOD_HAS_QUIC)
@@ -224,6 +230,9 @@ function(cnetmod_test_component TEST_NAME OUTPUT_VARIABLE)
         set(_target cnetmod_quic)
     elseif(TEST_NAME MATCHES "^(test_http|http_client_test|test_metrics|test_tfb)")
         set(_target cnetmod_http)
+    elseif(TEST_NAME STREQUAL "test_openai_proxy" OR
+            TEST_NAME STREQUAL "test_openai_responses_stream")
+        set(_target cnetmod_openai)
     elseif(TEST_NAME MATCHES "^test_openai")
         # The suite also validates the Application-owned OpenAI observability
         # adapter, not only the wire protocol component.

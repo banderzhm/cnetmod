@@ -19,6 +19,9 @@ import cnetmod.coro.task;
 import cnetmod.coro.cancel;
 import cnetmod.executor.async_op;
 import cnetmod.protocol.http.semantics;
+#ifdef CNETMOD_HAS_PROTOCOL_SOCKS5
+import cnetmod.protocol.socks5;
+#endif
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
 #endif
@@ -48,17 +51,33 @@ auto client::connect(connect_options opts, cancel_token& cancellation)
 {
     if (cancellation.is_cancelled())
         co_return std::unexpected("connect cancelled");
+    close();
     opts_ = std::move(opts);
-
     auto url_r = http::url::parse(opts_.api_base);
     if (!url_r)
-    {
         co_return std::unexpected("invalid api_base URL: " + url_r.error());
-    }
-
     url_ = std::move(*url_r);
-    bool use_tls = (url_.scheme == "https");
+    auto result = opts_.proxy_host.empty()
+        ? co_await connect_direct(cancellation)
+        : co_await connect_proxy(cancellation);
+    if (!result)
+        co_return std::unexpected(result.error());
+    if (url_.scheme == "https")
+    {
+        auto tls = co_await start_tls(cancellation);
+        if (!tls)
+        {
+            close();
+            co_return std::unexpected(tls.error());
+        }
+    }
+    connected_ = true;
+    co_return std::expected<void, std::string>{};
+}
 
+auto client::connect_direct(cancel_token& cancellation)
+    -> task<std::expected<void, std::string>>
+{
     auto addr_r = ip_address::from_string(url_.host);
     if (!addr_r)
     {
@@ -89,9 +108,44 @@ auto client::connect(connect_options opts, cancel_token& cancellation)
         sock_.close();
         co_return std::unexpected("connect failed: " + cr.error().message());
     }
+    co_return std::expected<void, std::string>{};
+}
 
+auto client::connect_proxy(cancel_token& cancellation)
+    -> task<std::expected<void, std::string>>
+{
+#ifdef CNETMOD_HAS_PROTOCOL_SOCKS5
+    if (opts_.proxy_port == 0)
+        co_return std::unexpected("SOCKS5 proxy port is required");
+    socks5::client proxy{ctx_};
+    auto connected = co_await proxy.connect(opts_.proxy_host, opts_.proxy_port);
+    if (!connected)
+        co_return std::unexpected("SOCKS5 connection failed: " + connected.error().message());
+    if (cancellation.is_cancelled())
+        co_return std::unexpected("connect cancelled");
+    if ((!opts_.proxy_username.empty() || !opts_.proxy_password.empty()) &&
+        proxy.selected_auth() != socks5::auth_method::username_password)
+        co_return std::unexpected("SOCKS5 proxy did not select password authentication");
+    auto authenticated = co_await proxy.authenticate(opts_.proxy_username, opts_.proxy_password);
+    if (!authenticated)
+        co_return std::unexpected("SOCKS5 authentication failed: " + authenticated.error().message());
+    auto target = co_await proxy.connect_target(url_.host, url_.port);
+    if (!target)
+        co_return std::unexpected("SOCKS5 target connection failed: " + target.error().message());
+    if (cancellation.is_cancelled())
+        co_return std::unexpected("connect cancelled");
+    sock_ = proxy.release_socket();
+    co_return std::expected<void, std::string>{};
+#else
+    (void)cancellation;
+    co_return std::unexpected("SOCKS5 support is not enabled");
+#endif
+}
+
+auto client::start_tls(cancel_token& cancellation)
+    -> task<std::expected<void, std::string>>
+{
 #ifdef CNETMOD_HAS_SSL
-    if (use_tls)
     {
         auto ssl_ctx_r = ssl_context::client();
         if (!ssl_ctx_r)
@@ -128,15 +182,10 @@ auto client::connect(connect_options opts, cancel_token& cancellation)
         }
     }
 #else
-    if (use_tls)
-    {
-        sock_.close();
-        co_return std::unexpected(
-            std::string("SSL not available (compiled without OpenSSL)"));
-    }
+    (void)cancellation;
+    co_return std::unexpected(
+        std::string("SSL not available (compiled without OpenSSL)"));
 #endif
-
-    connected_ = true;
     co_return std::expected<void, std::string>{};
 }
 
@@ -153,6 +202,7 @@ void client::close() noexcept
 #endif
     sock_.close();
     connected_ = false;
+    rbuf_.clear();
 }
 
 auto client::do_write(const_buffer buf)
@@ -379,6 +429,16 @@ auto client::read_response_header(cancel_token& cancellation)
                 });
             const auto chunked = header_text.find("transfer-encoding: chunked") !=
                 std::string::npos;
+            const auto connection_pos = header_text.find("\r\nconnection:");
+            bool connection_close = status_line.starts_with("HTTP/1.0");
+            if (connection_pos != std::string::npos)
+            {
+                const auto connection_end = header_text.find("\r\n", connection_pos + 2);
+                const auto value = std::string_view{header_text}.substr(
+                    connection_pos, connection_end - connection_pos);
+                if (value.contains("close")) connection_close = true;
+                else if (value.contains("keep-alive")) connection_close = false;
+            }
 
             std::optional<std::size_t> content_length;
             if (const auto length_pos = header_text.find("content-length:");
@@ -404,7 +464,8 @@ auto client::read_response_header(cancel_token& cancellation)
             co_return response_header{.status = status,
                 .content_type = std::move(ct),
                 .chunked = chunked,
-                .content_length = content_length};
+                .content_length = content_length,
+                .connection_close = connection_close};
         }
 
         auto chunk = co_await do_read_some(cancellation);

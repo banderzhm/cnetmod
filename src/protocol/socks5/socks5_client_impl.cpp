@@ -149,6 +149,11 @@ auto client::connect(std::string_view proxy_host, std::uint16_t proxy_port)
     co_return {};
 }
 
+auto client::selected_auth() const noexcept -> auth_method
+{
+    return selected_auth_;
+}
+
 auto client::authenticate(std::string_view username, std::string_view password)
     -> task<std::expected<void, std::error_code>>
 {

@@ -390,6 +390,27 @@ namespace detail {
     }
 } // namespace detail
 
+auto sanitize_utf8(std::string_view input, std::size_t max_bytes) -> std::string
+{
+    constexpr std::string_view replacement = "\xEF\xBF\xBD";
+    std::string result;
+    result.reserve(std::min(input.size(), max_bytes));
+    for (std::size_t index = 0; index < input.size();) {
+        const auto byte = static_cast<unsigned char>(input[index]);
+        const auto length = byte < 0x80U ? 1U
+            : detail::utf8_sequence_length(input, index);
+        const auto safe = length == 0U ? replacement
+            : input.substr(index, length);
+        const auto control = byte < 0x20U && byte != '\t'
+            && byte != '\r' && byte != '\n';
+        const auto value = control ? std::string_view{" "} : safe;
+        if (value.size() > max_bytes - result.size()) break;
+        result.append(value);
+        index += length == 0U ? 1U : length;
+    }
+    return result;
+}
+
 auto write_document(const document& value, bool prettify)
     -> std::expected<std::string, std::error_code>
 {

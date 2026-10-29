@@ -34,6 +34,9 @@ public:
         std::uint16_t proxy_port)
         -> task<std::expected<void, std::error_code>>;
 
+    /// Authentication method selected during negotiation.
+    [[nodiscard]] auto selected_auth() const noexcept -> auth_method;
+
     /// Authenticate with username/password
     [[nodiscard]] auto authenticate(std::string_view username,
         std::string_view password)

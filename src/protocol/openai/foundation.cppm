@@ -44,6 +44,11 @@ export struct connect_options
     std::string tls_ca_file;
     int timeout_seconds = 120;
     std::vector<std::pair<std::string, std::string>> extra_headers;
+    /// SOCKS5 proxy; empty host uses a direct connection.
+    std::string proxy_host;
+    std::uint16_t proxy_port = 0;
+    std::string proxy_username;
+    std::string proxy_password;
 };
 
 } // namespace cnetmod::openai

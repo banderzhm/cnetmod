@@ -41,6 +41,9 @@ export struct message
     std::string name;
     std::vector<tool_call> tool_calls;
     std::string tool_call_id;
+    /// Opaque Responses API output items, retained in memory for tool continuation.
+    /// Never serialized in Chat Completions messages.
+    std::vector<std::string> response_output_items;
 
     /// Constructs end-user input (wire role: user).
     static auto user(std::string_view text) -> message;

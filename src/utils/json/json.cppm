@@ -36,6 +36,16 @@ struct parse_options
 [[nodiscard]] auto write_document(const document& value, bool prettify = false)
     -> std::expected<std::string, std::error_code>;
 
+/**
+ * @brief Return JSON-safe UTF-8 text, replacing malformed byte sequences.
+ *
+ * Disallowed C0 controls become spaces while tab, CR and LF are preserved.
+ * A byte limit always ends at a complete UTF-8 sequence.
+ */
+[[nodiscard]] auto sanitize_utf8(std::string_view input,
+    std::size_t max_bytes = std::numeric_limits<std::size_t>::max())
+    -> std::string;
+
 namespace detail {
     /// Append-only output for the direct writer: bytes are written through a
     /// raw pointer into reserved string storage, so each byte costs no size
