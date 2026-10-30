@@ -70,6 +70,12 @@ set(TEST_SOURCES
     test_redis.cpp
     test_redis_template.cpp
     test_mongodb_wire.cpp
+    test_mongodb_lifecycle.cpp
+    test_mongodb_topology.cpp
+    test_mongodb_auth.cpp
+    test_mongodb_discovery.cpp
+    test_mongodb_cloud_auth.cpp
+    test_mongodb_integration.cpp
     test_orm_json_result_map.cpp
     test_orm_sharding.cpp
     test_orm_sharding_sessions.cpp
@@ -147,7 +153,7 @@ if(NOT CNETMOD_ENABLE_REDIS)
     list(REMOVE_ITEM TEST_SOURCES test_redis.cpp test_redis_template.cpp)
 endif()
 if(NOT CNETMOD_ENABLE_MONGODB)
-    list(REMOVE_ITEM TEST_SOURCES test_mongodb_wire.cpp)
+    list(REMOVE_ITEM TEST_SOURCES test_mongodb_wire.cpp test_mongodb_lifecycle.cpp test_mongodb_topology.cpp test_mongodb_auth.cpp test_mongodb_discovery.cpp test_mongodb_cloud_auth.cpp test_mongodb_integration.cpp)
 endif()
 if(NOT TARGET cnetmod_c OR NOT CNETMOD_ENABLE_HTTP)
     list(REMOVE_ITEM TEST_SOURCES test_c_api.cpp)
@@ -167,11 +173,17 @@ endif()
 if(CNETMOD_ENABLE_MYSQL)
     list(APPEND TEST_SOURCES test_mysql_pool.cpp)
 endif()
+if(CNETMOD_ENABLE_CLICKHOUSE)
+    list(APPEND TEST_SOURCES test_clickhouse.cpp test_clickhouse_compression.cpp test_clickhouse_transport.cpp test_clickhouse_live.cpp)
+    if(CNETMOD_ENABLE_ORM AND CNETMOD_ENABLE_HTTP)
+        list(APPEND TEST_SOURCES test_application_clickhouse.cpp)
+    endif()
+endif()
 if(CNETMOD_ENABLE_POSTGRESQL)
     list(APPEND TEST_SOURCES test_postgresql_transport.cpp)
 endif()
 if(NOT CNETMOD_ENABLE_ORM OR NOT CNETMOD_ENABLE_MYSQL)
-    list(REMOVE_ITEM TEST_SOURCES test_orm_json_result_map.cpp)
+    list(REMOVE_ITEM TEST_SOURCES test_orm_json_result_map.cpp test_orm_sharding_sessions.cpp)
 endif()
 if(NOT CNETMOD_ENABLE_ORM)
     list(FILTER TEST_SOURCES EXCLUDE REGEX
@@ -234,6 +246,8 @@ function(cnetmod_test_component TEST_NAME OUTPUT_VARIABLE)
         set(_target cnetmod_grpc)
     elseif(TEST_NAME MATCHES "^test_redis")
         set(_target cnetmod_redis)
+    elseif(TEST_NAME MATCHES "^test_clickhouse")
+        set(_target cnetmod_clickhouse)
     elseif(TEST_NAME MATCHES "^test_postgresql")
         set(_target cnetmod_postgresql)
     elseif(TEST_NAME MATCHES "^test_mysql")
@@ -307,6 +321,11 @@ foreach(test_src ${TEST_SOURCES})
         add_test(NAME ${test_name} COMMAND ${test_name} CONFIGURATIONS Release)
     else()
         add_test(NAME ${test_name} COMMAND ${test_name})
+    endif()
+    if(test_name STREQUAL "test_clickhouse_live" OR test_name STREQUAL "test_application_clickhouse")
+        set_tests_properties(${test_name} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60)
+    elseif(test_name MATCHES "^test_clickhouse")
+        set_tests_properties(${test_name} PROPERTIES TIMEOUT 30)
     endif()
     if(test_name MATCHES "^test_application($|_)")
         set_tests_properties(${test_name} PROPERTIES TIMEOUT 60)
@@ -416,8 +435,8 @@ if(TARGET test_application_redis_cluster_live)
         TIMEOUT 45 SKIP_RETURN_CODE 77 LABELS "integration;redis;cluster")
 endif()
 
-if(TARGET test_mongodb_wire)
-    set_tests_properties(test_mongodb_wire PROPERTIES TIMEOUT 5)
+if(TARGET test_mongodb_lifecycle)
+    set_tests_properties(test_mongodb_lifecycle PROPERTIES TIMEOUT 5)
 endif()
 if(TARGET test_orm_json_result_map)
     set_tests_properties(test_orm_json_result_map PROPERTIES TIMEOUT 15)
@@ -700,3 +719,65 @@ endif()
 # allowed a process-start check to be confused with protocol interoperability.
 
 set(CNETMOD_TEST_TARGETS ${CNETMOD_TEST_TARGETS} PARENT_SCOPE)
+
+if(TARGET test_mongodb_integration)
+    set_tests_properties(test_mongodb_integration PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60)
+endif()
+
+if(Python3_Interpreter_FOUND AND CNETMOD_ENABLE_MONGODB)
+    add_test(NAME test_mongodb_architecture COMMAND Python3::Interpreter
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_mongodb_architecture.py")
+endif()
+
+if(TARGET test_mongodb_integration AND CNETMOD_HAS_SNAPPY)
+    add_test(NAME test_mongodb_snappy_integration COMMAND test_mongodb_integration)
+    set_tests_properties(test_mongodb_snappy_integration PROPERTIES
+        SKIP_RETURN_CODE 77 TIMEOUT 60 ENVIRONMENT "CNETMOD_MONGODB_TEST_SNAPPY=1")
+endif()
+
+if(TARGET cnetmod_mongodb_cloud)
+    foreach(_test test_mongodb_oidc_providers test_mongodb_aws_providers)
+        add_executable(${_test} "${_test}.cpp")
+        target_link_libraries(${_test} PRIVATE cnetmod_mongodb_cloud)
+        set_property(TARGET ${_test} PROPERTY CXX_MODULE_GENERATION_MODE SEPARATE)
+        add_test(NAME ${_test} COMMAND ${_test})
+    endforeach()
+endif()
+
+if(CNETMOD_ENABLE_MONGODB AND CNETMOD_HAS_SSL AND Python3_Interpreter_FOUND)
+    add_executable(mongodb_cloud_handshake_driver mongodb_cloud_handshake_driver.cpp mongodb_cloud_test_certificate.cpp)
+    target_link_libraries(mongodb_cloud_handshake_driver PRIVATE cnetmod_mongodb)
+    set_property(TARGET mongodb_cloud_handshake_driver PROPERTY CXX_MODULE_GENERATION_MODE SEPARATE)
+    add_test(NAME test_mongodb_cloud_handshake COMMAND Python3::Interpreter
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_mongodb_cloud_handshake.py" "$<TARGET_FILE:mongodb_cloud_handshake_driver>")
+    set_tests_properties(test_mongodb_cloud_handshake PROPERTIES TIMEOUT 90)
+endif()
+
+if(CNETMOD_ENABLE_MONGODB)
+    add_executable(mongodb_srv_lookup_driver mongodb_srv_lookup_driver.cpp)
+    target_link_libraries(mongodb_srv_lookup_driver PRIVATE cnetmod_mongodb)
+    set_property(TARGET mongodb_srv_lookup_driver PROPERTY CXX_MODULE_GENERATION_MODE SEPARATE)
+endif()
+
+if(TARGET test_mongodb_integration AND CNETMOD_HAS_SNAPPY AND CNETMOD_HAS_ZLIB)
+    add_test(NAME test_mongodb_compressor_preference COMMAND test_mongodb_integration)
+    set_tests_properties(test_mongodb_compressor_preference PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
+        ENVIRONMENT "CNETMOD_MONGODB_TEST_COMPRESSION_ORDER=1")
+endif()
+
+if(TARGET cnetmod_application AND TARGET cnetmod_mongodb_cloud AND CNETMOD_HAS_SNAPPY)
+    add_executable(test_application_mongodb_lifecycle test_application_mongodb_lifecycle.cpp)
+    target_link_libraries(test_application_mongodb_lifecycle PRIVATE cnetmod_application)
+    set_property(TARGET test_application_mongodb_lifecycle PROPERTY CXX_MODULE_GENERATION_MODE SEPARATE)
+    add_test(NAME test_application_mongodb_lifecycle COMMAND test_application_mongodb_lifecycle)
+    set_tests_properties(test_application_mongodb_lifecycle PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60)
+endif()
+
+if(TARGET cnetmod_application AND TARGET cnetmod_mongodb_cloud AND CNETMOD_HAS_SSL AND Python3_Interpreter_FOUND)
+    add_executable(mongodb_application_cloud_driver mongodb_application_cloud_driver.cpp mongodb_cloud_test_certificate.cpp)
+    target_link_libraries(mongodb_application_cloud_driver PRIVATE cnetmod_application)
+    set_property(TARGET mongodb_application_cloud_driver PROPERTY CXX_MODULE_GENERATION_MODE SEPARATE)
+    add_test(NAME test_application_mongodb_cloud COMMAND Python3::Interpreter
+        "${CMAKE_CURRENT_SOURCE_DIR}/test_application_mongodb_cloud.py" "$<TARGET_FILE:mongodb_application_cloud_driver>")
+    set_tests_properties(test_application_mongodb_cloud PROPERTIES TIMEOUT 90)
+endif()

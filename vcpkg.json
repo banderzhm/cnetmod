@@ -9,11 +9,13 @@
     "brotli",
     "icu",
     "leveldb",
+    "lz4",
     "mimalloc",
     "pugixml",
     "stdexec",
     "zlib",
     "zstd",
+    "snappy",
     {
       "name": "liburing",
       "platform": "linux"

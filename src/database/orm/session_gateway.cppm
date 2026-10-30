@@ -54,6 +54,10 @@ public:
             co_return std::unexpected(lease.error());
 
         session_type session{client_(*lease), dialect_};
+        // A ClickHouse statement is a standalone operation; never manufacture
+        // BEGIN/COMMIT around its ordinary writes. Explicit transactions still fail.
+        if (!get_dialect_config(dialect_).supports_transactions)
+            co_return co_await operation(session);
         co_return co_await session.template transaction<T>(
             [&]() -> task<std::expected<T, std::string>>
             {

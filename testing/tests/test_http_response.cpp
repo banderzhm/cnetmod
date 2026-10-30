@@ -509,4 +509,37 @@ TEST(response_tfb_plaintext_format)
     ASSERT_EQ(resp.body().size(), static_cast<std::size_t>(13));
 }
 
+TEST(response_explicit_header_order_preserves_fast_path)
+{
+    response resp;
+    resp.set_header("X-Streamed", "1");
+    resp.set_header("Content-Type", "text/event-stream");
+    resp.set_header("Cache-Control", "no-cache");
+    resp.set_header("a-custom", "first");
+    const std::string fields{
+        "a-custom: first\r\nCache-Control: no-cache\r\n"
+        "Content-Type: text/event-stream\r\nX-Streamed: 1\r\n\r\n"};
+    ASSERT_EQ(resp.serialize(response::header_order::name),
+        "HTTP/1.1 200 OK\r\n" + fields);
+    ASSERT_EQ(resp.serialize(), std::string{
+        "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"
+        "X-Streamed: 1\r\na-custom: first\r\nCache-Control: no-cache\r\n\r\n"});
+    // Exercise the non-200 path and caller-owned append storage too.
+    resp.set_status(201);
+    ASSERT_EQ(resp.serialize(response::header_order::name),
+        "HTTP/1.1 201 Created\r\n" + fields);
+    std::string appended{"prefix"};
+    resp.append_serialized_headers_to(appended, 0, response::header_order::name);
+    ASSERT_EQ(appended, "prefixHTTP/1.1 201 Created\r\n" + fields);
+    resp.remove_header("Content-Type");
+    resp.set_header("content-type", "text/plain");
+    resp.set_cached_date_header(std::array<char, 29>{
+        'W','e','d',',',' ','2','1',' ','O','c','t',' ','2','0','1','5',' ',
+        '0','7',':','2','8',':','0','0',' ','G','M','T'});
+    ASSERT_EQ(resp.serialize(response::header_order::name), std::string{
+        "HTTP/1.1 201 Created\r\na-custom: first\r\nCache-Control: no-cache\r\n"
+        "Content-Type: text/plain\r\nDate: Wed, 21 Oct 2015 07:28:00 GMT\r\n"
+        "X-Streamed: 1\r\n\r\n"});
+}
+
 RUN_TESTS()

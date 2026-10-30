@@ -17,6 +17,9 @@ import cnetmod.application.mysql;
 #ifdef CNETMOD_HAS_PROTOCOL_POSTGRESQL
 import cnetmod.application.postgresql;
 #endif
+#ifdef CNETMOD_HAS_PROTOCOL_CLICKHOUSE
+import cnetmod.application.clickhouse;
+#endif
 #ifdef CNETMOD_HAS_PROTOCOL_MONGODB
 import cnetmod.application.mongodb;
 #endif
@@ -58,6 +61,9 @@ void register_builtin_auto_configurations(
 #ifdef CNETMOD_HAS_PROTOCOL_POSTGRESQL
     registry.add("postgresql", auto_configure_postgresql,
         integration_loop_mode::loop_local);
+#endif
+#ifdef CNETMOD_HAS_PROTOCOL_CLICKHOUSE
+    registry.add("clickhouse", auto_configure_clickhouse, integration_loop_mode::loop_local);
 #endif
 #ifdef CNETMOD_HAS_PROTOCOL_MONGODB
     registry.add("mongodb", auto_configure_mongodb);

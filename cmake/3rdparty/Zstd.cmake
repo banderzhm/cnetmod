@@ -4,7 +4,7 @@ macro(cnetmod_configure_zstd)
     set(CNETMOD_ZSTD_ROOT "" CACHE PATH "Optional zstd installation prefix")
     set(CNETMOD_HAS_ZSTD OFF)
     if(CNETMOD_USE_SYSTEM_DEPS AND
-       (CNETMOD_ENABLE_GRPC OR CNETMOD_ENABLE_KAFKA))
+       (CNETMOD_ENABLE_GRPC OR CNETMOD_ENABLE_KAFKA OR CNETMOD_ENABLE_MONGODB OR CNETMOD_ENABLE_CLICKHOUSE))
         find_package(zstd CONFIG QUIET)
         foreach(_cnetmod_zstd_target zstd::libzstd_static zstd::libzstd_shared zstd::zstd)
             if(TARGET ${_cnetmod_zstd_target})

@@ -10,59 +10,12 @@ import cnetmod.executor.async_op;
 
 namespace cnetmod::application {
 
+namespace mongodb_application_detail {
+    auto lifecycle_error(mongodb::error_code code) noexcept -> std::error_code;
+}
+
 namespace {
-    /**
-     * Preserves MongoDB failure identity without publishing server diagnostics.
-     * Values are offset by one because the protocol enum has no success entry.
-     */
-    class mongodb_category final : public std::error_category
-    {
-    public:
-        auto name() const noexcept -> const char* override
-        {
-            return "cnetmod.mongodb";
-        }
-
-        auto message(int value) const -> std::string override
-        {
-            return std::format("MongoDB error {}", value);
-        }
-
-        auto default_error_condition(int value) const noexcept -> std::error_condition override
-        {
-            if (value <= 0 || value > static_cast<int>(mongodb::error_code::connection_closed) + 1)
-                return {value, *this};
-            switch (static_cast<mongodb::error_code>(value - 1))
-            {
-            case mongodb::error_code::invalid_bson:
-            case mongodb::error_code::protocol_error:
-                return std::make_error_condition(std::errc::protocol_error);
-            case mongodb::error_code::message_too_large:
-                return std::make_error_condition(std::errc::message_size);
-            case mongodb::error_code::authentication_failed:
-                return std::make_error_condition(std::errc::permission_denied);
-            case mongodb::error_code::connection_failed:
-            case mongodb::error_code::tls_failed:
-                return std::make_error_condition(std::errc::io_error);
-            case mongodb::error_code::connection_closed:
-                return std::make_error_condition(std::errc::not_connected);
-            case mongodb::error_code::pool_exhausted:
-                return std::make_error_condition(std::errc::resource_unavailable_try_again);
-            default:
-                return {value, *this};
-            }
-        }
-    };
-
-    auto lifecycle_error(mongodb::error_code code) noexcept -> std::error_code
-    {
-        if (code == mongodb::error_code::operation_cancelled)
-            return std::make_error_code(std::errc::operation_canceled);
-        if (code == mongodb::error_code::operation_timed_out)
-            return std::make_error_code(std::errc::timed_out);
-        static const mongodb_category category;
-        return {static_cast<int>(code) + 1, category};
-    }
+    using mongodb_application_detail::lifecycle_error;
 
     auto warm_pool(mongodb::connection_pool& pool, cancel_token& cancellation)
         -> task<std::expected<void, std::error_code>>
@@ -90,8 +43,10 @@ mongodb_service::mongodb_service(io_context& io,
 {
 }
 
-auto mongodb_service::pool() noexcept -> mongodb::connection_pool&
+auto mongodb_service::pool() -> mongodb::connection_pool&
 {
+    if (cluster_)
+        throw std::logic_error("URI MongoDB service uses topology_pool(), acquire() or command()");
     return *pool_;
 }
 
@@ -161,6 +116,8 @@ auto mongodb_service::start(service_context& context)
 auto mongodb_service::start_runtime(service_context& context)
     -> task<std::expected<void, std::error_code>>
 {
+    if (cluster_)
+        co_return co_await start_cluster(context);
     if (rebuild_pool_)
     {
         auto replacement = std::make_shared<mongodb::connection_pool>(pool_->context(), options_);
@@ -205,6 +162,8 @@ auto mongodb_service::start_runtime(service_context& context)
 auto mongodb_service::stop(service_context& context)
     -> task<std::expected<void, std::error_code>>
 {
+    if (cluster_)
+        co_return co_await stop_cluster(context);
     cleanup_pending_ = true;
     maintenance_stop_.request_stop();
     co_await pool_->async_close();
@@ -263,6 +222,8 @@ auto mongodb_service::probe(service_context& context) -> task<health_report>
         };
     if (!started_)
         co_return health_report{.status = service_health::down, .message = "mongodb pool stopped"};
+    if (cluster_)
+        co_return co_await probe_cluster(context);
     auto result = co_await with_deadline(context.io, context.operation_deadline,
         probe_pool(*pool_, context.cancellation), context.cancellation);
     co_return health_report{
@@ -270,44 +231,6 @@ auto mongodb_service::probe(service_context& context) -> task<health_report>
         .message = result ? "mongodb PING succeeded" : "mongodb PING failed",
         .error = result ? std::error_code{} : result.error(),
     };
-}
-
-auto auto_configure_mongodb(const configured_service& configuration,
-    auto_configuration_context& context)
-    -> std::expected<void, std::error_code>
-{
-    if (!properties_are_known(configuration.properties, {"host", "port", "username", "password", "database", "minimum_size", "maximum_size"}))
-        return std::unexpected(
-            std::make_error_code(std::errc::invalid_argument));
-    if (!integer_property_in_range(configuration.properties, "port", 1, 65535))
-        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
-    mongodb::connection_pool_options options;
-    if (!pool_size_properties_are_valid(configuration.properties, options.minimum_size, options.maximum_size))
-        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
-    try
-    {
-        const auto& value = configuration.properties;
-        options.connection.host = cnetmod::json::value_or(value, "host", options.connection.host);
-        options.connection.port = cnetmod::json::value_or(value, "port", options.connection.port);
-        options.connection.username = cnetmod::json::value_or(value, "username",
-            options.connection.username);
-        options.connection.password = cnetmod::json::value_or(value, "password",
-            options.connection.password);
-        options.connection.database = cnetmod::json::value_or(value, "database",
-            options.connection.database);
-        options.minimum_size = cnetmod::json::value_or(value, "minimum_size", options.minimum_size);
-        options.maximum_size = cnetmod::json::value_or(value, "maximum_size", options.maximum_size);
-    }
-    catch (...)
-    {
-        return std::unexpected(
-            std::make_error_code(std::errc::invalid_argument));
-    }
-    auto service = std::make_shared<mongodb_service>(context.io,
-        std::move(options), configuration.instance,
-        configuration.requirement, configuration.recovery);
-    return context.services.add_managed_named<mongodb_service>(
-        configuration.instance, std::move(service));
 }
 
 } // namespace cnetmod::application

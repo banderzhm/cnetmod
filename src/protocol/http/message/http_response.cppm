@@ -247,8 +247,14 @@ public:
 
     // --- Serialization ---
 
-    /// Serialize to complete HTTP response string
-    [[nodiscard]] auto serialize() const -> std::string;
+    enum class header_order
+    {
+        storage, // Cached slots first: retain the ordinary response fast path.
+        name     // Case-insensitive name order for stable wire contracts.
+    };
+
+    /// Serialize to complete HTTP response string.
+    [[nodiscard]] auto serialize(header_order order = header_order::storage) const -> std::string;
 
     /// Serialize into caller-owned storage. Reusing the storage avoids a
     /// transient allocation for every response on a keep-alive connection.
@@ -263,7 +269,8 @@ public:
     /// shared bodies). `reserve_extra` sizes the reservation for bytes the
     /// caller will append afterwards.
     void append_serialized_headers_to(std::string& output,
-        std::size_t reserve_extra = 0) const;
+        std::size_t reserve_extra = 0,
+        header_order order = header_order::storage) const;
 
     /// Install a fixed-width, server-generated IMF-fixdate without allocating
     /// a header-map value. A later explicit `set_header("Date", ...)` retains

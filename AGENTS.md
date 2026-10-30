@@ -14,6 +14,7 @@ This file is generated from every `skill/**/*.md` file. Edit the source files an
 - `skill/coro/coroutine.md`
 - `skill/coro/executor-bridge.md`
 - `skill/coro/timer-retry.md`
+- `skill/database/clickhouse.md`
 - `skill/database/database-orm.md`
 - `skill/database/mongodb.md`
 - `skill/database/mysql.md`
@@ -121,6 +122,7 @@ This file is generated from every `skill/**/*.md` file. Edit the source files an
 | ORM 模型定义、CRUD、迁移、查询构建器 | [database-orm.md](database/database-orm.md) |
 | MySQL 协议（连接、查询、prepared statement） | [mysql.md](database/mysql.md) |
 | PostgreSQL 协议 | [postgresql.md](database/postgresql.md) |
+| ClickHouse Native TCP 协议 | [clickhouse.md](database/clickhouse.md) |
 | MongoDB 协议 | [mongodb.md](database/mongodb.md) |
 | Redis 协议 | [redis.md](database/redis.md) |
 
@@ -170,6 +172,7 @@ Python Binding 也默认关闭。只有框架维护者的完整验证构建才�
 | `-DCNETMOD_ENABLE_MYSQL=ON` | MySQL | 无 |
 | `-DCNETMOD_ENABLE_POSTGRESQL=ON` | PostgreSQL | 无 |
 | `-DCNETMOD_ENABLE_MONGODB=ON` | MongoDB | 无 |
+| `-DCNETMOD_ENABLE_CLICKHOUSE=ON` | ClickHouse Native TCP | 无 |
 | `-DCNETMOD_ENABLE_AMQP091=ON` | AMQP 0-9-1 | 无 |
 | `-DCNETMOD_ENABLE_AMQP10=ON` | AMQP 1.0 | 无 |
 | `-DCNETMOD_ENABLE_MODBUS=ON` | Modbus | 无 |
@@ -3322,6 +3325,231 @@ if (!requests.try_consume()) {
 > **完整示例**: `examples/core/timer_demo.cpp`
 <!-- END SOURCE: skill/coro/timer-retry.md -->
 
+<!-- BEGIN SOURCE: skill/database/clickhouse.md -->
+# Source: `skill/database/clickhouse.md`
+
+# ClickHouse Native TCP, Application and ORM
+
+> Executor-owned coroutine client, checksummed compression, managed connection
+> pools and provider-neutral repositories for ClickHouse analytical SQL.
+
+**Protocol import:** `import cnetmod.protocol.clickhouse;`
+**ORM adapter:** `import cnetmod.protocol.clickhouse.orm;`
+**Application:** `import cnetmod.application;`
+**CMake:** `-DCNETMOD_ENABLE_CLICKHOUSE=ON`; add HTTP and ORM for Application repositories.
+**Targets:** `cnetmod::clickhouse`, `cnetmod::application`, `cnetmod::orm`.
+
+## Responsibility boundaries
+
+- `column/`: recursive type grammar, column-major encoding and LowCardinality dictionaries.
+- `block/`: BlockInfo, row/column counts and per-column serialization flags.
+- `compression/`: Native frames, CityHash 1.0.2, LZ4 and Zstandard.
+- `wire/`: bounded primitive codecs and version-aware server packet parsing.
+- `transport/`: cancellable TCP/TLS reads/writes and operation deadlines.
+- `client/`: connect/hello, SELECT, server-side Cancel and schema-checked INSERT.
+- `pool/`: bounded executor-owned connection leases and shutdown admission.
+- `orm/`: server-bound SQL parameters, native result adaptation and session gateways.
+- `src/application/integration/clickhouse*`: configuration, loop-local pools,
+  lifecycle, health and repository factory binding.
+
+The public protocol module declares contracts; non-template implementations are
+split by responsibility. Do not introduce `types.cpp`/`types.cppm` dumping grounds.
+Protocol code must not import Application. Generic ORM policy stays provider-neutral;
+ClickHouse SQL/wire adaptation stays in the ClickHouse adapter.
+
+## Protocol capabilities
+
+The default Native revision is **54459**, with settings, typed parameters,
+LowCardinality, custom-serialization markers, logs/profile events, INSERT metadata
+and the handshake addendum. The explicit legacy **54401** profile remains available
+through `connection_options::revision`; legacy servers materialize LowCardinality
+results and do not support the modern settings/parameter API. Revisions outside
+these implemented profiles are rejected. A server's advertised version is not used
+to guess fields newer than the negotiated client revision.
+
+| Feature | Behavior |
+|---|---|
+| Compression | Default LZ4; ZSTD, checksum-only and uncompressed selectable |
+| Integrity | Every compressed frame validates CityHash **1.0.2** before decompression |
+| Framing | Blocks may span multiple independently checksummed frames |
+| Resource bounds | Compressed/uncompressed bytes, strings, rows, columns, value nodes and nesting |
+| Query | ID, settings, server-bound `{name:Type}` parameters, external tables |
+| Results | Data/schema blocks, totals/extremes, progress, profile, logs/profile events |
+| INSERT | Quoted identifiers, exact sample schema check, Native data blocks, EndOfStream |
+| Streaming | Awaited block sink with backpressure; no retained data blocks |
+| Cancellation | Transport cancellation and Native Cancel for an active SELECT |
+| TLS | Direct Native TLS with CA and hostname verification; system roots or explicit CA |
+| Failure | Structured code/name/message/nested exceptions; no credential/stack-trace logging |
+
+LZ4 and Zstandard development libraries are required when enabling ClickHouse.
+The exact historical CityHash source is vendored with its MIT notice and pinned
+upstream commit; a modern system CityHash is not interchangeable. The SDK installs
+its third-party notice. Compression libraries remain implementation dependencies,
+not HTTP protocol dependencies.
+
+## Values and columns
+
+Supported layouts: Int/UInt 8–256, Float32/64, Bool, String, FixedString, Date,
+Date32, DateTime, DateTime64, Decimal/Decimal32/64/128/256, Enum8/16, UUID, IPv4/IPv6,
+Nothing, Nullable, Array, named/unnamed Tuple, Map and LowCardinality (including
+nullable dictionary values and nested column prefixes).
+
+| Column | `value::data` representation |
+|---|---|
+| UInt up to 64, Bool, Date, DateTime, IPv4 | `std::uint64_t` |
+| Int up to 64, Date32, DateTime64, small Decimal, Enum | `std::int64_t` |
+| Float32/64 | `double` |
+| String, FixedString | Binary `std::string`; no implicit trimming/padding |
+| UUID, IPv6, Int/UInt128/256, Decimal128/256 | Exact Native storage bytes in `std::string` |
+| NULL/Nothing | `std::monostate` |
+| Array/Tuple | `value::sequence` |
+| Map | Sequence of two-element key/value sequences |
+| LowCardinality | Materialized values, retaining the original column type |
+
+Decimals remain unscaled integers with scale in the type name. Temporal integers
+retain native epoch units. Numeric overflow, wrong variants, unequal row counts,
+malformed dictionaries, unsupported types and invalid FixedString lengths fail
+explicitly. Dynamic/Variant/JSON/AggregateFunction wire layouts are not inferred or
+silently skipped; select a supported projection when querying such server types.
+
+## Client API and ownership
+
+```cpp
+auto client::connect(connection_options = {}, cancel_token* = nullptr)
+    -> task<std::expected<server_info, error>>;
+auto client::query(std::string sql, query_options, cancel_token* = nullptr)
+    -> task<std::expected<query_result, error>>;
+auto client::query(std::string sql, std::string query_id = {}, cancel_token* = nullptr)
+    -> task<std::expected<query_result, error>>;
+auto client::query_blocks(std::string sql, block_sink, std::string query_id = {},
+    cancel_token* = nullptr) -> task<std::expected<query_result, error>>;
+auto client::insert(std::string table, block, std::string query_id = {},
+    cancel_token* = nullptr) -> task<std::expected<query_result, error>>;
+auto client::cancel_current_query(cancel_token* = nullptr)
+    -> task<std::expected<void, error>>;
+```
+
+One executor owns a client. Overlapping ordinary operations return `busy` without
+interrupting the owner. Native Cancel is admitted only while SELECT is reading
+results; retain the client until both Cancel and the query settle. Cancelled queries
+discard their transport rather than returning partial results as success.
+Precancellation preserves an established connection. After server/protocol/I/O
+failure or a sink exception, reconnect explicitly before reuse. Inserts are never
+silently retried: an interrupted write may already have been accepted.
+
+`query_result::blocks` includes a zero-row schema block when sent by the server.
+Sink references last only until the callback returns. The absolute operation
+budget covers transport work; application callbacks must cooperate and bound
+their own work. Default connect/operation timeouts are 5/30 seconds.
+
+## Connection pool and Application
+
+`connection_pool_options` selects connection settings and minimum/maximum capacity.
+Leases are move-only; healthy connections return to idle storage, failed connections
+are discarded. Exhaustion returns `busy` immediately, providing bounded admission
+without an unbounded waiter queue. `close()` stops new acquisition, closes idle
+connections and returns `operation_in_progress` while leases remain. Keep borrowers
+alive until their work finishes, release them and retry shutdown. A stopped pool is
+not reopened implicitly.
+
+Application configuration is explicit:
+
+```json
+{
+  "services": {
+    "analytics": {
+      "type": "clickhouse",
+      "instance": "analytics",
+      "enabled": true,
+      "required": true,
+      "host": "127.0.0.1",
+      "port": 9000,
+      "database": "default",
+      "username": "default",
+      "password": "${CLICKHOUSE_PASSWORD}",
+      "compression": "lz4",
+      "minimum_size": 1,
+      "maximum_size": 8,
+      "connect_timeout_ms": 5000,
+      "operation_timeout_ms": 30000
+    }
+  }
+}
+```
+
+Call `enable_auto_configuration()`. Unknown options, invalid types/capacities and
+unknown compression modes fail before starting listeners. Optional TLS options
+are `tls` and `ca_file`; Native TLS normally uses port 9440. Each event loop gets
+an independent pool; total capacity must cover all participating loops. Repository
+factories resolve the service during build but select its loop-local pool only when
+an operation executes. HTTP readiness reads the common cached health registry.
+Required/optional startup, recovery budgets and rollback use the existing lifecycle.
+Failed shutdown retains cleanup ownership until outstanding borrowers return.
+
+## ORM and repository integration
+
+```cpp
+application::add_repository<analytics_record>(context.components,
+    {.instance = "analytics",
+     .provider = application::database_provider::clickhouse});
+```
+
+Automatic provider selection requires exactly one configured provider with the
+requested instance name. ClickHouse uses the same `managed_repository<T>`, model
+metadata, interceptors, query/update wrappers, XML statements, pagination and
+projection path as the existing databases. The adapter translates `{}` bind slots
+outside quoted literals/comments into typed server parameters. INSERT VALUES is
+rendered as INSERT SELECT so the Native query path does not confuse inline SQL data
+with the separate block-insertion protocol. Native `client::insert` remains the
+batch-column transport API.
+
+Updates/deletes render `ALTER TABLE ... UPDATE/DELETE ... SETTINGS mutations_sync=1`.
+Mutation success means completion, not a fabricated relational affected-row count.
+Ordinary repository writes and batch inserts do not issue synthetic transactions.
+The following fail explicitly: transactions, relational atomic upsert,
+auto-increment keys and affected-row-based optimistic locking. MergeTree primary
+keys are sorting/index keys, not enforced uniqueness.
+
+The result adapter preserves nulls and scalars, exact decimal text, wide integer
+text, UUID text and UTC calendar values. Finer-than-microsecond timestamps retain
+text instead of being silently rounded. Pass `orm_value_decoder` to `orm_client`
+for an explicit mapping of nested/special columns into common SQL values; returning
+`nullopt` delegates to the standard conversion.
+
+`relational_dialect::clickhouse` renders typed migrations using MergeTree/ORDER BY,
+nullable columns, application-generated keys, defaults, added columns and CHECK
+constraints. Generic relational foreign keys, uniqueness, B-tree indexes, identity
+columns and implicit JSON type mapping are rejected before any SQL is executed.
+The generic decimal migration type maps explicitly to `Decimal(38,9)`; use native
+DDL for a different scale/engine.
+
+## Validation
+
+Build and run `test_clickhouse`, `test_clickhouse_compression`,
+`test_clickhouse_transport`, `test_clickhouse_live`, `test_application_clickhouse`.
+Compression tests use independent official CLI byte fixtures, corrupted checksums,
+truncated inputs, invalid sizes and large frames. Loopback fixtures keep exact
+packet checks. Real-server tests cover all four transport modes, Native Cancel,
+parameter escaping, external tables, LowCardinality, large/multi-frame data, TLS
+trust/name rejection, pools, real repository CRUD, pagination, batch inserts,
+migrations, unsupported capabilities, restart/retained cleanup and auto-configuration.
+
+```bash
+python3 testing/database/run_clickhouse_native.py \
+  --clickhouse "$HOME/.local/bin/clickhouse" --test-dir build/native \
+  --application-executable build/native/testing/tests/test_application_clickhouse
+```
+
+The runner creates temporary loopback-only servers, generated test certificates
+and fresh data, then terminates and removes them. CTest registers it when Python,
+OpenSSL and a local ClickHouse binary are available. Direct live test executables
+use `CNETMOD_CLICKHOUSE_TEST_PORT` and return 77 when no test endpoint is configured.
+
+References: [Native packets](https://clickhouse.com/docs/native-protocol/client),
+[official revision gates](https://github.com/ClickHouse/ClickHouse/blob/master/src/Core/ProtocolDefines.h),
+[compression modes](https://clickhouse.com/docs/guides/clickhouse/data-modelling/compression/compression-modes).
+<!-- END SOURCE: skill/database/clickhouse.md -->
+
 <!-- BEGIN SOURCE: skill/database/database-orm.md -->
 # Source: `skill/database/database-orm.md`
 
@@ -4007,6 +4235,14 @@ ctest --test-dir build --output-on-failure --no-tests=error
 - `src/database/orm/session_gateway.cppm`
 - `src/database/orm/query_wrapper.cppm`
 - `src/database/orm/xml_mapper_registry.cppm`
+
+## ClickHouse provider
+
+ClickHouse analytical SQL uses the same repository/session path through `database_provider::clickhouse`.
+See [ClickHouse Native, Application and ORM](clickhouse.md) for bound parameters,
+MergeTree migrations, synchronous mutations, decimal/UUID/calendar mappings and explicit capability errors.
+Transactions, auto-increment, enforced uniqueness, atomic upsert and affected-row optimistic locking
+are not substituted with relational behavior. Ordinary writes and batch inserts remain standalone operations.
 <!-- END SOURCE: skill/database/database-orm.md -->
 
 <!-- BEGIN SOURCE: skill/database/mongodb.md -->
@@ -4038,7 +4274,7 @@ Application MongoDB 服务使用 `co_await` 等待它，不通过 `close()` 投�
 该 token 仅在上一条命令 I/O 已结束后复用；仍禁止并发使用同一连接。
 Arch epoll/ASAN 已验证无响应 hello 的超时收尾；这不是 MongoDB TLS 运行验证。
 
-> 异步 MongoDB C++ 客户端，基于 Wire Protocol，支持 SCRAM-SHA-256 认证、TLS、连接池、事务、变更流与重试逻辑。
+> 异步 MongoDB C++ 客户端，包含 SRV/TXT 发现、Snappy/zlib/zstd、SCRAM-SHA-256、AWS、OIDC 机器身份、X.509、TLS、连接池、事务和游标流。
 
 **import**: `import cnetmod.protocol.mongodb;`
 **CMake**: `-DCNETMOD_ENABLE_MONGODB=ON`
@@ -4048,6 +4284,7 @@ Arch epoll/ASAN 已验证无响应 hello 的超时收尾；这不是 MongoDB TLS
 
 | 场景 | 推荐入口 |
 |------|----------|
+| Application 用户入口 | `mongodb_service` URI 配置、`command` / `acquire`，见 [Application](../infra/application.md) |
 | 简单查询 / CRUD | `connection::command` |
 | 连接管理 | `topology_connection_pool` |
 | 多节点部署 | `connection_pool` + `topology_monitor` |
@@ -4704,11 +4941,11 @@ auto main() -> int
 
 普通 `connection::command()` 只适用于一问一答；若服务端 OP_MSG 设置
 `moreToCome`，它会返回协议错误，避免后续命令误读同一 socket 中残留的响应。
-对于 exhaust cursor 等连续响应场景，使用 `command_stream()`：
+对于 exhaust cursor 等连续响应场景，先用 find/aggregate 获得 cursor id，再将 getMore 传给 `command_stream()`：
 
 ```cpp
 auto streamed = co_await conn.command_stream("analytics",
-    bson_document{{"find", "events"}, {"filter", bson_document{}}},
+    bson_document{{"getMore", cursor_id}, {"collection", "events"}},
     [](bson_document response) -> task<result<void>> {
         // 处理每一条 OP_MSG 响应；这里可 co_await 异步写入或业务处理。
         co_return result<void>{};
@@ -4720,6 +4957,198 @@ auto streamed = co_await conn.command_stream("analytics",
 尚未读取的连续响应不能安全地留给下一位租户。`command_stream()` 不使用普通命令
 的整体超时，长流应通过 MongoDB 命令本身的 `maxTimeMS`、应用 deadline 和取消来
 控制生命周期。
+
+## Wire 编码与边界校验
+
+- `decode_command_message()` 拒绝未知的低 16 位必需标志，忽略高 16 位未知可选标志的语义，并在 `decoded_message::flags` 保留原始值。
+- `encode_command_message()` 默认不生成校验和；显式传入 `op_message_checksum_present` 时追加覆盖消息头和正文的 CRC-32C，并将校验和的 4 字节计入消息长度和 `max_message_bytes`。
+- `op_message_checksum_present | op_message_exhaust_allowed` 可组合使用。此编码入口仍拒绝无应答的 `moreToCome` 请求；`connection::command()` 的一问一答行为不变。
+- `encode_compressed_message()` 检查原始消息声明长度与实际字节数一致，并拒绝嵌套 `OP_COMPRESSED`。
+- `decode_compressed_message()` 在分配解压缓冲前检查重建消息是否超出 int32 长度及配置上限；zlib 解码还要求完整消费输入，拒绝尾随垃圾。
+- 本节接口是低层 wire API；普通连接命令不会自动开启请求校验和。
+
+```cpp
+bson_document ping{{"ping", bson_value{std::int32_t{1}}}};
+auto wire = encode_command_message(7, ping, 1024,
+    op_message_checksum_present);
+if (!wire)
+    co_return std::unexpected(wire.error());
+```
+
+协议定义参见 [MongoDB Wire Protocol](https://www.mongodb.com/docs/manual/reference/mongodb-wire-protocol/)。
+
+## 包职责与文件命名
+
+MongoDB 保留单一公开入口 `import cnetmod.protocol.mongodb;`，内部使用职责明确的分区和文件。禁止新增 `types.cpp` / `types.cppm` 或以 `_types` 结尾的笼统文件，也不要用 `common`、`utils`、`helpers`、`base` 命名聚合实现。
+
+| 包目录 | 责任 | 可依赖的 MongoDB 包 |
+|---|---|---|
+| `endpoint/` | 服务器地址与端口契约 | error |
+| `discovery/` | SRV/TXT、IDNA 和系统 DNS 适配 | endpoint、error |
+| `configuration/` | URI 与选项、发现结果的组合 | topology、discovery、endpoint、transport、auth、wire、error |
+| `bson/` | BSON 值与编解码 | error |
+| `wire/` | OP_MSG、CRC-32C、文档序列、压缩 | bson、error |
+| `auth/` | SCRAM/AWS/OIDC 凭据、签名和 SASL 契约 | bson、error |
+| `transport/` | socket/TLS、握手、命令超时与取消 | wire、bson、auth、error |
+| `pool/` | 单节点租约、排队、维护与关闭 | transport、error |
+| `topology/` | 节点描述、发现、选择与多节点池 | discovery、endpoint、pool、transport、auth 契约、bson、error |
+| `session/` | 会话、事务、重试策略 | topology、pool、transport、bson、error |
+| `cursor/` | find/aggregate 游标与 change stream | session、pool、transport、bson、error |
+
+底层包不得反向导入上层包；所有协议包不得导入 Application、HTTP 或其他数据库协议。
+`python3 testing/tests/test_mongodb_architecture.py` 检查分区归属、依赖方向和文件命名；测试配置中同样注册此门禁。
+
+## 批量文档与普通游标
+
+`document_sequence` 表示 OP_MSG Kind 1 文档序列。每个 BSON 文档单独受 `maxBsonObjectSize` 限制，整个报文受 `maxMessageSizeBytes` 限制；不能把整批文档错误地限制为一个 BSON 对象大小。解码支持正文前后的序列，将其按标识符路径合并成正文数组，拒绝重复正文、路径冲突、重复标识符和截断的序列。
+
+```cpp
+auto inserted = co_await conn.command("analytics", bson_document{{"insert", "events"}},
+    std::vector<document_sequence>{{"documents", {
+        bson_document{{"n", std::int32_t{1}}},
+        bson_document{{"n", std::int32_t{2}}}}}});
+
+cursor rows(pool, "analytics", "events", {.batch_size = 100});
+auto opened = co_await rows.find(bson_document{});
+if (!opened)
+    co_return std::unexpected(opened.error());
+while (true)
+{
+    auto item = co_await rows.next();
+    if (!item)
+        co_return std::unexpected(item.error());
+    if (!*item)
+        break;
+    // 处理 **item。
+}
+auto closed = co_await rows.close();
+```
+
+`cursor::aggregate(std::vector<bson_document>)` 打开聚合游标。
+`try_next()` 最多发一次 getMore；空的活跃批次返回空 optional，调用者用 `exhausted()` 区分真正耗尽。
+`next()` 会继续跨越空批次。游标独占租约直到服务器 id 为零或显式 `close()`；同一对象的并发协议操作返回错误。
+必须等待 `close()` 才能保证及时向服务器发送 killCursors；析构不会投递脱离监管的清理协程。
+
+## 压缩、认证与拓扑正确性
+
+- `connection_options::enable_zstd_compression` 默认 false；启用且构建包含 zstd 时优先协商 zstd，其次选择已启用的 zlib。只向服务器声明实际编译进来的 codec。
+- MongoDB 组件直接链接自身所需的 zlib、可选 zstd 和 ICU；不能依靠 HTTP、Kafka 或 PostgreSQL 间接提供这些依赖。
+- SCRAM-SHA-256 使用 ICU 完成 RFC 4013 SASLprep，拒绝非法 UTF-8、禁止字符、重复 SCRAM 属性、未知必需扩展和非法 Base64。
+- 最大复制延迟根据 `lastWrite.lastWriteDate`、监控更新时间差与心跳间隔计算；心跳新鲜不代表复制已经追平。
+- 标签集按先后次序匹配；secondaryPreferred 在从节点被标签/延迟过滤后回退主节点，primaryPreferred 有主节点时不套用从节点筛选。
+- 监控连接不执行用户认证，RTT 测量排除建连与认证；监控任务等待心跳时可被 stop token 唤醒。
+- 重试策略区分普通读写、事务提交与变更流；事务瞬态错误不能盲目重放单条命令，变更流历史丢失不能当作可恢复错误无限重试。
+- 变更流只在事件实际消费后推进事件 token，批次消费完后使用 postBatchResumeToken；缺少事件 token 会关闭流并报错。
+
+## MongoDB 本地验证
+
+仅启用 `CNETMOD_ENABLE_MONGODB=ON` 并关闭其余协议和 ORM，可以单独编译 MongoDB 测试。
+除纯协议、拓扑、认证、生命周期测试外，`test_mongodb_integration` 连接可丢弃的本地副本集：
+
+```bash
+CNETMOD_MONGODB_TEST_PORT=27017 ctest --test-dir <build> -R '^test_mongodb_' --output-on-failure
+# TLS 测试服务另行配置本地 CA；不关闭证书验证。
+CNETMOD_MONGODB_TEST_PORT=28719 CNETMOD_MONGODB_TEST_CA=/absolute/path/server-cert.pem \
+  ctest --test-dir <build> -R '^test_mongodb_' --output-on-failure
+```
+
+未配置端口时，真实服务测试以 77 明确跳过；不把跳过记成真实服务验证成功。
+测试使用唯一的 `cnetmod_native_*` 数据库和临时用户，并在结束后清理。副本集须允许本机测试连接创建临时用户。
+SRV/TXT、Snappy、AWS、OIDC 机器身份与 X.509 均有专门实现和测试；真实 AWS IAM/Atlas/Azure/GCP 账号授权需要独立的部署凭据，模拟 TLS 对话测试不能替代真实账号验收。OIDC 人工交互登录是规范可选功能，本模块公开的是机器身份回调；完整负载均衡部署认证矩阵仍需单独验收。
+
+本地测试快捷入口：`bash tools/test-mongodb-local.sh [CMake构建目录]`，默认 `build/mongodb-only` 和端口 27017。该入口显式启用真实服务测试，不把未配置端口导致的跳过混入本地联调结果。
+macOS 可用官方 Homebrew 包 `mongodb/brew/mongodb-community@8.0` 管理服务；在 `mongod.conf` 配置 `replication.replSetName: cnetmod-test`，初始化单节点副本集后可测试事务与变更流。仅绑定回环地址的开发配置不应直接用于远程部署。
+
+空事务的 commit/abort 不发送网络命令；变更流的恢复重试预算只计算恢复尝试，不因正常空批次而减少。
+
+## SRV/TXT 与连接字符串
+
+`parse_connection_string(uri)` 解析 `mongodb://` 和 `mongodb+srv://`；`resolve_connection_string(io, workers, uri, lookup = {})` 异步完成 SRV/TXT 解析，再返回 `connection_configuration`。其中 `topology` 可直接构造 `topology_connection_pool`，`selection` 是 URI 的读取偏好。
+
+- `endpoint/` 拥有服务器地址契约；`discovery/` 拥有 SRV 校验和系统 DNS 适配；`configuration/` 拥有 URI 和选项映射。拓扑包不反向依赖 URI 配置包。
+- 系统解析器使用操作系统 SRV/TXT API，并通过 `blocking_invoke` 在工作池执行。Windows 链接 dnsapi，Unix 链接 resolv；核心 MongoDB 不依赖 HTTP/DNS 高层协议模块。
+- SRV URI 禁止端口、多主机和 IP 字面量，默认开启 TLS；只允许 URI 的显式 `tls=false` 覆盖，TXT 不能关闭 TLS。
+- 每个 DNS 目标都先规范化为小写 IDNA A-label，检查父域和端口，再考虑 `srvMaxHosts` 采样。不能通过采样跳过恶意目标校验。
+- TXT 的多段字符字符串按顺序拼接；多个 TXT RR 报错。只接受 authSource、replicaSet、loadBalanced 默认值，显式 URI 选项覆盖 TXT。
+- `srvMaxHosts` 与 replicaSet/loadBalanced 冲突会报错。SRV 轮询只用于 Unknown/Sharded 拓扑，遵守至少 60 秒的 TTL；查询失败保留现有拓扑。
+- 节点移除会关闭该节点连接池；等待中的命令/借用持有独立 shared ownership，不能因 DNS 更新被提前销毁。
+- `topology.refresh_srv` 闭包捕获解析器所用 io/工作池；调用者必须让二者活到客户端和所有解析任务结束。
+
+## Snappy 与压缩职责
+
+`wire/mongodb_wire_protocol.cpp` 负责 OP_MSG 组帧；`wire/mongodb_wire_compression.cpp` 单独负责 OP_COMPRESSED。
+Snappy 使用 libsnappy 的原始 block 格式，不使用 framed stream；解压前校验声明大小，拒绝畸形长度和尾随数据。
+默认构建请求启用 `CNETMOD_ENABLE_MONGODB_SNAPPY`。找到 libsnappy 时声明 Snappy 能力；系统未安装 libsnappy 时继续构建，并输出 Arch、Ubuntu 和 CentOS 的安装命令。显式关闭该开关时不会探测或声明 Snappy 能力。
+运行时使用 `connection_options::enable_snappy_compression` 开启；URI 的 `compressors=...` 顺序保留到握手。
+程序配置可用 `compression_preference` 的 codec ID 列表指定优先级；未指定时保留 zstd、Snappy、zlib 的默认顺序。
+
+## 云认证职责与组合入口
+
+核心包 `cnetmod.protocol.mongodb` 实现 SASL、AWS SigV4、OIDC cache、推测认证和重认证；不导入 HTTP 或 Application。
+云端凭据获取是独立组件：
+
+```cmake
+target_link_libraries(app PRIVATE cnetmod::mongodb_cloud)
+```
+
+该组件仅在同时开启 MongoDB 和 HTTP 时构建，公开模块 `cnetmod.integration.mongodb_cloud`。
+`mongodb_metadata_http.cpp` 复用框架 HTTP 客户端，验证 TLS、禁用重定向和 cookie，限制响应为 1 MiB。
+AWS Web Identity、ECS、EC2 IMDSv2、OIDC workload、token 文件读取和凭据文档解析各自分文件；禁止 `types` / `common` 等聚合文件名。
+
+```cpp
+import cnetmod.protocol.mongodb;
+import cnetmod.integration.mongodb_cloud;
+
+// uri 由应用提供；不要打印含凭据的连接字符串。
+auto resolved = co_await resolve_connection_string(io, workers, uri);
+if (!resolved)
+    co_return std::unexpected(resolved.error());
+auto configured = cloud::configure_cloud_credentials(
+    resolved->topology.per_server_pool.connection, io, workers);
+if (!configured)
+    co_return std::unexpected(configured.error());
+topology_connection_pool client(io, std::move(resolved->topology));
+```
+
+### AWS IAM
+
+`authentication_mechanism::aws` / URI `authMechanism=MONGODB-AWS` 使用 `$external` 并要求 TLS。
+AWS 凭据不得放在 URI 或 username/password 选项中。优先使用 `aws_provider`；默认组合 provider 按环境变量、Web Identity、ECS、EC2 IMDSv2 获取凭据。
+
+- 环境凭据按每次授权动态读取；已经取得的临时元数据凭据按 expiration 缓存并提前刷新。
+- Web Identity 读取 AWS_WEB_IDENTITY_TOKEN_FILE 和 AWS_ROLE_ARN，支持 AWS_ROLE_SESSION_NAME、AWS_REGION/AWS_DEFAULT_REGION 及中国区域 STS 域名。
+- ECS 只接受可信 HTTP metadata 主机或显式 HTTPS endpoint；可读取 Authorization token 文件。EC2 使用 IMDSv2 token，不降级为 IMDSv1。
+- `aws_credential_cache` 支持异步 provider；同步 AWS SDK 调用应通过 `blocking_invoke` 桥接，不能阻塞 io_context。
+- AWS SASL 严格校验 64 字节服务端 nonce 的客户端前缀、STS 主机和 conversationId，再计算包含 session token 的 SigV4 签名。
+
+### OIDC 机器身份
+
+`authentication_mechanism::oidc` / URI `authMechanism=MONGODB-OIDC` 使用 `$external`、要求 TLS、禁止 password。
+支持自定义 `oidc_token_cache` callback，或通过 `configure_cloud_credentials` 选择 Azure/GCP/Kubernetes workload provider。
+Azure/GCP 必须提供 TOKEN_RESOURCE；Kubernetes 不允许该参数。callback 与内置 environment 不得同时配置。
+
+- Azure 使用 Instance Metadata Service，传递编码后的 resource 和可选 client_id；GCP 使用 metadata identity endpoint 和编码后的 audience。
+- Kubernetes 优先读取 AZURE_FEDERATED_TOKEN_FILE，其次 AWS_WEB_IDENTITY_TOKEN_FILE，最后 ServiceAccount 默认 token 文件。
+- token 文件在工作池读取，必须是大小受限的普通文件；provider 不解析或验证不透明 access token 的 JWT 内容。
+- 每个客户端/池共享一个 cache，所有调用必须位于同一 io_context。一次只执行一个 provider callback；等待者各自遵守自己的超时，不阻塞缓存快照和条件失效。
+- callback 参数包含 version=1、username 和剩余 timeout；自定义异步 callback 必须遵守该 timeout，跨线程 SDK 返回必须切回所属 io_context。
+- callback 间至少 100ms；按 token 值条件失效，不清除另一连接刚更新的 token。失败的推测认证不直接清空 cache。
+- 有缓存时在 hello 中尝试 speculativeAuthenticate。普通操作返回 391 时保留原命令的 guard/watchdog，执行 SASL 后只重发一次；第二次 391 直接返回。
+
+### X.509
+
+`authentication_mechanism::x509` 使用 TLS 客户端证书、`$external` 和可选用户名，不允许 password。
+配置 `tls_cert_file` / `tls_key_file`；认证命令与 AWS/OIDC/SCRAM 各自放在独立 transport 实现文件中。
+
+## 新能力验证入口
+
+本地 MongoDB 8.0 副本集测试包含独立 Snappy 协商和压缩优先级用例。
+`test_mongodb_discovery` 验证 URI、父域/IDNA、TXT 默认值和恶意记录拒绝；`mongodb_srv_lookup_driver <hostname>` 可单独验证真实系统 DNS 而不连接返回的数据库节点。
+`test_mongodb_cloud_auth` 覆盖独立 SigV4 向量、SASL 身份校验、token cache 并发和超时。
+`test_mongodb_cloud_handshake` 用 Python 标准库 TLS peer 验证 AWS nonce/签名、OIDC cache/18/391/speculative flow 与 X.509 客户端证书；由 BoringSSL 在测试临时目录生成证书，不需要外部 openssl 命令或云账号。
+开启 HTTP 后另有 `test_mongodb_aws_providers` 与 `test_mongodb_oidc_providers`，用注入的 metadata transport 验证完整凭据链，不访问真实用户云凭据。
+
+安装包消费者验证位于 `testing/package/mongodb_cloud_consumer`：仅链接 `cnetmod::mongodb_cloud`，通过安装后的接口构造 SRV/OIDC 配置并执行注入的 metadata provider，用来防止源树构建掩盖导出依赖缺失。
 <!-- END SOURCE: skill/database/mongodb.md -->
 
 <!-- BEGIN SOURCE: skill/database/mysql.md -->
@@ -10489,7 +10918,7 @@ auto& users = registry.require<user_repository>("primary");
 | `redis` | `redis_service` / `redis_cluster_service` | `mode=standalone` 连接池；`mode=cluster` 槽路由、seed failover 与健康检查 |
 | `mysql` | `mysql_service` | MySQL 连接池 |
 | `postgresql` | `postgresql_service` | PostgreSQL 连接池 |
-| `mongodb` | `mongodb_service` | MongoDB 连接池与维护任务 |
+| `mongodb` | `mongodb_service` | 单节点或 URI 拓扑连接池、SRV/TXT、压缩、云凭据与受监管监控 |
 | `kafka` | `kafka_service` | Kafka 客户端 |
 | `mqtt` | `mqtt_service` | MQTT 客户端与重连 |
 | `amqp091` | `amqp091_service` | AMQP 0-9-1 客户端与受监管帧泵 |
@@ -10544,6 +10973,46 @@ AMQP 传输报告内存不足时，适配器保留通用 not_enough_memory，启
 MySQL、Redis、PostgreSQL 和 MongoDB 在启动入口拒绝已经取消或过期的
 `service_context`，不先注册维护任务或进行预热。取消和过期同时发生时优先返回
 `operation_canceled`。此入口检查不代替操作进行中的取消和截止时间处理。
+
+MongoDB 用户入口统一为 `mongodb_service`。推荐使用 URI 自动配置：
+
+```json
+{
+  "services": {
+    "primary-mongo": {
+      "type": "mongodb",
+      "enabled": true,
+      "uri": "mongodb+srv://cluster.example.com/app?authMechanism=MONGODB-AWS&compressors=snappy,zstd",
+      "maximum_size": 32,
+      "heartbeat_frequency_ms": 10000
+    }
+  }
+}
+```
+
+沿用配置系统的服务实例命名规则，从 registry 取出 `mongodb_service`，业务代码调用
+`co_await service.command({{"ping", 1}})`（使用 URI 数据库）、
+`command(database, document)` 或 `acquire()`。URI 模式可通过 `topology_pool()` 取得
+当前运行的拓扑池，用于会话、重试和游标组合；重启会替换该池，不可跨重启持有引用。
+保留旧 `host/port/username/password/database` 配置及 `pool()`；URI 模式调用 `pool()`
+抛出 `logic_error`，避免误用一个未参与拓扑的单节点池。禁止 URI 与旧地址/凭据键混用。
+
+URI 模式在服务启动时解析 SRV/TXT，建立云凭据提供器并完成真实认证和最小池预热；
+最低池大小为零时仍验证一条连接。压缩顺序、认证机制与 workload 参数使用协议 URI
+选项；AWS 默认凭据链、OIDC ENVIRONMENT/TOKEN_RESOURCE、X.509 均由 application
+自动组合。TLS 文件键为 `tls_ca_file/tls_cert_file/tls_key_file/tls_sni`，不会关闭证书校验。
+`minimum_size/maximum_size` 显式覆盖 URI 池大小，`heartbeat_frequency_ms` 最低 500。
+
+编程配置使用 `mongodb_service_options`，构造顺序为
+`mongodb_service{options, io, instance, requirement, recovery}`；与旧构造函数保持无歧义。
+`options.srv_lookup` 可注入 DNS，`options.configure_connection` 可设置自定义 AWS/OIDC
+缓存或 TLS 材料。该回调在 URI/TXT 解析后、默认云凭据装配前执行。服务拥有 DNS/token
+文件阻塞执行器；原生 DNS 不能抢占，超时会等待其安全返回后拒绝后续认证和监控注册。
+
+所有入口在所属应用控制循环运行，自动配置仍拒绝多事件循环部署。拓扑监控由
+supervisor 管理，停机先禁止新借用并取消监控，再等待在途操作、建连和租约归还。
+被 SRV 移除的节点池也在停机统计内；清理超时保留资源所有权，调用方归还租约后可
+重试 `stop()`，清理完成后重新启动会重新解析 URI/DNS 并创建新池。
 
 MongoDB 预热失败保留 `cnetmod.mongodb` 错误类别，不再统一映射为连接拒绝。
 类别值为协议 `error_code` 的整数值加一（协议枚举从零开始且没有成功项），
@@ -10721,6 +11190,13 @@ JWT 使用 `security::sign_jwt/verify_jwt(executor.cpu_pool(),
 executor.event_loop(), ...)`。`event_loop()` 必须在 request handler 所在循环内求值，确保 CPU
 计算结束后回到请求循环；需要生命周期控制循环时才显式使用 `control_event_loop()`。
 密钥由应用持有，只在调用点传入框架。
+
+## ClickHouse managed integration
+
+Enable `CNETMOD_ENABLE_CLICKHOUSE` and auto-configuration to register named ClickHouse pools.
+`clickhouse_service` participates in startup, rollback, cached health, bounded recovery and retained shutdown cleanup.
+Pools are loop-local; repository factories defer selecting the pool until execution on its owner loop.
+Configuration and repository examples are in [clickhouse.md](../database/clickhouse.md).
 <!-- END SOURCE: skill/infra/application.md -->
 
 <!-- BEGIN SOURCE: skill/infra/architecture.md -->
