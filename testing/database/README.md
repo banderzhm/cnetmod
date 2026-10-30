@@ -81,3 +81,43 @@ Run the dependency-free gate checks with:
 ```text
 python -m unittest discover -s testing/database -p test_required_runner.py
 ```
+
+## Required local regression without skipped tests
+
+`run_local_regression.py` provisions disposable MySQL 8.4, a three-member
+MongoDB replica set with test commands enabled, and a ClickHouse Native server.
+All listeners use loopback, data lives in a temporary directory, and exit cleanup
+stops only processes created by the runner. It refuses an occupied MySQL port
+3306 because the existing shard and tenant tests use that port. It does not start
+Homebrew services or modify existing developer databases.
+
+On macOS, install `mysql@8.4` with Homebrew and provide the `mongod` and
+`clickhouse` executables. Install both database and HTTP/2 Python dependencies in
+an isolated environment, then configure CMake to use that same interpreter:
+
+```bash
+python3 -m venv build/test-venv
+build/test-venv/bin/python -m pip install -r testing/database/requirements-local.txt
+cmake -S . -B build/native \
+  -DPython3_EXECUTABLE="$PWD/build/test-venv/bin/python" \
+  -DCNETMOD_BUILD_TESTS=ON -DCNETMOD_ENABLE_HTTP=ON \
+  -DCNETMOD_ENABLE_MYSQL=ON -DCNETMOD_ENABLE_MONGODB=ON \
+  -DCNETMOD_ENABLE_CLICKHOUSE=ON -DCNETMOD_ENABLE_ORM=ON \
+  -DCNETMOD_ENABLE_SSL=ON
+cmake --build build/native --parallel 4
+build/test-venv/bin/python testing/database/run_local_regression.py build/native \
+  --mysql-bin "$(brew --prefix mysql@8.4)/bin" \
+  --clickhouse "$HOME/.local/bin/clickhouse"
+```
+
+Retain the compiler, generator and ICU options required by your existing build.
+Use `--mongod` when it is not on `PATH`. The runner creates a random test-only
+MySQL password and the required schemas/tables; no credentials are stored in the
+repository. The tenant test first runs against a cold MySQL authentication cache
+to check that it works independently of the Application tests. The complete
+configured CTest suite then runs with mandatory Python database execution,
+MongoDB failpoint and primary failover coverage, and inherited test filters
+removed. The result file is `build/native/required-local-tests.xml`; any failed
+or skipped test makes the runner fail. MongoDB's native Application lifecycle
+test accepts `CNETMOD_MONGODB_TEST_REPLICA_SET` (default `cnetmod-test`) so that
+the disposable cluster name does not need to match an existing local deployment.

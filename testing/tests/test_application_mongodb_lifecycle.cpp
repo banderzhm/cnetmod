@@ -28,7 +28,9 @@ int main()
     app::task_supervisor supervisor{*io};
     cnetmod::cancel_token token;
     app::mongodb_service_options options;
-    options.uri = std::format("mongodb://127.0.0.1:{}/?replicaSet=cnetmod-test&compressors=snappy&minPoolSize=2&maxPoolSize=2", port);
+    const auto replica_set = std::getenv("CNETMOD_MONGODB_TEST_REPLICA_SET");
+    options.uri = std::format("mongodb://127.0.0.1:{}/?replicaSet={}&compressors=snappy&minPoolSize=2&maxPoolSize=2",
+        port, replica_set ? replica_set : "cnetmod-test");
     options.configure_connection = [](mg::connection_options& connection) -> mg::result<void>
     {
         connection.compression_minimum_bytes = 0;
