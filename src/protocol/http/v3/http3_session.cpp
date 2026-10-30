@@ -493,58 +493,91 @@ namespace {
         bool& authority_seen;
     };
 
-    auto consume_request_header(void* context, header_field&& field)
+    auto consume_request_header_value(request_header_state& state,
+        std::string_view name, std::string_view value,
+        std::string* owned_name = nullptr, std::string* owned_value = nullptr)
         -> std::expected<void, std::error_code>
     {
-        auto& state = *static_cast<request_header_state*>(context);
         auto& request = state.request;
-        if (!state.is_trailer && field.name == ":method")
+        const auto take_name = [name, owned_name]
+        {
+            return owned_name ? std::move(*owned_name) : std::string{name};
+        };
+        const auto take_value = [value, owned_value]
+        {
+            return owned_value ? std::move(*owned_value) : std::string{value};
+        };
+        if (!state.is_trailer && name == ":method")
         {
             if (state.method_seen)
                 return std::unexpected(std::make_error_code(std::errc::protocol_error));
-            auto method = string_to_method(field.value);
+            auto method = string_to_method(value);
             if (!method)
                 return std::unexpected(std::make_error_code(std::errc::protocol_error));
             request.method = *method;
             state.method_seen = true;
         }
-        else if (field.name == ":path")
+        else if (name == ":path")
         {
             if (state.is_trailer || state.path_seen)
                 return std::unexpected(std::make_error_code(std::errc::protocol_error));
-            request.path = std::move(field.value);
+            if (owned_value != nullptr || request.path != value)
+                request.path = take_value();
             state.path_seen = true;
         }
-        else if (field.name == ":scheme")
+        else if (name == ":scheme")
         {
             if (state.is_trailer || state.scheme_seen)
                 return std::unexpected(std::make_error_code(std::errc::protocol_error));
-            request.scheme = std::move(field.value);
+            if (owned_value != nullptr || request.scheme != value)
+                request.scheme = take_value();
             state.scheme_seen = true;
         }
-        else if (field.name == ":authority")
+        else if (name == ":authority")
         {
             if (state.is_trailer || state.authority_seen)
                 return std::unexpected(std::make_error_code(std::errc::protocol_error));
-            request.host = std::move(field.value);
+            request.host = take_value();
             state.authority_seen = true;
         }
-        else if (field.name == ":protocol")
+        else if (name == ":protocol")
         {
             // HTTP/3 does not require a particular ordering among request
             // pseudo fields. Validate the CONNECT relation after the block.
-            if (state.is_trailer || !request.protocol.empty() || field.value.empty())
+            if (state.is_trailer || !request.protocol.empty() || value.empty())
                 return std::unexpected(std::make_error_code(std::errc::protocol_error));
-            request.protocol = std::move(field.value);
+            request.protocol = take_value();
         }
-        else if (!field.name.starts_with(':'))
+        else if (!name.starts_with(':'))
         {
             auto& target = state.is_trailer ? request.trailers : request.headers;
-            target.insert_or_assign(std::move(field.name), std::move(field.value));
+            target.insert_or_assign(take_name(), take_value());
         }
         else
             return std::unexpected(std::make_error_code(std::errc::protocol_error));
         return {};
+    }
+
+    auto consume_request_header(void* context, header_field&& field)
+        -> std::expected<void, std::error_code>
+    {
+        auto& state = *static_cast<request_header_state*>(context);
+        return consume_request_header_value(state, field.name, field.value,
+            &field.name, &field.value);
+    }
+
+    auto consume_request_static_header(void* context, std::string_view name,
+        std::string_view value) -> std::expected<void, std::error_code>
+    {
+        return consume_request_header_value(
+            *static_cast<request_header_state*>(context), name, value);
+    }
+
+    auto consume_request_static_name(void* context, std::string_view name,
+        std::string&& value) -> std::expected<void, std::error_code>
+    {
+        auto& state = *static_cast<request_header_state*>(context);
+        return consume_request_header_value(state, name, value, nullptr, &value);
     }
 
     auto request_from_frames(qpack_decoder& decoder, byte_view wire,
@@ -701,6 +734,8 @@ namespace {
                         qpack_header_sink{
                             .context = &header_state,
                             .consume = consume_request_header,
+                            .consume_static = consume_request_static_header,
+                            .consume_static_name = consume_request_static_name,
                         },
                         id);
                 }

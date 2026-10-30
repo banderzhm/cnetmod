@@ -1,11 +1,11 @@
 include_guard(GLOBAL)
 
 macro(cnetmod_configure_lz4)
-    option(CNETMOD_ENABLE_LZ4 "Enable Kafka LZ4 compression" ON)
+    option(CNETMOD_ENABLE_LZ4 "Enable LZ4 compression" ON)
     set(CNETMOD_LZ4_ROOT "" CACHE PATH "Optional LZ4 installation prefix")
     set(CNETMOD_HAS_LZ4 OFF)
     set(CNETMOD_LZ4_TARGET "")
-    if(CNETMOD_USE_SYSTEM_DEPS AND CNETMOD_ENABLE_KAFKA AND CNETMOD_ENABLE_LZ4)
+    if(CNETMOD_USE_SYSTEM_DEPS AND (CNETMOD_ENABLE_KAFKA OR CNETMOD_ENABLE_CLICKHOUSE) AND CNETMOD_ENABLE_LZ4)
         find_package(lz4 CONFIG QUIET)
         find_package(LZ4 CONFIG QUIET)
         foreach(_target lz4::lz4 LZ4::lz4 LZ4::LZ4 unofficial::lz4::lz4 lz4_static lz4_shared)
@@ -27,6 +27,23 @@ macro(cnetmod_configure_lz4)
         if(CNETMOD_LZ4_TARGET)
             set(CNETMOD_HAS_LZ4 ON)
         endif()
+    endif()
+    if((CNETMOD_ENABLE_KAFKA OR CNETMOD_ENABLE_CLICKHOUSE) AND CNETMOD_ENABLE_LZ4
+       AND NOT CNETMOD_LZ4_TARGET
+       AND EXISTS "${PROJECT_SOURCE_DIR}/3rdparty/lz4/build/cmake/CMakeLists.txt")
+        set(_cnetmod_saved_build_shared_libs "${BUILD_SHARED_LIBS}")
+        set(_cnetmod_saved_build_static_libs "${BUILD_STATIC_LIBS}")
+        set(LZ4_BUNDLED_MODE ON)
+        set(LZ4_BUILD_CLI OFF CACHE BOOL "" FORCE)
+        set(BUILD_STATIC_LIBS ON CACHE BOOL "" FORCE)
+        add_subdirectory(
+            "${PROJECT_SOURCE_DIR}/3rdparty/lz4/build/cmake"
+            "${PROJECT_BINARY_DIR}/3rdparty/lz4"
+            EXCLUDE_FROM_ALL)
+        set(BUILD_SHARED_LIBS "${_cnetmod_saved_build_shared_libs}" CACHE BOOL "" FORCE)
+        set(BUILD_STATIC_LIBS "${_cnetmod_saved_build_static_libs}" CACHE BOOL "" FORCE)
+        set(CNETMOD_LZ4_TARGET lz4_static)
+        set(CNETMOD_HAS_LZ4 ON)
     endif()
 endmacro()
 

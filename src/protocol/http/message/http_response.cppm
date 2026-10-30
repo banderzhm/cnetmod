@@ -11,6 +11,34 @@ import :cookie;
 
 namespace cnetmod::http {
 
+/**
+ * @brief Immutable response shape prepared once for repeated delivery.
+ *
+ * The normal response state is still populated for middleware and non-H1
+ * transports. HTTP/1.1 may reuse the encoded bytes when the server has no
+ * dynamic response headers and no later middleware changes the response.
+ */
+export class prepared_response
+{
+public:
+    prepared_response(int status_code, std::string content_type,
+        std::string body);
+
+    [[nodiscard]] auto status_code() const noexcept -> int;
+    [[nodiscard]] auto content_type() const noexcept -> std::string_view;
+    [[nodiscard]] auto body() const noexcept
+        -> const std::shared_ptr<const std::string>&;
+
+private:
+    friend class response;
+
+    int status_code_{};
+    std::string content_type_;
+    std::string content_length_;
+    std::shared_ptr<const std::string> body_;
+    std::shared_ptr<const std::string> encoded_h1_;
+};
+
 // =============================================================================
 // response — HTTP Response Builder
 // =============================================================================
@@ -35,6 +63,10 @@ public:
     /// allocation when a server-side cache has just produced the value.
     auto set_header_owned(std::string_view key, std::string value) -> response&;
 
+    /// Set Content-Type through its fixed response slot. This is the common
+    /// text/JSON/HTML response path and avoids generic header-name dispatch.
+    auto set_content_type(std::string_view value) -> response&;
+
     auto append_header(std::string_view key, std::string_view value)
         -> response&;
 
@@ -58,6 +90,7 @@ public:
     auto generate_body(Generator&& generator)
         -> std::expected<void, std::error_code>
     {
+        invalidate_prepared_h1();
         restore_generation_buffer();
         shared_body_.reset();
         body_source_.reset();
@@ -81,6 +114,7 @@ public:
     auto transform_body(Transformer&& transformer)
         -> std::expected<bool, std::error_code>
     {
+        invalidate_prepared_h1();
         const auto input = body();
         transformed_body_.clear();
         auto transformed = std::invoke(
@@ -109,6 +143,10 @@ public:
         std::shared_ptr<const std::string> body) -> response&;
 
     auto set_body_preserve_headers(std::string body) -> response&;
+
+    /// Apply an immutable response while retaining the regular observable
+    /// status, headers and body for middleware and HTTP/2/3 transports.
+    auto set_prepared(const prepared_response& value) -> response&;
 
     /// Install a pull-based response body. The transport consumes the source
     /// with back-pressure after the handler returns; this keeps file and
@@ -149,6 +187,7 @@ public:
     template <typename Visitor>
     void take_headers(Visitor&& visitor)
     {
+        invalidate_prepared_h1();
         if (has_cached_date_header_)
             std::invoke(visitor, std::string{"Date"},
                 std::string{cached_date_header_.data(),
@@ -241,6 +280,11 @@ public:
     [[nodiscard]] auto cached_date_header() const noexcept -> std::string_view;
 
 private:
+    friend class server;
+
+    [[nodiscard]] auto has_content_length() const noexcept -> bool;
+    [[nodiscard]] auto is_streamed() const noexcept -> bool;
+
     static constexpr std::size_t common_header_count = 10;
 
     struct common_header_value
@@ -261,6 +305,7 @@ private:
         -> response&;
     void refresh_content_length();
     void restore_generation_buffer() noexcept;
+    void invalidate_prepared_h1() noexcept;
 
     int status_code_ = 200;
     std::string status_msg_;
@@ -277,6 +322,8 @@ private:
     std::shared_ptr<const std::string> shared_body_;
     std::shared_ptr<response_body_source> body_source_;
     std::shared_ptr<const preencoded_header_block> preencoded_h2_headers_;
+    std::shared_ptr<const std::string> prepared_h1_;
+    bool prepared_h1_valid_{};
     std::array<char, 29U> cached_date_header_{};
     bool has_cached_date_header_ = false;
 };

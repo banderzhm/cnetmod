@@ -4,7 +4,7 @@ macro(cnetmod_configure_zstd)
     set(CNETMOD_ZSTD_ROOT "" CACHE PATH "Optional zstd installation prefix")
     set(CNETMOD_HAS_ZSTD OFF)
     if(CNETMOD_USE_SYSTEM_DEPS AND
-       (CNETMOD_ENABLE_GRPC OR CNETMOD_ENABLE_KAFKA))
+       (CNETMOD_ENABLE_GRPC OR CNETMOD_ENABLE_KAFKA OR CNETMOD_ENABLE_MONGODB OR CNETMOD_ENABLE_CLICKHOUSE))
         find_package(zstd CONFIG QUIET)
         foreach(_cnetmod_zstd_target zstd::libzstd_static zstd::libzstd_shared zstd::zstd)
             if(TARGET ${_cnetmod_zstd_target})
@@ -28,6 +28,21 @@ macro(cnetmod_configure_zstd)
         if(CNETMOD_ZSTD_TARGET)
             set(CNETMOD_HAS_ZSTD ON)
         endif()
+    endif()
+    if((CNETMOD_ENABLE_GRPC OR CNETMOD_ENABLE_KAFKA OR CNETMOD_ENABLE_MONGODB OR CNETMOD_ENABLE_CLICKHOUSE)
+       AND NOT CNETMOD_ZSTD_TARGET
+       AND EXISTS "${PROJECT_SOURCE_DIR}/3rdparty/zstd/build/cmake/CMakeLists.txt")
+        set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+        set(ZSTD_BUILD_CONTRIB OFF CACHE BOOL "" FORCE)
+        set(ZSTD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+        set(ZSTD_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+        set(ZSTD_BUILD_STATIC ON CACHE BOOL "" FORCE)
+        add_subdirectory(
+            "${PROJECT_SOURCE_DIR}/3rdparty/zstd/build/cmake"
+            "${PROJECT_BINARY_DIR}/3rdparty/zstd"
+            EXCLUDE_FROM_ALL)
+        set(CNETMOD_ZSTD_TARGET libzstd_static)
+        set(CNETMOD_HAS_ZSTD ON)
     endif()
 endmacro()
 

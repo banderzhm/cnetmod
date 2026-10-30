@@ -189,7 +189,7 @@ auto request_parser::method() const noexcept -> std::string_view
 
 auto request_parser::method_enum() const noexcept -> std::optional<http_method>
 {
-    return string_to_method(method());
+    return method_enum_;
 }
 
 auto request_parser::uri() const noexcept -> std::string_view
@@ -266,6 +266,11 @@ auto request_parser::get_header(std::string_view k) const -> std::string_view
     return header_value(index);
 }
 
+auto request_parser::connection_header() const -> std::string_view
+{
+    return common_header_value(1U, "Connection");
+}
+
 void request_parser::reset() noexcept
 {
     buf_.clear();
@@ -283,6 +288,7 @@ void request_parser::reset() noexcept
 void request_parser::reset_message_state() noexcept
 {
     method_offset_ = method_size_ = uri_offset_ = uri_size_ = 0;
+    method_enum_.reset();
     version_ = http_version::http_1_1;
     header_fields_.clear();
     header_index_.clear();
@@ -365,6 +371,7 @@ auto request_parser::parse_request_line(std::string_view l) -> std::expected<voi
     const auto* base = buf_.data();
     method_offset_ = static_cast<std::size_t>(l.data() - base);
     method_size_ = a;
+    method_enum_ = string_to_method(l.substr(0, a));
     auto r = l.substr(a + 1);
     auto b = r.find(' ');
     if (b == std::string_view::npos)
@@ -499,6 +506,16 @@ auto request_parser::find_header(std::string_view name) const noexcept
     return missing_header;
 }
 
+auto request_parser::common_header_value(std::size_t slot,
+    std::string_view name) const -> std::string_view
+{
+    const auto index = common_headers_[slot];
+    if (index == missing_header)
+        return {};
+    return header_fields_[index].duplicate ? get_header(name)
+                                           : header_value(index);
+}
+
 void request_parser::materialize_headers() const
 {
     if (headers_materialized_)
@@ -523,13 +540,13 @@ void request_parser::materialize_headers() const
 
 auto request_parser::prepare_body() -> bool
 {
-    auto t = get_header("Transfer-Encoding");
+    const auto t = common_header_value(3U, "Transfer-Encoding");
     if (t.find("chunked") != std::string_view::npos)
     {
         chunked_ = true;
         return true;
     }
-    auto c = get_header("Content-Length");
+    const auto c = common_header_value(2U, "Content-Length");
     std::size_t n{};
     auto [p, e] = std::from_chars(c.data(), c.data() + c.size(), n);
     if (!c.empty() && e == std::errc{} && n)

@@ -12,6 +12,7 @@ enum class sql_dialect
 {
     mysql,
     postgresql,
+    clickhouse,
 };
 
 // =============================================================================
@@ -22,6 +23,7 @@ struct dialect_config
 {
     sql_dialect dialect = sql_dialect::mysql;
     char identifier_quote = '`';           // MySQL: `, PostgreSQL: "
+    bool supports_transactions = true;
     bool supports_returning = false;       // PostgreSQL supports RETURNING clause
     bool std_boolean_literals = false;     // PostgreSQL: TRUE/FALSE vs MySQL: 1/0
 };
@@ -34,6 +36,8 @@ inline auto get_dialect_config(sql_dialect dialect) -> dialect_config
 {
     switch (dialect)
     {
+    case sql_dialect::clickhouse:
+        return {.dialect = sql_dialect::clickhouse, .identifier_quote = '`', .supports_transactions = false, .supports_returning = false, .std_boolean_literals = true};
     case sql_dialect::postgresql:
         return {
             .dialect = sql_dialect::postgresql,

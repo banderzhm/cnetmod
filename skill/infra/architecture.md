@@ -75,7 +75,8 @@ protocol (协议实现)
 - `cnetmod::orm`：通用 ORM；仅在 `CNETMOD_ENABLE_ORM=ON` 时存在。
 - `cnetmod::<protocol>`：每个已启用协议各自一个静态组件，例如
   `cnetmod::http`、`cnetmod::redis`、`cnetmod::mysql`。
-- `cnetmod::application`：Application 组合与自动配置层。
+- `cnetmod::application`：Application 组合与自动配置层。MongoDB 云凭据装配归属
+  `src/application/integration/mongodb/credentials/`，不得另设顶层 integration 层或独立 cloud 组件。
 - `cnetmod::http_redis_cache`：Redis 驱动的 HTTP 缓存中间件适配器；仅在
   HTTP 与 Redis 同时启用时存在。
 - `cnetmod::core` / `cnetmod::all`：兼容旧工程的一次性聚合入口，自身只含

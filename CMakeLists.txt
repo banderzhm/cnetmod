@@ -535,7 +535,7 @@ if(NOT CNETMOD_ENABLE_ORM)
         list(FILTER CNETMOD_APPLICATION_${_kind} EXCLUDE REGEX
             "[/\\\\]src[/\\\\]application[/\\\\](data|orm_repository)\\.(cppm|ixx|cpp)$")
         list(FILTER CNETMOD_APPLICATION_${_kind} EXCLUDE REGEX
-            "[/\\\\]src[/\\\\]application[/\\\\]integration[/\\\\](mysql_orm|postgresql_orm)\\.(cppm|ixx|cpp)$")
+            "[/\\\\]src[/\\\\]application[/\\\\]integration[/\\\\](mysql_orm|postgresql_orm|clickhouse_orm)\\.(cppm|ixx|cpp)$")
     endforeach()
 endif()
 
@@ -612,6 +612,7 @@ target_compile_definitions(cnetmod_runtime PUBLIC
     $<$<BOOL:${CNETMOD_ENABLE_QUIC}>:CNETMOD_ENABLE_QUIC>
     $<$<BOOL:${CNETMOD_HAS_ZLIB}>:CNETMOD_HAS_ZLIB>
     $<$<BOOL:${CNETMOD_HAS_ZSTD}>:CNETMOD_HAS_ZSTD>
+    $<$<BOOL:${CNETMOD_HAS_SNAPPY}>:CNETMOD_HAS_SNAPPY>
     $<$<BOOL:${CNETMOD_HAS_BROTLI}>:CNETMOD_HAS_BROTLI>
     $<$<BOOL:${CNETMOD_HAS_LZ4}>:CNETMOD_HAS_LZ4>
     $<$<BOOL:${CNETMOD_HAS_LEVELDB}>:CNETMOD_HAS_LEVELDB>
@@ -690,8 +691,26 @@ if(TARGET cnetmod_kafka)
     cnetmod_link_zstd(cnetmod_kafka)
     cnetmod_link_lz4(cnetmod_kafka)
 endif()
+if(TARGET cnetmod_clickhouse)
+    if(NOT CNETMOD_HAS_LZ4 OR NOT CNETMOD_HAS_ZSTD)
+        message(FATAL_ERROR "ClickHouse Native requires LZ4 and Zstandard libraries")
+    endif()
+    target_sources(cnetmod_clickhouse PRIVATE 3rdparty/cityhash102/src/city.cc)
+    target_include_directories(cnetmod_clickhouse PRIVATE 3rdparty/cityhash102/include)
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/cityhash102/LICENSE" DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/cnetmod/cityhash102")
+    cnetmod_link_lz4(cnetmod_clickhouse)
+    cnetmod_link_zstd(cnetmod_clickhouse)
+endif()
 if(TARGET cnetmod_mongodb)
+    if(WIN32)
+        target_link_libraries(cnetmod_mongodb PUBLIC dnsapi)
+    elseif(UNIX)
+        target_link_libraries(cnetmod_mongodb PUBLIC resolv)
+    endif()
+    cnetmod_link_snappy(cnetmod_mongodb)
     cnetmod_link_zlib(cnetmod_mongodb)
+    cnetmod_link_zstd(cnetmod_mongodb)
+    cnetmod_link_icu(cnetmod_mongodb)
 endif()
 if(TARGET cnetmod_raft)
     cnetmod_link_leveldb(cnetmod_raft)
@@ -724,7 +743,7 @@ if(TARGET cnetmod_http AND TARGET cnetmod_quic)
     target_link_libraries(cnetmod_http PUBLIC cnetmod_quic)
 endif()
 if(CNETMOD_ENABLE_ORM)
-    foreach(_database_target IN ITEMS cnetmod_mysql cnetmod_postgresql)
+    foreach(_database_target IN ITEMS cnetmod_mysql cnetmod_postgresql cnetmod_clickhouse)
         if(TARGET ${_database_target})
             target_link_libraries(${_database_target} PUBLIC cnetmod_orm)
         endif()
@@ -756,6 +775,9 @@ if(CNETMOD_APPLICATION_MODULE_INTERFACE_FILES OR
     foreach(_protocol_target IN LISTS CNETMOD_PROTOCOL_COMPONENT_TARGETS)
         target_link_libraries(cnetmod_application PUBLIC ${_protocol_target})
     endforeach()
+    if(TARGET cnetmod_mongodb)
+        target_link_libraries(cnetmod_application PRIVATE ${CNETMOD_PUGIXML_TARGET})
+    endif()
     if(CNETMOD_HAS_YAML_CONFIGURATION)
         target_link_libraries(cnetmod_application PRIVATE yaml_cpp::yaml_cpp)
     endif()
@@ -855,6 +877,28 @@ if(CNETMOD_HAS_PUGIXML AND CNETMOD_PUGIXML_TARGET STREQUAL "pugixml-static")
         LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
         RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
     )
+endif()
+if(CNETMOD_HAS_LZ4 AND CNETMOD_LZ4_TARGET STREQUAL "lz4_static")
+    install(TARGETS lz4_static
+        EXPORT cnetmodTargets
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+    install(FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/lz4/lib/lz4.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/lz4/lib/lz4hc.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/lz4/lib/lz4frame.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/lz4/lib/lz4file.h"
+        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/lz4/LICENSE"
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/cnetmod/lz4")
+endif()
+if(CNETMOD_HAS_ZSTD AND CNETMOD_ZSTD_TARGET STREQUAL "libzstd_static")
+    target_include_directories(libzstd_static INTERFACE
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+    install(TARGETS libzstd_static
+        EXPORT cnetmodTargets
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/zstd/LICENSE"
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/cnetmod/zstd")
 endif()
 if(BoringSSL_FOUND AND TARGET ssl AND TARGET crypto)
     install(TARGETS ssl crypto

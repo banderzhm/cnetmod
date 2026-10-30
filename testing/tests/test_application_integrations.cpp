@@ -112,6 +112,7 @@ import cnetmod.application.mongodb;
 import cnetmod.protocol.mongodb;
 import cnetmod.executor.async_op;
 
+    #include "mongodb_application_configuration_cases.inc"
     #include "mongodb_health_probe_cases.inc"
     #include "mongodb_service_shutdown_cases.inc"
     #include "mongodb_startup_timeout_cases.inc"

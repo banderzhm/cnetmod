@@ -106,6 +106,10 @@ TEST(mysql_live_system_chart_chat_timestamp_fill)
         connection.password = std::getenv("CNETMOD_MYSQL_TENANT_TEST_PASSWORD")
             ? std::getenv("CNETMOD_MYSQL_TENANT_TEST_PASSWORD") : "";
         connection.database = std::getenv("CNETMOD_MYSQL_TENANT_TEST_DATABASE");
+        // MySQL 8.4 cold caching_sha2_password authentication requires TLS;
+        // never depend on a preceding test warming the server password cache.
+        connection.ssl = cnetmod::mysql::ssl_mode::require;
+        connection.tls_verify = false; // The disposable test server uses its generated certificate.
         ASSERT_FALSE((co_await client.connect(std::move(connection))).is_err());
         for (const auto sql : {
                  "CREATE TABLE IF NOT EXISTS fill_system_user_verify ("
@@ -240,6 +244,8 @@ TEST(mysql_live_mixed_logical_delete_and_timestamp_fill)
         connection.password = std::getenv("CNETMOD_MYSQL_TENANT_TEST_PASSWORD")
             ? std::getenv("CNETMOD_MYSQL_TENANT_TEST_PASSWORD") : "";
         connection.database = std::getenv("CNETMOD_MYSQL_TENANT_TEST_DATABASE");
+        connection.ssl = cnetmod::mysql::ssl_mode::require;
+        connection.tls_verify = false;
         ASSERT_FALSE((co_await client.connect(std::move(connection))).is_err());
         ASSERT_FALSE((co_await client.query(
             "CREATE TABLE IF NOT EXISTS saas_flag_delete_verify ("
@@ -341,6 +347,8 @@ TEST(mysql_live_tenant_and_organization_scopes_cover_typed_and_xml)
         connection.password = std::getenv("CNETMOD_MYSQL_TENANT_TEST_PASSWORD")
             ? std::getenv("CNETMOD_MYSQL_TENANT_TEST_PASSWORD") : "";
         connection.database = std::getenv("CNETMOD_MYSQL_TENANT_TEST_DATABASE");
+        connection.ssl = cnetmod::mysql::ssl_mode::require;
+        connection.tls_verify = false;
         auto connected = co_await client.connect(std::move(connection));
         ASSERT_FALSE(connected.is_err());
         if (connected.is_err())

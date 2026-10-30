@@ -1506,6 +1506,11 @@ auto server::make_h2_sync_handler(io_context& io, socket& client)
             output->set_header("Server", "cnetmod");
         if (response_headers_.emit_date)
             output->set_cached_date_header(date_cache_.get());
+        if (match->route->prepared)
+        {
+            output->set_prepared(*match->route->prepared);
+            return detail::take_h2_response(*output, true);
+        }
         const auto body = std::string_view{
             reinterpret_cast<const char*>(request.body.data()),
             request.body.size()};
@@ -1755,7 +1760,10 @@ auto server::handle_h1_clear(socket& client, io_context& io,
             // Borrow the route: the synchronous fast path calls the router's
             // handler in place (as HTTP/2 does) instead of copying two
             // std::function objects per request.
-            auto mr = router_.match_borrowed(parser.method(), path);
+            const auto parsed_method = parser.method_enum();
+            auto mr = parsed_method
+                ? router_.match_borrowed(*parsed_method, path)
+                : router_.match_borrowed(parser.method(), path);
 
             resp.reset(status::ok, parser.version());
             if (response_headers_.emit_server)
@@ -1848,7 +1856,7 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                 co_await when_all(invoke_handler(), pump_body());
                 if (body_stream->error() ==
                         std::make_error_code(std::errc::message_size) &&
-                    resp.get_header("X-Streamed") != "1")
+                    !resp.is_streamed())
                     rctx.text(status::payload_too_large,
                         "Request body exceeds the route limit");
                 connection_upgrade = rctx.take_connection_upgrade();
@@ -1858,50 +1866,60 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                 while (!parser.ready())
                     if (!(co_await receive_more()))
                         co_return;
-                request_context rctx(io, client, parser, resp, std::move(rp));
-                rctx.enable_connection_upgrade();
-                if (middlewares_.empty() && sync_route)
-                    (*sync_route)(rctx);
+                if (middlewares_.empty() && mr && mr->route->prepared)
+                    resp.set_prepared(*mr->route->prepared);
                 else
                 {
-                    rctx.set_stream_writer(
-                        [&io, &client, &pending_responses](
-                            std::string_view bytes, cancel_token& token)
-                            -> task<std::expected<void, std::error_code>>
-                        {
-                            if (!pending_responses.empty())
-                            {
-                                auto pending = co_await async_write_all(io, client,
-                                    const_buffer{pending_responses.data(),
-                                        pending_responses.size()},
-                                    token);
-                                if (!pending)
-                                    co_return std::unexpected(pending.error());
-                                pending_responses.clear();
-                            }
-                            co_return co_await async_write_all(io, client,
-                                const_buffer{bytes.data(), bytes.size()}, token);
-                        });
-                    if (middlewares_.empty())
-                        co_await handler_for_chain()(rctx);
+                    request_context rctx(
+                        io, client, parser, resp, std::move(rp));
+                    rctx.enable_connection_upgrade();
+                    if (middlewares_.empty() && sync_route)
+                        (*sync_route)(rctx);
                     else
                     {
-                        handler_fn adapted;
-                        auto* selected = &handler_for_chain();
-                        if (sync_route)
-                        {
-                            adapted = [sync_route](request_context& context)
-                                -> task<void>
+                        rctx.set_stream_writer(
+                            [&io, &client, &pending_responses](
+                                std::string_view bytes, cancel_token& token)
+                                -> task<std::expected<void, std::error_code>>
                             {
-                                (*sync_route)(context);
-                                co_return;
-                            };
-                            selected = &adapted;
+                                if (!pending_responses.empty())
+                                {
+                                    auto pending = co_await async_write_all(
+                                        io, client,
+                                        const_buffer{pending_responses.data(),
+                                            pending_responses.size()},
+                                        token);
+                                    if (!pending)
+                                        co_return std::unexpected(
+                                            pending.error());
+                                    pending_responses.clear();
+                                }
+                                co_return co_await async_write_all(io, client,
+                                    const_buffer{bytes.data(), bytes.size()},
+                                    token);
+                            });
+                        if (middlewares_.empty())
+                            co_await handler_for_chain()(rctx);
+                        else
+                        {
+                            handler_fn adapted;
+                            auto* selected = &handler_for_chain();
+                            if (sync_route)
+                            {
+                                adapted = [sync_route](
+                                              request_context& context)
+                                    -> task<void>
+                                {
+                                    (*sync_route)(context);
+                                    co_return;
+                                };
+                                selected = &adapted;
+                            }
+                            co_await execute_chain(rctx, *selected);
                         }
-                        co_await execute_chain(rctx, *selected);
                     }
+                    connection_upgrade = rctx.take_connection_upgrade();
                 }
-                connection_upgrade = rctx.take_connection_upgrade();
             }
 
             if (connection_upgrade)
@@ -1909,7 +1927,7 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                 if (parser.version() != http_version::http_1_1 ||
                     resp.status_code() != status::switching_protocols ||
                     !resp.body().empty() || resp.body_source() ||
-                    resp.get_header("X-Streamed") == "1")
+                    resp.is_streamed())
                     co_return;
 #if defined(CNETMOD_HAS_IO_URING) &&             \
     defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
@@ -1954,10 +1972,10 @@ auto server::handle_h1_clear(socket& client, io_context& io,
             }
             // Check if chunked encoding is needed
             bool use_chunked = false;
-            if (!has_body_source && resp.get_header("X-Streamed") != "1")
+            if (!has_body_source && !resp.is_streamed())
             {
                 // If no Content-Length and body not empty, use chunked
-                if (resp.get_header("Content-Length").empty() && !resp.body().empty() &&
+                if (!resp.has_content_length() && !resp.body().empty() &&
                     parser.version() == http_version::http_1_1)
                 {
                     use_chunked = true;
@@ -1988,7 +2006,7 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                 }
             }
 
-            auto conn_hdr = parser.get_header("Connection");
+            auto conn_hdr = parser.connection_header();
             if (parser.version() == http_version::http_1_1)
             {
                 keep_alive = (conn_hdr != "close");
@@ -2249,7 +2267,7 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
             co_await when_all(invoke_handler(), pump_body());
             if (body_stream->error() ==
                     std::make_error_code(std::errc::message_size) &&
-                resp.get_header("X-Streamed") != "1")
+                !resp.is_streamed())
                 rctx.text(status::payload_too_large,
                     "Request body exceeds the route limit");
         }
@@ -2302,10 +2320,10 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
         }
         // Check if chunked encoding is needed
         bool use_chunked = false;
-        if (!has_body_source && resp.get_header("X-Streamed") != "1")
+        if (!has_body_source && !resp.is_streamed())
         {
             // If no Content-Length and body not empty, use chunked
-            if (resp.get_header("Content-Length").empty() && !resp.body().empty() &&
+            if (!resp.has_content_length() && !resp.body().empty() &&
                 parser.version() == http_version::http_1_1)
             {
                 use_chunked = true;
@@ -2347,7 +2365,7 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
             }
         }
 
-        auto conn_hdr = parser.get_header("Connection");
+        auto conn_hdr = parser.connection_header();
         if (parser.version() == http_version::http_1_1)
         {
             keep_alive = (conn_hdr != "close");

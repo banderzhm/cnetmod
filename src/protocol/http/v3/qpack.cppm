@@ -97,6 +97,13 @@ export struct qpack_header_sink
     void* context{};
     auto (*consume)(void* context, header_field&& field)
         -> std::expected<void, std::error_code>{};
+    /// Optional zero-copy callbacks for static-table representations. Views
+    /// remain valid for the synchronous callback only. The owned value in a
+    /// static-name callback may be moved into the destination.
+    auto (*consume_static)(void* context, std::string_view name,
+        std::string_view value) -> std::expected<void, std::error_code>{};
+    auto (*consume_static_name)(void* context, std::string_view name,
+        std::string&& value) -> std::expected<void, std::error_code>{};
 };
 
 export class qpack_decoder

@@ -24,7 +24,7 @@ Application MongoDB 服务使用 `co_await` 等待它，不通过 `close()` 投�
 该 token 仅在上一条命令 I/O 已结束后复用；仍禁止并发使用同一连接。
 Arch epoll/ASAN 已验证无响应 hello 的超时收尾；这不是 MongoDB TLS 运行验证。
 
-> 异步 MongoDB C++ 客户端，基于 Wire Protocol，支持 SCRAM-SHA-256 认证、TLS、连接池、事务、变更流与重试逻辑。
+> 异步 MongoDB C++ 客户端，包含 SRV/TXT 发现、Snappy/zlib/zstd、SCRAM-SHA-256、AWS、OIDC 机器身份、X.509、TLS、连接池、事务和游标流。
 
 **import**: `import cnetmod.protocol.mongodb;`
 **CMake**: `-DCNETMOD_ENABLE_MONGODB=ON`
@@ -34,6 +34,7 @@ Arch epoll/ASAN 已验证无响应 hello 的超时收尾；这不是 MongoDB TLS
 
 | 场景 | 推荐入口 |
 |------|----------|
+| Application 用户入口 | `mongodb_service` URI 配置、`command` / `acquire`，见 [Application](../infra/application.md) |
 | 简单查询 / CRUD | `connection::command` |
 | 连接管理 | `topology_connection_pool` |
 | 多节点部署 | `connection_pool` + `topology_monitor` |
@@ -690,11 +691,11 @@ auto main() -> int
 
 普通 `connection::command()` 只适用于一问一答；若服务端 OP_MSG 设置
 `moreToCome`，它会返回协议错误，避免后续命令误读同一 socket 中残留的响应。
-对于 exhaust cursor 等连续响应场景，使用 `command_stream()`：
+对于 exhaust cursor 等连续响应场景，先用 find/aggregate 获得 cursor id，再将 getMore 传给 `command_stream()`：
 
 ```cpp
 auto streamed = co_await conn.command_stream("analytics",
-    bson_document{{"find", "events"}, {"filter", bson_document{}}},
+    bson_document{{"getMore", cursor_id}, {"collection", "events"}},
     [](bson_document response) -> task<result<void>> {
         // 处理每一条 OP_MSG 响应；这里可 co_await 异步写入或业务处理。
         co_return result<void>{};
@@ -706,3 +707,183 @@ auto streamed = co_await conn.command_stream("analytics",
 尚未读取的连续响应不能安全地留给下一位租户。`command_stream()` 不使用普通命令
 的整体超时，长流应通过 MongoDB 命令本身的 `maxTimeMS`、应用 deadline 和取消来
 控制生命周期。
+
+## Wire 编码与边界校验
+
+- `decode_command_message()` 拒绝未知的低 16 位必需标志，忽略高 16 位未知可选标志的语义，并在 `decoded_message::flags` 保留原始值。
+- `encode_command_message()` 默认不生成校验和；显式传入 `op_message_checksum_present` 时追加覆盖消息头和正文的 CRC-32C，并将校验和的 4 字节计入消息长度和 `max_message_bytes`。
+- `op_message_checksum_present | op_message_exhaust_allowed` 可组合使用。此编码入口仍拒绝无应答的 `moreToCome` 请求；`connection::command()` 的一问一答行为不变。
+- `encode_compressed_message()` 检查原始消息声明长度与实际字节数一致，并拒绝嵌套 `OP_COMPRESSED`。
+- `decode_compressed_message()` 在分配解压缓冲前检查重建消息是否超出 int32 长度及配置上限；zlib 解码还要求完整消费输入，拒绝尾随垃圾。
+- 本节接口是低层 wire API；普通连接命令不会自动开启请求校验和。
+
+```cpp
+bson_document ping{{"ping", bson_value{std::int32_t{1}}}};
+auto wire = encode_command_message(7, ping, 1024,
+    op_message_checksum_present);
+if (!wire)
+    co_return std::unexpected(wire.error());
+```
+
+协议定义参见 [MongoDB Wire Protocol](https://www.mongodb.com/docs/manual/reference/mongodb-wire-protocol/)。
+
+## 包职责与文件命名
+
+MongoDB 保留单一公开入口 `import cnetmod.protocol.mongodb;`，内部使用职责明确的分区和文件。禁止新增 `types.cpp` / `types.cppm` 或以 `_types` 结尾的笼统文件，也不要用 `common`、`utils`、`helpers`、`base` 命名聚合实现。
+
+| 包目录 | 责任 | 可依赖的 MongoDB 包 |
+|---|---|---|
+| `endpoint/` | 服务器地址与端口契约 | error |
+| `discovery/` | SRV/TXT、IDNA 和系统 DNS 适配 | endpoint、error |
+| `configuration/` | URI 与选项、发现结果的组合 | topology、discovery、endpoint、transport、auth、wire、error |
+| `bson/` | BSON 值与编解码 | error |
+| `wire/` | OP_MSG、CRC-32C、文档序列、压缩 | bson、error |
+| `auth/` | SCRAM/AWS/OIDC 凭据、签名和 SASL 契约 | bson、error |
+| `transport/` | socket/TLS、握手、命令超时与取消 | wire、bson、auth、error |
+| `pool/` | 单节点租约、排队、维护与关闭 | transport、error |
+| `topology/` | 节点描述、发现、选择与多节点池 | discovery、endpoint、pool、transport、auth 契约、bson、error |
+| `session/` | 会话、事务、重试策略 | topology、pool、transport、bson、error |
+| `cursor/` | find/aggregate 游标与 change stream | session、pool、transport、bson、error |
+
+底层包不得反向导入上层包；所有协议包不得导入 Application、HTTP 或其他数据库协议。
+`python3 testing/tests/test_mongodb_architecture.py` 检查分区归属、依赖方向和文件命名；测试配置中同样注册此门禁。
+
+## 批量文档与普通游标
+
+`document_sequence` 表示 OP_MSG Kind 1 文档序列。每个 BSON 文档单独受 `maxBsonObjectSize` 限制，整个报文受 `maxMessageSizeBytes` 限制；不能把整批文档错误地限制为一个 BSON 对象大小。解码支持正文前后的序列，将其按标识符路径合并成正文数组，拒绝重复正文、路径冲突、重复标识符和截断的序列。
+
+```cpp
+auto inserted = co_await conn.command("analytics", bson_document{{"insert", "events"}},
+    std::vector<document_sequence>{{"documents", {
+        bson_document{{"n", std::int32_t{1}}},
+        bson_document{{"n", std::int32_t{2}}}}}});
+
+cursor rows(pool, "analytics", "events", {.batch_size = 100});
+auto opened = co_await rows.find(bson_document{});
+if (!opened)
+    co_return std::unexpected(opened.error());
+while (true)
+{
+    auto item = co_await rows.next();
+    if (!item)
+        co_return std::unexpected(item.error());
+    if (!*item)
+        break;
+    // 处理 **item。
+}
+auto closed = co_await rows.close();
+```
+
+`cursor::aggregate(std::vector<bson_document>)` 打开聚合游标。
+`try_next()` 最多发一次 getMore；空的活跃批次返回空 optional，调用者用 `exhausted()` 区分真正耗尽。
+`next()` 会继续跨越空批次。游标独占租约直到服务器 id 为零或显式 `close()`；同一对象的并发协议操作返回错误。
+必须等待 `close()` 才能保证及时向服务器发送 killCursors；析构不会投递脱离监管的清理协程。
+
+## 压缩、认证与拓扑正确性
+
+- `connection_options::enable_zstd_compression` 默认 false；启用且构建包含 zstd 时优先协商 zstd，其次选择已启用的 zlib。只向服务器声明实际编译进来的 codec。
+- MongoDB 组件直接链接自身所需的 zlib、可选 zstd 和 ICU；不能依靠 HTTP、Kafka 或 PostgreSQL 间接提供这些依赖。
+- SCRAM-SHA-256 使用 ICU 完成 RFC 4013 SASLprep，拒绝非法 UTF-8、禁止字符、重复 SCRAM 属性、未知必需扩展和非法 Base64。
+- 最大复制延迟根据 `lastWrite.lastWriteDate`、监控更新时间差与心跳间隔计算；心跳新鲜不代表复制已经追平。
+- 标签集按先后次序匹配；secondaryPreferred 在从节点被标签/延迟过滤后回退主节点，primaryPreferred 有主节点时不套用从节点筛选。
+- 监控连接不执行用户认证，RTT 测量排除建连与认证；监控任务等待心跳时可被 stop token 唤醒。
+- 重试策略区分普通读写、事务提交与变更流；事务瞬态错误不能盲目重放单条命令，变更流历史丢失不能当作可恢复错误无限重试。
+- 变更流只在事件实际消费后推进事件 token，批次消费完后使用 postBatchResumeToken；缺少事件 token 会关闭流并报错。
+
+## MongoDB 本地验证
+
+仅启用 `CNETMOD_ENABLE_MONGODB=ON` 并关闭其余协议和 ORM，可以单独编译 MongoDB 测试。
+除纯协议、拓扑、认证、生命周期测试外，`test_mongodb_integration` 连接可丢弃的本地副本集：
+
+```bash
+CNETMOD_MONGODB_TEST_PORT=27017 ctest --test-dir <build> -R '^test_mongodb_' --output-on-failure
+# TLS 测试服务另行配置本地 CA；不关闭证书验证。
+CNETMOD_MONGODB_TEST_PORT=28719 CNETMOD_MONGODB_TEST_CA=/absolute/path/server-cert.pem \
+  ctest --test-dir <build> -R '^test_mongodb_' --output-on-failure
+```
+
+未配置端口时，真实服务测试以 77 明确跳过；不把跳过记成真实服务验证成功。
+测试使用唯一的 `cnetmod_native_*` 数据库和临时用户，并在结束后清理。副本集须允许本机测试连接创建临时用户。
+SRV/TXT、Snappy、AWS、OIDC 机器身份与 X.509 均有专门实现和测试；真实 AWS IAM/Atlas/Azure/GCP 账号授权需要独立的部署凭据，模拟 TLS 对话测试不能替代真实账号验收。OIDC 人工交互登录是规范可选功能，本模块公开的是机器身份回调；完整负载均衡部署认证矩阵仍需单独验收。
+
+本地测试快捷入口：`bash tools/test-mongodb-local.sh [CMake构建目录]`，默认 `build/mongodb-only` 和端口 27017。该入口显式启用真实服务测试，不把未配置端口导致的跳过混入本地联调结果。
+macOS 可用官方 Homebrew 包 `mongodb/brew/mongodb-community@8.0` 管理服务；在 `mongod.conf` 配置 `replication.replSetName: cnetmod-test`，初始化单节点副本集后可测试事务与变更流。仅绑定回环地址的开发配置不应直接用于远程部署。
+
+空事务的 commit/abort 不发送网络命令；变更流的恢复重试预算只计算恢复尝试，不因正常空批次而减少。
+
+## SRV/TXT 与连接字符串
+
+`parse_connection_string(uri)` 解析 `mongodb://` 和 `mongodb+srv://`；`resolve_connection_string(io, workers, uri, lookup = {})` 异步完成 SRV/TXT 解析，再返回 `connection_configuration`。其中 `topology` 可直接构造 `topology_connection_pool`，`selection` 是 URI 的读取偏好。
+
+- `endpoint/` 拥有服务器地址契约；`discovery/` 拥有 SRV 校验和系统 DNS 适配；`configuration/` 拥有 URI 和选项映射。拓扑包不反向依赖 URI 配置包。
+- 系统解析器使用操作系统 SRV/TXT API，并通过 `blocking_invoke` 在工作池执行。Windows 链接 dnsapi，Unix 链接 resolv；核心 MongoDB 不依赖 HTTP/DNS 高层协议模块。
+- SRV URI 禁止端口、多主机和 IP 字面量，默认开启 TLS；只允许 URI 的显式 `tls=false` 覆盖，TXT 不能关闭 TLS。
+- 每个 DNS 目标都先规范化为小写 IDNA A-label，检查父域和端口，再考虑 `srvMaxHosts` 采样。不能通过采样跳过恶意目标校验。
+- TXT 的多段字符字符串按顺序拼接；多个 TXT RR 报错。只接受 authSource、replicaSet、loadBalanced 默认值，显式 URI 选项覆盖 TXT。
+- `srvMaxHosts` 与 replicaSet/loadBalanced 冲突会报错。SRV 轮询只用于 Unknown/Sharded 拓扑，遵守至少 60 秒的 TTL；查询失败保留现有拓扑。
+- 节点移除会关闭该节点连接池；等待中的命令/借用持有独立 shared ownership，不能因 DNS 更新被提前销毁。
+- `topology.refresh_srv` 闭包捕获解析器所用 io/工作池；调用者必须让二者活到客户端和所有解析任务结束。
+
+## Snappy 与压缩职责
+
+`wire/mongodb_wire_protocol.cpp` 负责 OP_MSG 组帧；`wire/mongodb_wire_compression.cpp` 单独负责 OP_COMPRESSED。
+Snappy 使用 libsnappy 的原始 block 格式，不使用 framed stream；解压前校验声明大小，拒绝畸形长度和尾随数据。
+默认构建请求启用 `CNETMOD_ENABLE_MONGODB_SNAPPY`。找到 libsnappy 时声明 Snappy 能力；系统未安装 libsnappy 时继续构建，并输出 Arch、Ubuntu 和 CentOS 的安装命令。显式关闭该开关时不会探测或声明 Snappy 能力。
+运行时使用 `connection_options::enable_snappy_compression` 开启；URI 的 `compressors=...` 顺序保留到握手。
+程序配置可用 `compression_preference` 的 codec ID 列表指定优先级；未指定时保留 zstd、Snappy、zlib 的默认顺序。
+
+## 云认证职责与组合入口
+
+核心包 `cnetmod.protocol.mongodb` 实现 SASL、AWS SigV4、OIDC cache、推测认证和重认证；不导入 HTTP 或 Application。
+云凭据获取与装配属于 Application，源码位于
+`src/application/integration/mongodb/credentials/`，随 `cnetmod::application` 构建和导出。
+不新增顶层 `src/integration/` 层，也不单独导出 MongoDB cloud 组件。
+用户入口是 `import cnetmod.application;` 和 `mongodb_service` 的 URI 自动配置，见
+[Application MongoDB 配置](../infra/application.md)。
+
+`mongodb_metadata_http.cpp` 复用框架 HTTP 客户端，验证 TLS、禁用重定向和 cookie，限制响应为 1 MiB。
+AWS Web Identity、ECS、EC2 IMDSv2、OIDC workload、token 文件读取和凭据文档解析各自分文件；禁止 `types` / `common` 等聚合文件名。
+高级自定义凭据装配可使用 `cnetmod.application.mongodb_credentials` 中的
+`cnetmod::application::mongodb_credentials` 工厂，并通过
+`mongodb_service_options::configure_connection` 设置 provider。常规用户不必手动装配 provider
+或管理协议连接池。
+
+### AWS IAM
+
+`authentication_mechanism::aws` / URI `authMechanism=MONGODB-AWS` 使用 `$external` 并要求 TLS。
+AWS 凭据不得放在 URI 或 username/password 选项中。优先使用 `aws_provider`；默认组合 provider 按环境变量、Web Identity、ECS、EC2 IMDSv2 获取凭据。
+
+- 环境凭据按每次授权动态读取；已经取得的临时元数据凭据按 expiration 缓存并提前刷新。
+- Web Identity 读取 AWS_WEB_IDENTITY_TOKEN_FILE 和 AWS_ROLE_ARN，支持 AWS_ROLE_SESSION_NAME、AWS_REGION/AWS_DEFAULT_REGION 及中国区域 STS 域名。
+- ECS 只接受可信 HTTP metadata 主机或显式 HTTPS endpoint；可读取 Authorization token 文件。EC2 使用 IMDSv2 token，不降级为 IMDSv1。
+- `aws_credential_cache` 支持异步 provider；同步 AWS SDK 调用应通过 `blocking_invoke` 桥接，不能阻塞 io_context。
+- AWS SASL 严格校验 64 字节服务端 nonce 的客户端前缀、STS 主机和 conversationId，再计算包含 session token 的 SigV4 签名。
+
+### OIDC 机器身份
+
+`authentication_mechanism::oidc` / URI `authMechanism=MONGODB-OIDC` 使用 `$external`、要求 TLS、禁止 password。
+支持自定义 `oidc_token_cache` callback，或通过 `configure_cloud_credentials` 选择 Azure/GCP/Kubernetes workload provider。
+Azure/GCP 必须提供 TOKEN_RESOURCE；Kubernetes 不允许该参数。callback 与内置 environment 不得同时配置。
+
+- Azure 使用 Instance Metadata Service，传递编码后的 resource 和可选 client_id；GCP 使用 metadata identity endpoint 和编码后的 audience。
+- Kubernetes 优先读取 AZURE_FEDERATED_TOKEN_FILE，其次 AWS_WEB_IDENTITY_TOKEN_FILE，最后 ServiceAccount 默认 token 文件。
+- token 文件在工作池读取，必须是大小受限的普通文件；provider 不解析或验证不透明 access token 的 JWT 内容。
+- 每个客户端/池共享一个 cache，所有调用必须位于同一 io_context。一次只执行一个 provider callback；等待者各自遵守自己的超时，不阻塞缓存快照和条件失效。
+- callback 参数包含 version=1、username 和剩余 timeout；自定义异步 callback 必须遵守该 timeout，跨线程 SDK 返回必须切回所属 io_context。
+- callback 间至少 100ms；按 token 值条件失效，不清除另一连接刚更新的 token。失败的推测认证不直接清空 cache。
+- 有缓存时在 hello 中尝试 speculativeAuthenticate。普通操作返回 391 时保留原命令的 guard/watchdog，执行 SASL 后只重发一次；第二次 391 直接返回。
+
+### X.509
+
+`authentication_mechanism::x509` 使用 TLS 客户端证书、`$external` 和可选用户名，不允许 password。
+配置 `tls_cert_file` / `tls_key_file`；认证命令与 AWS/OIDC/SCRAM 各自放在独立 transport 实现文件中。
+
+## 新能力验证入口
+
+本地 MongoDB 8.0 副本集测试包含独立 Snappy 协商和压缩优先级用例。
+`test_mongodb_discovery` 验证 URI、父域/IDNA、TXT 默认值和恶意记录拒绝；`mongodb_srv_lookup_driver <hostname>` 可单独验证真实系统 DNS 而不连接返回的数据库节点。
+`test_mongodb_cloud_auth` 覆盖独立 SigV4 向量、SASL 身份校验、token cache 并发和超时。
+`test_mongodb_cloud_handshake` 用 Python 标准库 TLS peer 验证 AWS nonce/签名、OIDC cache/18/391/speculative flow 与 X.509 客户端证书；由 BoringSSL 在测试临时目录生成证书，不需要外部 openssl 命令或云账号。
+开启 HTTP 后另有 `test_mongodb_aws_providers` 与 `test_mongodb_oidc_providers`，用注入的 metadata transport 验证完整凭据链，不访问真实用户云凭据。
+
+安装包消费者验证位于 `testing/package/mongodb_application_consumer`：仅链接 `cnetmod::application`，验证 URI 服务注册和注入 metadata provider，防止源树构建掩盖导出依赖缺失。

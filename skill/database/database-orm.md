@@ -680,3 +680,11 @@ ctest --test-dir build --output-on-failure --no-tests=error
 - `src/database/orm/session_gateway.cppm`
 - `src/database/orm/query_wrapper.cppm`
 - `src/database/orm/xml_mapper_registry.cppm`
+
+## ClickHouse provider
+
+ClickHouse analytical SQL uses the same repository/session path through `database_provider::clickhouse`.
+See [ClickHouse Native, Application and ORM](clickhouse.md) for bound parameters,
+MergeTree migrations, synchronous mutations, decimal/UUID/calendar mappings and explicit capability errors.
+Transactions, auto-increment, enforced uniqueness, atomic upsert and affected-row optimistic locking
+are not substituted with relational behavior. Ordinary writes and batch inserts remain standalone operations.

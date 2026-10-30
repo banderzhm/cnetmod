@@ -96,7 +96,9 @@ macro(cnetmod_configure_boringssl_submodule)
             endif()
             foreach(_boringssl_target IN ITEMS crypto ssl)
                 if(TARGET ${_boringssl_target} AND NOT MSVC)
-                    target_compile_options(${_boringssl_target} PRIVATE -Wno-unused-parameter)
+                    target_compile_options(${_boringssl_target} PRIVATE
+                        -Wno-error
+                        -Wno-unused-parameter)
                 endif()
             endforeach()
 

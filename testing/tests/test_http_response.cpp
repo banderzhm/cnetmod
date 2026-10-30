@@ -124,6 +124,13 @@ TEST(response_get_header_missing)
     ASSERT_TRUE(resp.get_header("Nonexistent").empty());
 }
 
+TEST(response_content_type_slot_preserves_generic_semantics)
+{
+    response resp;
+    resp.set_content_type("text/plain");
+    ASSERT_EQ(resp.get_header("Content-Type"), std::string_view{"text/plain"});
+}
+
 // =============================================================================
 // set_body auto Content-Length
 // =============================================================================
@@ -279,6 +286,34 @@ TEST(response_shared_body_reuses_immutable_storage)
         std::make_shared<const std::string>("cached-file"));
     ASSERT_EQ(resp.get_header("Content-Length"), std::string_view{"11"});
     ASSERT_EQ(resp.body(), std::string_view{"cached-file"});
+}
+
+TEST(prepared_response_preserves_semantics_and_invalidates_on_mutation)
+{
+    const prepared_response prepared{
+        status::ok, "text/plain", "ok"};
+    response resp;
+    resp.set_prepared(prepared);
+
+    ASSERT_EQ(resp.status_code(), status::ok);
+    ASSERT_EQ(resp.get_header("Content-Type"), std::string_view{"text/plain"});
+    ASSERT_EQ(resp.get_header("Content-Length"), std::string_view{"2"});
+    ASSERT_EQ(resp.body(), std::string_view{"ok"});
+    ASSERT_EQ(resp.serialize(),
+        std::string{"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n"
+                    "Content-Type: text/plain\r\n\r\nok"});
+
+    resp.set_header("X-Test", "changed");
+    ASSERT_TRUE(resp.serialize().find("X-Test: changed\r\n") !=
+        std::string::npos);
+
+    resp.reset();
+    resp.set_header("Server", "test");
+    resp.set_prepared(prepared);
+    const auto with_dynamic_header = resp.serialize();
+    ASSERT_TRUE(with_dynamic_header.find("Server: test\r\n") !=
+        std::string::npos);
+    ASSERT_TRUE(with_dynamic_header.ends_with("\r\nok"));
 }
 
 TEST(response_body_source_is_exclusive_and_sets_length)

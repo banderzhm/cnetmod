@@ -90,6 +90,63 @@ TEST(qpack_decode_each_matches_owning_decode)
     }
 }
 
+TEST(qpack_decode_each_exposes_static_entries_without_materializing_names)
+{
+    qpack_encoder encoder;
+    const auto input = fields({{":method", "GET"}, {":path", "/direct"},
+        {"x-cnetmod-test", "plain"}});
+    const auto encoded = encoder.encode(input, 4);
+    ASSERT_TRUE(encoded.has_value());
+
+    struct sink_state
+    {
+        std::vector<header_field> fields;
+        std::size_t static_fields{};
+        std::size_t static_names{};
+    } state;
+
+    qpack_decoder decoder;
+    const auto decoded = decoder.decode_each(*encoded,
+        qpack_header_sink{
+            .context = &state,
+            .consume = [](void* context, header_field&& field)
+                -> std::expected<void, std::error_code>
+            {
+                static_cast<sink_state*>(context)->fields.push_back(
+                    std::move(field));
+                return {};
+            },
+            .consume_static = [](void* context, std::string_view name,
+                                  std::string_view value)
+                -> std::expected<void, std::error_code>
+            {
+                auto& state = *static_cast<sink_state*>(context);
+                ++state.static_fields;
+                state.fields.push_back({std::string{name}, std::string{value}});
+                return {};
+            },
+            .consume_static_name = [](void* context, std::string_view name,
+                                       std::string&& value)
+                -> std::expected<void, std::error_code>
+            {
+                auto& state = *static_cast<sink_state*>(context);
+                ++state.static_names;
+                state.fields.push_back({std::string{name}, std::move(value)});
+                return {};
+            },
+        },
+        4);
+    ASSERT_TRUE(decoded.has_value());
+    ASSERT_EQ(state.static_fields, 1U);
+    ASSERT_EQ(state.static_names, 1U);
+    ASSERT_EQ(state.fields.size(), input.size());
+    for (std::size_t index{}; index < input.size(); ++index)
+    {
+        ASSERT_EQ(state.fields[index].name, input[index].name);
+        ASSERT_EQ(state.fields[index].value, input[index].value);
+    }
+}
+
 TEST(qpack_decode_each_propagates_sink_error_without_section_ack)
 {
     qpack_encoder encoder{1024};

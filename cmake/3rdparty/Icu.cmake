@@ -5,7 +5,7 @@ option(CNETMOD_USE_ICU_SUBMODULE "Use the bundled ICU submodule when available" 
 macro(cnetmod_configure_icu)
     set(CNETMOD_HAS_ICU OFF)
     set(CNETMOD_USING_BUNDLED_ICU OFF)
-    if(CNETMOD_ENABLE_POSTGRESQL)
+    if(CNETMOD_ENABLE_POSTGRESQL OR CNETMOD_ENABLE_MONGODB)
         set(_cnetmod_icu_source "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/icu/icu4c/source")
         if(CNETMOD_USE_ICU_SUBMODULE AND WIN32
            AND EXISTS "${_cnetmod_icu_source}/allinone/allinone.sln")
@@ -122,8 +122,8 @@ macro(cnetmod_configure_icu)
                 message(STATUS "  CentOS: sudo dnf install libicu-devel")
             endif()
             message(FATAL_ERROR
-                "CNETMOD_ENABLE_POSTGRESQL=ON requires ICU uc and i18n for complete RFC 4013 SASLprep. "
-                "Install ICU with the selected package manager or disable PostgreSQL explicitly.")
+                "PostgreSQL and MongoDB require ICU uc and i18n for complete RFC 4013 SASLprep. "
+                "Install ICU with the selected package manager or disable PostgreSQL and MongoDB explicitly.")
         endif()
     endif()
 endmacro()

@@ -20,8 +20,33 @@ function(detect_stdlib_module_paths)
         set(STDLIB_INCLUDE_DIRS "${LIBCXX_INCLUDE_DIRS}")
     endif()
 
-    if(UNIX)
-        # Linux/Unix/macOS: Auto-detect libc++ standard library module paths
+    if(UNIX AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        # GCC ships the libstdc++ module sources beside its versioned headers.
+        # Do not select an installed libc++ merely because both runtimes are
+        # present: GCC does not accept Clang's -stdlib=libc++ option.
+        string(REGEX MATCH "^[0-9]+" GCC_MAJOR_VERSION
+            "${CMAKE_CXX_COMPILER_VERSION}")
+        find_path(STDLIB_MODULE_DIRS
+            NAMES std.cc std.compat.cc
+            PATHS "/usr/include/c++/${GCC_MAJOR_VERSION}/bits"
+            NO_DEFAULT_PATH
+            DOC "Path to libstdc++ standard library modules")
+        find_path(STDLIB_INCLUDE_DIRS
+            NAMES bits/c++config.h
+            PATHS
+                "/usr/include/c++/${GCC_MAJOR_VERSION}"
+                "/usr/include/${CMAKE_LIBRARY_ARCHITECTURE}/c++/${GCC_MAJOR_VERSION}"
+            DOC "Path to libstdc++ headers")
+        if(STDLIB_MODULE_DIRS)
+            set(CNETMOD_STDLIB_KIND "libstdc++")
+            message(STATUS "Auto-detected libstdc++ module sources:")
+            message(STATUS "  Module directory: ${STDLIB_MODULE_DIRS}")
+        else()
+            message(WARNING
+                "Unable to find GCC ${GCC_MAJOR_VERSION} libstdc++ module sources")
+        endif()
+    elseif(UNIX)
+        # Clang/Linux and macOS use libc++ standard library module sources.
 
         # macOS special handling: Detect Homebrew LLVM path
         if(APPLE)
@@ -88,6 +113,7 @@ function(detect_stdlib_module_paths)
         )
 
         if(STDLIB_MODULE_DIRS AND STDLIB_INCLUDE_DIRS)
+            set(CNETMOD_STDLIB_KIND "libc++")
             message(STATUS "Auto-detected libc++ paths:")
             message(STATUS "  Module directory: ${STDLIB_MODULE_DIRS}")
             message(STATUS "  Header directory: ${STDLIB_INCLUDE_DIRS}")
@@ -198,6 +224,7 @@ function(detect_stdlib_module_paths)
     # Export detected values to caller scope
     set(STDLIB_MODULE_DIRS "${STDLIB_MODULE_DIRS}" PARENT_SCOPE)
     set(STDLIB_INCLUDE_DIRS "${STDLIB_INCLUDE_DIRS}" PARENT_SCOPE)
+    set(CNETMOD_STDLIB_KIND "${CNETMOD_STDLIB_KIND}" PARENT_SCOPE)
 
     # Backward compatibility: also export legacy names
     set(LIBCXX_MODULE_DIRS "${STDLIB_MODULE_DIRS}" PARENT_SCOPE)
@@ -213,7 +240,8 @@ endfunction()
   revisit a runtime library that appears before those archives.
 ]]
 function(cnetmod_link_selected_stdlib TARGET_NAME)
-    if(UNIX AND STDLIB_MODULE_DIRS AND STDLIB_INCLUDE_DIRS)
+    if(UNIX AND CNETMOD_STDLIB_KIND STREQUAL "libc++" AND
+       STDLIB_MODULE_DIRS AND STDLIB_INCLUDE_DIRS)
         # Build-tree flags are applied globally above. Installed consumers
         # resolve their own matching headers and runtimes in
         # cnetmodConfig.cmake; never bake producer-machine paths into the SDK.
@@ -251,7 +279,18 @@ function(configure_cxx_modules)
         message(FATAL_ERROR "configure_cxx_modules requires TARGET")
     endif()
 
-    if(UNIX AND STDLIB_MODULE_DIRS AND STDLIB_INCLUDE_DIRS)
+    if(UNIX AND CNETMOD_STDLIB_KIND STREQUAL "libstdc++" AND
+       STDLIB_MODULE_DIRS)
+        target_sources(${CFG_TARGET} PUBLIC
+            FILE_SET cxx_modules TYPE CXX_MODULES
+            BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR} ${STDLIB_MODULE_DIRS}
+            FILES
+                ${CFG_MODULE_INTERFACE_FILES}
+                ${CFG_DEPENDENCY_MODULE_INTERFACE_FILES}
+                ${STDLIB_MODULE_DIRS}/std.cc
+                ${STDLIB_MODULE_DIRS}/std.compat.cc
+        )
+    elseif(UNIX AND STDLIB_MODULE_DIRS AND STDLIB_INCLUDE_DIRS)
         # Linux/macOS: libc++ standard library modules
         # Keep the standard-library selection on the module target itself.
         # CMake may synthesize helper targets while producing module BMIs;
