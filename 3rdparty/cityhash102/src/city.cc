@@ -275,8 +275,10 @@ static uint128 CityMurmur(const char *s, size_t len, uint128 seed) {
       c *= k1;
       d ^= c;
       s += 16;
+      if (l <= 16)
+        break;
       l -= 16;
-    } while (l > 0);
+    } while (true);
   }
   a = HashLen16(a, c);
   b = HashLen16(d, b);
