@@ -535,7 +535,8 @@ auto request_context::sse_begin(int s) -> task<bool>
         resp_.set_header("Transfer-Encoding", "chunked");
     else
         resp_.set_header("Connection", "close");
-    auto h = resp_.serialize();
+    // SSE freezes its header bytes independently of response-cache slot order.
+    auto h = resp_.serialize(response::header_order::name);
     state.sse_state = sse_stream_state::committing;
     if (!(co_await write_sse_bytes(h)))
     {
