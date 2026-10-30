@@ -10,35 +10,39 @@ import cnetmod.json;
 import cnetmod.protocol.mongodb;
 
 namespace cnetmod::application::mongodb_credentials::detail {
-auto parse_aws_json_credentials(std::string_view value) -> result<aws_credentials>
+auto parse_aws_json_credentials(std::string_view value) -> mongodb::result<mongodb::aws_credentials>
 {
     auto document = cnetmod::json::parse_document(value);
     if (!document)
-        return std::unexpected(make_error(error_code::authentication_failed, "invalid AWS credential JSON"));
+        return std::unexpected(mongodb::make_error(
+            mongodb::error_code::authentication_failed, "invalid AWS credential JSON"));
     try
     {
-        aws_credentials credentials{document->at("AccessKeyId").get<std::string>(), document->at("SecretAccessKey").get<std::string>(),
+        mongodb::aws_credentials credentials{document->at("AccessKeyId").get<std::string>(),
+            document->at("SecretAccessKey").get<std::string>(),
             document->at("Token").get<std::string>(), {}};
         auto expiry = parse_utc_expiry(document->at("Expiration").get<std::string>());
         if (!expiry)
             return std::unexpected(expiry.error());
         credentials.expires_at = *expiry;
-        auto valid = validate_aws_credentials(credentials);
+        auto valid = mongodb::validate_aws_credentials(credentials);
         if (!valid)
             return std::unexpected(valid.error());
         return credentials;
     }
     catch (...)
     {
-        return std::unexpected(make_error(error_code::authentication_failed, "incomplete AWS credential JSON"));
+        return std::unexpected(mongodb::make_error(
+            mongodb::error_code::authentication_failed, "incomplete AWS credential JSON"));
     }
 }
 
-auto parse_aws_sts_credentials(std::string_view value) -> result<aws_credentials>
+auto parse_aws_sts_credentials(std::string_view value) -> mongodb::result<mongodb::aws_credentials>
 {
     pugi::xml_document document;
     if (!document.load_buffer(value.data(), value.size()))
-        return std::unexpected(make_error(error_code::authentication_failed, "invalid STS XML response"));
+        return std::unexpected(mongodb::make_error(
+            mongodb::error_code::authentication_failed, "invalid STS XML response"));
     const auto child = [](pugi::xml_node parent, std::string_view local_name) -> pugi::xml_node
     {
         pugi::xml_node found;
@@ -57,16 +61,19 @@ auto parse_aws_sts_credentials(std::string_view value) -> result<aws_credentials
     const auto result = child(response, "AssumeRoleWithWebIdentityResult");
     const auto node = child(result, "Credentials");
     if (!node)
-        return std::unexpected(make_error(error_code::authentication_failed, "STS response has no credentials"));
-    aws_credentials credentials{child(node, "AccessKeyId").child_value(), child(node, "SecretAccessKey").child_value(),
+        return std::unexpected(mongodb::make_error(
+            mongodb::error_code::authentication_failed, "STS response has no credentials"));
+    mongodb::aws_credentials credentials{child(node, "AccessKeyId").child_value(),
+        child(node, "SecretAccessKey").child_value(),
         child(node, "SessionToken").child_value(), {}};
     if (credentials.session_token.empty())
-        return std::unexpected(make_error(error_code::authentication_failed, "STS credentials have no session token"));
+        return std::unexpected(mongodb::make_error(
+            mongodb::error_code::authentication_failed, "STS credentials have no session token"));
     auto expiry = parse_utc_expiry(child(node, "Expiration").child_value());
     if (!expiry)
         return std::unexpected(expiry.error());
     credentials.expires_at = *expiry;
-    auto valid = validate_aws_credentials(credentials);
+    auto valid = mongodb::validate_aws_credentials(credentials);
     if (!valid)
         return std::unexpected(valid.error());
     return credentials;
