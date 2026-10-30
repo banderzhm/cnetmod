@@ -69,6 +69,7 @@
 | ORM 模型定义、CRUD、迁移、查询构建器 | [database-orm.md](database/database-orm.md) |
 | MySQL 协议（连接、查询、prepared statement） | [mysql.md](database/mysql.md) |
 | PostgreSQL 协议 | [postgresql.md](database/postgresql.md) |
+| ClickHouse Native TCP 协议 | [clickhouse.md](database/clickhouse.md) |
 | MongoDB 协议 | [mongodb.md](database/mongodb.md) |
 | Redis 协议 | [redis.md](database/redis.md) |
 
@@ -118,6 +119,7 @@ Python Binding 也默认关闭。只有框架维护者的完整验证构建才�
 | `-DCNETMOD_ENABLE_MYSQL=ON` | MySQL | 无 |
 | `-DCNETMOD_ENABLE_POSTGRESQL=ON` | PostgreSQL | 无 |
 | `-DCNETMOD_ENABLE_MONGODB=ON` | MongoDB | 无 |
+| `-DCNETMOD_ENABLE_CLICKHOUSE=ON` | ClickHouse Native TCP | 无 |
 | `-DCNETMOD_ENABLE_AMQP091=ON` | AMQP 0-9-1 | 无 |
 | `-DCNETMOD_ENABLE_AMQP10=ON` | AMQP 1.0 | 无 |
 | `-DCNETMOD_ENABLE_MODBUS=ON` | Modbus | 无 |

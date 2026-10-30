@@ -13,7 +13,7 @@ export import cnetmod.application.components;
 export import cnetmod.application.options;
 export import cnetmod.application.modules;
 #if defined(CNETMOD_HAS_ORM) && \
-    (defined(CNETMOD_HAS_PROTOCOL_MYSQL) || defined(CNETMOD_HAS_PROTOCOL_POSTGRESQL))
+    (defined(CNETMOD_HAS_PROTOCOL_MYSQL) || defined(CNETMOD_HAS_PROTOCOL_POSTGRESQL) || defined(CNETMOD_HAS_PROTOCOL_CLICKHOUSE))
 export import cnetmod.application.data;
 #endif
 export import cnetmod.application.managed_service;
@@ -43,6 +43,9 @@ export import cnetmod.application.mysql;
 #endif
 #ifdef CNETMOD_HAS_PROTOCOL_POSTGRESQL
 export import cnetmod.application.postgresql;
+#endif
+#ifdef CNETMOD_HAS_PROTOCOL_CLICKHOUSE
+export import cnetmod.application.clickhouse;
 #endif
 #ifdef CNETMOD_HAS_PROTOCOL_MONGODB
 export import cnetmod.application.mongodb;

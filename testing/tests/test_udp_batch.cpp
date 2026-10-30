@@ -260,6 +260,13 @@ auto run_udp_batch_layout_case(cnetmod::io_context& context,
     cnetmod::udp::udp_socket sender{context};
     if (const auto opened = sender.open(loopback->family()); !opened)
         co_return std::unexpected(opened.error());
+    // This layout fixture sends individual 24,000-byte datagrams. Darwin's default
+    // UDP SO_SNDBUF is only 9216 bytes and rejects them with EMSGSIZE before
+    // batch submission can be exercised. Provision one full-size datagram on
+    // this test socket; keep the payloads, packet boundaries and assertions.
+    if (const auto configured = sender.native_socket().apply_options(
+            cnetmod::socket_options{.send_buffer_size = 64 * 1024}); !configured)
+        co_return std::unexpected(configured.error());
 #ifdef CNETMOD_HAS_IO_URING
     if (disable_checksum)
     {

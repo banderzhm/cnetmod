@@ -7,7 +7,8 @@ export namespace cnetmod::orm {
 enum class relational_dialect : std::uint8_t
 {
     mysql,
-    postgresql
+    postgresql,
+    clickhouse
 };
 enum class relational_column_type : std::uint8_t
 {

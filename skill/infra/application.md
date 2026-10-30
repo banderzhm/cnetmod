@@ -982,3 +982,10 @@ JWT 使用 `security::sign_jwt/verify_jwt(executor.cpu_pool(),
 executor.event_loop(), ...)`。`event_loop()` 必须在 request handler 所在循环内求值，确保 CPU
 计算结束后回到请求循环；需要生命周期控制循环时才显式使用 `control_event_loop()`。
 密钥由应用持有，只在调用点传入框架。
+
+## ClickHouse managed integration
+
+Enable `CNETMOD_ENABLE_CLICKHOUSE` and auto-configuration to register named ClickHouse pools.
+`clickhouse_service` participates in startup, rollback, cached health, bounded recovery and retained shutdown cleanup.
+Pools are loop-local; repository factories defer selecting the pool until execution on its owner loop.
+Configuration and repository examples are in [clickhouse.md](../database/clickhouse.md).

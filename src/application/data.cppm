@@ -20,7 +20,7 @@ module;
 export module cnetmod.application.data;
 
 #if defined(CNETMOD_HAS_ORM) && \
-    (defined(CNETMOD_HAS_PROTOCOL_MYSQL) || defined(CNETMOD_HAS_PROTOCOL_POSTGRESQL))
+    (defined(CNETMOD_HAS_PROTOCOL_MYSQL) || defined(CNETMOD_HAS_PROTOCOL_POSTGRESQL) || defined(CNETMOD_HAS_PROTOCOL_CLICKHOUSE))
 
 import std;
 import cnetmod.application.components;
@@ -42,6 +42,10 @@ import cnetmod.application.postgresql;
 import cnetmod.application.postgresql_orm;
     #endif
 
+#ifdef CNETMOD_HAS_PROTOCOL_CLICKHOUSE
+import cnetmod.application.clickhouse;
+import cnetmod.application.clickhouse_orm;
+#endif
 namespace cnetmod::application {
 
 /**
@@ -51,23 +55,22 @@ export enum class database_provider
 {
     automatic,
     mysql,
-    postgresql
+    postgresql,
+    clickhouse
 };
 
-    #if defined(CNETMOD_HAS_PROTOCOL_MYSQL) && \
-        defined(CNETMOD_HAS_PROTOCOL_POSTGRESQL)
 export template <orm::Model T>
-using managed_repository = application_repository<T,
-    mysql_repository_handle<T>, postgresql_repository_handle<T>>;
-    #elif defined(CNETMOD_HAS_PROTOCOL_MYSQL)
-export template <orm::Model T>
-using managed_repository = application_repository<T,
-    mysql_repository_handle<T>>;
-    #else
-export template <orm::Model T>
-using managed_repository = application_repository<T,
-    postgresql_repository_handle<T>>;
-    #endif
+using managed_repository = application_repository<T
+#ifdef CNETMOD_HAS_PROTOCOL_MYSQL
+    , mysql_repository_handle<T>
+#endif
+#ifdef CNETMOD_HAS_PROTOCOL_POSTGRESQL
+    , postgresql_repository_handle<T>
+#endif
+#ifdef CNETMOD_HAS_PROTOCOL_CLICKHOUSE
+    , clickhouse_repository_handle<T>
+#endif
+>;
 
 /**
  * @brief Data source and policies of one repository binding.
@@ -218,15 +221,20 @@ private:
     #else
         constexpr bool postgresql_available = false;
     #endif
+#ifdef CNETMOD_HAS_PROTOCOL_CLICKHOUSE
+        const bool clickhouse_available=services_->find<clickhouse_service>(options_.instance)!=nullptr;
+#else
+        constexpr bool clickhouse_available=false;
+#endif
         switch (options_.provider)
         {
         case database_provider::automatic:
-            if (mysql_available == postgresql_available)
-                return std::unexpected(std::make_error_code(mysql_available
-                        ? std::errc::address_in_use
-                        : std::errc::no_such_file_or_directory));
-            return mysql_available ? database_provider::mysql
-                                   : database_provider::postgresql;
+            if (static_cast<unsigned>(mysql_available)+static_cast<unsigned>(postgresql_available)+static_cast<unsigned>(clickhouse_available)!=1)
+                return std::unexpected(std::make_error_code(mysql_available||postgresql_available||clickhouse_available?std::errc::address_in_use:std::errc::no_such_file_or_directory));
+            return mysql_available?database_provider::mysql:postgresql_available?database_provider::postgresql:database_provider::clickhouse;
+        case database_provider::clickhouse:
+            if (!clickhouse_available) return std::unexpected(std::make_error_code(std::errc::no_such_file_or_directory));
+            return database_provider::clickhouse;
         case database_provider::mysql:
             if (!mysql_available)
                 return std::unexpected(
@@ -281,6 +289,16 @@ private:
             return managed_repository<T>{std::move(*handle)};
         }
     #endif
+#ifdef CNETMOD_HAS_PROTOCOL_CLICKHOUSE
+        if(options_.provider==database_provider::clickhouse)
+        {
+            auto* service=services_->find<clickhouse_service>(options_.instance);
+            if(!service)return std::unexpected(std::make_error_code(std::errc::no_such_file_or_directory));
+            auto handle=make_clickhouse_repository_handle<T>(*service,std::move(policies));
+            if(!handle)return std::unexpected(handle.error());
+            return managed_repository<T>{std::move(*handle)};
+        }
+#endif
         return std::unexpected(std::make_error_code(std::errc::operation_not_supported));
     }
 
