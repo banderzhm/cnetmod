@@ -20,6 +20,7 @@ class CnetmodConan(ConanFile):
         "with_amqp091": [True, False],
         "with_amqp10": [True, False],
         "with_coap": [True, False],
+        "with_clickhouse": [True, False],
         "with_dns": [True, False],
         "with_grpc": [True, False],
         "with_http": [True, False],
@@ -49,6 +50,7 @@ class CnetmodConan(ConanFile):
         "with_amqp091": True,
         "with_amqp10": True,
         "with_coap": True,
+        "with_clickhouse": True,
         "with_dns": True,
         "with_grpc": True,
         "with_http": True,
@@ -117,7 +119,9 @@ class CnetmodConan(ConanFile):
             or self.options.with_mongodb
         ):
             self.requires("zlib/1.3.2")
-        if self.options.with_kafka and self.options.with_lz4:
+        if self.options.with_clickhouse:
+            self.requires("zstd/[>=1.5 <2]")
+        if (self.options.with_kafka or self.options.with_clickhouse) and self.options.with_lz4:
             self.requires("lz4/[>=1.9 <2]")
 
         if self.options.with_raft and self.options.with_leveldb:
@@ -131,6 +135,8 @@ class CnetmodConan(ConanFile):
 
     def validate(self):
         check_min_cppstd(self, "23")
+        if self.options.with_clickhouse and not self.options.with_lz4:
+            raise ConanInvalidConfiguration("ClickHouse Native requires LZ4 compression support")
         dependencies = {
             "with_dns": ("with_http",),
             "with_grpc": ("with_http",),
@@ -167,6 +173,7 @@ class CnetmodConan(ConanFile):
             "AMQP091": "with_amqp091",
             "AMQP10": "with_amqp10",
             "COAP": "with_coap",
+            "CLICKHOUSE": "with_clickhouse",
             "DNS": "with_dns",
             "GRPC": "with_grpc",
             "HTTP": "with_http",

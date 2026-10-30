@@ -9,6 +9,7 @@
     "brotli",
     "icu",
     "leveldb",
+    "lz4",
     "mimalloc",
     "pugixml",
     "stdexec",

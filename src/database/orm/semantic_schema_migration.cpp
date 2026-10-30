@@ -3,6 +3,7 @@ import std;
 import cnetmod.utils.sha256;
 
 namespace cnetmod::orm {
+auto render_clickhouse_schema(const schema_migration&) -> std::expected<std::vector<std::string>,schema_render_error>;
 namespace {
     auto identifier(std::string_view s, relational_dialect d) -> std::expected<std::string, schema_render_error>
     {
@@ -247,6 +248,7 @@ auto render_schema_migration(const schema_migration& m, relational_dialect d) ->
 {
     if (!m.version.valid() || m.name.empty() || m.operations.empty())
         return std::unexpected(schema_render_error{"migration requires version, name, and operations"});
+    if (d == relational_dialect::clickhouse) return render_clickhouse_schema(m);
     std::vector<std::string> out;
     for (auto& op : m.operations)
     {

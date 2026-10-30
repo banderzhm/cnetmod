@@ -8,6 +8,7 @@ set(CNETMOD_PROTOCOLS
     AMQP091
     AMQP10
     COAP
+    CLICKHOUSE
     DNS
     GRPC
     HTTP
@@ -29,6 +30,7 @@ set(CNETMOD_PROTOCOLS
 set(CNETMOD_PROTOCOL_AMQP091_DIRECTORY "amqp091")
 set(CNETMOD_PROTOCOL_AMQP10_DIRECTORY "amqp10")
 set(CNETMOD_PROTOCOL_COAP_DIRECTORY "coap")
+set(CNETMOD_PROTOCOL_CLICKHOUSE_DIRECTORY "clickhouse")
 set(CNETMOD_PROTOCOL_DNS_DIRECTORY "dns")
 set(CNETMOD_PROTOCOL_GRPC_DIRECTORY "grpc")
 set(CNETMOD_PROTOCOL_HTTP_DIRECTORY "http")
@@ -132,7 +134,7 @@ function(cnetmod_filter_disabled_component_sources)
     foreach(source_list_variable IN LISTS ARG_VARIABLES)
         set(filtered_sources "${${source_list_variable}}")
         list(FILTER filtered_sources EXCLUDE REGEX "[/\\\\]src[/\\\\]database[/\\\\]orm([/\\\\]|\\.(cppm|ixx|cpp)$)")
-        list(FILTER filtered_sources EXCLUDE REGEX "[/\\\\]src[/\\\\]protocol[/\\\\](mysql[/\\\\]orm|postgresql[/\\\\]postgresql_orm)($|[/\\\\]|\\.(cppm|ixx|cpp)$)")
+        list(FILTER filtered_sources EXCLUDE REGEX "[/\\\\]src[/\\\\]protocol[/\\\\](mysql[/\\\\]orm|clickhouse[/\\\\]orm|postgresql[/\\\\]postgresql_orm)($|[/\\\\]|\\.(cppm|ixx|cpp)$)")
         set(${source_list_variable} "${filtered_sources}" PARENT_SCOPE)
     endforeach()
 endfunction()

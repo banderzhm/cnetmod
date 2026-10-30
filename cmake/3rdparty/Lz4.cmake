@@ -1,11 +1,11 @@
 include_guard(GLOBAL)
 
 macro(cnetmod_configure_lz4)
-    option(CNETMOD_ENABLE_LZ4 "Enable Kafka LZ4 compression" ON)
+    option(CNETMOD_ENABLE_LZ4 "Enable LZ4 compression" ON)
     set(CNETMOD_LZ4_ROOT "" CACHE PATH "Optional LZ4 installation prefix")
     set(CNETMOD_HAS_LZ4 OFF)
     set(CNETMOD_LZ4_TARGET "")
-    if(CNETMOD_USE_SYSTEM_DEPS AND CNETMOD_ENABLE_KAFKA AND CNETMOD_ENABLE_LZ4)
+    if(CNETMOD_USE_SYSTEM_DEPS AND (CNETMOD_ENABLE_KAFKA OR CNETMOD_ENABLE_CLICKHOUSE) AND CNETMOD_ENABLE_LZ4)
         find_package(lz4 CONFIG QUIET)
         find_package(LZ4 CONFIG QUIET)
         foreach(_target lz4::lz4 LZ4::lz4 LZ4::LZ4 unofficial::lz4::lz4 lz4_static lz4_shared)

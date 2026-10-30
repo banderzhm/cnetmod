@@ -769,6 +769,9 @@ namespace detail {
 
         template <Model T> auto insert(T& model) -> task<model_result<T>>
         {
+            if (dialect_ == sql_dialect::clickhouse)
+                if (const auto* pk = model_traits<T>::meta().pk(); pk && pk->col.is_auto())
+                    co_return failure<T>("ClickHouse requires an application-generated primary key", std::make_error_code(std::errc::operation_not_supported));
             if (field_fill_enabled_)
                 global_auto_fill_interceptor().template fill_insert_fields<T>(model);
             const auto& meta = model_traits<T>::meta();
@@ -822,6 +825,8 @@ namespace detail {
          */
         template <Model T> auto upsert(T& model) -> task<model_result<T>>
         {
+            if (dialect_ == sql_dialect::clickhouse)
+                co_return failure<T>("ClickHouse does not provide relational atomic upsert", std::make_error_code(std::errc::operation_not_supported));
             if (field_fill_enabled_)
                 global_auto_fill_interceptor().template fill_insert_fields<T>(model);
             const auto& meta = model_traits<T>::meta();
@@ -1017,6 +1022,8 @@ namespace detail {
                 }
             }
 
+            if (version_field && dialect_ == sql_dialect::clickhouse)
+                co_return failure<T>("ClickHouse mutations do not provide relational optimistic-lock affected-row guarantees", std::make_error_code(std::errc::operation_not_supported));
             std::string sql = "UPDATE ";
             sql += quote_identifier(table_name<T>(), dialect_config_);
             sql += " SET ";
@@ -1335,9 +1342,11 @@ namespace detail {
             for (std::size_t offset = 0; offset < models.size(); offset += batch_size)
             {
                 const auto end = std::min(models.size(), offset + batch_size);
-                auto started = co_await begin_expected_transaction(std::nullopt);
-                if (started.is_err())
-                    co_return map<T>(std::move(started));
+                if (dialect_config_.supports_transactions)
+                {
+                    auto started = co_await begin_expected_transaction(std::nullopt);
+                    if (started.is_err()) co_return map<T>(std::move(started));
+                }
                 for (std::size_t index = offset; index < end; ++index)
                 {
                     auto inserted = co_await insert(models[index]);
@@ -1346,6 +1355,7 @@ namespace detail {
                         inserted.batch_index = offset / batch_size;
                         inserted.item_index = index;
                         inserted.operation = "insert_batch";
+                        if (!dialect_config_.supports_transactions) co_return inserted;
                         co_return co_await rollback_batch_failure(std::move(inserted));
                     }
                     aggregate.affected_rows += inserted.affected_rows;
@@ -1356,6 +1366,7 @@ namespace detail {
                         std::make_move_iterator(inserted.data.begin()),
                         std::make_move_iterator(inserted.data.end()));
                 }
+                if (!dialect_config_.supports_transactions) continue;
                 auto committed = co_await execute("COMMIT");
                 if (committed.is_err())
                 {
@@ -1672,7 +1683,7 @@ namespace detail {
                     {
                         const auto& options = observation->options;
                         std::vector<std::pair<std::string, std::string>> attributes{
-                            {"db.system.name", dialect_ == sql_dialect::postgresql ? "postgresql" : "mysql"},
+                            {"db.system.name", dialect_ == sql_dialect::postgresql ? "postgresql" : dialect_ == sql_dialect::clickhouse ? "clickhouse" : "mysql"},
                             {"db.operation.name", execution ? "execute" : "query"}};
                         if (options.capture_query_text && options.max_query_bytes > 0)
                         {
@@ -1697,7 +1708,7 @@ namespace detail {
                         {
                             std::vector<std::pair<std::string, std::string>> attributes;
                             std::string code;
-                            if (dialect_ == sql_dialect::mysql && result.error_code != 0)
+                            if (dialect_ != sql_dialect::postgresql && result.error_code != 0)
                                 code = std::to_string(result.error_code);
                             else if (dialect_ == sql_dialect::postgresql && result.sql_state.size() == 5 &&
                                 std::ranges::all_of(result.sql_state, [](char character)
@@ -1788,6 +1799,12 @@ namespace detail {
         auto begin_expected_transaction(std::optional<isolation_level> isolation)
             -> task<query_result>
         {
+            if (!dialect_config_.supports_transactions)
+            {
+                query_result failure;
+                failure.error_msg = "ClickHouse ORM transactions are not supported";
+                co_return failure;
+            }
             if (!isolation)
             {
                 auto started = co_await execute(

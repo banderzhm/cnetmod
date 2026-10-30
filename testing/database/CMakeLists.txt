@@ -65,3 +65,27 @@ if(Python3_Interpreter_FOUND AND TARGET mongodb_interoperability_driver)
 endif()
 
 set(CNETMOD_TEST_TARGETS ${CNETMOD_TEST_TARGETS} PARENT_SCOPE)
+
+# A real, isolated ClickHouse server is used when the local binary is present.
+# The runner owns its temporary data, loopback ports and process cleanup.
+if(CNETMOD_ENABLE_CLICKHOUSE)
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    find_program(CNETMOD_CLICKHOUSE_EXECUTABLE NAMES clickhouse
+        HINTS "$ENV{HOME}/.local/bin")
+    find_program(CNETMOD_CLICKHOUSE_OPENSSL_EXECUTABLE NAMES openssl)
+    if(Python3_Interpreter_FOUND AND CNETMOD_CLICKHOUSE_EXECUTABLE
+            AND CNETMOD_CLICKHOUSE_OPENSSL_EXECUTABLE)
+        set(_clickhouse_application_args)
+        if(TARGET test_application_clickhouse)
+            list(APPEND _clickhouse_application_args --application-executable "$<TARGET_FILE:test_application_clickhouse>")
+        endif()
+        add_test(NAME python_clickhouse_interoperability
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/run_clickhouse_native.py"
+                --clickhouse "${CNETMOD_CLICKHOUSE_EXECUTABLE}"
+                --openssl "${CNETMOD_CLICKHOUSE_OPENSSL_EXECUTABLE}"
+                --test-executable "$<TARGET_FILE:test_clickhouse_live>" ${_clickhouse_application_args})
+        set_tests_properties(python_clickhouse_interoperability PROPERTIES
+            TIMEOUT 300 LABELS "interoperability;database;clickhouse")
+    endif()
+endif()

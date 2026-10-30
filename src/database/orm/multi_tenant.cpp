@@ -160,7 +160,7 @@ auto placeholder_index(std::string_view expression, std::string_view sql,
     while (!expression.empty() && std::isspace(
         static_cast<unsigned char>(expression.back())))
         expression.remove_suffix(1);
-    if (dialect == sql_dialect::mysql)
+    if (dialect != sql_dialect::postgresql)
         return expression == "{}"
             ? std::optional{placeholder_count(sql, expression_begin)}
             : std::nullopt;
@@ -248,11 +248,11 @@ auto insert_scoped(intercepted_statement statement, std::string_view table,
     const auto value_end_position = words[values_end].begin;
     const auto column_end_position = words[columns_end].begin;
     const auto parameter_position = placeholder_count(statement.sql, value_end_position);
-    auto marker = dialect == sql_dialect::mysql ? std::string{"{}"}
+    auto marker = dialect != sql_dialect::postgresql ? std::string{"{}"}
         : std::format("${}", statement.parameters.size() + 1);
     statement.sql.insert(value_end_position, ", " + marker);
     statement.sql.insert(column_end_position, ", " + std::string{column});
-    if (dialect == sql_dialect::mysql)
+    if (dialect != sql_dialect::postgresql)
         statement.parameters.insert(statement.parameters.begin() +
             std::min(parameter_position, statement.parameters.size()),
             param_value::from_int(scope.tenant_id));
@@ -386,7 +386,7 @@ auto apply_tenant_scope(sql_operation operation,
                 return std::unexpected("tenant scope contains an invalid ID");
             if (!policy_parameters.empty())
                 predicate += ", ";
-            predicate += dialect == sql_dialect::mysql ? "{}"
+            predicate += dialect != sql_dialect::postgresql ? "{}"
                 : std::format("${}", statement.parameters.size() +
                     policy_parameters.size() + 1);
             policy_parameters.push_back(param_value::from_int(id));
@@ -415,7 +415,7 @@ auto apply_tenant_scope(sql_operation operation,
         statement.sql.replace(words[where].end, tail - words[where].end,
             " (" + original + ") AND (" + predicate + ") ");
     }
-    if (dialect == sql_dialect::mysql)
+    if (dialect != sql_dialect::postgresql)
     {
         if (parameter_position > statement.parameters.size())
             return std::unexpected("SQL parameter count mismatch");

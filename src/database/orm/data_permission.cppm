@@ -133,7 +133,7 @@ public:
             {
                 if (index != 0)
                     predicate += ", ";
-                predicate += dialect_ == sql_dialect::mysql ? "{}"
+                predicate += dialect_ != sql_dialect::postgresql ? "{}"
                     : std::format("${}", statement.parameters.size() +
                         policy_parameters.size() + 1);
                 policy_parameters.push_back(
@@ -146,12 +146,12 @@ public:
             if (!predicate.empty())
                 predicate = '(' + predicate + " OR " +
                     column(owner->column_name) + " = " +
-                    (dialect_ == sql_dialect::mysql ? "{}"
+                    (dialect_ != sql_dialect::postgresql ? "{}"
                         : std::format("${}", statement.parameters.size() +
                             policy_parameters.size() + 1)) + ")";
             else
                 predicate = column(owner->column_name) + " = " +
-                    (dialect_ == sql_dialect::mysql ? "{}"
+                    (dialect_ != sql_dialect::postgresql ? "{}"
                         : std::format("${}", statement.parameters.size() +
                             policy_parameters.size() + 1));
             policy_parameters.push_back(param_value::from_int(scope_.owner_id));
@@ -159,7 +159,7 @@ public:
         if (predicate.empty())
             predicate = "1 = 0";
 
-        const auto parameter_position = dialect_ == sql_dialect::mysql
+        const auto parameter_position = dialect_ != sql_dialect::postgresql
             ? count_placeholders(statement.sql, predicate_position(statement.sql))
             : statement.parameters.size();
         inject_predicate(statement.sql, predicate);

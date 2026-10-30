@@ -11,6 +11,7 @@ import cnetmod.orm.model_metadata;
 import cnetmod.orm.query_wrapper;
 import cnetmod.orm.repository_contract;
 import cnetmod.orm.sql_parameters;
+import cnetmod.orm.sql_dialect;
 import cnetmod.orm.model_reflection;
 import cnetmod.orm.xml_mapper_registry;
 
@@ -715,6 +716,8 @@ private:
                 auto configured = this->configure(session);
                 if (!configured)
                     co_return std::unexpected(configured.error());
+                if (!get_dialect_config(session.dialect()).supports_transactions)
+                    co_return co_await operation(session);
                 auto started = co_await session.begin_transaction();
                 if (!started)
                     co_return failure(started.error());
