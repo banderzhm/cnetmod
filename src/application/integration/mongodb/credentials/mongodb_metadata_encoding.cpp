@@ -22,11 +22,13 @@ auto percent_encode(std::string_view value) -> std::string
     return result;
 }
 
-auto parse_utc_expiry(std::string_view value) -> result<std::chrono::system_clock::time_point>
+auto parse_utc_expiry(std::string_view value)
+    -> mongodb::result<std::chrono::system_clock::time_point>
 {
     const auto invalid = []
     {
-        return std::unexpected(make_error(error_code::authentication_failed, "invalid cloud credential expiration"));
+        return std::unexpected(mongodb::make_error(
+            mongodb::error_code::authentication_failed, "invalid cloud credential expiration"));
     };
     if (value.size() < 20 || value[4] != '-' || value[7] != '-' || value[10] != 'T' || value[13] != ':' || value[16] != ':')
         return invalid();

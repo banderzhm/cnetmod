@@ -8,13 +8,15 @@ import cnetmod.executor.pool;
 import cnetmod.protocol.mongodb;
 
 namespace cnetmod::application::mongodb_credentials {
-auto make_default_aws_provider(io_context& io, thread_pool& pool, metadata_transport transport) -> std::shared_ptr<aws_credential_cache>
+auto make_default_aws_provider(io_context& io, thread_pool& pool,
+    metadata_transport transport) -> std::shared_ptr<mongodb::aws_credential_cache>
 {
     if (!transport)
         transport = make_metadata_transport(io);
     // @flow Custom providers are selected by the caller. The default cache reads
     // environment credentials dynamically, then invokes this fallback chain.
-    auto callback = [&io, &pool, transport]() mutable -> task<result<aws_credentials>>
+    auto callback = [&io, &pool, transport]() mutable
+        -> task<mongodb::result<mongodb::aws_credentials>>
     {
         // @step Prefer web identity whenever either required setting is present;
         // a partial configuration fails instead of falling through to another identity.
@@ -31,7 +33,7 @@ auto make_default_aws_provider(io_context& io, thread_pool& pool, metadata_trans
             co_return co_await detail::fetch_ecs_credentials(io, pool, transport, std::move(**ecs));
         co_return co_await detail::fetch_instance_credentials(transport);
     };
-    return std::make_shared<aws_credential_cache>(std::move(callback), true);
+    return std::make_shared<mongodb::aws_credential_cache>(std::move(callback), true);
 }
 } // namespace cnetmod::application::mongodb_credentials
 
