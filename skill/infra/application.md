@@ -750,7 +750,7 @@ auto& users = registry.require<user_repository>("primary");
 | `redis` | `redis_service` / `redis_cluster_service` | `mode=standalone` 连接池；`mode=cluster` 槽路由、seed failover 与健康检查 |
 | `mysql` | `mysql_service` | MySQL 连接池 |
 | `postgresql` | `postgresql_service` | PostgreSQL 连接池 |
-| `mongodb` | `mongodb_service` | MongoDB 连接池与维护任务 |
+| `mongodb` | `mongodb_service` | 单节点或 URI 拓扑连接池、SRV/TXT、压缩、云凭据与受监管监控 |
 | `kafka` | `kafka_service` | Kafka 客户端 |
 | `mqtt` | `mqtt_service` | MQTT 客户端与重连 |
 | `amqp091` | `amqp091_service` | AMQP 0-9-1 客户端与受监管帧泵 |
@@ -805,6 +805,46 @@ AMQP 传输报告内存不足时，适配器保留通用 not_enough_memory，启
 MySQL、Redis、PostgreSQL 和 MongoDB 在启动入口拒绝已经取消或过期的
 `service_context`，不先注册维护任务或进行预热。取消和过期同时发生时优先返回
 `operation_canceled`。此入口检查不代替操作进行中的取消和截止时间处理。
+
+MongoDB 用户入口统一为 `mongodb_service`。推荐使用 URI 自动配置：
+
+```json
+{
+  "services": {
+    "primary-mongo": {
+      "type": "mongodb",
+      "enabled": true,
+      "uri": "mongodb+srv://cluster.example.com/app?authMechanism=MONGODB-AWS&compressors=snappy,zstd",
+      "maximum_size": 32,
+      "heartbeat_frequency_ms": 10000
+    }
+  }
+}
+```
+
+沿用配置系统的服务实例命名规则，从 registry 取出 `mongodb_service`，业务代码调用
+`co_await service.command({{"ping", 1}})`（使用 URI 数据库）、
+`command(database, document)` 或 `acquire()`。URI 模式可通过 `topology_pool()` 取得
+当前运行的拓扑池，用于会话、重试和游标组合；重启会替换该池，不可跨重启持有引用。
+保留旧 `host/port/username/password/database` 配置及 `pool()`；URI 模式调用 `pool()`
+抛出 `logic_error`，避免误用一个未参与拓扑的单节点池。禁止 URI 与旧地址/凭据键混用。
+
+URI 模式在服务启动时解析 SRV/TXT，建立云凭据提供器并完成真实认证和最小池预热；
+最低池大小为零时仍验证一条连接。压缩顺序、认证机制与 workload 参数使用协议 URI
+选项；AWS 默认凭据链、OIDC ENVIRONMENT/TOKEN_RESOURCE、X.509 均由 application
+自动组合。TLS 文件键为 `tls_ca_file/tls_cert_file/tls_key_file/tls_sni`，不会关闭证书校验。
+`minimum_size/maximum_size` 显式覆盖 URI 池大小，`heartbeat_frequency_ms` 最低 500。
+
+编程配置使用 `mongodb_service_options`，构造顺序为
+`mongodb_service{options, io, instance, requirement, recovery}`；与旧构造函数保持无歧义。
+`options.srv_lookup` 可注入 DNS，`options.configure_connection` 可设置自定义 AWS/OIDC
+缓存或 TLS 材料。该回调在 URI/TXT 解析后、默认云凭据装配前执行。服务拥有 DNS/token
+文件阻塞执行器；原生 DNS 不能抢占，超时会等待其安全返回后拒绝后续认证和监控注册。
+
+所有入口在所属应用控制循环运行，自动配置仍拒绝多事件循环部署。拓扑监控由
+supervisor 管理，停机先禁止新借用并取消监控，再等待在途操作、建连和租约归还。
+被 SRV 移除的节点池也在停机统计内；清理超时保留资源所有权，调用方归还租约后可
+重试 `stop()`，清理完成后重新启动会重新解析 URI/DNS 并创建新池。
 
 MongoDB 预热失败保留 `cnetmod.mongodb` 错误类别，不再统一映射为连接拒绝。
 类别值为协议 `error_code` 的整数值加一（协议枚举从零开始且没有成功项），

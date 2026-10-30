@@ -104,9 +104,11 @@ class CnetmodConan(ConanFile):
         self.options.shared = False
 
     def requirements(self):
-        if self.options.with_postgresql:
+        if self.options.with_postgresql or self.options.with_mongodb:
             self.requires("icu/[>=74 <79]")
-        if self.options.with_orm:
+        if self.options.with_mongodb:
+            self.requires("snappy/1.2.2")
+        if self.options.with_orm or (self.options.with_mongodb and self.options.with_http):
             self.requires("pugixml/1.16")
         if (
             self.options.with_http

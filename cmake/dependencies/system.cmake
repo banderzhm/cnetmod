@@ -9,6 +9,7 @@ if(_cnetmod_toolchain_name STREQUAL "vcpkg.cmake" OR
 endif()
 
 macro(cnetmod_configure_provider_dependencies)
+    cnetmod_configure_snappy()
     option(CNETMOD_USE_SYSTEM_DEPS
         "Prefer installed system libraries before bundled 3rdparty sources"
         ON)
@@ -37,7 +38,7 @@ function(cnetmod_print_system_install_hints)
         list(APPEND _ubuntu zlib1g-dev)
         list(APPEND _centos zlib-devel)
     endif()
-    if((CNETMOD_ENABLE_GRPC OR CNETMOD_ENABLE_KAFKA) AND NOT CNETMOD_HAS_ZSTD)
+    if((CNETMOD_ENABLE_GRPC OR CNETMOD_ENABLE_KAFKA OR CNETMOD_ENABLE_MONGODB) AND NOT CNETMOD_HAS_ZSTD)
         list(APPEND _arch zstd)
         list(APPEND _ubuntu libzstd-dev)
         list(APPEND _centos libzstd-devel)

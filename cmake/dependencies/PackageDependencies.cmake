@@ -3,13 +3,14 @@ include_guard(GLOBAL)
 # Both package managers expose CMake targets. Keep target mapping here; their
 # toolchain validation and installation remain in their separate entry points.
 macro(cnetmod_configure_package_dependencies)
+    cnetmod_configure_snappy()
     set(CNETMOD_USE_SYSTEM_DEPS ON)
     set(CNETMOD_USE_ICU_SUBMODULE OFF CACHE BOOL
         "Use the bundled ICU submodule when available" FORCE)
     cnetmod_configure_stdexec()
 
     set(CNETMOD_HAS_PUGIXML OFF)
-    if(CNETMOD_ENABLE_ORM)
+    if(CNETMOD_ENABLE_ORM OR (CNETMOD_ENABLE_MONGODB AND CNETMOD_ENABLE_HTTP))
         find_package(pugixml CONFIG REQUIRED)
         foreach(_target pugixml::pugixml pugixml-static pugixml)
             if(TARGET "${_target}" AND NOT CNETMOD_PUGIXML_TARGET)
@@ -29,7 +30,7 @@ macro(cnetmod_configure_package_dependencies)
     endif()
 
     set(CNETMOD_HAS_ZSTD OFF)
-    if(CNETMOD_ENABLE_GRPC OR CNETMOD_ENABLE_KAFKA)
+    if(CNETMOD_ENABLE_GRPC OR CNETMOD_ENABLE_KAFKA OR CNETMOD_ENABLE_MONGODB)
         find_package(zstd CONFIG QUIET)
         foreach(_target zstd::libzstd_static zstd::libzstd_shared zstd::zstd)
             if(TARGET "${_target}" AND NOT CNETMOD_ZSTD_TARGET)
@@ -82,7 +83,7 @@ macro(cnetmod_configure_package_dependencies)
     endif()
 
     set(CNETMOD_HAS_ICU OFF)
-    if(CNETMOD_ENABLE_POSTGRESQL)
+    if(CNETMOD_ENABLE_POSTGRESQL OR CNETMOD_ENABLE_MONGODB)
         find_package(ICU REQUIRED COMPONENTS uc i18n)
         if(NOT TARGET ICU::uc OR NOT TARGET ICU::i18n)
             message(FATAL_ERROR "ICU package must provide ICU::uc and ICU::i18n")

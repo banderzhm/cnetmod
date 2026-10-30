@@ -505,6 +505,8 @@ cnetmod_extract_component(CNETMOD_MONITORING_CORE
     "[/\\\\]src[/\\\\]application[/\\\\]monitoring[/\\\\]core[/\\\\]")
 cnetmod_extract_component(CNETMOD_HTTP_REDIS_CACHE
     "[/\\\\]src[/\\\\]protocol[/\\\\]http[/\\\\]middleware[/\\\\]redis_cache\\.(cppm|ixx|cpp)$")
+cnetmod_extract_component(CNETMOD_MONGODB_CLOUD
+    "[/\\\\]src[/\\\\]integration[/\\\\]mongodb_cloud[/\\\\]")
 cnetmod_extract_component(CNETMOD_ORM
     "[/\\\\]src[/\\\\]database[/\\\\]orm[/\\\\]")
 
@@ -612,6 +614,7 @@ target_compile_definitions(cnetmod_runtime PUBLIC
     $<$<BOOL:${CNETMOD_ENABLE_QUIC}>:CNETMOD_ENABLE_QUIC>
     $<$<BOOL:${CNETMOD_HAS_ZLIB}>:CNETMOD_HAS_ZLIB>
     $<$<BOOL:${CNETMOD_HAS_ZSTD}>:CNETMOD_HAS_ZSTD>
+    $<$<BOOL:${CNETMOD_HAS_SNAPPY}>:CNETMOD_HAS_SNAPPY>
     $<$<BOOL:${CNETMOD_HAS_BROTLI}>:CNETMOD_HAS_BROTLI>
     $<$<BOOL:${CNETMOD_HAS_LZ4}>:CNETMOD_HAS_LZ4>
     $<$<BOOL:${CNETMOD_HAS_LEVELDB}>:CNETMOD_HAS_LEVELDB>
@@ -691,7 +694,15 @@ if(TARGET cnetmod_kafka)
     cnetmod_link_lz4(cnetmod_kafka)
 endif()
 if(TARGET cnetmod_mongodb)
+    if(WIN32)
+        target_link_libraries(cnetmod_mongodb PUBLIC dnsapi)
+    elseif(UNIX)
+        target_link_libraries(cnetmod_mongodb PUBLIC resolv)
+    endif()
+    cnetmod_link_snappy(cnetmod_mongodb)
     cnetmod_link_zlib(cnetmod_mongodb)
+    cnetmod_link_zstd(cnetmod_mongodb)
+    cnetmod_link_icu(cnetmod_mongodb)
 endif()
 if(TARGET cnetmod_raft)
     cnetmod_link_leveldb(cnetmod_raft)
@@ -739,6 +750,17 @@ if(TARGET cnetmod_http AND TARGET cnetmod_redis)
     list(APPEND CNETMOD_COMPONENT_TARGETS cnetmod_http_redis_cache)
 endif()
 
+if(TARGET cnetmod_mongodb AND TARGET cnetmod_http)
+    cnetmod_add_component(cnetmod_mongodb_cloud mongodb_cloud
+        CNETMOD_MONGODB_CLOUD_MODULE_INTERFACE_FILES
+        CNETMOD_MONGODB_CLOUD_MODULE_IMPLEMENTATION_CPP_FILES
+        CNETMOD_MONGODB_CLOUD_REGULAR_CPP_SOURCES)
+    target_link_libraries(cnetmod_mongodb_cloud PUBLIC cnetmod_mongodb
+        PRIVATE cnetmod_http ${CNETMOD_PUGIXML_TARGET})
+    add_library(cnetmod::mongodb_cloud ALIAS cnetmod_mongodb_cloud)
+    list(APPEND CNETMOD_COMPONENT_TARGETS cnetmod_mongodb_cloud)
+endif()
+
 if(CNETMOD_APPLICATION_MODULE_INTERFACE_FILES OR
         CNETMOD_APPLICATION_MODULE_IMPLEMENTATION_CPP_FILES OR
         CNETMOD_APPLICATION_REGULAR_CPP_SOURCES)
@@ -753,6 +775,9 @@ if(CNETMOD_APPLICATION_MODULE_INTERFACE_FILES OR
     foreach(_protocol_target IN LISTS CNETMOD_PROTOCOL_COMPONENT_TARGETS)
         target_link_libraries(cnetmod_application PUBLIC ${_protocol_target})
     endforeach()
+    if(TARGET cnetmod_mongodb_cloud)
+        target_link_libraries(cnetmod_application PRIVATE cnetmod_mongodb_cloud)
+    endif()
     if(CNETMOD_HAS_YAML_CONFIGURATION)
         target_link_libraries(cnetmod_application PRIVATE yaml_cpp::yaml_cpp)
     endif()
