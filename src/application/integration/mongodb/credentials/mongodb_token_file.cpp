@@ -1,8 +1,9 @@
-module cnetmod.integration.mongodb_cloud;
+module cnetmod.application.mongodb_credentials;
+#ifdef CNETMOD_HAS_PROTOCOL_MONGODB
 import std;
 import cnetmod.protocol.mongodb;
 
-namespace cnetmod::mongodb::cloud::detail {
+namespace cnetmod::application::mongodb_credentials::detail {
 auto read_token_file(const std::filesystem::path& path) -> result<std::string>
 {
     std::error_code error;
@@ -21,4 +22,6 @@ auto read_token_file(const std::filesystem::path& path) -> result<std::string>
         return std::unexpected(make_error(error_code::authentication_failed, "cloud token file is empty or malformed"));
     return value;
 }
-} // namespace cnetmod::mongodb::cloud::detail
+} // namespace cnetmod::application::mongodb_credentials::detail
+
+#endif

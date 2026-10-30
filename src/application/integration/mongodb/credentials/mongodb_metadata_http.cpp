@@ -1,11 +1,12 @@
-module cnetmod.integration.mongodb_cloud;
+module cnetmod.application.mongodb_credentials;
+#ifdef CNETMOD_HAS_PROTOCOL_MONGODB
 import std;
 import cnetmod.coro.task;
 import cnetmod.io.io_context;
 import cnetmod.protocol.http;
 import cnetmod.protocol.mongodb;
 
-namespace cnetmod::mongodb::cloud {
+namespace cnetmod::application::mongodb_credentials {
 auto make_metadata_transport(io_context& io) -> metadata_transport
 {
     return [&io](metadata_request request) -> task<result<metadata_response>>
@@ -37,4 +38,6 @@ auto make_metadata_transport(io_context& io) -> metadata_transport
         co_return metadata_response{response->status_code(), std::string(response->body())};
     };
 }
-} // namespace cnetmod::mongodb::cloud
+} // namespace cnetmod::application::mongodb_credentials
+
+#endif

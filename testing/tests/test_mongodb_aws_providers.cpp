@@ -5,10 +5,10 @@ import cnetmod.io;
 import cnetmod.coro;
 import cnetmod.executor.pool;
 import cnetmod.protocol.mongodb;
-import cnetmod.integration.mongodb_cloud;
+import cnetmod.application.mongodb_credentials;
 #include "mongodb_provider_environment.hpp"
 namespace mg = cnetmod::mongodb;
-namespace cloud = mg::cloud;
+namespace cloud = cnetmod::application::mongodb_credentials;
 using mongodb_test::provider_environment;
 constexpr std::string_view credentials_json{R"({"AccessKeyId":"METAKEY","SecretAccessKey":"test-secret","Token":"test-session","Expiration":"2099-01-01T00:00:00Z"})"};
 

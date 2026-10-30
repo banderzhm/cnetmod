@@ -1,4 +1,5 @@
-module cnetmod.integration.mongodb_cloud;
+module cnetmod.application.mongodb_credentials;
+#ifdef CNETMOD_HAS_PROTOCOL_MONGODB
 import std;
 import cnetmod.coro.task;
 import cnetmod.coro.bridge;
@@ -6,7 +7,7 @@ import cnetmod.io.io_context;
 import cnetmod.executor.pool;
 import cnetmod.protocol.mongodb;
 
-namespace cnetmod::mongodb::cloud::detail {
+namespace cnetmod::application::mongodb_credentials::detail {
 auto ecs_endpoint() -> result<std::optional<std::string>>
 {
     const auto relative = environment_value("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI");
@@ -59,4 +60,6 @@ auto fetch_ecs_credentials(io_context& io, thread_pool& pool, metadata_transport
         co_return std::unexpected(make_error(error_code::authentication_failed, "ECS credential exchange failed"));
     co_return detail::parse_aws_json_credentials(reply->body);
 }
-} // namespace cnetmod::mongodb::cloud::detail
+} // namespace cnetmod::application::mongodb_credentials::detail
+
+#endif

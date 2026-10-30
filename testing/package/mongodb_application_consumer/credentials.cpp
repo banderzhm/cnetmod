@@ -4,7 +4,7 @@ import cnetmod.io;
 import cnetmod.coro;
 import cnetmod.executor.pool;
 import cnetmod.protocol.mongodb;
-import cnetmod.integration.mongodb_cloud;
+import cnetmod.application;
 
 int main()
 {
@@ -18,10 +18,10 @@ int main()
     auto& options = config->topology.per_server_pool.connection;
     options.oidc_application_environment = mg::oidc_environment::gcp;
     options.oidc_token_resource = "installed-sdk-audience";
-    auto configured = mg::cloud::configure_cloud_credentials(options, *io, pool,
-        [](mg::cloud::metadata_request) -> cnetmod::task<mg::result<mg::cloud::metadata_response>>
+    auto configured = cnetmod::application::mongodb_credentials::configure_cloud_credentials(options, *io, pool,
+        [](cnetmod::application::mongodb_credentials::metadata_request) -> cnetmod::task<mg::result<cnetmod::application::mongodb_credentials::metadata_response>>
         {
-            co_return mg::cloud::metadata_response{200, "installed-sdk-token"};
+            co_return cnetmod::application::mongodb_credentials::metadata_response{200, "installed-sdk-token"};
         });
     if (!configured)
         return 2;

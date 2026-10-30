@@ -1,11 +1,27 @@
-export module cnetmod.integration.mongodb_cloud;
+module;
+#include <cnetmod/config.hpp>
+export module cnetmod.application.mongodb_credentials;
+#ifdef CNETMOD_HAS_PROTOCOL_MONGODB
 import std;
 import cnetmod.coro.task;
 import cnetmod.io.io_context;
 import cnetmod.executor.pool;
 import cnetmod.protocol.mongodb;
 
-export namespace cnetmod::mongodb::cloud {
+namespace cnetmod::application::mongodb_credentials {
+using mongodb::aws_credential_cache;
+using mongodb::aws_credentials;
+using mongodb::connection_options;
+using mongodb::error_code;
+using mongodb::make_error;
+using mongodb::oidc_access_token;
+using mongodb::oidc_callback_parameters;
+using mongodb::oidc_environment;
+using mongodb::oidc_token_cache;
+using mongodb::result;
+} // namespace cnetmod::application::mongodb_credentials
+
+export namespace cnetmod::application::mongodb_credentials {
 enum class metadata_method
 {
     get,
@@ -47,9 +63,9 @@ auto make_default_aws_provider(io_context& io, thread_pool& pool,
 /// Wire provider selection at the composition boundary, never in core transport.
 auto configure_cloud_credentials(connection_options& options, io_context& io, thread_pool& pool,
     metadata_transport transport = {}) -> result<void>;
-} // namespace cnetmod::mongodb::cloud
+} // namespace cnetmod::application::mongodb_credentials
 
-namespace cnetmod::mongodb::cloud::detail {
+namespace cnetmod::application::mongodb_credentials::detail {
 auto environment_value(std::string_view key) -> std::string;
 auto safe_role_name(std::string_view name) -> bool;
 auto ecs_endpoint() -> result<std::optional<std::string>>;
@@ -63,4 +79,6 @@ auto read_token_file(const std::filesystem::path& path) -> result<std::string>;
 auto parse_utc_expiry(std::string_view value) -> result<std::chrono::system_clock::time_point>;
 auto parse_aws_json_credentials(std::string_view value) -> result<aws_credentials>;
 auto parse_aws_sts_credentials(std::string_view value) -> result<aws_credentials>;
-} // namespace cnetmod::mongodb::cloud::detail
+} // namespace cnetmod::application::mongodb_credentials::detail
+
+#endif

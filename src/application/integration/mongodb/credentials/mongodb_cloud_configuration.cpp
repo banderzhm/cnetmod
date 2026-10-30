@@ -1,10 +1,13 @@
-module cnetmod.integration.mongodb_cloud;
+module cnetmod.application.mongodb_credentials;
+#ifdef CNETMOD_HAS_PROTOCOL_MONGODB
 import std;
 import cnetmod.io.io_context;
 import cnetmod.executor.pool;
 import cnetmod.protocol.mongodb;
 
-namespace cnetmod::mongodb::cloud {
+namespace cnetmod::application::mongodb_credentials {
+using mongodb::authentication_mechanism;
+
 auto configure_cloud_credentials(connection_options& options, io_context& io, thread_pool& pool,
     metadata_transport transport) -> result<void>
 {
@@ -32,4 +35,6 @@ auto configure_cloud_credentials(connection_options& options, io_context& io, th
     }
     return {};
 }
-} // namespace cnetmod::mongodb::cloud
+} // namespace cnetmod::application::mongodb_credentials
+
+#endif

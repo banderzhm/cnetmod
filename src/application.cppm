@@ -49,6 +49,7 @@ export import cnetmod.application.clickhouse;
 #endif
 #ifdef CNETMOD_HAS_PROTOCOL_MONGODB
 export import cnetmod.application.mongodb;
+export import cnetmod.application.mongodb_credentials;
 #endif
 #ifdef CNETMOD_HAS_PROTOCOL_KAFKA
 export import cnetmod.application.kafka;

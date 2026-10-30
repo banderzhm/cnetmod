@@ -1,4 +1,5 @@
-module cnetmod.integration.mongodb_cloud;
+module cnetmod.application.mongodb_credentials;
+#ifdef CNETMOD_HAS_PROTOCOL_MONGODB
 import std;
 import cnetmod.coro.task;
 import cnetmod.coro.bridge;
@@ -7,7 +8,7 @@ import cnetmod.executor.pool;
 import cnetmod.json;
 import cnetmod.protocol.mongodb;
 
-namespace cnetmod::mongodb::cloud {
+namespace cnetmod::application::mongodb_credentials {
 auto make_oidc_workload_provider(io_context& io, thread_pool& pool, oidc_workload_options options,
     metadata_transport transport) -> result<std::shared_ptr<oidc_token_cache>>
 {
@@ -88,4 +89,6 @@ auto make_oidc_workload_provider(io_context& io, thread_pool& pool, oidc_workloa
     };
     return std::make_shared<oidc_token_cache>(io, std::move(callback), oidc_callback_parameters{options.username, options.timeout, 1});
 }
-} // namespace cnetmod::mongodb::cloud
+} // namespace cnetmod::application::mongodb_credentials
+
+#endif

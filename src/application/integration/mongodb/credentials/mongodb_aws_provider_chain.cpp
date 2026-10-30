@@ -1,4 +1,5 @@
-module cnetmod.integration.mongodb_cloud;
+module cnetmod.application.mongodb_credentials;
+#ifdef CNETMOD_HAS_PROTOCOL_MONGODB
 import std;
 import cnetmod.coro.task;
 import cnetmod.coro.bridge;
@@ -6,7 +7,7 @@ import cnetmod.io.io_context;
 import cnetmod.executor.pool;
 import cnetmod.protocol.mongodb;
 
-namespace cnetmod::mongodb::cloud {
+namespace cnetmod::application::mongodb_credentials {
 auto make_default_aws_provider(io_context& io, thread_pool& pool, metadata_transport transport) -> std::shared_ptr<aws_credential_cache>
 {
     if (!transport)
@@ -32,4 +33,6 @@ auto make_default_aws_provider(io_context& io, thread_pool& pool, metadata_trans
     };
     return std::make_shared<aws_credential_cache>(std::move(callback), true);
 }
-} // namespace cnetmod::mongodb::cloud
+} // namespace cnetmod::application::mongodb_credentials
+
+#endif

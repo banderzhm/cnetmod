@@ -52,16 +52,25 @@ def main():
             errors.append(f"{relative}: protocol depends on an application or unrelated protocol")
     for name in OWNERS.keys() - partitions.keys():
         errors.append(f"missing partition :{name}")
-    cloud_root = ROOT.parents[1] / "integration" / "mongodb_cloud"
-    if not cloud_root.is_dir():
-        errors.append("missing MongoDB cloud integration source directory")
-    for path in sorted(cloud_root.glob("*")):
+    source_root = ROOT.parents[1]
+    credentials_root = source_root / "application" / "integration" / "mongodb" / "credentials"
+    if not credentials_root.is_dir():
+        errors.append("missing Application MongoDB credentials directory")
+    if (source_root / "integration" / "mongodb_cloud").exists():
+        errors.append("MongoDB credentials must not create a top-level integration layer")
+    for path in sorted(credentials_root.glob("*")):
         if path.suffix not in {".cpp", ".cppm"}:
             continue
         if path.stem.lower() in {"types", "common", "utils", "helpers", "base"} or path.stem.lower().endswith("_types"):
-            errors.append(f"mongodb_cloud/{path.name}: use a responsibility-specific filename")
-        if re.search(r"^[ \t]*(?:export\s+)?import\s+cnetmod\.application\b", path.read_text(encoding="utf-8"), re.MULTILINE):
-            errors.append(f"mongodb_cloud/{path.name}: cloud providers must not import Application")
+            errors.append(f"credentials/{path.name}: use a responsibility-specific filename")
+        text = path.read_text(encoding="utf-8")
+        if not re.search(r"(?:export )?module cnetmod\.application\.mongodb_credentials\s*;", text):
+            errors.append(f"credentials/{path.name}: credential providers belong to Application")
+        if re.search(r"^[ \t]*(?:export\s+)?import\s+cnetmod\.integration\.", text, re.MULTILINE):
+            errors.append(f"credentials/{path.name}: credentials cannot depend on a separate integration layer")
+    cmake = (source_root.parent / "CMakeLists.txt").read_text(encoding="utf-8")
+    if "cnetmod_add_component(cnetmod_mongodb_cloud" in cmake:
+        errors.append("MongoDB credential providers must be owned by the Application component")
     if errors:
         print("\n".join(errors))
         return 1

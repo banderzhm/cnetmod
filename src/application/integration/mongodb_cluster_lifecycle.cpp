@@ -6,7 +6,7 @@ import cnetmod.coro.timer;
 import cnetmod.executor.pool;
 import cnetmod.executor.async_op;
 import cnetmod.application.task_supervisor;
-import cnetmod.integration.mongodb_cloud;
+import cnetmod.application.mongodb_credentials;
     #include "mongodb_cluster_runtime.hpp"
 
 namespace cnetmod::application {
@@ -40,7 +40,7 @@ namespace {
             if (!configured)
                 co_return std::unexpected(lifecycle_error(configured.error().code));
         }
-        auto credentials = mongodb::cloud::configure_cloud_credentials(pool.connection,
+        auto credentials = mongodb_credentials::configure_cloud_credentials(pool.connection,
             runtime->io, runtime->blocking_pool);
         if (!credentials)
             co_return std::unexpected(lifecycle_error(credentials.error().code));

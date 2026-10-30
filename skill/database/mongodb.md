@@ -835,30 +835,18 @@ Snappy 使用 libsnappy 的原始 block 格式，不使用 framed stream；解�
 ## 云认证职责与组合入口
 
 核心包 `cnetmod.protocol.mongodb` 实现 SASL、AWS SigV4、OIDC cache、推测认证和重认证；不导入 HTTP 或 Application。
-云端凭据获取是独立组件：
+云凭据获取与装配属于 Application，源码位于
+`src/application/integration/mongodb/credentials/`，随 `cnetmod::application` 构建和导出。
+不新增顶层 `src/integration/` 层，也不单独导出 MongoDB cloud 组件。
+用户入口是 `import cnetmod.application;` 和 `mongodb_service` 的 URI 自动配置，见
+[Application MongoDB 配置](../infra/application.md)。
 
-```cmake
-target_link_libraries(app PRIVATE cnetmod::mongodb_cloud)
-```
-
-该组件仅在同时开启 MongoDB 和 HTTP 时构建，公开模块 `cnetmod.integration.mongodb_cloud`。
 `mongodb_metadata_http.cpp` 复用框架 HTTP 客户端，验证 TLS、禁用重定向和 cookie，限制响应为 1 MiB。
 AWS Web Identity、ECS、EC2 IMDSv2、OIDC workload、token 文件读取和凭据文档解析各自分文件；禁止 `types` / `common` 等聚合文件名。
-
-```cpp
-import cnetmod.protocol.mongodb;
-import cnetmod.integration.mongodb_cloud;
-
-// uri 由应用提供；不要打印含凭据的连接字符串。
-auto resolved = co_await resolve_connection_string(io, workers, uri);
-if (!resolved)
-    co_return std::unexpected(resolved.error());
-auto configured = cloud::configure_cloud_credentials(
-    resolved->topology.per_server_pool.connection, io, workers);
-if (!configured)
-    co_return std::unexpected(configured.error());
-topology_connection_pool client(io, std::move(resolved->topology));
-```
+高级自定义凭据装配可使用 `cnetmod.application.mongodb_credentials` 中的
+`cnetmod::application::mongodb_credentials` 工厂，并通过
+`mongodb_service_options::configure_connection` 设置 provider。常规用户不必手动装配 provider
+或管理协议连接池。
 
 ### AWS IAM
 
@@ -898,4 +886,4 @@ Azure/GCP 必须提供 TOKEN_RESOURCE；Kubernetes 不允许该参数。callback
 `test_mongodb_cloud_handshake` 用 Python 标准库 TLS peer 验证 AWS nonce/签名、OIDC cache/18/391/speculative flow 与 X.509 客户端证书；由 BoringSSL 在测试临时目录生成证书，不需要外部 openssl 命令或云账号。
 开启 HTTP 后另有 `test_mongodb_aws_providers` 与 `test_mongodb_oidc_providers`，用注入的 metadata transport 验证完整凭据链，不访问真实用户云凭据。
 
-安装包消费者验证位于 `testing/package/mongodb_cloud_consumer`：仅链接 `cnetmod::mongodb_cloud`，通过安装后的接口构造 SRV/OIDC 配置并执行注入的 metadata provider，用来防止源树构建掩盖导出依赖缺失。
+安装包消费者验证位于 `testing/package/mongodb_application_consumer`：仅链接 `cnetmod::application`，验证 URI 服务注册和注入 metadata provider，防止源树构建掩盖导出依赖缺失。

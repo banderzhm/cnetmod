@@ -1,8 +1,9 @@
-module cnetmod.integration.mongodb_cloud;
+module cnetmod.application.mongodb_credentials;
+#ifdef CNETMOD_HAS_PROTOCOL_MONGODB
 import std;
 import cnetmod.protocol.mongodb;
 
-namespace cnetmod::mongodb::cloud::detail {
+namespace cnetmod::application::mongodb_credentials::detail {
 auto percent_encode(std::string_view value) -> std::string
 {
     constexpr std::string_view hex{"0123456789ABCDEF"};
@@ -55,4 +56,6 @@ auto parse_utc_expiry(std::string_view value) -> result<std::chrono::system_cloc
         return invalid();
     return std::chrono::time_point_cast<std::chrono::system_clock::duration>(time);
 }
-} // namespace cnetmod::mongodb::cloud::detail
+} // namespace cnetmod::application::mongodb_credentials::detail
+
+#endif

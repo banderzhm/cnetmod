@@ -1,11 +1,15 @@
 module;
-#include <pugixml.hpp>
-module cnetmod.integration.mongodb_cloud;
+#include <cnetmod/config.hpp>
+#ifdef CNETMOD_HAS_PROTOCOL_MONGODB
+    #include <pugixml.hpp>
+#endif
+module cnetmod.application.mongodb_credentials;
+#ifdef CNETMOD_HAS_PROTOCOL_MONGODB
 import std;
 import cnetmod.json;
 import cnetmod.protocol.mongodb;
 
-namespace cnetmod::mongodb::cloud::detail {
+namespace cnetmod::application::mongodb_credentials::detail {
 auto parse_aws_json_credentials(std::string_view value) -> result<aws_credentials>
 {
     auto document = cnetmod::json::parse_document(value);
@@ -67,4 +71,6 @@ auto parse_aws_sts_credentials(std::string_view value) -> result<aws_credentials
         return std::unexpected(valid.error());
     return credentials;
 }
-} // namespace cnetmod::mongodb::cloud::detail
+} // namespace cnetmod::application::mongodb_credentials::detail
+
+#endif

@@ -505,8 +505,6 @@ cnetmod_extract_component(CNETMOD_MONITORING_CORE
     "[/\\\\]src[/\\\\]application[/\\\\]monitoring[/\\\\]core[/\\\\]")
 cnetmod_extract_component(CNETMOD_HTTP_REDIS_CACHE
     "[/\\\\]src[/\\\\]protocol[/\\\\]http[/\\\\]middleware[/\\\\]redis_cache\\.(cppm|ixx|cpp)$")
-cnetmod_extract_component(CNETMOD_MONGODB_CLOUD
-    "[/\\\\]src[/\\\\]integration[/\\\\]mongodb_cloud[/\\\\]")
 cnetmod_extract_component(CNETMOD_ORM
     "[/\\\\]src[/\\\\]database[/\\\\]orm[/\\\\]")
 
@@ -760,17 +758,6 @@ if(TARGET cnetmod_http AND TARGET cnetmod_redis)
     list(APPEND CNETMOD_COMPONENT_TARGETS cnetmod_http_redis_cache)
 endif()
 
-if(TARGET cnetmod_mongodb AND TARGET cnetmod_http)
-    cnetmod_add_component(cnetmod_mongodb_cloud mongodb_cloud
-        CNETMOD_MONGODB_CLOUD_MODULE_INTERFACE_FILES
-        CNETMOD_MONGODB_CLOUD_MODULE_IMPLEMENTATION_CPP_FILES
-        CNETMOD_MONGODB_CLOUD_REGULAR_CPP_SOURCES)
-    target_link_libraries(cnetmod_mongodb_cloud PUBLIC cnetmod_mongodb
-        PRIVATE cnetmod_http ${CNETMOD_PUGIXML_TARGET})
-    add_library(cnetmod::mongodb_cloud ALIAS cnetmod_mongodb_cloud)
-    list(APPEND CNETMOD_COMPONENT_TARGETS cnetmod_mongodb_cloud)
-endif()
-
 if(CNETMOD_APPLICATION_MODULE_INTERFACE_FILES OR
         CNETMOD_APPLICATION_MODULE_IMPLEMENTATION_CPP_FILES OR
         CNETMOD_APPLICATION_REGULAR_CPP_SOURCES)
@@ -785,8 +772,8 @@ if(CNETMOD_APPLICATION_MODULE_INTERFACE_FILES OR
     foreach(_protocol_target IN LISTS CNETMOD_PROTOCOL_COMPONENT_TARGETS)
         target_link_libraries(cnetmod_application PUBLIC ${_protocol_target})
     endforeach()
-    if(TARGET cnetmod_mongodb_cloud)
-        target_link_libraries(cnetmod_application PRIVATE cnetmod_mongodb_cloud)
+    if(TARGET cnetmod_mongodb)
+        target_link_libraries(cnetmod_application PRIVATE ${CNETMOD_PUGIXML_TARGET})
     endif()
     if(CNETMOD_HAS_YAML_CONFIGURATION)
         target_link_libraries(cnetmod_application PRIVATE yaml_cpp::yaml_cpp)
