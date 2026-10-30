@@ -1,8 +1,8 @@
 module;
 #include <cnetmod/config.hpp>
 #ifdef _WIN32
-    #include <windns.h>
     #include <winsock2.h>
+    #include <windns.h>
 #else
     #include <arpa/nameser.h>
     #include <netdb.h>
