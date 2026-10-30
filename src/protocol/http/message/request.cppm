@@ -48,6 +48,12 @@ public:
         return *this;
     }
 
+    auto& set_header_owned(std::string key, std::string value)
+    {
+        headers_[std::move(key)] = std::move(value);
+        return *this;
+    }
+
     auto& append_header(std::string_view key, std::string_view value)
     {
         auto it = headers_.find(key);

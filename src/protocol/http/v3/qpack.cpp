@@ -1104,7 +1104,11 @@ auto qpack_decoder::decode_each(byte_view in, qpack_header_sink sink,
             {
                 if (*i >= detail::static_table.size())
                     return std::unexpected(detail::error());
-                if (auto emitted = emit({std::string{detail::static_table[*i].name}, std::string{detail::static_table[*i].value}}); !emitted)
+                const auto& field = detail::static_table[*i];
+                const auto emitted = sink.consume_static
+                    ? sink.consume_static(sink.context, field.name, field.value)
+                    : emit({std::string{field.name}, std::string{field.value}});
+                if (!emitted)
                     return std::unexpected(emitted.error());
             }
             else
@@ -1129,7 +1133,11 @@ auto qpack_decoder::decode_each(byte_view in, qpack_header_sink sink,
             {
                 if (*i >= detail::static_table.size())
                     return std::unexpected(detail::error());
-                if (auto emitted = emit({std::string{detail::static_table[*i].name}, std::move(*v)}); !emitted)
+                const auto name = detail::static_table[*i].name;
+                const auto emitted = sink.consume_static_name
+                    ? sink.consume_static_name(sink.context, name, std::move(*v))
+                    : emit({std::string{name}, std::move(*v)});
+                if (!emitted)
                     return std::unexpected(emitted.error());
             }
             else

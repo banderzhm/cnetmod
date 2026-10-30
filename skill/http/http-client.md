@@ -547,6 +547,82 @@ auto h2_batch_with_pool(client_pool& pool) -> task<void> {
 | 合理设置 `max_idle` 避免内存浪费 | 设置过大导致大量空闲连接占内存 |
 | 生产环境保持 `keep_alive = true` | 每次请求后关闭连接 |
 
+### `bounded_client_pool` — 网关上游有界租约池
+
+`client_pool` 是兼容保留的空闲 client 缓存：池空时 `acquire()` 会立即创建
+新 client，不限制并发数量。普通低并发服务调用可以继续使用它；反向代理、API
+Gateway 和突发流量入口必须使用 `bounded_client_pool`，不能把空闲缓存误当成容量门禁。
+
+```cpp
+struct bounded_client_pool_options
+{
+    client_options client;
+    std::size_t maximum_clients = 256;
+    std::size_t maximum_waiters = 1024;
+    std::chrono::milliseconds acquire_timeout{5000};
+};
+
+class pooled_client
+{
+public:
+    [[nodiscard]] auto valid() const noexcept -> bool;
+    [[nodiscard]] auto operator->() noexcept -> client*;
+    [[nodiscard]] auto get() noexcept -> client&;
+    void discard() noexcept;
+};
+
+class bounded_client_pool
+{
+public:
+    bounded_client_pool(io_context&, bounded_client_pool_options = {});
+    [[nodiscard]] auto acquire()
+        -> task<std::expected<pooled_client, std::error_code>>;
+    [[nodiscard]] auto acquire(cancel_token&)
+        -> task<std::expected<pooled_client, std::error_code>>;
+    [[nodiscard]] auto close() -> task<void>;
+    [[nodiscard]] auto size() const noexcept -> std::size_t;
+    [[nodiscard]] auto idle_count() const noexcept -> std::size_t;
+    [[nodiscard]] auto checked_out_count() const noexcept -> std::size_t;
+    [[nodiscard]] auto waiter_count() const noexcept -> std::size_t;
+};
+```
+
+核心语义：
+
+- 每个池只归属一个 `io_context`。多事件循环应用为每个 worker、每个上游各建一份，
+  不跨线程共享可变 client。
+- 达到 `maximum_clients` 后按 FIFO 排队；达到 `maximum_waiters` 时立即返回
+  `std::errc::resource_unavailable_try_again`，供网关映射为明确的过载响应。
+- `acquire_timeout` 大于零时，超时返回 `std::errc::timed_out`；传入
+  `cancel_token` 可取消仍在队列中的租约请求。
+- `pooled_client` 析构时自动归还；请求失败导致连接不可复用时调用 `discard()`，
+  池会先关闭当前 transport，再把该 client 槽位交给后续请求。
+- 停止应用时必须 `co_await pool.close()`。它会拒绝新租约、唤醒等待者，并等到
+  已借出的租约全部归还后才释放 client，禁止直接销毁仍有请求的池。
+
+```cpp
+import std;
+import cnetmod.coro.cancel;
+import cnetmod.protocol.http.client.pool;
+
+auto forward(cnetmod::http::bounded_client_pool& pool,
+    const cnetmod::http::request& request, cnetmod::cancel_token& cancellation)
+    -> cnetmod::task<std::expected<cnetmod::http::response, std::error_code>>
+{
+    auto lease = co_await pool.acquire(cancellation);
+    if (!lease)
+        co_return std::unexpected(lease.error());
+
+    auto response = co_await lease->get().send(request, cancellation);
+    if (!response)
+        lease->discard();
+    co_return response;
+}
+```
+
+`maximum_clients` 是每个事件循环、每个上游的上限，不是整个进程的总量。总连接预算
+应按 `worker 数 × 每 worker 上游池容量 × 上游数量` 计算。
+
 ---
 
 ## 参考示例

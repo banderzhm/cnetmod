@@ -16,6 +16,30 @@ import cnetmod.protocol.http.v3.static_files;
 
 namespace {
 
+[[nodiscard]] auto parse_query_integer(std::string_view encoded) noexcept
+    -> std::optional<std::int64_t>
+{
+    std::string decoded_storage;
+    auto value = encoded;
+    if (encoded.find_first_of("%+") != std::string_view::npos)
+    {
+        decoded_storage = cnetmod::http::url_decode(encoded);
+        value = decoded_storage;
+    }
+    if (value.starts_with('+'))
+    {
+        value.remove_prefix(1);
+        if (value.starts_with('-'))
+            return std::nullopt;
+    }
+    std::int64_t number{};
+    const auto [end, error] =
+        std::from_chars(value.data(), value.data() + value.size(), number);
+    if (error != std::errc{} || end != value.data() + value.size())
+        return std::nullopt;
+    return number;
+}
+
 auto handle_request(cnetmod::http::v3::http3_request& request,
     cnetmod::http::v3::http3_response& response,
     const std::shared_ptr<const cnetmod::http::v3::qpack_static_response_headers>&
@@ -38,20 +62,13 @@ auto handle_request(cnetmod::http::v3::http3_request& request,
         const auto equals = field.find('=');
         if (equals != std::string_view::npos)
         {
-            const auto decoded = http::url_decode(field.substr(equals + 1));
-            auto value = std::string_view{decoded};
-            if (value.starts_with('+'))
-            {
-                value.remove_prefix(1);
-                if (value.starts_with('-'))
-                    value = {};
-            }
-            std::int64_t number{};
-            const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), number);
-            if (error == std::errc{} && end == value.data() + value.size() &&
-                !(number > 0 && sum > std::numeric_limits<std::int64_t>::max() - number) &&
-                !(number < 0 && sum < std::numeric_limits<std::int64_t>::min() - number))
-                sum += number;
+            if (const auto number = parse_query_integer(field.substr(equals + 1));
+                number &&
+                !(*number > 0 &&
+                    sum > std::numeric_limits<std::int64_t>::max() - *number) &&
+                !(*number < 0 &&
+                    sum < std::numeric_limits<std::int64_t>::min() - *number))
+                sum += *number;
         }
         if (next == std::string_view::npos)
             break;

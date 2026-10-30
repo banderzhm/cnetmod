@@ -828,7 +828,7 @@ macOS 可用官方 Homebrew 包 `mongodb/brew/mongodb-community@8.0` 管理服�
 
 `wire/mongodb_wire_protocol.cpp` 负责 OP_MSG 组帧；`wire/mongodb_wire_compression.cpp` 单独负责 OP_COMPRESSED。
 Snappy 使用 libsnappy 的原始 block 格式，不使用 framed stream；解压前校验声明大小，拒绝畸形长度和尾随数据。
-默认构建启用 `CNETMOD_ENABLE_MONGODB_SNAPPY`，需要 libsnappy；显式关闭该开关时不会声明 Snappy 能力。
+默认构建请求启用 `CNETMOD_ENABLE_MONGODB_SNAPPY`。找到 libsnappy 时声明 Snappy 能力；系统未安装 libsnappy 时继续构建，并输出 Arch、Ubuntu 和 CentOS 的安装命令。显式关闭该开关时不会探测或声明 Snappy 能力。
 运行时使用 `connection_options::enable_snappy_compression` 开启；URI 的 `compressors=...` 顺序保留到握手。
 程序配置可用 `compression_preference` 的 codec ID 列表指定优先级；未指定时保留 zstd、Snappy、zlib 的默认顺序。
 

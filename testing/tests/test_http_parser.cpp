@@ -352,6 +352,27 @@ TEST(request_parser_method_enum)
     ASSERT_EQ(static_cast<int>(*me), static_cast<int>(http_method::DELETE_));
 }
 
+TEST(request_parser_method_enum_tracks_pipelined_messages_and_extensions)
+{
+    request_parser parser;
+    const std::string raw =
+        "GET /first HTTP/1.1\r\n\r\n"
+        "PROPFIND /second HTTP/1.1\r\n\r\n";
+
+    ASSERT_TRUE(parser.consume(raw.data(), raw.size()).has_value());
+    ASSERT_TRUE(parser.ready());
+    const auto first_method = parser.method_enum();
+    ASSERT_TRUE(first_method.has_value());
+    ASSERT_EQ(static_cast<int>(*first_method),
+        static_cast<int>(http_method::GET));
+
+    ASSERT_TRUE(parser.reset_for_next_message());
+    ASSERT_TRUE(parser.consume_buffered().has_value());
+    ASSERT_TRUE(parser.ready());
+    ASSERT_EQ(parser.method(), std::string_view{"PROPFIND"});
+    ASSERT_FALSE(parser.method_enum().has_value());
+}
+
 // =============================================================================
 // request_parser — reset
 // =============================================================================

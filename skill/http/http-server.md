@@ -327,6 +327,48 @@ auto handler = [](request_context& ctx) -> task<void> {
 #### `request_context::not_found`
 **签名**: `void not_found()`
 
+#### `response::set_content_type`
+**签名**: `auto set_content_type(std::string_view value) -> response&`
+
+需要直接操作 `response` 时，用这个入口设置 `Content-Type`。它与
+`set_header("Content-Type", value)` 的结果一致，但直接使用框架已有的固定头槽位。
+常规文本、JSON 和 HTML 响应继续优先使用 `request_context::text/json/html()`；这些
+便捷方法已经走同一入口。
+
+#### `prepared_response` / `router::get_prepared`
+**签名**:
+```cpp
+class prepared_response {
+    prepared_response(int status_code, std::string content_type,
+        std::string body);
+};
+
+void request_context::respond(const prepared_response& value);
+auto router::get_prepared(std::string_view pattern,
+    prepared_response value, endpoint_metadata metadata = {}) -> router&;
+```
+
+用于状态码、媒体类型和正文都固定，且会跨请求反复发送的小响应。对象在启动期构造一次；
+每次调用仍会把标准 `response` 的状态、头和共享正文填完整，因此中间件与 HTTP/2 仍看到
+普通响应语义。只有 HTTP/1.1、应用响应尚无动态头、且后续中间件没有修改响应时，传输层
+才复用预编码字节；设置 Cookie、Date、Server、自定义头，或修改状态与正文都会自动使
+预编码结果失效并回退普通序列化。
+
+不要用它缓存个性化正文，也不要把手写的原始 HTTP 报文作为正文。动态 JSON 应继续使用
+DTO/JSON 序列化和 `generate_body()`；静态文件使用 `serve_dir()`。
+
+固定 GET 端点优先直接注册：
+
+```cpp
+routes.get_prepared("/health",
+    prepared_response{status::ok, "text/plain", "ok"});
+```
+
+`get_prepared()` 是显式能力，不会根据 handler 的内容猜测或隐式缓存。没有中间件时，
+HTTP/1.1 与 HTTP/2 可以跳过 `request_context` 和类型擦除 handler；存在中间件时则自动
+通过普通同步 handler 执行，访问策略和响应修改仍然生效。只有响应由 handler 运行期选择
+时，才直接调用 `request.respond(prepared)`。
+
 #### `response::set_cookie`
 **签名**:
 ```cpp
@@ -530,6 +572,10 @@ HTTP 响应。`callback(event)` 借用流对象，不能超过 route handler、`
 当前 socket 操作、关闭连接并将状态置为 `failed`。普通 `request_timeout` 中间件检测到 SSE
 已提交后不会写入 504；SSE 使用自己的总时限。生产者访问下游时应使用
 `request_context::with_deadline()`，让下游操作同样受总时限和请求取消约束。
+需要为某一阶段设置更短预算时，使用
+`with_deadline(deadline::after(stage_timeout), factory)`；它会取阶段 deadline 与请求
+总 deadline 中更早的一个，并给 factory 独立、与请求取消联动的 `cancel_token`。不要为了
+连接池租约、数据库或上游 HTTP 阶段另起一个脱离请求生命周期的 timer。
 
 #### `sse::event`
 ```cpp
@@ -808,6 +854,7 @@ cnetmod::http::v3::server_request_handler handler =
 |---------|---------|
 | 先 `use()` 注册中间件，再 `set_router()` | 在 `run()` 之后注册路由 |
 | 用 `ctx.json()` 返回 JSON | 手动拼接 `Content-Type` header |
+| 固定 GET 小响应使用 `get_prepared()` | 在 handler 中硬编码完整 HTTP 报文 |
 | 用 `ctx.get_header()` 读取已知 header | 为读取单个值调用 `ctx.headers()` 物化整张表 |
 | 使用 `save_upload()` 处理大文件上传 | 在 handler 中手动读取整个 body 到内存 |
 | 大响应使用 `response_body_source` 或 `serve_dir()` | handler 直接写 `raw_socket()` 绕过 TLS/H2 |
@@ -872,6 +919,80 @@ payload 增加独立所有者和 gather segment 的管理成本。
 SSE、表单、追踪、取消与 request-scope 扩展状态仅在实际调用对应能力时创建。应用仍只使用
 公开的 `router::match()`、`request_context` 和 `get_sync()` 等接口，不得依赖这些内部视图，
 也不要为了追求吞吐绕过 endpoint metadata 或自行管理请求上下文生命周期。
+
+---
+
+### 反向代理与 API Gateway
+
+`reverse_proxy` 是显式启用的独立模块：
+
+```cpp
+import cnetmod.protocol.http;
+import cnetmod.protocol.http.reverse_proxy;
+```
+
+它负责把 HTTP/1.1、HTTP/2 的 `request_context`，或 HTTP/3 的
+`http3_request`，转发到固定 upstream，并统一处理：
+
+- 每事件循环的 `bounded_client_pool`、FIFO 等待、容量上限与租约超时；
+- 下游取消和绝对 deadline 向 upstream I/O 传播；
+- RFC hop-by-hop header 以及 `Connection` 动态列出的 header 清理；
+- `X-Forwarded-For`、`X-Forwarded-Host`、`X-Forwarded-Proto` 策略；
+- upstream 过载、连接失败和超时到 503、502、504 的稳定映射；
+- upstream response header/body/trailer 向当前 response 的所有权转移。
+
+```cpp
+cnetmod::http::reverse_proxy_options options;
+options.upstream = "http://127.0.0.1:8081/api";
+options.downstream_scheme = "https";
+options.pool.maximum_clients = 128;
+options.pool.maximum_waiters = 512;
+options.pool.acquire_timeout = std::chrono::milliseconds{100};
+options.pool.client.request_timeout = std::chrono::seconds{5};
+options.pool.client.version_pref =
+    cnetmod::http::http_version_preference::http1_only;
+
+auto proxy = cnetmod::http::reverse_proxy::create(io, std::move(options));
+if (!proxy)
+    return proxy.error();
+
+routes.any("/api/*path",
+    [&proxy](cnetmod::http::request_context& request)
+        -> cnetmod::task<void>
+    {
+        co_await (*proxy)->forward(request);
+    });
+
+// 停止 listener 并等现有 handler 退出后：
+co_await (*proxy)->close();
+```
+
+启用 QUIC 时，同一个每-worker实例可以直接用于 HTTP/3 异步 handler；不需要先把
+HTTP/3 请求复制成 `request_context`：
+
+```cpp
+cnetmod::http::v3::async_server_request_handler handler =
+    [&proxy](cnetmod::http::v3::http3_request& request,
+        cnetmod::http::v3::http3_response& response,
+        cnetmod::cancel_token& cancellation)
+        -> cnetmod::task<std::expected<void, std::error_code>>
+    {
+        co_return co_await (*proxy)->forward(
+            request, response, cancellation);
+    };
+```
+
+HTTP/3 入口会移动其已拥有的 header/body 到 upstream 请求，并把 upstream
+response 的 header/body/trailer 所有权直接转入 HTTP/3 response。下游流取消会立即
+传播给连接池等待与 upstream I/O；租约、请求超时分别稳定映射为 503/504 与 502/504。
+HTTP/3 请求对象没有 TCP peer address，因此该重载不会伪造 `X-Forwarded-For`；需要
+客户端地址时，应由 HTTP/3 server 在获得可信连接元数据后显式注入。
+
+多事件循环服务器必须为每个 worker、每个 upstream 创建一份 `reverse_proxy`，并按
+`request.io_ctx()` 选择对应实例；禁止把内部可变 HTTP client 跨 worker 共享。默认
+`forwarded_headers = replace`，不会信任客户端伪造的 `X-Forwarded-For`。只有当前入口
+确实位于可信代理之后时才选择 `append`。静态文件应在 router 中先由 `serve_dir()`
+处理，不要让静态资源绕行 upstream。
 
 ---
 

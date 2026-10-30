@@ -51,7 +51,10 @@ to guess fields newer than the negotiated client revision.
 | TLS | Direct Native TLS with CA and hostname verification; system roots or explicit CA |
 | Failure | Structured code/name/message/nested exceptions; no credential/stack-trace logging |
 
-LZ4 and Zstandard development libraries are required when enabling ClickHouse.
+ClickHouse always enables LZ4 and Zstandard frame support. In `system` dependency
+mode, cnetmod prefers installed development packages. When they are unavailable,
+the pinned `3rdparty/lz4` and `3rdparty/zstd` sources are built and installed with
+the SDK; vcpkg is not required for this fallback.
 The exact historical CityHash source is vendored with its MIT notice and pinned
 upstream commit; a modern system CityHash is not interchangeable. The SDK installs
 its third-party notice. Compression libraries remain implementation dependencies,

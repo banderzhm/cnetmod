@@ -24,9 +24,12 @@ macro(cnetmod_configure_snappy)
             endif()
         endif()
         if(NOT CNETMOD_SNAPPY_TARGET)
-            message(FATAL_ERROR "MongoDB Snappy requires libsnappy; install it or explicitly set CNETMOD_ENABLE_MONGODB_SNAPPY=OFF")
+            message(STATUS
+                "MongoDB Snappy requested but libsnappy is unavailable; "
+                "building MongoDB without Snappy wire compression")
+        else()
+            set(CNETMOD_HAS_SNAPPY ON)
         endif()
-        set(CNETMOD_HAS_SNAPPY ON)
     endif()
 endmacro()
 
