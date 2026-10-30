@@ -10,23 +10,30 @@ import cnetmod.protocol.mongodb;
 
 namespace cnetmod::application::mongodb_credentials {
 auto make_oidc_workload_provider(io_context& io, thread_pool& pool, oidc_workload_options options,
-    metadata_transport transport) -> result<std::shared_ptr<oidc_token_cache>>
+    metadata_transport transport) -> mongodb::result<std::shared_ptr<mongodb::oidc_token_cache>>
 {
-    const bool metadata = options.environment == oidc_environment::azure || options.environment == oidc_environment::gcp;
-    if (options.environment == oidc_environment::none || options.timeout.count() <= 0 || metadata == options.token_resource.empty())
-        return std::unexpected(make_error(error_code::authentication_failed, "invalid OIDC environment, TOKEN_RESOURCE, or timeout"));
+    const bool metadata = options.environment == mongodb::oidc_environment::azure ||
+        options.environment == mongodb::oidc_environment::gcp;
+    if (options.environment == mongodb::oidc_environment::none ||
+        options.timeout.count() <= 0 || metadata == options.token_resource.empty())
+        return std::unexpected(mongodb::make_error(mongodb::error_code::authentication_failed,
+            "invalid OIDC environment, TOKEN_RESOURCE, or timeout"));
     if (!transport)
         transport = make_metadata_transport(io);
-    auto callback = [&io, &pool, options, transport](oidc_callback_parameters parameters) -> task<result<oidc_access_token>>
+    auto callback = [&io, &pool, options, transport](mongodb::oidc_callback_parameters parameters)
+        -> task<mongodb::result<mongodb::oidc_access_token>>
     {
-        if (options.environment == oidc_environment::test || options.environment == oidc_environment::kubernetes)
+        if (options.environment == mongodb::oidc_environment::test ||
+            options.environment == mongodb::oidc_environment::kubernetes)
         {
             std::filesystem::path file;
-            if (options.environment == oidc_environment::test)
+            if (options.environment == mongodb::oidc_environment::test)
             {
                 const auto value = std::getenv("OIDC_TOKEN_FILE");
                 if (!value || !*value)
-                    co_return std::unexpected(make_error(error_code::authentication_failed, "OIDC_TOKEN_FILE is not configured"));
+                    co_return std::unexpected(mongodb::make_error(
+                        mongodb::error_code::authentication_failed,
+                        "OIDC_TOKEN_FILE is not configured"));
                 file = value;
             }
             else if (const auto value = std::getenv("AZURE_FEDERATED_TOKEN_FILE"); value && *value)
@@ -41,11 +48,11 @@ auto make_oidc_workload_provider(io_context& io, thread_pool& pool, oidc_workloa
                 });
             if (!token)
                 co_return std::unexpected(token.error());
-            co_return oidc_access_token{std::move(*token), {}};
+            co_return mongodb::oidc_access_token{std::move(*token), {}};
         }
         metadata_request request;
         request.timeout = parameters.timeout;
-        if (options.environment == oidc_environment::azure)
+        if (options.environment == mongodb::oidc_environment::azure)
         {
             request.url = "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=" + detail::percent_encode(options.token_resource);
             if (!parameters.username.empty())
@@ -61,15 +68,18 @@ auto make_oidc_workload_provider(io_context& io, thread_pool& pool, oidc_workloa
         if (!reply)
             co_return std::unexpected(reply.error());
         if (reply->status != 200 || reply->body.empty() || reply->body.size() > 1024U * 1024U)
-            co_return std::unexpected(make_error(error_code::authentication_failed, "OIDC metadata endpoint did not return a valid success response"));
-        if (options.environment == oidc_environment::gcp)
-            co_return oidc_access_token{std::move(reply->body), {}};
+            co_return std::unexpected(mongodb::make_error(
+                mongodb::error_code::authentication_failed,
+                "OIDC metadata endpoint did not return a valid success response"));
+        if (options.environment == mongodb::oidc_environment::gcp)
+            co_return mongodb::oidc_access_token{std::move(reply->body), {}};
         const auto document = cnetmod::json::parse_document(reply->body);
         if (!document)
-            co_return std::unexpected(make_error(error_code::authentication_failed, "invalid Azure identity JSON"));
+            co_return std::unexpected(mongodb::make_error(
+                mongodb::error_code::authentication_failed, "invalid Azure identity JSON"));
         try
         {
-            oidc_access_token token{document->at("access_token").get<std::string>(), {}};
+            mongodb::oidc_access_token token{document->at("access_token").get<std::string>(), {}};
             if (document->contains("expires_in"))
             {
                 const auto& expiration = document->at("expires_in");
@@ -77,17 +87,20 @@ auto make_oidc_workload_provider(io_context& io, thread_pool& pool, oidc_workloa
                 std::int64_t seconds{};
                 const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), seconds);
                 if (error != std::errc{} || end != text.data() + text.size() || seconds < 0)
-                    co_return std::unexpected(make_error(error_code::authentication_failed, "invalid Azure token expiry"));
+                    co_return std::unexpected(mongodb::make_error(
+                        mongodb::error_code::authentication_failed, "invalid Azure token expiry"));
                 token.expires_in = std::chrono::seconds{seconds};
             }
             co_return token;
         }
         catch (...)
         {
-            co_return std::unexpected(make_error(error_code::authentication_failed, "incomplete Azure identity JSON"));
+            co_return std::unexpected(mongodb::make_error(
+                mongodb::error_code::authentication_failed, "incomplete Azure identity JSON"));
         }
     };
-    return std::make_shared<oidc_token_cache>(io, std::move(callback), oidc_callback_parameters{options.username, options.timeout, 1});
+    return std::make_shared<mongodb::oidc_token_cache>(io, std::move(callback),
+        mongodb::oidc_callback_parameters{options.username, options.timeout, 1});
 }
 } // namespace cnetmod::application::mongodb_credentials
 

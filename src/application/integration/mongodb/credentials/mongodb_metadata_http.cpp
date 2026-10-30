@@ -9,10 +9,11 @@ import cnetmod.protocol.mongodb;
 namespace cnetmod::application::mongodb_credentials {
 auto make_metadata_transport(io_context& io) -> metadata_transport
 {
-    return [&io](metadata_request request) -> task<result<metadata_response>>
+    return [&io](metadata_request request) -> task<mongodb::result<metadata_response>>
     {
         if (request.timeout.count() <= 0)
-            co_return std::unexpected(make_error(error_code::operation_timed_out, "cloud metadata deadline expired"));
+            co_return std::unexpected(mongodb::make_error(
+                mongodb::error_code::operation_timed_out, "cloud metadata deadline expired"));
         http::client_options options;
         options.connect_timeout = std::min(request.timeout, std::chrono::milliseconds{10000});
         options.request_timeout = request.timeout;
@@ -27,14 +28,16 @@ auto make_metadata_transport(io_context& io) -> metadata_transport
         for (const auto& [name, value] : request.headers)
         {
             if (name.find_first_of("\r\n") != std::string::npos || value.find_first_of("\r\n") != std::string::npos)
-                co_return std::unexpected(make_error(error_code::authentication_failed, "invalid cloud metadata header"));
+                co_return std::unexpected(mongodb::make_error(
+                    mongodb::error_code::authentication_failed, "invalid cloud metadata header"));
             outgoing.set_header(name, value);
         }
         if (!request.body.empty())
             outgoing.set_body(std::move(request.body));
         auto response = co_await client.send(outgoing);
         if (!response)
-            co_return std::unexpected(make_error(error_code::authentication_failed, "cloud metadata transport failed"));
+            co_return std::unexpected(mongodb::make_error(
+                mongodb::error_code::authentication_failed, "cloud metadata transport failed"));
         co_return metadata_response{response->status_code(), std::string(response->body())};
     };
 }
