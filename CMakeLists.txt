@@ -888,6 +888,28 @@ if(CNETMOD_HAS_PUGIXML AND CNETMOD_PUGIXML_TARGET STREQUAL "pugixml-static")
         RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
     )
 endif()
+if(CNETMOD_HAS_LZ4 AND CNETMOD_LZ4_TARGET STREQUAL "lz4_static")
+    install(TARGETS lz4_static
+        EXPORT cnetmodTargets
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+    install(FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/lz4/lib/lz4.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/lz4/lib/lz4hc.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/lz4/lib/lz4frame.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/lz4/lib/lz4file.h"
+        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/lz4/LICENSE"
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/cnetmod/lz4")
+endif()
+if(CNETMOD_HAS_ZSTD AND CNETMOD_ZSTD_TARGET STREQUAL "libzstd_static")
+    target_include_directories(libzstd_static INTERFACE
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+    install(TARGETS libzstd_static
+        EXPORT cnetmodTargets
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/zstd/LICENSE"
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/cnetmod/zstd")
+endif()
 if(BoringSSL_FOUND AND TARGET ssl AND TARGET crypto)
     install(TARGETS ssl crypto
         ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}/cnetmod/boringssl"

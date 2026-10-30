@@ -28,6 +28,23 @@ macro(cnetmod_configure_lz4)
             set(CNETMOD_HAS_LZ4 ON)
         endif()
     endif()
+    if((CNETMOD_ENABLE_KAFKA OR CNETMOD_ENABLE_CLICKHOUSE) AND CNETMOD_ENABLE_LZ4
+       AND NOT CNETMOD_LZ4_TARGET
+       AND EXISTS "${PROJECT_SOURCE_DIR}/3rdparty/lz4/build/cmake/CMakeLists.txt")
+        set(_cnetmod_saved_build_shared_libs "${BUILD_SHARED_LIBS}")
+        set(_cnetmod_saved_build_static_libs "${BUILD_STATIC_LIBS}")
+        set(LZ4_BUNDLED_MODE ON)
+        set(LZ4_BUILD_CLI OFF CACHE BOOL "" FORCE)
+        set(BUILD_STATIC_LIBS ON CACHE BOOL "" FORCE)
+        add_subdirectory(
+            "${PROJECT_SOURCE_DIR}/3rdparty/lz4/build/cmake"
+            "${PROJECT_BINARY_DIR}/3rdparty/lz4"
+            EXCLUDE_FROM_ALL)
+        set(BUILD_SHARED_LIBS "${_cnetmod_saved_build_shared_libs}" CACHE BOOL "" FORCE)
+        set(BUILD_STATIC_LIBS "${_cnetmod_saved_build_static_libs}" CACHE BOOL "" FORCE)
+        set(CNETMOD_LZ4_TARGET lz4_static)
+        set(CNETMOD_HAS_LZ4 ON)
+    endif()
 endmacro()
 
 function(cnetmod_link_lz4 TARGET_NAME)
