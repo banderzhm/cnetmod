@@ -413,10 +413,11 @@ auto response::get_header(std::string_view key) const -> std::string_view
                                 : std::string_view{};
 }
 
-auto response::serialize() const -> std::string
+auto response::serialize(header_order order) const -> std::string
 {
     std::string out;
-    serialize_to(out);
+    append_serialized_headers_to(out, body().size(), order);
+    out += body();
     return out;
 }
 
@@ -451,7 +452,7 @@ void response::append_serialized_to(std::string& output) const
 }
 
 void response::append_serialized_headers_to(std::string& output,
-    std::size_t reserve_extra) const
+    std::size_t reserve_extra, header_order order) const
 {
     const auto reserve_size = 64U + reserve_extra +
         (has_cached_date_header_ ? cached_date_header_.size() + 8U : 0U) +
@@ -470,15 +471,56 @@ void response::append_serialized_headers_to(std::string& output,
         active &= static_cast<std::uint16_t>(active - 1U);
     }
     output.reserve(output.size() + reserve_size + common_size);
+    // Merge the fixed header cache with the sorted extension headers. Storage
+    // slots remain the default fast path; callers with a stable wire contract
+    // can request name ordering without allocating a compatibility snapshot.
+    const auto visit_ordered_headers = [&](auto&& visit)
+    {
+        if (order == header_order::storage)
+        {
+            if (has_cached_date_header_)
+                visit("Date", std::string_view{cached_date_header_.data(), cached_date_header_.size()});
+            auto remaining = active_common_headers_;
+            while (remaining != 0)
+            {
+                const auto slot = static_cast<std::size_t>(std::countr_zero(remaining));
+                visit(common_header_name(slot), common_headers_[slot].value);
+                remaining &= static_cast<std::uint16_t>(remaining - 1U);
+            }
+            for (const auto& [name, value] : headers_)
+                visit(name, value);
+            return;
+        }
+        constexpr std::array<std::size_t, common_header_count> ordered_slots{
+            8, 2, 0, 1, 6, 7, 9, 4, 3, 5};
+        const case_insensitive_less less;
+        auto extension = headers_.begin();
+        for (const auto slot : ordered_slots)
+        {
+            const auto cached_date = slot == 6 && has_cached_date_header_;
+            if (!common_headers_[slot].present && !cached_date)
+                continue;
+            const auto name = common_header_name(slot);
+            while (extension != headers_.end() && less(extension->first, name))
+            {
+                visit(extension->first, extension->second);
+                ++extension;
+            }
+            visit(name, cached_date
+                ? std::string_view{cached_date_header_.data(), cached_date_header_.size()}
+                : std::string_view{common_headers_[slot].value});
+        }
+        for (; extension != headers_.end(); ++extension)
+            visit(extension->first, extension->second);
+    };
     if (version_ == http_version::http_1_1 && status_msg_.empty() && status_code_ == 200)
     {
         // Hot path: the status line and every header are copied straight
         // into storage sized exactly once, with no per-piece append calls.
         constexpr std::string_view status_line{"HTTP/1.1 200 OK\r\n"};
-        constexpr std::string_view date_prefix{"Date: "};
         std::size_t total = status_line.size() + 2U + common_size;
         if (has_cached_date_header_)
-            total += date_prefix.size() + cached_date_header_.size() + 2U;
+            total += 6U + cached_date_header_.size() + 2U;
         for (const auto& [key, value] : headers_)
             total += key.size() + value.size() + 4U;
         const auto start = output.size();
@@ -492,29 +534,13 @@ void response::append_serialized_headers_to(std::string& output,
                     cursor += text.size();
                 };
                 put(status_line);
-                if (has_cached_date_header_)
+                visit_ordered_headers([&](std::string_view name, std::string_view value)
                 {
-                    put(date_prefix);
-                    put({cached_date_header_.data(), cached_date_header_.size()});
-                    put("\r\n");
-                }
-                auto remaining = active_common_headers_;
-                while (remaining != 0)
-                {
-                    const auto slot = static_cast<std::size_t>(std::countr_zero(remaining));
-                    put(common_header_name(slot));
-                    put(": ");
-                    put(common_headers_[slot].value);
-                    put("\r\n");
-                    remaining &= static_cast<std::uint16_t>(remaining - 1U);
-                }
-                for (const auto& [key, value] : headers_)
-                {
-                    put(key);
+                    put(name);
                     put(": ");
                     put(value);
                     put("\r\n");
-                }
+                });
                 put("\r\n");
                 return start + total;
             });
@@ -576,30 +602,13 @@ void response::append_serialized_headers_to(std::string& output,
                                       : status_msg_;
         output += "\r\n";
     }
-    if (has_cached_date_header_)
+    visit_ordered_headers([&](std::string_view name, std::string_view value)
     {
-        output += "Date: ";
-        output.append(cached_date_header_.data(), cached_date_header_.size());
-        output += "\r\n";
-    }
-    active = active_common_headers_;
-    while (active != 0)
-    {
-        const auto slot = static_cast<std::size_t>(std::countr_zero(active));
-        const auto& header = common_headers_[slot];
-        output += common_header_name(slot);
-        output += ": ";
-        output += header.value;
-        output += "\r\n";
-        active &= static_cast<std::uint16_t>(active - 1U);
-    }
-    for (const auto& [key, value] : headers_)
-    {
-        output += key;
+        output += name;
         output += ": ";
         output += value;
         output += "\r\n";
-    }
+    });
     output += "\r\n";
 }
 
