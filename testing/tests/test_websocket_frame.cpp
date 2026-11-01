@@ -309,6 +309,27 @@ void check_http_route_upgrade_preserves_first_frame()
                 "read non-ASCII UTF-8 echo");
             wire.append(buffer.data(), *read);
         }
+
+        const std::string first = "pipeline-alpha";
+        const std::string second = "pipeline-beta";
+        std::vector<std::byte> pipeline;
+        ws::append_frame_into(pipeline, ws::opcode::text,
+            std::as_bytes(std::span{first}), true);
+        ws::append_frame_into(pipeline, ws::opcode::text,
+            std::as_bytes(std::span{second}), true);
+        require((co_await cnetmod::async_write_all(context.accept_io(), *peer,
+                     cnetmod::const_buffer{pipeline.data(), pipeline.size()}))
+                    .has_value(),
+            "write pipelined WebSocket frames");
+        while (wire.find(first) == std::string::npos ||
+            wire.find(second) == std::string::npos)
+        {
+            auto read = co_await cnetmod::async_read(context.accept_io(), *peer,
+                cnetmod::mutable_buffer{buffer.data(), buffer.size()});
+            require(read.has_value() && *read != 0,
+                "read pipelined WebSocket echoes");
+            wire.append(buffer.data(), *read);
+        }
         peer->close();
         server.stop();
         while (!listener.handle().done())

@@ -1773,7 +1773,8 @@ auto server::handle_h1_clear(socket& client, io_context& io,
             route_params rp;
             const sync_handler_fn* sync_route = nullptr;
             std::optional<handler_fn> owned_handler;
-            connection_upgrade_handler connection_upgrade;
+            std::optional<request_context::connection_upgrade_state>
+                connection_upgrade;
 
             if (mr)
             {
@@ -1949,8 +1950,9 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                 if (!written)
                     co_return;
                 pending_responses.clear();
-                co_await connection_upgrade(
-                    io, std::move(client), std::move(received));
+                co_await connection_upgrade->handler(io, std::move(client),
+                    std::move(received),
+                    std::move(connection_upgrade->headers));
                 co_return;
             }
             const bool has_body_source = static_cast<bool>(resp.body_source());

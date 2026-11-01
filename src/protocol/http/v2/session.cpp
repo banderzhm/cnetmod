@@ -26,7 +26,7 @@ namespace {
     constexpr std::size_t response_batch_bytes = 64U * 1024U;
     // DATA payloads at least this large are framed by reference when the
     // transport supports vectored writes; smaller ones are cheaper to copy.
-    constexpr std::size_t borrowed_frame_threshold = 4U * 1024U;
+    constexpr std::size_t borrowed_frame_threshold = 16U * 1024U;
     constexpr auto response_batch_max_age = std::chrono::microseconds{250};
     constexpr std::size_t response_batch_time_check_interval = 32;
 

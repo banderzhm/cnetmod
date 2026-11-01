@@ -441,8 +441,15 @@ private:
     void configure_sse(sse_stream_options options);
     void set_stream_writer(stream_write_fn writer);
     void enable_connection_upgrade() noexcept;
+
+    struct connection_upgrade_state
+    {
+        connection_upgrade_handler_with_headers handler;
+        request_header_snapshot headers;
+    };
+
     [[nodiscard]] auto take_connection_upgrade()
-        -> connection_upgrade_handler;
+        -> std::optional<connection_upgrade_state>;
     [[nodiscard]] auto take_upgrade_headers() -> request_header_snapshot;
     void expire_sse() noexcept;
     auto write_sse_bytes(std::string_view bytes) -> task<bool>;

@@ -767,20 +767,13 @@ void request_context::enable_connection_upgrade() noexcept
 }
 
 auto request_context::take_connection_upgrade()
-    -> connection_upgrade_handler
+    -> std::optional<connection_upgrade_state>
 {
     auto* state = extended_if();
     if (!state || !state->connection_upgrade)
-        return {};
-    auto handler = std::move(state->connection_upgrade);
-    auto headers = take_upgrade_headers();
-    return [handler = std::move(handler), headers = std::move(headers)](
-               io_context& io, socket transport,
-               std::string received) mutable -> task<void>
-    {
-        co_await handler(io, std::move(transport), std::move(received),
-            std::move(headers));
-    };
+        return std::nullopt;
+    return connection_upgrade_state{
+        std::move(state->connection_upgrade), take_upgrade_headers()};
 }
 
 auto request_context::take_upgrade_headers() -> request_header_snapshot

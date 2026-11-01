@@ -1,6 +1,11 @@
 module;
 
 #include <cnetmod/config.hpp>
+#ifdef CNETMOD_PLATFORM_LINUX
+    #include <errno.h>
+    #include <sys/socket.h>
+    #include <sys/uio.h>
+#endif
 
 module cnetmod.executor.async_op;
 
@@ -18,6 +23,37 @@ import cnetmod.io.platform.io_uring;
 
 namespace cnetmod {
 namespace detail {
+
+#ifdef CNETMOD_PLATFORM_LINUX
+    auto try_write_gather(socket& sock,
+        std::span<const const_buffer> buffers)
+        -> std::expected<std::size_t, std::error_code>
+    {
+        constexpr std::size_t gather_limit = 128;
+        std::array<::iovec, gather_limit> vectors{};
+        std::size_t count{};
+        for (const auto& buffer : buffers)
+        {
+            if (buffer.size == 0)
+                continue;
+            vectors[count++] = {
+                const_cast<void*>(buffer.data), buffer.size};
+            if (count == vectors.size())
+                break;
+        }
+        if (count == 0)
+            return std::size_t{};
+
+        ::msghdr message{};
+        message.msg_iov = vectors.data();
+        message.msg_iovlen = count;
+        const auto written = ::sendmsg(static_cast<int>(sock.native_handle()),
+            &message, MSG_DONTWAIT | MSG_NOSIGNAL);
+        if (written < 0)
+            return std::unexpected(make_error_code(from_native_error(errno)));
+        return static_cast<std::size_t>(written);
+    }
+#endif
 
     auto find_delimiter(const_buffer buf, std::string_view delimiter) noexcept
         -> std::optional<std::size_t>
@@ -222,6 +258,44 @@ auto async_write_all(io_context& ctx, socket& sock, const_buffer buf,
     }
 
     co_return {};
+}
+
+auto async_write_gather_all(io_context& ctx, socket& sock,
+    std::span<const const_buffer> buffers)
+    -> task<std::expected<void, std::error_code>>
+{
+    std::size_t index{};
+    std::size_t offset{};
+#ifdef CNETMOD_PLATFORM_LINUX
+    const auto immediate = detail::try_write_gather(sock, buffers);
+    if (immediate)
+    {
+        auto consumed = *immediate;
+        while (index < buffers.size() && consumed >= buffers[index].size)
+        {
+            consumed -= buffers[index].size;
+            ++index;
+        }
+        offset = consumed;
+    }
+    else if (immediate.error() != std::errc::resource_unavailable_try_again &&
+        immediate.error() != std::errc::operation_would_block)
+    {
+        co_return std::unexpected(immediate.error());
+    }
+#endif
+    for (; index < buffers.size(); ++index, offset = 0)
+    {
+        const auto& buffer = buffers[index];
+        if (offset >= buffer.size)
+            continue;
+        const auto result = co_await async_write_all(ctx, sock,
+            const_buffer{static_cast<const std::byte*>(buffer.data) + offset,
+                buffer.size - offset});
+        if (!result)
+            co_return result;
+    }
+    co_return std::expected<void, std::error_code>{};
 }
 
 auto async_file_read_pipeline(io_context& ctx, file& source,

@@ -73,14 +73,20 @@ namespace {
 } // namespace
 
 message_writer::message_writer(std::vector<std::byte>& output, bool mask,
-    std::size_t limit) : output_(output), mask_(mask), limit_(limit) {}
+    std::size_t limit, bool borrow_input)
+    : output_(output), mask_(mask), borrow_input_(borrow_input), limit_(limit)
+{
+}
 
 void message_writer::trust_input(opcode op,
-    std::span<const std::byte> payload) noexcept
+    std::span<const std::byte> payload, std::span<std::byte> frame,
+    bool borrowable) noexcept
 {
     trusted_op_ = op;
     trusted_data_ = payload.data();
     trusted_size_ = payload.size();
+    trusted_frame_ = frame;
+    trusted_borrowable_ = borrowable;
 }
 
 void message_writer::clear_trusted_input() noexcept
@@ -88,6 +94,53 @@ void message_writer::clear_trusted_input() noexcept
     trusted_op_ = opcode::continuation;
     trusted_data_ = nullptr;
     trusted_size_ = 0;
+    trusted_frame_ = {};
+    trusted_borrowable_ = false;
+}
+
+void message_writer::materialize_borrowed()
+{
+    auto append = [this](const borrowed_frame& frame)
+    {
+        output_.insert(output_.end(), frame.encoded.begin(), frame.encoded.end());
+    };
+    if (first_borrowed_)
+        append(*first_borrowed_);
+    for (const auto& frame : additional_borrowed_)
+        append(frame);
+    clear_borrowed();
+}
+
+auto message_writer::gather_borrowed() -> std::span<const const_buffer>
+{
+    gather_buffers_.clear();
+    gather_buffers_.reserve(borrowed_count());
+    auto append = [this](const borrowed_frame& frame)
+    {
+        gather_buffers_.emplace_back(frame.encoded);
+    };
+    if (first_borrowed_)
+        append(*first_borrowed_);
+    for (const auto& frame : additional_borrowed_)
+        append(frame);
+    return gather_buffers_;
+}
+
+void message_writer::clear_borrowed() noexcept
+{
+    first_borrowed_.reset();
+    additional_borrowed_.clear();
+    borrowed_size_ = 0;
+}
+
+auto message_writer::borrowed_count() const noexcept -> std::size_t
+{
+    return (first_borrowed_ ? 1U : 0U) + additional_borrowed_.size();
+}
+
+auto message_writer::queued_size() const noexcept -> std::size_t
+{
+    return output_.size() + borrowed_size_;
 }
 
 auto message_writer::send(opcode op, std::span<const std::byte> payload)
@@ -95,7 +148,7 @@ auto message_writer::send(opcode op, std::span<const std::byte> payload)
 {
     if (!error_ && (op != opcode::text && op != opcode::binary))
         error_ = make_error_code(ws_errc::reserved_opcode);
-    if (!error_ && (payload.size() > limit_ - 14 || output_.size() > limit_ - 14 - payload.size()))
+    if (!error_ && (payload.size() > limit_ - 14 || queued_size() > limit_ - 14 - payload.size()))
         error_ = std::make_error_code(std::errc::message_size);
     const bool validated_input = op == trusted_op_ &&
         payload.data() == trusted_data_ && payload.size() == trusted_size_;
@@ -104,6 +157,53 @@ auto message_writer::send(opcode op, std::span<const std::byte> payload)
         error_ = make_error_code(ws_errc::invalid_utf8);
     if (error_)
         return std::unexpected(error_);
+    if (borrow_input_ && validated_input && trusted_borrowable_ && !mask_ &&
+        output_.empty())
+    {
+        std::size_t header_size;
+        if (payload.size() <= 125)
+            header_size = 2;
+        else if (payload.size() <= 0xffff)
+            header_size = 4;
+        else
+            header_size = 10;
+        if (trusted_frame_.size() < payload.size() + header_size)
+        {
+            append_frame_into(output_, op, payload, mask_);
+            return {};
+        }
+        auto header = trusted_frame_.subspan(
+            trusted_frame_.size() - payload.size() - header_size, header_size);
+        header[0] = static_cast<std::byte>(
+            static_cast<std::uint8_t>(op) | 0x80U);
+        if (payload.size() <= 125)
+        {
+            header[1] = static_cast<std::byte>(payload.size());
+        }
+        else if (payload.size() <= 0xffff)
+        {
+            header[1] = static_cast<std::byte>(126);
+            header[2] = static_cast<std::byte>(payload.size() >> 8);
+            header[3] = static_cast<std::byte>(payload.size());
+        }
+        else
+        {
+            header[1] = static_cast<std::byte>(127);
+            const auto size = static_cast<std::uint64_t>(payload.size());
+            for (int index = 0; index < 8; ++index)
+                header[2 + index] =
+                    static_cast<std::byte>(size >> ((7 - index) * 8));
+        }
+        borrowed_frame frame{trusted_frame_.last(payload.size() + header_size)};
+        borrowed_size_ += frame.encoded.size();
+        if (!first_borrowed_)
+            first_borrowed_.emplace(frame);
+        else
+            additional_borrowed_.push_back(frame);
+        return {};
+    }
+    if (first_borrowed_)
+        materialize_borrowed();
     append_frame_into(output_, op, payload, mask_);
     return {};
 }
@@ -157,7 +257,12 @@ auto connection::async_process_messages(message_handler_fn handler,
 
         std::vector<std::byte> fragments;
         auto fragmented_op = opcode::continuation;
-        message_writer writer(send_buf_, !is_server_, max_message_size + 65536);
+        bool borrow_input = is_server_ && !cancel_token_;
+#ifdef CNETMOD_HAS_SSL
+        borrow_input = borrow_input && !secure_;
+#endif
+        message_writer writer(send_buf_, !is_server_, max_message_size + 65536,
+            borrow_input);
         send_buf_.clear();
         send_buf_.reserve(256);
         std::error_code failure;
@@ -169,7 +274,7 @@ auto connection::async_process_messages(message_handler_fn handler,
         {
             parse_result result;
             while (result.consumed < input.size() && result.processed < 64 &&
-                send_buf_.size() < 65536)
+                writer.queued_size() < 65536)
             {
                 auto remaining = input.subspan(result.consumed);
                 auto parsed = parse_frame_header(
@@ -233,14 +338,18 @@ auto connection::async_process_messages(message_handler_fn handler,
                                 failure_close = close_code::invalid_payload;
                             break;
                         }
+                        writer.materialize_borrowed();
                         if (!close_sent_)
                             append_frame_into(send_buf_, opcode::close,
                                 payload, !is_server_);
                         close_sent_ = close_received_ = received_close = true;
                     }
                     else if (op == opcode::ping)
+                    {
+                        writer.materialize_borrowed();
                         append_frame_into(send_buf_, opcode::pong,
                             payload, !is_server_);
+                    }
                 }
                 else
                 {
@@ -264,7 +373,9 @@ auto connection::async_process_messages(message_handler_fn handler,
                             failure_close = close_code::invalid_payload;
                             break;
                         }
-                        writer.trust_input(message_op, message);
+                        writer.trust_input(message_op, message,
+                            remaining.first(frame_size),
+                            message.data() == payload.data());
                         const auto handled = handler(message_op, message, writer);
                         writer.clear_trusted_input();
                         if (!handled || writer.error_)
@@ -291,6 +402,7 @@ auto connection::async_process_messages(message_handler_fn handler,
     defined(IORING_CQE_F_MORE)
         std::optional<io_uring_received_buffer> received_block;
         std::size_t received_offset{};
+        start_receiver();
 #endif
         while (connected_)
         {
@@ -337,11 +449,6 @@ auto connection::async_process_messages(message_handler_fn handler,
                     recv_buf_.commit(tail);
                     received_offset = data.size;
                 }
-                if (received_offset == data.size)
-                {
-                    received_block.reset();
-                    received_offset = 0;
-                }
                 need_read = parsed.need_more;
             }
 #endif
@@ -352,12 +459,35 @@ auto connection::async_process_messages(message_handler_fn handler,
 
             if (failure && !close_sent_)
             {
+                writer.materialize_borrowed();
                 const std::array code{static_cast<std::byte>(failure_close >> 8),
                     static_cast<std::byte>(failure_close)};
                 append_frame_into(send_buf_, opcode::close, code, !is_server_);
                 close_sent_ = true;
             }
-            if (!send_buf_.empty())
+            if (writer.borrowed_count() != 0)
+            {
+                const auto buffers = writer.gather_borrowed();
+                std::expected<void, std::error_code> written;
+                if (buffers.size() == 1)
+                {
+                    written = co_await async_write_all(
+                        static_cast<const char*>(buffers.front().data),
+                        buffers.front().size, write_submission_mode);
+                }
+                else
+                {
+                    written = co_await cnetmod::async_write_gather_all(
+                        ctx_, sock_, buffers);
+                }
+                writer.clear_borrowed();
+                if (!written)
+                {
+                    connected_ = false;
+                    co_return std::unexpected(written.error());
+                }
+            }
+            else if (!send_buf_.empty())
             {
                 const auto written = co_await async_write_all(
                     reinterpret_cast<const char*>(send_buf_.data()), send_buf_.size(),
@@ -369,6 +499,16 @@ auto connection::async_process_messages(message_handler_fn handler,
                     co_return std::unexpected(written.error());
                 }
             }
+#if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
+    defined(IORING_RECV_MULTISHOT) && defined(IORING_CQE_F_BUFFER) &&             \
+    defined(IORING_CQE_F_MORE)
+            if (received_block &&
+                received_offset == received_block->data().size)
+            {
+                received_block.reset();
+                received_offset = 0;
+            }
+#endif
             if (failure || received_close)
             {
                 connected_ = false;

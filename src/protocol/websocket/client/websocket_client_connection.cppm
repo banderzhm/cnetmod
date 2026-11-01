@@ -43,18 +43,39 @@ export class message_writer
 public:
     auto send(opcode op, std::span<const std::byte> payload)
         -> std::expected<void, std::error_code>;
+
 private:
     friend class connection;
-    message_writer(std::vector<std::byte>& output, bool mask, std::size_t limit);
-    void trust_input(opcode op, std::span<const std::byte> payload) noexcept;
+
+    struct borrowed_frame
+    {
+        std::span<const std::byte> encoded;
+    };
+
+    message_writer(std::vector<std::byte>& output, bool mask, std::size_t limit,
+        bool borrow_input);
+    void trust_input(opcode op, std::span<const std::byte> payload,
+        std::span<std::byte> frame, bool borrowable) noexcept;
     void clear_trusted_input() noexcept;
+    void materialize_borrowed();
+    [[nodiscard]] auto gather_borrowed() -> std::span<const const_buffer>;
+    void clear_borrowed() noexcept;
+    [[nodiscard]] auto borrowed_count() const noexcept -> std::size_t;
+    [[nodiscard]] auto queued_size() const noexcept -> std::size_t;
     std::vector<std::byte>& output_;
     bool mask_;
+    bool borrow_input_;
     std::size_t limit_;
     std::error_code error_;
     opcode trusted_op_{opcode::continuation};
     const std::byte* trusted_data_{};
     std::size_t trusted_size_{};
+    std::span<std::byte> trusted_frame_;
+    bool trusted_borrowable_{};
+    std::optional<borrowed_frame> first_borrowed_;
+    std::vector<borrowed_frame> additional_borrowed_;
+    std::vector<const_buffer> gather_buffers_;
+    std::size_t borrowed_size_{};
 };
 
 /// The payload is borrowed until the callback returns. Copy it before retaining
