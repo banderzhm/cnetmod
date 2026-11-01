@@ -1005,7 +1005,7 @@ TEST(http2_complete_body_batch_and_split_body_return_exact_consumed_credit)
 
 TEST(http2_shared_bodies_are_framed_by_reference_with_identical_wire_bytes)
 {
-    // 20 KB splits into one borrowed 16 KB DATA frame plus a borrowed 4 KB
+    // 20 KB splits into one borrowed 16 KB DATA frame plus a copied 4 KB
     // remainder; 1 KB stays below the threshold and is copied.
     const auto large = std::make_shared<const std::string>(20'480, 'L');
     const auto small = std::make_shared<const std::string>(1'024, 's');
@@ -1115,8 +1115,9 @@ TEST(http2_shared_bodies_are_framed_by_reference_with_identical_wire_bytes)
     const auto copied = exchange(false, copied_parts);
     const auto borrowed = exchange(true, borrowed_parts);
     ASSERT_EQ(copied_parts, std::size_t{0});
-    // Three large responses, each framed as two borrowed DATA payloads.
-    ASSERT_EQ(borrowed_parts, std::size_t{6});
+    // Three large responses, each with one borrowed 16 KB DATA payload. Their
+    // 4 KB remainders stay in the connection batch with the frame metadata.
+    ASSERT_EQ(borrowed_parts, std::size_t{3});
     ASSERT_EQ(borrowed.size(), copied.size());
     ASSERT_TRUE(borrowed == copied);
 

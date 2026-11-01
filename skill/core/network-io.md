@@ -151,12 +151,20 @@ export auto async_write_all(io_context& ctx, socket& sock, const_buffer buf,
     write_submission submission) -> task<expected<void, error_code>>;
 export auto async_write_all(io_context& ctx, socket& sock, const_buffer buf,
     cancel_token& token) -> task<expected<void, error_code>>;
+export auto async_write_gather_all(io_context& ctx, socket& sock,
+    std::span<const const_buffer> buffers)
+    -> task<expected<void, error_code>>;
 ```
 
 `write_submission::balanced` 保留事件循环的默认批量提交策略，适合吞吐优先或
 流水线写入。`low_latency` 是小型请求/响应写入的后端提示：io_uring 会使用更小的
 提交批次，其他后端保持原有行为。不要把它用于大块传输，也不要为了单个协议修改
 整个 `io_context` 的全局批量阈值。
+
+`async_write_gather_all` 按顺序写完多个缓冲区。Linux 会先尝试一次非阻塞
+scatter/gather 写入；遇到部分写入或临时背压时，从准确偏移继续异步发送。
+调用方必须让每个缓冲区的存储持续到协程完成。该重载不接收取消令牌；需要取消
+语义时，应使用带 `cancel_token` 的 `async_write_all`。
 
 #### `async_read_until()`
 **签名**（字符串分隔符）:

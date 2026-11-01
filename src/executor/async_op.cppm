@@ -116,6 +116,13 @@ export auto async_write_all(io_context& ctx, socket& sock, const_buffer buf,
     cancel_token& token)
     -> task<std::expected<void, std::error_code>>;
 
+/// Write all buffers in order. Platforms may use scatter/gather I/O for the
+/// first submission and fall back to ordinary asynchronous writes after a
+/// partial write or temporary backpressure.
+export auto async_write_gather_all(io_context& ctx, socket& sock,
+    std::span<const const_buffer> buffers)
+    -> task<std::expected<void, std::error_code>>;
+
 #ifdef CNETMOD_HAS_IO_URING
 auto async_write_all_low_latency(
     io_context& ctx, socket& sock, const_buffer buf)
