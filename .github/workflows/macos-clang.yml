@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, macos-15]  # Apple Silicon (M1/M2)
+        os: [macos-15]  # Available GitHub-hosted Apple Silicon runner
         build_type: [Release, Debug]
 
     steps:
