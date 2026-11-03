@@ -395,6 +395,11 @@ private:
     // Receive buffer of the inline path, reused across requests; moved into
     // the coroutine when a stream needs it.
     std::optional<dynamic_buffer> inline_wire_;
+    // The synchronous inline handler never overlaps another inline parse.
+    // Retain only the flat-map storage after the handler returns, so common
+    // request headers do not allocate a new vector for every stream.
+    header_map inline_request_headers_;
+    header_map inline_request_trailers_;
     bool peer_control_stream_seen_{};
     bool peer_settings_seen_{};
     bool peer_datagram_enabled_{};

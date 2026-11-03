@@ -940,6 +940,84 @@ identical bytes. Release tests `test_http2_stream`, `test_http_response`,
 Retain the 16KiB boundary and close T2. No rejected threshold, ownership, or
 temporary benchmark-script change remains in the worktree. Q1 is active.
 
+## 2026-11-03 - Q1 - reuse inline HTTP/3 request-header storage
+
+### Source identity
+
+- cnetmod worktree: `new/httparena-gap-closure`;
+- baseline revision: `2f1ff804`;
+- baseline binary SHA-256:
+  `1d863e6179a1ca35f024148c4443b273f82090a3e1e7be7fec888ecbdbfcfd50`;
+- candidate revision: uncommitted Q1 candidate based on `2f1ff804`;
+- HttpArena load generator: nghttp2 `h2load` 1.69.0 with HTTP/3.
+
+### Environment
+
+- Arch Linux on WSL2;
+- Clang 23.1.3, libc++, C++23, Release `-O3`, frame pointers, mimalloc;
+- server: CPUs 0-15, 16 workers;
+- load generator: CPUs 16-31, 64 threads, 64 connections, 64 streams;
+- request: `/baseline2?a=1&b=1` over HTTP/3;
+- each run used a two-second warm-up and a five-second measurement window.
+
+### Profile finding
+
+The frame-pointer profile placed a repeated allocation under
+`flat_map::insert_or_assign()` while QPACK decoded ordinary request headers.
+The synchronous inline HTTP/3 handler completed before another inline request
+could run on the same session, but its `header_map` vector was destroyed after
+every request.
+
+The retained change moves the two request maps into session-local scratch
+storage after the handler returns. The next inline parse moves that storage
+into the new request and clears its elements while preserving vector capacity.
+Coroutine handlers and incomplete requests keep their existing owning paths.
+
+### Rejected candidates
+
+Three smaller QUIC layout candidates were implemented, tested, measured, and
+then removed:
+
+- a second inline retransmittable-frame slot reduced the six-run throughput
+  median by about 5.0% and increased CPU/request by about 13.8%;
+- cache-contiguous retired-stream slot indexing improved its first sample but
+  the combined twelve-run median fell about 5.5%, while CPU/request rose about
+  5.6%;
+- removing the retired-stream slot's explicit used flag reduced its storage
+  from about 32KiB to 24KiB per active connection, but combined throughput
+  fell about 3.1% and CPU/request rose about 8.2%.
+
+No source from these rejected candidates remains.
+
+### Performance rounds
+
+Two interleaved six-run rotations produced six measurements for each binary.
+All twelve runs completed with zero failed requests.
+
+| Variant | RPS rounds (millions) | Combined median | CPU seconds/request median | Change |
+|---|---|---:|---:|---:|
+| baseline | 5.112 / 6.079 / 6.062 / 5.783 / 5.302 / 5.950 | 5.867M/s | 1.791us | - |
+| reused header storage | 4.588 / 6.261 / 6.141 / 5.290 / 5.784 / 6.105 | 5.944M/s | 1.756us | +1.32% RPS, -1.95% CPU/request |
+
+The individual WSL runs were noisy, including one low sample for each side.
+The combined median and CPU/request moved in the same favorable direction, so
+the candidate passed the local retention gate.
+
+### Correctness
+
+- `test_http3_qpack`: 23/23 passed;
+- `test_http3_frame`: 31/31 passed;
+- complete QUIC/HTTP3 CTest selection: 41/41 passed after all fixture targets
+  were built;
+- complete configured Release suite: 100/100 passed;
+- the official-parameter load runs returned zero failed requests.
+
+### Decision
+
+Retain session-local request-header and trailer capacity reuse. Q1 remains the
+active queue item because this local improvement does not by itself close the
+published baseline-H3 gap.
+
 ## Entry template
 
 Copy this section for every later session. Fill every field or write `not
