@@ -581,7 +581,9 @@ namespace {
     }
 
     auto request_from_frames(qpack_decoder& decoder, byte_view wire,
-        stream_id id, std::deque<std::vector<header_field>>& completed_headers)
+        stream_id id, std::deque<std::vector<header_field>>& completed_headers,
+        header_map* recycled_headers = nullptr,
+        header_map* recycled_trailers = nullptr)
         -> std::expected<http3_request, std::error_code>;
 
     auto decode_header_block(qpack_decoder& decoder, byte_view encoded,
@@ -690,10 +692,21 @@ namespace {
     }
 
     auto request_from_frames(qpack_decoder& decoder, byte_view wire,
-        stream_id id, std::deque<std::vector<header_field>>& completed_headers)
+        stream_id id, std::deque<std::vector<header_field>>& completed_headers,
+        header_map* recycled_headers, header_map* recycled_trailers)
         -> std::expected<http3_request, std::error_code>
     {
         http3_request request;
+        if (recycled_headers != nullptr)
+        {
+            request.headers = std::move(*recycled_headers);
+            request.headers.clear();
+        }
+        if (recycled_trailers != nullptr)
+        {
+            request.trailers = std::move(*recycled_trailers);
+            request.trailers.clear();
+        }
         request.request_stream = id;
         bool headers_seen{};
         bool trailers_seen{};
@@ -2646,7 +2659,8 @@ void http3_server_session::serve_peer_stream(stream_id id)
     {
         async_lock_guard header_guard{request_header_mutex_, std::adopt_lock};
         parsed = request_from_frames(decoder_, wire.readable_view(), id,
-            completed_header_blocks(id));
+            completed_header_blocks(id), &inline_request_headers_,
+            &inline_request_trailers_);
         // Decoder acknowledgements are left pending: run() commits them for
         // the whole accept batch before it flushes the responses.
         if (!parsed && parsed.error() == std::make_error_code(std::errc::resource_unavailable_try_again))
@@ -2681,10 +2695,18 @@ void http3_server_session::serve_peer_stream(stream_id id)
         response.static_headers.reset();
     }
 
+    // The synchronous handler has returned, so no valid request reference can
+    // outlive this point. Keep the vector allocations for the next inline
+    // request while the remaining response path uses only the method.
+    const auto method = parsed->method;
+    inline_request_headers_ = std::move(parsed->headers);
+    inline_request_headers_.clear();
+    inline_request_trailers_ = std::move(parsed->trailers);
+    inline_request_trailers_.clear();
+
     // The common response (no pushes, no body producer, a consistent
     // length) is encoded and committed here; anything else, or a lock or
     // transport that is busy, finishes in a coroutine.
-    const auto method = parsed->method;
     const bool suppress_body = response_forbids_content(response.status,
         method == http_method::HEAD);
     const auto declared_length = response_declared_length(response);

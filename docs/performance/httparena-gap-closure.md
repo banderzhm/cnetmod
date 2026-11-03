@@ -230,6 +230,7 @@ after every regression is either fixed or rejected.
 | 2026-11-01 | T1 HTTP/2 batch age | After a two-second warm-up, reducing the response batch age from 250us to 50us moved the local median from 6.321M/s to 6.334M/s | Reject the 0.21% movement because it did not pass the retention gate |
 | 2026-11-01 | T1 TLS BIO direct-send threshold | Raising the threshold from 8KiB to 64KiB reduced the JSON-TLS median by 0.83%; lowering it to 4KiB reduced the median by 2.68% | Keep the existing 8KiB threshold, close T1, and start T2 |
 | 2026-11-01 | T2 HTTP/2 static copy boundary | Raising the borrowed-body threshold from 4KiB to 16KiB moved the static-H2 median from 350.55K/s to 365.17K/s; baseline-H2 and JSON-H2C also improved | Retain 16KiB; reject 32KiB and the owner-deduplication branch; close T2 and start Q1 |
+| 2026-11-03 | Q1 inline HTTP/3 request-header storage | Twelve matched official-parameter runs moved the median from 5.867M/s to 5.944M/s (+1.32%) and reduced median CPU/request by 1.95%; 41 QUIC/HTTP3 tests passed | Retain session-local `header_map` capacity reuse; rejected frame-storage and retired-stream layout candidates remain absent |
 
 Detailed evidence and the current handoff point are maintained in the
 [execution record](httparena-gap-closure-log.md).
