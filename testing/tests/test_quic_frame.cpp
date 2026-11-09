@@ -25,6 +25,67 @@ TEST(quic_ping_frame_roundtrip)
     ASSERT_TRUE(std::holds_alternative<cnetmod::quic::ping_frame>(result->first));
 }
 
+TEST(quic_ack_rejects_impossible_range_count)
+{
+    for (const auto ecn : {false, true})
+    {
+        cnetmod::quic::ack_frame frame{};
+        frame.has_ecn = ecn;
+        frame.ack_range_count = (std::uint64_t{1} << 62U) - 1U;
+        const auto result = cnetmod::quic::decode_frame(cnetmod::quic::encode_frame(frame));
+        ASSERT_FALSE(result.has_value());
+        ASSERT_TRUE(result.error() == std::errc::bad_message);
+
+        cnetmod::quic::path_ack_frame path{};
+        path.path_id = 1U;
+        path.acknowledgment = frame;
+        const auto path_result = cnetmod::quic::decode_frame(cnetmod::quic::encode_frame(path));
+        ASSERT_FALSE(path_result.has_value());
+        ASSERT_TRUE(path_result.error() == std::errc::bad_message);
+    }
+}
+
+TEST(quic_ack_rejects_missing_range_and_ecn_bytes)
+{
+    for (const auto ecn : {false, true})
+    {
+        cnetmod::quic::ack_frame frame{};
+        frame.has_ecn = ecn;
+        frame.ack_range_count = 1U;
+        frame.ack_ranges.push_back({0U, 0U});
+        auto encoded = cnetmod::quic::encode_frame(frame);
+        ASSERT_TRUE(cnetmod::quic::decode_frame(encoded).has_value());
+        encoded.pop_back();
+        ASSERT_FALSE(cnetmod::quic::decode_frame(encoded).has_value());
+    }
+}
+
+TEST(quic_ack_many_ranges_preserve_values_and_consumed_length)
+{
+    for (const auto count : {0U, 1U, 8U, 256U})
+    {
+        cnetmod::quic::ack_frame frame{};
+        frame.largest_acked = 1000000U;
+        frame.ack_range_count = count;
+        for (auto index = 0U; index < count; ++index)
+            frame.ack_ranges.push_back({index, index + 64U});
+        auto encoded = cnetmod::quic::encode_frame(frame);
+        const auto size = encoded.size();
+        encoded.push_back(std::byte{0x01}); // A following PING is not part of the ACK.
+        const auto result = cnetmod::quic::decode_frame(encoded);
+        ASSERT_TRUE(result.has_value());
+        ASSERT_EQ(result->second, size);
+        const auto& decoded = std::get<cnetmod::quic::ack_frame>(result->first);
+        ASSERT_EQ(decoded.ack_ranges.size(), count);
+        for (auto index = 0U; index < count; ++index)
+        {
+            ASSERT_EQ(decoded.ack_ranges[index].gap, frame.ack_ranges[index].gap);
+            ASSERT_EQ(decoded.ack_ranges[index].ack_range_length,
+                frame.ack_ranges[index].ack_range_length);
+        }
+    }
+}
+
 TEST(quic_ack_frame_with_ranges)
 {
     // Test ACK frame with multiple ranges

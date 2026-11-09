@@ -289,10 +289,7 @@ namespace detail {
             in = in.subspan(*n);
             return result;
         }
-        std::string s;
-        s.reserve(*n);
-        for (std::size_t i{}; i < *n; ++i)
-            s.push_back(static_cast<char>(std::to_integer<unsigned char>(in[i])));
+        std::string s{reinterpret_cast<const char*>(in.data()), *n};
         in = in.subspan(*n);
         return s;
     }
@@ -952,9 +949,7 @@ auto qpack_decoder::process_encoder_instructions(byte_view data) -> std::expecte
             }
             else
             {
-                name.reserve(*length);
-                for (std::size_t i{}; i < *length; ++i)
-                    name.push_back(static_cast<char>(std::to_integer<unsigned char>(cursor[i])));
+                name.assign(reinterpret_cast<const char*>(cursor.data()), *length);
             }
             cursor = cursor.subspan(*length);
             auto value = detail::read_string(cursor);
@@ -1167,9 +1162,7 @@ auto qpack_decoder::decode_each(byte_view in, qpack_header_sink sink,
             }
             else
             {
-                name.reserve(*n);
-                for (std::size_t i{}; i < *n; ++i)
-                    name.push_back(static_cast<char>(std::to_integer<unsigned char>(in[i])));
+                name.assign(reinterpret_cast<const char*>(in.data()), *n);
             }
             in = in.subspan(*n);
             auto v = detail::read_string(in);

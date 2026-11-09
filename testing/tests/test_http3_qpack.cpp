@@ -573,4 +573,50 @@ TEST(qpack_decoder_stream_rejects_an_unbounded_integer_prefix)
     ASSERT_TRUE(rejected);
 }
 
+TEST(qpack_literal_octets_preserve_wire_bytes_and_reject_truncation)
+{
+    qpack_encoder encoder;
+    const auto input = fields({{"x", std::string{"\x00\xff", 2U}}});
+    const auto encoded = encoder.encode(input);
+    ASSERT_TRUE(encoded.has_value());
+    const std::array expected{std::byte{0x00}, std::byte{0x00}, std::byte{0x21},
+        std::byte{0x78}, std::byte{0x02}, std::byte{0x00}, std::byte{0xff}};
+    ASSERT_TRUE(std::ranges::equal(*encoded, expected));
+    qpack_decoder decoder;
+    const auto decoded = decoder.decode(*encoded);
+    ASSERT_TRUE(decoded.has_value());
+    ASSERT_EQ(decoded->size(), 1U);
+    ASSERT_EQ(decoded->front().value, input.front().value);
+    for (auto size = 3U; size < expected.size(); ++size)
+        ASSERT_FALSE(decoder.decode(std::span{expected}.first(size)).has_value());
+}
+
+TEST(qpack_literal_names_and_values_preserve_empty_and_long_octets)
+{
+    std::string octets;
+    for (auto value = 0U; value < 256U; ++value)
+        octets.push_back(static_cast<char>(value));
+    for (const auto length : {1U, 7U, 8U, 31U, 127U, 1024U})
+    {
+        for (const auto& value : {std::string{}, octets})
+        {
+            const auto input = fields({{std::string(length, 'x'), value}});
+            for (const auto capacity : {0U, 4096U})
+            {
+                qpack_encoder encoder{capacity};
+                qpack_decoder decoder{capacity};
+                const auto encoded = encoder.encode(input, 4U);
+                ASSERT_TRUE(encoded.has_value());
+                const auto instructions = encoder.take_encoder_instructions();
+                ASSERT_TRUE(decoder.process_encoder_instructions(instructions).has_value());
+                const auto decoded = decoder.decode(*encoded, 4U);
+                ASSERT_TRUE(decoded.has_value());
+                ASSERT_EQ(decoded->size(), 1U);
+                ASSERT_EQ(decoded->front().name, input.front().name);
+                ASSERT_EQ(decoded->front().value, input.front().value);
+            }
+        }
+    }
+}
+
 RUN_TESTS();

@@ -43,7 +43,9 @@ namespace {
 auto handle_request(cnetmod::http::v3::http3_request& request,
     cnetmod::http::v3::http3_response& response,
     const std::shared_ptr<const cnetmod::http::v3::qpack_static_response_headers>&
-        baseline_headers) -> std::error_code
+        baseline_headers,
+    const std::shared_ptr<const std::vector<cnetmod::http::v3::http3_prepared_response>>&
+        prepared_digits) -> std::error_code
 {
     namespace http = cnetmod::http;
     const auto target = std::string_view{request.path};
@@ -73,6 +75,11 @@ auto handle_request(cnetmod::http::v3::http3_request& request,
         if (next == std::string_view::npos)
             break;
         query.remove_prefix(next + 1);
+    }
+    if (sum >= 0 && sum < static_cast<std::int64_t>(prepared_digits->size()))
+    {
+        response.use_prepared((*prepared_digits)[static_cast<std::size_t>(sum)]);
+        return {};
     }
     response.static_headers = baseline_headers;
     response.body = std::to_string(sum);
@@ -140,11 +147,33 @@ auto main(int argc, char** argv) -> int
     }
     auto baseline_headers = std::make_shared<const cnetmod::http::v3::qpack_static_response_headers>(
         std::move(*encoded_baseline_headers));
+    auto prepared_digits_storage =
+        std::make_shared<std::vector<cnetmod::http::v3::http3_prepared_response>>();
+    prepared_digits_storage->reserve(10U);
+    for (char digit = '0'; digit <= '9'; ++digit)
+    {
+        const std::array<char, 1> body{{digit}};
+        auto prepared = cnetmod::http::v3::http3_prepared_response::encode(
+            cnetmod::http::status::ok, baseline_fields,
+            std::string_view{body.data(), body.size()});
+        if (!prepared)
+        {
+            logger::error{"failed to prepare baseline response: {}",
+                prepared.error().message()};
+            return 1;
+        }
+        prepared_digits_storage->push_back(std::move(*prepared));
+    }
+    auto prepared_digits = std::shared_ptr<const std::vector<
+        cnetmod::http::v3::http3_prepared_response>>{
+        std::move(prepared_digits_storage)};
 
     cnetmod::http::v3::server_request_handler handler = [static_files =
                                                                 std::move(static_files),
                                                             baseline_headers =
-                                                                std::move(baseline_headers)](
+                                                                std::move(baseline_headers),
+                                                            prepared_digits =
+                                                                std::move(prepared_digits)](
                                                             cnetmod::http::v3::http3_request& request,
                                                             cnetmod::http::v3::http3_response& response) -> std::error_code
     {
@@ -156,7 +185,8 @@ auto main(int argc, char** argv) -> int
             if (*served)
                 return {};
         }
-        return handle_request(request, response, baseline_headers);
+        return handle_request(request, response, baseline_headers,
+            prepared_digits);
     };
     cnetmod::server_context context{workers, workers};
     const cnetmod::endpoint endpoint{cnetmod::ipv4_address::any(), static_cast<std::uint16_t>(port)};

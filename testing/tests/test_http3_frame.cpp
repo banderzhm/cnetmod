@@ -77,6 +77,66 @@ TEST(http3_async_server_handler_can_share_buffered_response_body)
     ASSERT_TRUE(response.shared_body == cached);
 }
 
+TEST(http3_prepared_response_contains_reusable_headers_and_body)
+{
+    const std::array<cnetmod::http::v3::header_field, 1> fields{{
+        {"content-type", "text/plain"},
+    }};
+    auto prepared = cnetmod::http::v3::http3_prepared_response::encode(
+        cnetmod::http::status::ok, fields, "7");
+    ASSERT_TRUE(prepared.has_value());
+    ASSERT_EQ(prepared->status(), cnetmod::http::status::ok);
+
+    const auto headers = prepared->payload(true);
+    const auto complete = prepared->payload(false);
+    ASSERT_FALSE(headers.empty());
+    ASSERT_FALSE(complete.empty());
+    ASSERT_TRUE(complete.size() > headers.size());
+
+    const auto bytes = [](std::string_view value)
+    {
+        return cnetmod::byte_view{
+            reinterpret_cast<const std::byte*>(value.data()), value.size()};
+    };
+    const auto header_frame =
+        cnetmod::http::v3::decode_http3_frame(bytes(headers));
+    ASSERT_TRUE(header_frame.has_value());
+    ASSERT_TRUE(std::holds_alternative<cnetmod::http::v3::headers_frame>(
+        header_frame->first));
+    cnetmod::http::v3::qpack_decoder decoder;
+    const auto decoded_headers = decoder.decode(
+        std::get<cnetmod::http::v3::headers_frame>(header_frame->first).encoded_headers);
+    ASSERT_TRUE(decoded_headers.has_value());
+    const auto contains_header = [&](std::string_view name, std::string_view value)
+    {
+        return std::ranges::any_of(*decoded_headers, [&](const auto& field)
+            {
+                return field.name == name && field.value == value;
+            });
+    };
+    ASSERT_TRUE(contains_header(":status", "200"));
+    ASSERT_TRUE(contains_header("content-type", "text/plain"));
+
+    const auto complete_bytes = bytes(complete);
+    const auto first = cnetmod::http::v3::decode_http3_frame(complete_bytes);
+    ASSERT_TRUE(first.has_value());
+    const auto second = cnetmod::http::v3::decode_http3_frame(
+        complete_bytes.subspan(first->second));
+    ASSERT_TRUE(second.has_value());
+    const auto* data = std::get_if<cnetmod::http::v3::data_frame>(&second->first);
+    ASSERT_TRUE(data != nullptr);
+    ASSERT_EQ(data->data.size(), std::size_t{1});
+    ASSERT_EQ(std::to_integer<char>(data->data.front()), '7');
+
+    cnetmod::http::v3::http3_response response;
+    response.body = "discarded";
+    response.headers.emplace("x-test", "discarded");
+    response.use_prepared(*prepared);
+    ASSERT_TRUE(response.prepared == std::addressof(*prepared));
+    ASSERT_TRUE(response.body.empty());
+    ASSERT_TRUE(response.headers.empty());
+}
+
 TEST(http3_static_files_follow_disk_and_negotiate_precompressed_content)
 {
     const auto root = std::filesystem::temp_directory_path() /

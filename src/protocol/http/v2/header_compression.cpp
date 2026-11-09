@@ -182,8 +182,8 @@ namespace {
             return;
         }
         encode_integer(out, static_cast<std::uint32_t>(value.size()), 7);
-        for (char ch : value)
-            out.push_back(static_cast<std::byte>(ch));
+        const auto bytes = std::as_bytes(std::span{value.data(), value.size()});
+        out.insert(out.end(), bytes.begin(), bytes.end());
     }
 
     auto decode_string(std::span<const std::byte> input, std::size_t& offset,

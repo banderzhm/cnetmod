@@ -960,7 +960,69 @@ namespace {
         return encode_http3_frame(headers_frame{*block});
     }
 
+    auto valid_prepared_response(const http3_response& response) noexcept -> bool
+    {
+        return response.prepared &&
+            response.status == response.prepared->status() &&
+            response.headers.empty() && !response.static_headers &&
+            response.body.empty() && !response.shared_body &&
+            !response.body_source && response.trailers.empty() &&
+            response.pushes.empty();
+    }
+
+    auto copy_prepared_response(const http3_prepared_response& response,
+        bool suppress_body) -> std::vector<std::byte>
+    {
+        const auto payload = response.payload(suppress_body);
+        const auto bytes = std::as_bytes(std::span{payload});
+        std::vector<std::byte> encoded;
+        // QUIC can prepend the STREAM frame header without reallocating.
+        encoded.reserve(bytes.size() + 24U);
+        encoded.insert(encoded.end(), bytes.begin(), bytes.end());
+        return encoded;
+    }
+
 } // namespace
+
+http3_prepared_response::http3_prepared_response(int status,
+    std::string headers, std::string complete) noexcept
+    : status_(status), headers_(std::move(headers)), complete_(std::move(complete))
+{
+}
+
+auto http3_prepared_response::encode(int status,
+    std::span<const header_field> fields, std::string_view body)
+    -> std::expected<http3_prepared_response, std::error_code>
+{
+    auto encoded_headers = qpack_static_response_headers::encode(status, fields);
+    if (!encoded_headers)
+        return std::unexpected(encoded_headers.error());
+    auto encoded_header_frame =
+        encode_http3_frame(headers_frame{encoded_headers->encoded()});
+    auto complete = encoded_header_frame;
+    if (!body.empty())
+        append_http3_frame(complete,
+            static_cast<std::uint64_t>(http3_frame_type::data),
+            ::utils::conv::to_bytes(body));
+    const auto as_string = [](const byte_buffer& bytes)
+    {
+        return std::string{
+            reinterpret_cast<const char*>(bytes.data()), bytes.size()};
+    };
+    return http3_prepared_response{status,
+        as_string(encoded_header_frame), as_string(complete)};
+}
+
+auto http3_prepared_response::status() const noexcept -> int
+{
+    return status_;
+}
+
+auto http3_prepared_response::payload(bool suppress_body) const noexcept
+    -> std::string_view
+{
+    return suppress_body ? headers_ : complete_;
+}
 
 auto make_webtransport_connect_request(std::string host, std::string path)
     -> http3_request
@@ -2233,6 +2295,7 @@ auto http3_server_session::service_peer_stream(stream_id id,
             response.body.clear();
             response.shared_body.reset();
             response.static_headers.reset();
+            response.prepared = nullptr;
         }
     }
     else if (async_handler_)
@@ -2257,6 +2320,7 @@ auto http3_server_session::service_peer_stream(stream_id id,
             response.body.clear();
             response.shared_body.reset();
             response.static_headers.reset();
+            response.prepared = nullptr;
         }
     }
     else if (handler_(*request, response))
@@ -2265,6 +2329,7 @@ auto http3_server_session::service_peer_stream(stream_id id,
         response.body.clear();
         response.shared_body.reset();
         response.static_headers.reset();
+        response.prepared = nullptr;
     }
     co_await send_response(id, request->method, response);
 }
@@ -2299,6 +2364,21 @@ auto http3_server_session::send_response(stream_id id, http_method method,
         response.status, method == http_method::HEAD);
     if (suppress_response_body)
         response.body_source.reset();
+
+    if (response.prepared)
+    {
+        if (!valid_prepared_response(response))
+        {
+            (void)co_await conn_.async_cancel_stream(id);
+            co_return;
+        }
+        auto encoded = copy_prepared_response(
+            *response.prepared, suppress_response_body);
+        const auto sent = co_await conn_.async_send(id, std::move(encoded), true);
+        if (!sent)
+            co_await cancel_request(id);
+        co_return;
+    }
 
     const auto declared_length = response_declared_length(response);
     if (!declared_length)
@@ -2693,6 +2773,7 @@ void http3_server_session::serve_peer_stream(stream_id id)
         response.body.clear();
         response.shared_body.reset();
         response.static_headers.reset();
+        response.prepared = nullptr;
     }
 
     // The synchronous handler has returned, so no valid request reference can
@@ -2709,6 +2790,30 @@ void http3_server_session::serve_peer_stream(stream_id id)
     // transport that is busy, finishes in a coroutine.
     const bool suppress_body = response_forbids_content(response.status,
         method == http_method::HEAD);
+    if (response.prepared)
+    {
+        if (!valid_prepared_response(response))
+        {
+            spawn_local(conn_.context(), cancel_owned(id, 0U));
+            return;
+        }
+        auto encoded = copy_prepared_response(*response.prepared, suppress_body);
+        auto sent = conn_.try_send_now(id, encoded, {}, true);
+        if (!sent)
+        {
+            spawn_local(conn_.context(), respond_owned(
+                id, method, std::move(response)));
+            return;
+        }
+        if (!*sent)
+        {
+            spawn_local(conn_.context(), cancel_owned(id, 0U));
+            return;
+        }
+        inline_writes_pending_ = true;
+        finish_peer_stream(id, false);
+        return;
+    }
     const auto declared_length = response_declared_length(response);
     const auto buffered_body = buffered_response_body(response);
     const bool simple = response.pushes.empty() && !response.body_source &&
