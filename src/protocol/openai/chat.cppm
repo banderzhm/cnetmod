@@ -64,6 +64,8 @@ export struct chat_chunk
     std::vector<tool_delta> delta_tool_calls;
     std::optional<usage> token_usage;
     std::size_t generation_attempt = 1;
+    /// Incremental provider reasoning state, separate from user-visible delta_content.
+    std::string delta_reasoning_content;
 
     [[nodiscard]] static auto from_json(std::string_view text) -> chat_chunk;
 };

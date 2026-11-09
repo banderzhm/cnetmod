@@ -17399,6 +17399,12 @@ auto run_dns_server(cn::io_context& ctx) -> cn::task<void> {
 - **Do**: DNS 查询使用 `make_query` 构建标准查询，避免手动构造 message
 - **Don't**: 不要在 OpenAI `chat_stream` 回调中执行耗时操作，会阻塞 SSE 解析
 - **Don't**: DNS `udp_client` 单次查询限制 512 字节，大响应需用 `tcp_client`
+
+## 思考模型的工具往返
+
+`message::reasoning_content` 保存供应商返回的内部推理状态。Chat Completions 的完整响应和流式响应分别从 `message.reasoning_content` 和 `delta.reasoning_content` 读取，`openai_chat_model::stream` 会合并这些片段。工具执行后，应将原 assistant 消息连同工具调用和推理状态一起放回请求。
+
+正文仍由 `message::content` 和 `chat_chunk::delta_content` 提供。应用展示、业务留痕和外部 API 应明确选择正文，不能把推理状态拼进用户可见内容。普通请求没有推理状态时，序列化不会额外发送该字段。
 <!-- END SOURCE: skill/protocols/openai-mail-dns.md -->
 
 <!-- BEGIN SOURCE: skill/protocols/raft.md -->

@@ -362,6 +362,7 @@ auto openai_chat_model::stream(chat_request request, stream_handler handler,
             if (!chunk.model.empty())
                 aggregate.model = chunk.model;
             output.content += chunk.delta_content;
+            output.reasoning_content += chunk.delta_reasoning_content;
             if (!chunk.finish_reason.empty())
                 finish_reason = chunk.finish_reason;
             if (chunk.token_usage)

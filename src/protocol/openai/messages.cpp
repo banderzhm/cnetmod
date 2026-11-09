@@ -143,6 +143,7 @@ auto message::from_json_object(const json& value)
         }
     }
     result.name = cnetmod::json::value_or(value, "name", std::string{});
+    result.reasoning_content = cnetmod::json::value_or(value, "reasoning_content", std::string{});
     result.tool_call_id = cnetmod::json::value_or(
         value, "tool_call_id", std::string{});
     if (value.contains("tool_calls"))
@@ -172,6 +173,8 @@ auto message::to_json_object() const -> json
 {
     json value;
     value["role"] = role;
+    if (!reasoning_content.empty())
+        value["reasoning_content"] = reasoning_content;
     if (!content_parts.empty())
     {
         auto content = cnetmod::json::array();
@@ -194,9 +197,7 @@ auto message::to_json_object() const -> json
             calls.get_array().push_back(cnetmod::json::object(
                 {{"id", call.id},
                     {"type", call.type},
-                    {"function", cnetmod::json::object(
-                                     {{"name", call.function.name},
-                                         {"arguments", call.function.arguments}})}}));
+                    {"function", cnetmod::json::object({{"name", call.function.name}, {"arguments", call.function.arguments}})}}));
         value["tool_calls"] = std::move(calls);
     }
     return value;

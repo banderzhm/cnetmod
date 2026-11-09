@@ -21,7 +21,7 @@ import cnetmod.observability.openai;
 import cnetmod.json;
 
 #ifndef CNETMOD_OPENAI_TEST_GROUP
-#define CNETMOD_OPENAI_TEST_GROUP 0
+    #define CNETMOD_OPENAI_TEST_GROUP 0
 #endif
 
 #if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 8
@@ -409,6 +409,33 @@ TEST(openai_prompt_template_renders_nested_row_contexts)
     ASSERT_EQ(*rendered, std::string("orders:read=allow;write=global;\n" "billing:read=global;\n"));
 }
 
+TEST(openai_reasoning_state_roundtrips_without_becoming_visible_content)
+{
+    auto response = openai::chat_response::from_json(R"({"model":"reasoning-fixture","choices":[{"index":0,"message":{"role":"assistant","content":"answer","reasoning_content":"internal state"},"finish_reason":"stop"}]})");
+    ASSERT_EQ(response.choices.front().msg.content, "answer");
+    ASSERT_EQ(response.choices.front().msg.reasoning_content, "internal state");
+    const auto restored = openai::message::from_json_object(response.choices.front().msg.to_json_object());
+    ASSERT_TRUE(restored.has_value());
+    ASSERT_EQ(restored->reasoning_content, "internal state");
+    const auto chunk = openai::chat_chunk::from_json(R"({"choices":[{"index":0,"delta":{"reasoning_content":"thinking"}}]})");
+    ASSERT_TRUE(chunk.delta_content.empty());
+    ASSERT_EQ(chunk.delta_reasoning_content, "thinking");
+}
+
+TEST(openai_reasoning_requests_preserve_state_and_fill_assistant_history)
+{
+    openai::chat_request request;
+    request.messages.push_back(openai::message::model_output("old answer"));
+    auto plain = cnetmod::json::parse_document(request.to_json()).value();
+    ASSERT_FALSE(plain["messages"][0].contains("reasoning_content"));
+    auto state = openai::message::model_output("next answer");
+    state.reasoning_content = "tool reasoning";
+    request.messages.push_back(std::move(state));
+    const auto wire = cnetmod::json::parse_document(request.to_json()).value();
+    ASSERT_EQ(wire["messages"][0]["reasoning_content"].get<std::string>(), "");
+    ASSERT_EQ(wire["messages"][1]["reasoning_content"].get<std::string>(), "tool reasoning");
+}
+
 TEST(openai_structured_output_serializes_and_validates)
 {
     const openai::json schema{{"type", "object"},
@@ -429,11 +456,7 @@ TEST(openai_structured_output_serializes_and_validates)
 TEST(openai_json_schema_enforces_scalar_and_collection_bounds)
 {
     const openai::json schema{{"type", "object"},
-        {"properties", {
-            {"score", {{"type", "integer"}, {"minimum", 1}, {"maximum", 5}}},
-            {"label", {{"type", "string"}, {"minLength", 2}, {"maxLength", 3}}},
-            {"items", {{"type", "array"}, {"minItems", 1}, {"maxItems", 2},
-                {"items", {{"type", "integer"}}}}}}},
+        {"properties", {{"score", {{"type", "integer"}, {"minimum", 1}, {"maximum", 5}}}, {"label", {{"type", "string"}, {"minLength", 2}, {"maxLength", 3}}}, {"items", {{"type", "array"}, {"minItems", 1}, {"maxItems", 2}, {"items", {{"type", "integer"}}}}}}},
         {"required", {"score", "label", "items"}},
         {"additionalProperties", false}};
 
@@ -3241,17 +3264,17 @@ TEST(openai_mcp_stdio_transport_exchanges_json_rpc)
 {
     auto context = cnetmod::make_io_context();
     cnetmod::thread_pool pool{1};
-#ifdef _WIN32
+    #ifdef _WIN32
     cnetmod::process_options process{
         .executable = LR"(C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe)",
         .arguments = {"-NoProfile", "-NonInteractive", "-Command",
             "$null=[Console]::In.ReadLine();" "[Console]::Out.WriteLine(" "'{\"jsonrpc\":\"2.0\",\"id\":99,\"method\":\"roots/list\",\"params\":{}}');" "$reply=[Console]::In.ReadLine()|ConvertFrom-Json;" "$ok=($reply.id -eq 99 -and " "$reply.result.roots[0].uri -eq 'file:///workspace');" "[Console]::Out.WriteLine((@{jsonrpc='2.0';id=7;" "result=@{ok=$ok}}|ConvertTo-Json -Compress))"}};
-#else
+    #else
     cnetmod::process_options process{
         .executable = "/bin/sh",
         .arguments = {"-c",
             "read line; printf '%s\\n' " "'{\"jsonrpc\":\"2.0\",\"id\":99,\"method\":\"roots/list\",\"params\":{}}'; " "read reply; case \"$reply\" in *file:///workspace*) ok=true;; " "*) ok=false;; esac; printf " "'{\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"ok\":%s}}\\n' \"$ok\""}};
-#endif
+    #endif
     openai::mcp_stdio_transport transport{*context, pool,
         {.process = std::move(process)}};
     std::size_t inbound_calls = 0;

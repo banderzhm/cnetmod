@@ -44,6 +44,8 @@ export struct message
     /// Opaque Responses API output items, retained in memory for tool continuation.
     /// Never serialized in Chat Completions messages.
     std::vector<std::string> response_output_items;
+    /// Provider-owned reasoning state for subsequent tool turns. Never display as answer text.
+    std::string reasoning_content;
 
     /// Constructs end-user input (wire role: user).
     static auto user(std::string_view text) -> message;

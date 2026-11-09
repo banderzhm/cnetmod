@@ -40,8 +40,18 @@ auto chat_request::to_json() const -> std::string
         value["max_tokens"] = max_tokens;
     value["stream"] = stream;
     auto wire_messages = cnetmod::json::array();
+    const auto has_reasoning_state = std::ranges::any_of(messages,
+        [](const message& item)
+        {
+            return !item.reasoning_content.empty();
+        });
     for (const auto& item : messages)
-        wire_messages.get_array().push_back(item.to_json_object());
+    {
+        auto encoded = item.to_json_object();
+        if (has_reasoning_state && item.role == "assistant" && item.reasoning_content.empty())
+            encoded["reasoning_content"] = "";
+        wire_messages.get_array().push_back(std::move(encoded));
+    }
     value["messages"] = std::move(wire_messages);
     if (top_p != 1.0)
         value["top_p"] = top_p;
@@ -60,10 +70,7 @@ auto chat_request::to_json() const -> std::string
     if (response_format == "json_schema")
         value["response_format"] = cnetmod::json::object(
             {{"type", "json_schema"},
-                {"json_schema", cnetmod::json::object(
-                                    {{"name", response_schema_name},
-                                        {"strict", response_schema_strict},
-                                        {"schema", response_schema}})}});
+                {"json_schema", cnetmod::json::object({{"name", response_schema_name}, {"strict", response_schema_strict}, {"schema", response_schema}})}});
     else if (!response_format.empty())
         value["response_format"] =
             cnetmod::json::object({{"type", response_format}});
@@ -119,6 +126,7 @@ auto chat_chunk::from_json(std::string_view text) -> chat_chunk
         const auto& delta = choice["delta"];
         result.delta_role = string_field(delta, "role");
         result.delta_content = string_field(delta, "content");
+        result.delta_reasoning_content = string_field(delta, "reasoning_content");
         if (delta.contains("tool_calls") && delta["tool_calls"].is_array())
         {
             for (const auto& item : delta["tool_calls"].get_array())
@@ -171,6 +179,8 @@ auto chat_response::from_json(std::string_view text) -> chat_response
                     wire_message, "role", std::string{});
                 parsed.msg.content = cnetmod::json::value_or(
                     wire_message, "content", std::string{});
+                parsed.msg.reasoning_content = cnetmod::json::value_or(
+                    wire_message, "reasoning_content", std::string{});
                 if (wire_message.contains("tool_calls") && wire_message["tool_calls"].is_array())
                     for (const auto& item : wire_message["tool_calls"].get_array())
                     {
