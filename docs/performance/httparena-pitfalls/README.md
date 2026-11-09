@@ -34,4 +34,3 @@
 完整轮次仍以 [推进日志](../httparena-gap-closure-log.md) 为准。
 当前排名和预计剩余差距见
 [第一名目标跟踪表](../httparena-target-tracker.md)。
-
