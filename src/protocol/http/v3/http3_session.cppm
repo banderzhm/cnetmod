@@ -82,6 +82,36 @@ export [[nodiscard]] auto decode_webtransport_stream_preface(byte_view bytes,
 
 export struct http3_response;
 
+/// Immutable HEADERS plus DATA wire image for repeated HTTP/3 responses.
+/// Build it once, keep it alive, and select it through
+/// http3_response::use_prepared(). The payload uses only static-table QPACK
+/// references, so every connection can send it without encoder state.
+export class http3_prepared_response
+{
+public:
+    http3_prepared_response(http3_prepared_response&&) noexcept = default;
+    auto operator=(http3_prepared_response&&) noexcept
+        -> http3_prepared_response& = default;
+    http3_prepared_response(const http3_prepared_response&) = delete;
+    auto operator=(const http3_prepared_response&)
+        -> http3_prepared_response& = delete;
+
+    [[nodiscard]] static auto encode(int status,
+        std::span<const header_field> fields, std::string_view body)
+        -> std::expected<http3_prepared_response, std::error_code>;
+    [[nodiscard]] auto status() const noexcept -> int;
+    [[nodiscard]] auto payload(bool suppress_body = false) const noexcept
+        -> std::string_view;
+
+private:
+    http3_prepared_response(int status,
+        std::string headers, std::string complete) noexcept;
+
+    int status_{};
+    std::string headers_;
+    std::string complete_;
+};
+
 /// One RFC 9114 server-push candidate.  The server sends `request` in a
 /// PUSH_PROMISE on the parent request stream and delivers `response` on its
 /// own server-initiated unidirectional push stream.  A null response is
@@ -103,6 +133,21 @@ export struct http3_response
     /// with qpack_static_response_headers::encode(). `status` must match and
     /// `headers` must stay empty when this fast path is used.
     std::shared_ptr<const qpack_static_response_headers> static_headers;
+    /// Non-owning selection of an application-lifetime prepared response.
+    /// use_prepared() clears mutually exclusive response storage.
+    const http3_prepared_response* prepared{};
+    void use_prepared(const http3_prepared_response& value) noexcept
+    {
+        status = value.status();
+        headers.clear();
+        static_headers.reset();
+        body.clear();
+        shared_body.reset();
+        body_source.reset();
+        trailers.clear();
+        pushes.clear();
+        prepared = std::addressof(value);
+    }
     std::string body;
     /// Optional immutable buffered body storage. Servers can share preloaded
     /// content across responses while the session builds the wire image.

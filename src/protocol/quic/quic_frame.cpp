@@ -64,21 +64,27 @@ namespace {
             return std::unexpected(first_range.error());
         frame.first_ack_range = *first_range;
 
-        frame.ack_ranges.reserve(static_cast<std::size_t>(frame.ack_range_count));
-        for (std::uint64_t i = 0; i < frame.ack_range_count; ++i)
+        if (frame.ack_range_count != 0U)
         {
-            ack_range range{};
-            auto gap = read_varint();
-            if (!gap)
-                return std::unexpected(gap.error());
-            range.gap = *gap;
+            // Each range needs two varints. Bound allocation by available bytes.
+            if (frame.ack_range_count > (data.size() - offset) / 2U)
+                return std::unexpected(std::make_error_code(std::errc::bad_message));
+            frame.ack_ranges.reserve(static_cast<std::size_t>(frame.ack_range_count));
+            for (std::uint64_t i = 0; i < frame.ack_range_count; ++i)
+            {
+                ack_range range{};
+                auto gap = read_varint();
+                if (!gap)
+                    return std::unexpected(gap.error());
+                range.gap = *gap;
 
-            auto range_len = read_varint();
-            if (!range_len)
-                return std::unexpected(range_len.error());
-            range.ack_range_length = *range_len;
+                auto range_len = read_varint();
+                if (!range_len)
+                    return std::unexpected(range_len.error());
+                range.ack_range_length = *range_len;
 
-            frame.ack_ranges.push_back(range);
+                frame.ack_ranges.push_back(range);
+            }
         }
 
         if (has_ecn)
@@ -99,7 +105,7 @@ namespace {
             frame.ecn_ce_count = *ecn_ce;
         }
 
-        return std::pair{frame, offset};
+        return std::pair{std::move(frame), offset};
     }
 
     auto decode_stream_frame(std::span<const std::byte> data,
@@ -259,7 +265,7 @@ auto decode_frame(std::span<const std::byte> data)
         auto result = decode_ack_frame(payload, type_value == 0x03);
         if (!result)
             return std::unexpected(result.error());
-        return std::pair{quic_frame_variant{result->first},
+        return std::pair{quic_frame_variant{std::move(result->first)},
             type_offset + result->second};
     }
 

@@ -217,6 +217,24 @@ response.shared_body = cached_body;
 并且不能同时使用 `body_source`。`response.headers` 为空时直接复用预编码块；
 非空时合并缓存字段后走普通 QPACK 编码，同名字段以 `response.headers` 为准。
 
+状态、响应头和小响应体都固定时，可以预编码完整的 HEADERS + DATA。该路径会绕过
+逐请求 QPACK 编码与 HTTP/3 帧组装，同时保留普通发送路径的流控和恢复语义：
+
+```cpp
+const std::array fields{
+    h3::header_field{"content-type", "text/plain"}};
+auto prepared = h3::http3_prepared_response::encode(200, fields, "ok");
+if (!prepared)
+    co_return std::unexpected(prepared.error());
+
+// prepared 必须比所有引用它的请求更长寿，通常由应用组合根持有。
+response.use_prepared(*prepared);
+```
+
+`use_prepared()` 会清空其他响应存储。预编码对象只使用静态 QPACK 表和字面量，
+所以可以跨连接复用。它适合健康检查、固定 API 回执和有限枚举响应；动态响应继续使用
+`static_headers`、`body` 或 `shared_body`。
+
 ### 响应体流式发送
 
 服务端可设置 `response.body_source`。服务端先发送 HEADERS，再按 producer 发送

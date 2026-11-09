@@ -2432,11 +2432,9 @@ auto server::execute_chain(request_context& ctx, handler_fn& handler,
 auto server::send_chunked_response(io_context& io, socket& client,
     response& resp, cancel_token& cancellation) -> task<void>
 {
-    // Send headers (without body)
-    auto body = std::move(resp.body());
-    resp.set_body(std::string{}); // Clear body
-
-    auto header_data = resp.serialize();
+    const auto body = resp.body();
+    std::string header_data;
+    resp.append_serialized_headers_to(header_data);
     auto wr = co_await async_write_all(
         io, client, const_buffer{header_data.data(), header_data.size()}, cancellation);
     if (!wr)
@@ -2450,23 +2448,12 @@ auto server::send_chunked_response(io_context& io, socket& client,
     {
         auto chunk_size = std::min(CHUNK_SIZE, body.size() - offset);
 
-        // Send chunk size (hex)
-        auto size_str = std::format("{:x}\r\n", chunk_size);
-        auto wr1 = co_await async_write_all(
-            io, client, const_buffer{size_str.data(), size_str.size()}, cancellation);
-        if (!wr1)
-            co_return;
-
-        // Send chunk data
-        auto wr2 = co_await async_write_all(
-            io, client, const_buffer{body.data() + offset, chunk_size}, cancellation);
-        if (!wr2)
-            co_return;
-
-        // Send chunk ending \r\n
-        auto wr3 = co_await async_write_all(
-            io, client, const_buffer{"\r\n", 2}, cancellation);
-        if (!wr3)
+        auto record = std::format("{:x}\r\n", chunk_size);
+        record.append(body.data() + offset, chunk_size);
+        record += "\r\n";
+        auto written = co_await async_write_all(io, client,
+            const_buffer{record.data(), record.size()}, cancellation);
+        if (!written)
             co_return;
 
         offset += chunk_size;
@@ -2574,11 +2561,9 @@ auto server::send_body_source_tls(ssl_stream& ssl, response& resp,
 auto server::send_chunked_response_tls(io_context&, ssl_stream& ssl,
     response& resp, cancel_token& cancellation) -> task<void>
 {
-    // Send headers (without body)
-    auto body = std::move(resp.body());
-    resp.set_body(std::string{}); // Clear body
-
-    auto header_data = resp.serialize();
+    const auto body = resp.body();
+    std::string header_data;
+    resp.append_serialized_headers_to(header_data);
     auto wr = co_await ssl.async_write_all(
         const_buffer{header_data.data(), header_data.size()}, cancellation);
     if (!wr)

@@ -174,4 +174,40 @@ TEST(hpack_shared_block_does_not_shift_peer_dynamic_indices)
         std::string("shared block must not insert"));
 }
 
+TEST(hpack_literal_octets_preserve_wire_bytes)
+{
+    header_compression encoder{0U};
+    const std::array input{header_field{"x", std::string{"\x00\xff", 2U}}};
+    const auto encoded = encoder.encode(input);
+    ASSERT_TRUE(encoded.has_value());
+    const std::array expected{std::byte{0x00}, std::byte{0x01}, std::byte{0x78},
+        std::byte{0x02}, std::byte{0x00}, std::byte{0xff}};
+    ASSERT_TRUE(std::ranges::equal(*encoded, expected));
+    header_compression decoder;
+    const auto decoded = decoder.decode(*encoded);
+    ASSERT_TRUE(decoded.has_value());
+    ASSERT_EQ(decoded->size(), 1U);
+    ASSERT_EQ(decoded->front().value, input.front().value);
+}
+
+TEST(hpack_literal_values_preserve_empty_and_long_octets)
+{
+    for (const auto length : {0U, 1U, 15U, 16U, 127U, 1024U})
+    {
+        header_compression encoder{0U};
+        header_compression decoder;
+        std::string value;
+        for (auto index = 0U; index < length; ++index)
+            value.push_back(static_cast<char>(index % 256U));
+        const std::array input{header_field{"x-header-name", value}};
+        const auto encoded = encoder.encode(input);
+        ASSERT_TRUE(encoded.has_value());
+        const auto decoded = decoder.decode(*encoded);
+        ASSERT_TRUE(decoded.has_value());
+        ASSERT_EQ(decoded->size(), 1U);
+        ASSERT_EQ(decoded->front().name, input.front().name);
+        ASSERT_EQ(decoded->front().value, input.front().value);
+    }
+}
+
 RUN_TESTS()

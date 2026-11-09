@@ -335,6 +335,19 @@ auto handler = [](request_context& ctx) -> task<void> {
 常规文本、JSON 和 HTML 响应继续优先使用 `request_context::text/json/html()`；这些
 便捷方法已经走同一入口。
 
+#### `response::append_serialized_headers_to`
+
+```cpp
+void append_serialized_headers_to(std::string& output,
+    std::size_t reserve_extra = 0,
+    header_order order = header_order::storage) const;
+```
+
+框架传输层需要单独发送响应头时，调用这个入口，再从 `body()` 的视图发送正文。
+`body()` 返回 `std::string_view`，其有效期由 response 内的正文所有权决定。
+发送完成前应保留正文。`set_body()` 会替换正文并重算 `Content-Length`，因此单独输出
+响应头时应直接使用上述入口。普通 handler 继续通过 response 交给框架处理分块和发送。
+
 #### `prepared_response` / `router::get_prepared`
 **签名**:
 ```cpp

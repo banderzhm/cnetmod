@@ -665,4 +665,141 @@ TEST(sse_recovery_finishes_committed_stream_without_http_fallback)
     ASSERT_TRUE(verified);
 }
 
+namespace {
+auto buffered_chunked_pipeline_is_intact([[maybe_unused]] bool secure) -> bool
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    server http_server{*io};
+#ifdef CNETMOD_HAS_SSL
+    std::optional<cnetmod::ssl_context> server_tls;
+    if (secure)
+    {
+        auto context = cnetmod::ssl_context::server();
+        ASSERT_TRUE(context.has_value());
+        server_tls.emplace(std::move(*context));
+        ASSERT_TRUE(server_tls->load_cert_file(CNETMOD_HTTP_SSE_TEST_CERT).has_value());
+        ASSERT_TRUE(server_tls->load_key_file(CNETMOD_HTTP_SSE_TEST_KEY).has_value());
+        http_server.set_ssl_context(*server_tls);
+    }
+#endif
+    router routes;
+    std::vector<std::shared_ptr<const std::string>> expected;
+    std::string requests;
+    for (const auto size : {12U, 8192U, 16385U})
+    {
+        for (const auto shared : {false, true})
+        {
+            auto bytes = std::make_shared<std::string>(size, '\0');
+            for (std::size_t index{}; index < bytes->size(); ++index)
+                (*bytes)[index] = static_cast<char>((index + 1U) % 256U);
+            const auto path = std::format("/chunked/{}", expected.size());
+            expected.push_back(bytes);
+            routes.get_sync(path, [bytes, shared](request_context& request)
+            {
+                if (shared)
+                    request.resp().set_shared_body(bytes);
+                else
+                    request.resp().set_body(std::string_view{*bytes});
+                request.resp().remove_header("Content-Length");
+            });
+            requests += std::format("GET {} HTTP/1.1\r\nHost: localhost\r\n\r\n", path);
+        }
+    }
+    routes.get_sync("/health", [](request_context& request)
+    {
+        request.text(status::ok, "done");
+    });
+    requests += "GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+    http_server.set_router(std::move(routes));
+    ASSERT_TRUE(http_server.listen("127.0.0.1", 0).has_value());
+    const auto endpoint = http_server.local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+    auto listener = http_server.run();
+    listener.handle().resume();
+    std::string received;
+    auto exercise = [&]() -> cnetmod::task<void>
+    {
+        auto peer = cnetmod::socket::create(cnetmod::address_family::ipv4,
+            cnetmod::socket_type::stream);
+        ASSERT_TRUE(peer.has_value());
+        ASSERT_TRUE((co_await cnetmod::async_connect(*io, *peer, *endpoint)).has_value());
+#ifdef CNETMOD_HAS_SSL
+        std::optional<cnetmod::ssl_context> client_tls;
+        std::optional<cnetmod::ssl_stream> encrypted;
+        if (secure)
+        {
+            auto context = cnetmod::ssl_context::client();
+            ASSERT_TRUE(context.has_value());
+            client_tls.emplace(std::move(*context));
+            client_tls->set_verify_peer(false);
+            encrypted.emplace(*client_tls, *io, *peer);
+            encrypted->set_connect_state();
+            ASSERT_TRUE((co_await encrypted->async_handshake()).has_value());
+        }
+        if (encrypted)
+            ASSERT_TRUE((co_await encrypted->async_write_all(
+                cnetmod::const_buffer{requests.data(), requests.size()})).has_value());
+        else
+#endif
+            ASSERT_TRUE((co_await cnetmod::async_write_all(*io, *peer,
+                cnetmod::const_buffer{requests.data(), requests.size()})).has_value());
+        std::array<char, 4096> bytes{};
+        for (;;)
+        {
+            std::expected<std::size_t, std::error_code> read;
+#ifdef CNETMOD_HAS_SSL
+            if (encrypted)
+                read = co_await encrypted->async_read({bytes.data(), bytes.size()});
+            else
+#endif
+                read = co_await cnetmod::async_read(*io, *peer,
+                    cnetmod::mutable_buffer{bytes.data(), bytes.size()});
+            if (!read || *read == 0U)
+                break;
+            received.append(bytes.data(), *read);
+        }
+        peer->close();
+        http_server.stop();
+        while (!listener.handle().done())
+            co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{1});
+        listener.handle().promise().result();
+        while (http_server.active_connections() != 0U)
+            co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{1});
+        io->stop();
+    };
+    auto operation = exercise();
+    operation.handle().resume();
+    io->run();
+    ASSERT_TRUE(operation.handle().done());
+    operation.handle().promise().result();
+    for (const auto& body : expected)
+    {
+        response_parser parser;
+        const auto parsed = parser.consume(received.data(), received.size());
+        if (!parsed || !parser.ready() || parser.status_code() != 200 ||
+            parser.get_header("Transfer-Encoding") != "chunked" ||
+            !parser.get_header("Content-Length").empty() || parser.body() != *body)
+            return false;
+        received = parser.take_buffered_data();
+    }
+    response_parser health;
+    return health.consume(received.data(), received.size()).has_value() &&
+        health.ready() && health.status_code() == 200 && health.body() == "done" &&
+        health.take_buffered_data().empty();
+}
+} // namespace
+
+TEST(buffered_chunked_response_preserves_body_and_pipeline)
+{
+    ASSERT_TRUE(buffered_chunked_pipeline_is_intact(false));
+}
+
+#ifdef CNETMOD_HAS_SSL
+TEST(buffered_chunked_tls_response_preserves_body_and_pipeline)
+{
+    ASSERT_TRUE(buffered_chunked_pipeline_is_intact(true));
+}
+#endif
+
 RUN_TESTS()

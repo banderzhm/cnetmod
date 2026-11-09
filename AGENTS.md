@@ -8925,6 +8925,19 @@ auto handler = [](request_context& ctx) -> task<void> {
 常规文本、JSON 和 HTML 响应继续优先使用 `request_context::text/json/html()`；这些
 便捷方法已经走同一入口。
 
+#### `response::append_serialized_headers_to`
+
+```cpp
+void append_serialized_headers_to(std::string& output,
+    std::size_t reserve_extra = 0,
+    header_order order = header_order::storage) const;
+```
+
+框架传输层需要单独发送响应头时，调用这个入口，再从 `body()` 的视图发送正文。
+`body()` 返回 `std::string_view`，其有效期由 response 内的正文所有权决定。
+发送完成前应保留正文。`set_body()` 会替换正文并重算 `Content-Length`，因此单独输出
+响应头时应直接使用上述入口。普通 handler 继续通过 response 交给框架处理分块和发送。
+
 #### `prepared_response` / `router::get_prepared`
 **签名**:
 ```cpp
@@ -9925,6 +9938,24 @@ response.shared_body = cached_body;
 使用 `static_headers` 时，`response.status` 必须与预编码状态一致，
 并且不能同时使用 `body_source`。`response.headers` 为空时直接复用预编码块；
 非空时合并缓存字段后走普通 QPACK 编码，同名字段以 `response.headers` 为准。
+
+状态、响应头和小响应体都固定时，可以预编码完整的 HEADERS + DATA。该路径会绕过
+逐请求 QPACK 编码与 HTTP/3 帧组装，同时保留普通发送路径的流控和恢复语义：
+
+```cpp
+const std::array fields{
+    h3::header_field{"content-type", "text/plain"}};
+auto prepared = h3::http3_prepared_response::encode(200, fields, "ok");
+if (!prepared)
+    co_return std::unexpected(prepared.error());
+
+// prepared 必须比所有引用它的请求更长寿，通常由应用组合根持有。
+response.use_prepared(*prepared);
+```
+
+`use_prepared()` 会清空其他响应存储。预编码对象只使用静态 QPACK 表和字面量，
+所以可以跨连接复用。它适合健康检查、固定 API 回执和有限枚举响应；动态响应继续使用
+`static_headers`、`body` 或 `shared_body`。
 
 ### 响应体流式发送
 

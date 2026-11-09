@@ -31,14 +31,14 @@ jobs:
       - name: Install Clang 22 and build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget ninja-build python3-venv libicu-dev liburing-dev
+          sudo apt-get install -y wget ninja-build python3-pip python3-venv libicu-dev liburing-dev
           wget -q https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh 22 all
           sudo apt-get install -y libc++-22-dev libc++abi-22-dev
-          wget -q https://github.com/Kitware/CMake/releases/download/v4.1.2/cmake-4.1.2-linux-x86_64.sh
-          chmod +x cmake-4.1.2-linux-x86_64.sh
-          sudo ./cmake-4.1.2-linux-x86_64.sh --skip-license --prefix=/usr/local
+          sudo python3 -m pip install --only-binary=:all: \
+            --retries 5 --timeout 60 cmake==4.1.2
+          cmake --version
 
       - name: Check version contract
         run: python3 tools/release/check_version.py
