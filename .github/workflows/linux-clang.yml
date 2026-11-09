@@ -64,7 +64,7 @@ jobs:
     - name: Install base dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y wget ninja-build libicu-dev liburing-dev
+        sudo apt-get install -y wget ninja-build python3-pip libicu-dev liburing-dev
 
     - name: Install Clang ${{ matrix.clang_version }}
       run: |
@@ -75,11 +75,10 @@ jobs:
         clang++-${{ matrix.clang_version }} --version
         ls -la /usr/lib/llvm-${{ matrix.clang_version }}/
 
-    - name: Install CMake 4.0+
+    - name: Install CMake 4.1.2
       run: |
-        wget https://github.com/Kitware/CMake/releases/download/v4.1.2/cmake-4.1.2-linux-x86_64.sh
-        chmod +x cmake-4.1.2-linux-x86_64.sh
-        sudo ./cmake-4.1.2-linux-x86_64.sh --skip-license --prefix=/usr/local
+        sudo python3 -m pip install --only-binary=:all: \
+          --retries 5 --timeout 60 cmake==4.1.2
         cmake --version
 
     - name: Install pinned libkqueue compatibility backend
