@@ -24,6 +24,145 @@ import cnetmod.json;
 
 namespace cnetmod::openai {
 
+namespace {
+
+    struct tool_trace_entry
+    {
+        std::string name;
+        std::size_t action_hash = 0;
+        std::size_t observation_hash = 0;
+        bool successful = false;
+    };
+
+    using tool_trace_group = std::vector<tool_trace_entry>;
+
+    inline void hash_combine(std::size_t& seed, std::size_t value) noexcept
+    {
+        seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6U) + (seed >> 2U);
+    }
+
+    auto hash_json(const json& value) -> std::size_t
+    {
+        std::size_t seed = 0;
+        if (value.is_null())
+            return 0;
+        if (value.is_boolean())
+            return std::hash<bool>{}(value.get<bool>());
+        if (value.is_uint64())
+            return std::hash<std::uint64_t>{}(value.get<std::uint64_t>());
+        if (value.is_int64())
+            return std::hash<std::int64_t>{}(value.get<std::int64_t>());
+        if (value.is_double())
+        {
+            const auto bits = std::bit_cast<std::uint64_t>(value.get<double>());
+            return std::hash<std::uint64_t>{}(bits);
+        }
+        if (value.is_string())
+            return std::hash<std::string_view>{}(value.get<std::string>());
+        if (value.is_array())
+        {
+            hash_combine(seed, value.size());
+            for (const auto& item : value.get_array())
+                hash_combine(seed, hash_json(item));
+            return seed;
+        }
+        hash_combine(seed, value.size());
+        for (const auto& [key, item] : value.get_object())
+        {
+            hash_combine(seed, std::hash<std::string_view>{}(key));
+            hash_combine(seed, hash_json(item));
+        }
+        return seed;
+    }
+
+    auto arguments_hash(std::string_view arguments) -> std::size_t
+    {
+        auto parsed = json::parse(arguments, nullptr, false);
+        return parsed.is_discarded()
+            ? std::hash<std::string_view>{}(arguments)
+            : hash_json(parsed);
+    }
+
+    auto action_hash(const tool_call& call) -> std::size_t
+    {
+        auto seed = std::hash<std::string_view>{}(call.function.name);
+        hash_combine(seed, arguments_hash(call.function.arguments));
+        return seed;
+    }
+
+    auto same_action(const tool_trace_entry& left, const tool_trace_entry& right) -> bool
+    {
+        return left.action_hash == right.action_hash;
+    }
+
+    auto same_observation(const tool_trace_entry& left,
+        const tool_trace_entry& right) -> bool
+    {
+        return left.successful == right.successful &&
+            left.observation_hash == right.observation_hash;
+    }
+
+    auto identical_observation_streak(
+        const std::vector<tool_trace_group>& groups) -> std::size_t
+    {
+        if (groups.empty())
+            return 0;
+        const auto& reference = groups.back();
+        if (reference.size() != 1 || !reference.front().successful)
+            return 0;
+        std::size_t streak = 0;
+        for (auto it = groups.rbegin(); it != groups.rend(); ++it)
+        {
+            if (it->size() != 1 || !it->front().successful ||
+                !same_action(it->front(), reference.front()) ||
+                !same_observation(it->front(), reference.front()))
+                break;
+            ++streak;
+        }
+        return streak;
+    }
+
+    auto identical_error_streak(
+        const std::vector<tool_trace_group>& groups) -> std::size_t
+    {
+        if (groups.empty())
+            return 0;
+        const auto& reference = groups.back();
+        if (reference.size() != 1 || reference.front().successful)
+            return 0;
+        std::size_t streak = 0;
+        for (auto it = groups.rbegin(); it != groups.rend(); ++it)
+        {
+            if (it->size() != 1 || it->front().successful ||
+                !same_action(it->front(), reference.front()) ||
+                !same_observation(it->front(), reference.front()))
+                break;
+            ++streak;
+        }
+        return streak;
+    }
+
+    auto alternating_pattern(const std::vector<tool_trace_group>& groups,
+        std::size_t threshold) -> bool
+    {
+        if (threshold < 3 || groups.size() < threshold)
+            return false;
+        const auto start = groups.size() - threshold;
+        for (auto index = start; index < groups.size(); ++index)
+        {
+            if (groups[index].size() != 1)
+                return false;
+            if (index + 2 < groups.size() &&
+                (!same_action(groups[index].front(), groups[index + 2].front()) ||
+                    !same_observation(
+                        groups[index].front(), groups[index + 2].front())))
+                return false;
+        }
+        return true;
+    }
+
+} // namespace
+
 agent_executor::agent_executor(chat_model& model, tool_registry& tools,
     chat_memory* memory, agent_options options)
     : model_(model), tools_(&tools), memory_(memory), options_(std::move(options))
@@ -122,6 +261,8 @@ auto agent_executor::execute(std::vector<message> input,
     agent_result result;
     std::optional<tool_provider_result> fixed_tools;
     std::set<std::string, std::less<>> discovered_tools;
+    std::vector<tool_trace_group> tool_trace;
+    std::set<std::size_t> nudged_actions;
 
     const auto max_iterations = std::max<std::size_t>(1, options_.max_iterations);
     for (std::size_t iteration = 1; iteration <= max_iterations; ++iteration)
@@ -258,6 +399,19 @@ auto agent_executor::execute(std::vector<message> input,
 
         if (assistant.tool_calls.empty())
         {
+            const bool has_visible_content = std::ranges::any_of(
+                assistant.content, [](unsigned char value)
+                {
+                    return !std::isspace(value);
+                });
+            if (!has_visible_content)
+            {
+                auto error = assistant.reasoning_content.empty()
+                    ? std::string{"model returned no visible content or tool call"}
+                    : std::string{"model returned reasoning without a visible answer or tool call"};
+                agent_run.fail(error, iteration);
+                co_return std::unexpected(std::move(error));
+            }
             result.output = std::move(assistant);
             result.transcript = context;
             if (!options_.return_intermediate_steps)
@@ -275,6 +429,8 @@ auto agent_executor::execute(std::vector<message> input,
         using invocation_result = std::expected<std::string, tool_error>;
         std::vector<std::optional<invocation_result>> observations(
             assistant.tool_calls.size());
+        std::vector<tool_trace_entry> response_trace;
+        response_trace.reserve(assistant.tool_calls.size());
         if (parallel_context_ && assistant.tool_calls.size() > 1)
         {
             task_group group{*parallel_context_};
@@ -334,7 +490,7 @@ auto agent_executor::execute(std::vector<message> input,
                             : resolution.message);
                 tool_content = resolution.message.empty()
                     ? cnetmod::json::write_document(cnetmod::json::object(
-                          {{"error", observation.error().message}}))
+                                                        {{"error", observation.error().message}}))
                           .value_or("{}")
                     : std::move(resolution.message);
             }
@@ -350,6 +506,11 @@ auto agent_executor::execute(std::vector<message> input,
             agent_step step{.call = call,
                 .observation = tool_content,
                 .successful = observation.has_value()};
+            response_trace.push_back(
+                {.name = call.function.name,
+                    .action_hash = action_hash(call),
+                    .observation_hash = std::hash<std::string>{}(tool_content),
+                    .successful = observation.has_value()});
             auto tool_message = message::tool_result(call.id, tool_content,
                 call.function.name);
             context.push_back(tool_message);
@@ -379,6 +540,54 @@ auto agent_executor::execute(std::vector<message> input,
                 agent_run.succeed(result.output.content, iteration);
                 co_return result;
             }
+        }
+        tool_trace.push_back(std::move(response_trace));
+
+        const auto& guard = options_.loop_guard;
+        const auto observation_streak = identical_observation_streak(tool_trace);
+        if (observation_streak >= std::max<std::size_t>(
+                                      1, guard.repeated_action_observation))
+        {
+            auto error = std::format(
+                "agent stuck: tool '{}' returned the same observation {} times in a row",
+                tool_trace.back().front().name, observation_streak);
+            agent_run.fail(error, iteration);
+            co_return std::unexpected(std::move(error));
+        }
+
+        const auto error_streak = identical_error_streak(tool_trace);
+        const auto error_threshold = std::max<std::size_t>(
+            1, guard.repeated_action_error);
+        if (error_streak > error_threshold)
+        {
+            auto error = std::format(
+                "agent stuck: tool '{}' failed with the same error {} times in a row",
+                tool_trace.back().front().name, error_streak);
+            agent_run.fail(error, iteration);
+            co_return std::unexpected(std::move(error));
+        }
+        if (error_streak == error_threshold)
+        {
+            const auto& failed = tool_trace.back().front();
+            if (!nudged_actions.contains(failed.action_hash))
+            {
+                nudged_actions.insert(failed.action_hash);
+                context.push_back(message::user(std::format(
+                    "Your calls to `{}` have failed with the same error {} times " "in a row. Repeating the exact call will not work; inspect the " "error, correct the arguments, or use a different tool.",
+                    failed.name, error_streak)));
+            }
+        }
+
+        if (alternating_pattern(tool_trace,
+                std::max<std::size_t>(
+                    3, guard.alternating_action_observation)))
+        {
+            auto error = std::format(
+                "agent stuck: alternating tool loop detected after {} tool steps",
+                std::max<std::size_t>(
+                    3, guard.alternating_action_observation));
+            agent_run.fail(error, iteration);
+            co_return std::unexpected(std::move(error));
         }
     }
     auto error = std::format(

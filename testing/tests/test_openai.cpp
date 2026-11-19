@@ -704,6 +704,141 @@ TEST(openai_agent_executes_validated_tool_loop)
     ASSERT_TRUE(listener.events.back().type == openai::run_event_type::agent_end);
 }
 
+TEST(openai_agent_stops_repeated_action_observation_loop)
+{
+    scripted_model model;
+    for (int index = 0; index < 5; ++index)
+    {
+        const auto arguments = index % 2 == 0
+            ? std::string{R"({"query":"same","limit":3})"}
+            : std::string{R"({"limit":3,"query":"same"})"};
+        model.responses.push_back(response_with(openai::message::tool_call_request(
+            {{.id = "repeat-observation",
+                .function = {.name = "lookup", .arguments = arguments}}})));
+    }
+
+    std::size_t executions = 0;
+    openai::tool_registry tools;
+    ASSERT_TRUE(tools.add({.definition = {.function_name = "lookup",
+                               .function_parameters = {{"type", "object"}}},
+                              .handler = [&](const openai::json&)
+                                  -> cnetmod::task<std::expected<openai::json, std::string>>
+                              {
+                                  ++executions;
+                                  co_return openai::json{{"result", "unchanged"}};
+                              }})
+            .has_value());
+
+    openai::agent_executor agent{model, tools, nullptr,
+        {.max_iterations = 8,
+            .loop_guard = {.repeated_action_observation = 3}}};
+    auto result = cnetmod::sync_wait(agent.invoke("repeat"));
+
+    ASSERT_FALSE(result.has_value());
+    ASSERT_EQ(executions, std::size_t{3});
+    ASSERT_NE(result.error().find("same observation"), std::string::npos);
+}
+
+TEST(openai_agent_nudges_then_stops_repeated_action_error_loop)
+{
+    scripted_model model;
+    for (int index = 0; index < 5; ++index)
+        model.responses.push_back(response_with(openai::message::tool_call_request(
+            {{.id = "repeat-error",
+                .function = {.name = "lookup", .arguments = R"({"query":"missing"})"}}})));
+
+    std::size_t executions = 0;
+    openai::tool_registry tools;
+    ASSERT_TRUE(tools.add({.definition = {.function_name = "lookup",
+                               .function_parameters = {{"type", "object"}}},
+                              .handler = [&](const openai::json&)
+                                  -> cnetmod::task<std::expected<openai::json, std::string>>
+                              {
+                                  ++executions;
+                                  co_return std::unexpected("same validation error");
+                              }})
+            .has_value());
+
+    openai::agent_executor agent{model, tools, nullptr,
+        {.max_iterations = 8,
+            .loop_guard = {.repeated_action_error = 2}}};
+    auto result = cnetmod::sync_wait(agent.invoke("repeat"));
+
+    ASSERT_FALSE(result.has_value());
+    ASSERT_EQ(executions, std::size_t{3});
+    ASSERT_NE(result.error().find("same error"), std::string::npos);
+    ASSERT_EQ(model.requests.size(), std::size_t{3});
+    ASSERT_TRUE(std::ranges::any_of(model.requests.back().messages,
+        [](const openai::message& value)
+        {
+            return value.role == "user" &&
+                value.content.find("failed with the same error") != std::string::npos;
+        }));
+}
+
+TEST(openai_agent_stops_alternating_tool_loop)
+{
+    scripted_model model;
+    for (int index = 0; index < 5; ++index)
+    {
+        const auto name = index % 2 == 0 ? "first" : "second";
+        model.responses.push_back(response_with(openai::message::tool_call_request(
+            {{.id = "alternating-" + std::to_string(index),
+                .function = {.name = name, .arguments = "{}"}}})));
+    }
+
+    std::size_t first_calls = 0;
+    std::size_t second_calls = 0;
+    auto handler = [](std::size_t& calls, std::string value)
+        -> cnetmod::task<std::expected<openai::json, std::string>>
+    {
+        ++calls;
+        co_return openai::json{{"result", std::move(value)}};
+    };
+
+    openai::tool_registry tools;
+    ASSERT_TRUE(tools.add({.definition = {.function_name = "first",
+                               .function_parameters = {{"type", "object"}}},
+                              .handler = [&](const openai::json& args)
+                              {
+                                  return handler(first_calls, "first");
+                              }})
+            .has_value());
+    ASSERT_TRUE(tools.add({.definition = {.function_name = "second",
+                               .function_parameters = {{"type", "object"}}},
+                              .handler = [&](const openai::json& args)
+                              {
+                                  return handler(second_calls, "second");
+                              }})
+            .has_value());
+
+    openai::agent_executor agent{model, tools, nullptr,
+        {.max_iterations = 8,
+            .loop_guard = {.repeated_action_observation = 10,
+                .repeated_action_error = 10,
+                .alternating_action_observation = 4}}};
+    auto result = cnetmod::sync_wait(agent.invoke("alternate"));
+
+    ASSERT_FALSE(result.has_value());
+    ASSERT_EQ(first_calls, std::size_t{2});
+    ASSERT_EQ(second_calls, std::size_t{2});
+    ASSERT_NE(result.error().find("alternating tool loop"), std::string::npos);
+}
+
+TEST(openai_agent_rejects_empty_completion)
+{
+    scripted_model model;
+    model.responses.push_back(
+        response_with(openai::message::model_output(" \n\t ")));
+
+    openai::tool_registry tools;
+    openai::agent_executor agent{model, tools};
+    auto result = cnetmod::sync_wait(agent.invoke("answer"));
+
+    ASSERT_FALSE(result.has_value());
+    ASSERT_NE(result.error().find("no visible content"), std::string::npos);
+}
+
 TEST(openai_agent_executes_multiple_tool_calls_concurrently_in_stable_order)
 {
     auto context = cnetmod::make_io_context();

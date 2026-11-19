@@ -16709,6 +16709,10 @@ export struct tool { std::string type; std::string function_name; std::string fu
 
 `tool_registry::invoke_detailed` 返回 `tool_error`，其 `tool_error_kind` 明确区分取消、工具不存在、参数解析或 Schema 校验失败以及业务处理失败。`agent_options::handle_tool_error` 可按应用策略把可恢复错误转换为模型可见结果，或终止本次调用；未配置时继续兼容 `continue_on_tool_error`。向 Agent 提供专用 `io_context` 并调用 `with_parallel_tool_execution` 后，同一轮的多个工具调用使用结构化 `task_group` 并发执行，等待全部子任务结束后仍按模型给出的调用顺序写回消息。上下文感知工具可在长操作内部检查取消令牌；并行工具处理函数及运行监听器必须自行满足并发安全要求。
 
+`agent_options::loop_guard` 在模型、工具和观测之间增加有界推进检查。相同工具参数与返回值连续出现 4 次时停止；相同工具参数与错误连续出现 3 次时先向模型追加一次纠错提醒，再重复一次才停止；两种调用顺序稳定交替 6 次时停止。工具参数按 JSON 规范化后参与比较，调用编号、推理文本和消息编号不参与比较。计数按一次模型响应分组，同一轮并行返回的多个调用不会被误算成多轮循环。阈值可由应用按运行策略调整，默认值与 OpenHands SDK 的卡死检测一致；达到 `max_iterations` 仍作为最后的硬边界。
+
+模型返回空白正文且没有工具调用时，执行器按协议失败结束，不能保存空助手消息。只有推理内容、没有可见正文或工具调用时同样失败，避免供应商的推理状态被误当成成功结果。
+
 启用 `agent_executor::with_tool_search` 后，默认工具不会一次性暴露给模型，只保留 `tool_visibility::always_visible` 工具和 `find_tools` 检索命令。模型完成检索后，命中的工具从下一轮开始可见。`keyword_tool_search` 提供无外部依赖的确定性匹配；`semantic_tool_search` 通过供应商无关的 `embedding_model` 按向量相似度排序。
 
 `skill_catalog` 实现渐进式 Agent Skills：初始只暴露激活、停用和资源读取命令；`activate_skill` 的工具结果保存技能激活状态和指令，下一轮才加入技能专属工具及嵌套 Tool Provider。`filesystem_skill_loader` 在 executor 上预加载 `SKILL.md` 与相对资源，限制单文件和总容量、忽略符号链接及隐藏文件，模型推理期间不直接访问文件系统。
@@ -16899,7 +16903,10 @@ if (!registered)
 cn::openai::conversation_memory memory{{.max_messages = 32}};
 cn::openai::openai_chat_model model{client};
 cn::openai::agent_executor agent{model, tools, &memory,
-    {.max_iterations = 6, .system_prompt = "Use tools when required."}};
+    {.max_iterations = 6, .system_prompt = "Use tools when required.",
+        .loop_guard = {.repeated_action_observation = 4,
+            .repeated_action_error = 3,
+            .alternating_action_observation = 6}}};
 agent.with_parallel_tool_execution(ctx);
 auto answer = co_await agent.invoke("Shanghai weather?");
 ```

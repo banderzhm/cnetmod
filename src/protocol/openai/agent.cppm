@@ -37,6 +37,19 @@ export using tool_error_handler = std::function<task<tool_error_resolution>(
     const tool_call& call, const tool_error& error,
     const run_config& config)>;
 
+/// Limits for detecting a tool loop without treating legitimate retries as
+/// success. Thresholds follow OpenHands' stuck detector defaults.
+export struct agent_loop_guard_options
+{
+    /// Number of identical successful action/observation pairs that stop a run.
+    std::size_t repeated_action_observation = 4;
+    /// Number of identical failing actions that stop a run. One nudge is sent
+    /// when the streak first reaches this value.
+    std::size_t repeated_action_error = 3;
+    /// Number of alternating action/observation pairs that stop a run.
+    std::size_t alternating_action_observation = 6;
+};
+
 export struct agent_options
 {
     std::size_t max_iterations = 8;
@@ -44,6 +57,7 @@ export struct agent_options
     bool return_intermediate_steps = true;
     std::string system_prompt;
     tool_error_handler handle_tool_error;
+    agent_loop_guard_options loop_guard;
 };
 
 export struct agent_step
