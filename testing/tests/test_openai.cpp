@@ -77,6 +77,23 @@ public:
     std::size_t calls = 0;
 };
 
+class context_retry_summary_model final : public openai::chat_model
+{
+public:
+    auto invoke(openai::chat_request request, const openai::run_config&)
+        -> cnetmod::task<std::expected<openai::chat_response, std::string>> override
+    {
+        last_request = std::move(request);
+        if (++calls == 1)
+            co_return std::unexpected(first_error);
+        co_return response_with(openai::message::model_output("retry summary"));
+    }
+
+    std::string first_error = "input exceeds the context capacity";
+    openai::chat_request last_request;
+    std::size_t calls = 0;
+};
+
 class streaming_probe_model final : public openai::chat_model
 {
 public:
@@ -2611,6 +2628,160 @@ TEST(openai_compact_messages_summarizes_old_history_and_preserves_tail)
     ASSERT_TRUE(compacted->window.limit_satisfied);
 }
 
+TEST(openai_compact_messages_preserves_initial_task_before_summary)
+{
+    std::size_t calls = 0;
+    openai::functional_conversation_summarizer summarizer{
+        [&calls](openai::conversation_summary_request request)
+            -> cnetmod::task<std::expected<std::string, std::string>>
+        {
+            ++calls;
+            ASSERT_EQ(request.messages.front().content,
+                std::string("old answer"));
+            co_return std::string("later exchanges");
+        }};
+    std::vector<openai::message> messages{
+        openai::message::system("fixed policy"),
+        openai::message::user("original task"),
+        openai::message::model_output("old answer"),
+        openai::message::user("middle question"),
+        openai::message::model_output("middle answer"),
+        openai::message::user("current question"),
+    };
+
+    const auto compacted = cnetmod::sync_wait(openai::compact_messages(messages,
+        {.max_tokens = 3,
+            .count_tokens = [](const openai::message&)
+            {
+                return std::size_t{1};
+            },
+            .pinned_prefix_messages = 1,
+            .preserved_tail_messages = 1,
+            .summarizer = &summarizer,
+            .summary_preserved_messages = 1,
+            .summary_keep_first_messages = 1,
+            .summary_minimum_progress = 0.5},
+        "initial-task"));
+
+    ASSERT_TRUE(compacted.has_value());
+    ASSERT_TRUE(compacted->summary_applied);
+    ASSERT_FALSE(compacted->hard_context_reset);
+    ASSERT_EQ(calls, std::size_t{1});
+    ASSERT_EQ(messages[1].content, std::string("original task"));
+    ASSERT_EQ(messages[2].name,
+        std::string(openai::conversation_summary_message_name));
+}
+
+TEST(openai_compact_messages_skips_low_progress_or_hard_resets)
+{
+    std::size_t calls = 0;
+    openai::functional_conversation_summarizer summarizer{
+        [&calls](openai::conversation_summary_request request)
+            -> cnetmod::task<std::expected<std::string, std::string>>
+        {
+            ++calls;
+            ASSERT_EQ(request.messages.size(), std::size_t{2});
+            co_return std::string("hard reset summary");
+        }};
+    const std::vector<openai::message> original{
+        openai::message::system("fixed policy"),
+        openai::message::user("original task"),
+        openai::message::model_output("middle answer"),
+        openai::message::user("current question"),
+    };
+    const auto count_one = [](const openai::message&)
+    {
+        return std::size_t{1};
+    };
+    auto fallback = original;
+
+    const auto skipped = cnetmod::sync_wait(openai::compact_messages(fallback,
+        {.max_tokens = 2,
+            .count_tokens = count_one,
+            .pinned_prefix_messages = 1,
+            .preserved_tail_messages = 1,
+            .summarizer = &summarizer,
+            .summary_preserved_messages = 1,
+            .summary_keep_first_messages = 1,
+            .summary_minimum_progress = 0.9}));
+    ASSERT_TRUE(skipped.has_value());
+    ASSERT_FALSE(skipped->summary_applied);
+    ASSERT_TRUE(skipped->fallback_trimmed);
+    ASSERT_EQ(calls, std::size_t{0});
+    ASSERT_TRUE(skipped->summary_error.contains("minimum progress"));
+
+    auto strict = original;
+    const auto reset = cnetmod::sync_wait(openai::compact_messages(strict,
+        {.max_tokens = 2,
+            .count_tokens = count_one,
+            .pinned_prefix_messages = 1,
+            .preserved_tail_messages = 1,
+            .summarizer = &summarizer,
+            .summary_preserved_messages = 1,
+            .summary_keep_first_messages = 1,
+            .summary_minimum_progress = 0.9,
+            .summary_failure = openai::summary_failure_policy::return_error}));
+    ASSERT_TRUE(reset.has_value());
+    ASSERT_TRUE(reset->summary_applied);
+    ASSERT_TRUE(reset->hard_context_reset);
+    ASSERT_EQ(calls, std::size_t{1});
+}
+
+TEST(openai_compact_messages_hard_reset_expands_beyond_full_recent_window)
+{
+    std::size_t calls = 0;
+    openai::functional_conversation_summarizer summarizer{
+        [&calls](openai::conversation_summary_request request)
+            -> cnetmod::task<std::expected<std::string, std::string>>
+        {
+            ++calls;
+            ASSERT_EQ(request.messages.size(), std::size_t{3});
+            ASSERT_EQ(request.messages.front().content,
+                std::string("original task"));
+            ASSERT_EQ(request.messages.back().content,
+                std::string("current question"));
+            co_return std::string("expanded hard reset summary");
+        }};
+    std::vector<openai::message> messages{
+        openai::message::system("fixed policy"),
+        openai::message::user("original task"),
+        openai::message::model_output("middle answer"),
+        openai::message::user("current question"),
+        openai::message::tool_call_request(
+            {{.id = "call-1",
+                .type = "function",
+                .function = {.name = "cast", .arguments = "{}"}}}),
+        openai::message::tool_result(
+            "call-1", "latest complete tool result", "cast"),
+    };
+
+    const auto compacted = cnetmod::sync_wait(openai::compact_messages(messages,
+        {.max_tokens = 4,
+            .count_tokens = [](const openai::message&)
+            {
+                return std::size_t{1};
+            },
+            .pinned_prefix_messages = 1,
+            .preserved_tail_messages = 1,
+            .summarizer = &summarizer,
+            .summary_preserved_messages = 16,
+            .summary_keep_first_messages = 1,
+            .summary_minimum_progress = 0.9,
+            .summary_failure = openai::summary_failure_policy::return_error}));
+
+    ASSERT_TRUE(compacted.has_value());
+    ASSERT_TRUE(compacted->summary_applied);
+    ASSERT_TRUE(compacted->hard_context_reset);
+    ASSERT_EQ(compacted->summarized_messages, std::size_t{3});
+    ASSERT_EQ(calls, std::size_t{1});
+    ASSERT_EQ(messages.size(), std::size_t{4});
+    ASSERT_EQ(messages[1].name,
+        std::string(openai::conversation_summary_message_name));
+    ASSERT_EQ(messages[2].tool_calls.front().id, std::string("call-1"));
+    ASSERT_EQ(messages[3].role, std::string("tool"));
+    ASSERT_EQ(messages[3].content, std::string("latest complete tool result"));
+}
+
 TEST(openai_compact_messages_falls_back_or_preserves_input_on_summary_failure)
 {
     openai::functional_conversation_summarizer failing{
@@ -2687,6 +2858,51 @@ TEST(openai_model_conversation_summarizer_uses_untrusted_transcript_envelope)
         "&lt;/conversation_transcript&gt;"));
     ASSERT_TRUE(model.last_request.tools.empty());
     ASSERT_FALSE(model.last_request.stream);
+}
+
+TEST(openai_model_conversation_summarizer_hard_reset_truncates_material)
+{
+    context_retry_summary_model model;
+    openai::model_conversation_summarizer summarizer{model,
+        {.hard_reset_max_attempts = 3,
+            .hard_reset_context_scaling = 0.5}};
+    std::vector<openai::message> messages{
+        openai::message::user(std::string(2048, 'x')),
+    };
+
+    const auto summary = cnetmod::sync_wait(summarizer.summarize({
+        .session_id = "summary-retry",
+        .messages = messages,
+        .target_tokens = 256,
+    }));
+
+    ASSERT_TRUE(summary.has_value());
+    ASSERT_EQ(*summary, std::string("retry summary"));
+    ASSERT_EQ(model.calls, std::size_t{2});
+    ASSERT_TRUE(model.last_request.messages.back().content.contains(
+        "[event truncated:"));
+}
+
+TEST(openai_model_conversation_summarizer_does_not_retry_auth_error)
+{
+    context_retry_summary_model model;
+    model.first_error = "invalid API token";
+    openai::model_conversation_summarizer summarizer{model,
+        {.hard_reset_max_attempts = 4,
+            .hard_reset_context_scaling = 0.8}};
+    std::vector<openai::message> messages{
+        openai::message::user("material"),
+    };
+
+    const auto summary = cnetmod::sync_wait(summarizer.summarize({
+        .session_id = "summary-auth-error",
+        .messages = messages,
+        .target_tokens = 256,
+    }));
+
+    ASSERT_FALSE(summary.has_value());
+    ASSERT_EQ(summary.error(), std::string("invalid API token"));
+    ASSERT_EQ(model.calls, std::size_t{1});
 }
 
 TEST(openai_conversation_memory_automatically_persists_generated_summary)

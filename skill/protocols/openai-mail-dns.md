@@ -364,6 +364,10 @@ export struct tool { std::string type; std::string function_name; std::string fu
 
 模型返回空白正文且没有工具调用时，执行器按协议失败结束，不能保存空助手消息。只有推理内容、没有可见正文或工具调用时同样失败，避免供应商的推理状态被误当成成功结果。
 
+`memory_options::summary_keep_first_messages` 在滚动摘要前逐字保留预算历史最早的若干消息，防止原始任务和首次更正被摘要覆盖；工具调用与结果仍按完整交换保护。`summary_minimum_progress` 要求一次语义压缩至少移出预算历史的一个比例：`fallback_to_trim` 在进度不足时保留原检查点并采用确定性裁剪，`return_error` 则执行硬上下文重置，从系统消息后的第一条可摘要消息开始压缩。严格模式优先保证容量，因此硬重置可能摘要掉 `summary_keep_first_messages` 保护段；当最近消息偏好占满预算时，硬重置还会把逐字保留范围收缩到 `preserved_tail_messages` 下限，同时保持最近工具调用与结果完整。原始消息仍由应用存储负责回查。
+
+`model_conversation_summarizer_options` 的 `hard_reset_max_attempts` 和 `hard_reset_context_scaling` 控制摘要输入超限时的恢复。首次发送完整材料；错误明确属于上下文、Token、长度或容量问题后，逐次缩短单条事件文本并重试。被截断的事件明确写出省略字符数，普通认证或供应商故障不会盲目重复。截断只作用于用于生成摘要的临时副本，原始消息和工具结果不变。
+
 启用 `agent_executor::with_tool_search` 后，默认工具不会一次性暴露给模型，只保留 `tool_visibility::always_visible` 工具和 `find_tools` 检索命令。模型完成检索后，命中的工具从下一轮开始可见。`keyword_tool_search` 提供无外部依赖的确定性匹配；`semantic_tool_search` 通过供应商无关的 `embedding_model` 按向量相似度排序。
 
 `skill_catalog` 实现渐进式 Agent Skills：初始只暴露激活、停用和资源读取命令；`activate_skill` 的工具结果保存技能激活状态和指令，下一轮才加入技能专属工具及嵌套 Tool Provider。`filesystem_skill_loader` 在 executor 上预加载 `SKILL.md` 与相对资源，限制单文件和总容量、忽略符号链接及隐藏文件，模型推理期间不直接访问文件系统。

@@ -104,6 +104,20 @@ export struct memory_options
     std::size_t summary_preserved_messages = 8;
 
     /**
+     * Leading budgeted messages preserved verbatim while producing a rolling
+     * summary. This keeps the original task and first corrections available
+     * before older exchanges are summarized.
+     */
+    std::size_t summary_keep_first_messages = 0;
+
+    /**
+     * Minimum fraction of the budgeted history that a semantic compaction must
+     * forget. A smaller range is skipped for the fallback policy. The strict
+     * policy performs a hard reset from the first eligible message instead.
+     */
+    double summary_minimum_progress = 0.0;
+
+    /**
      * Prefix attached to model-produced summaries before they enter context.
      */
     std::string summary_prefix = "Summary of earlier conversation:\n";
@@ -146,6 +160,7 @@ export auto trim_messages(std::vector<message>& messages,
 export struct compaction_result
 {
     bool summary_applied = false;
+    bool hard_context_reset = false;
     bool fallback_trimmed = false;
     std::size_t summarized_messages = 0;
     std::size_t summarized_tokens = 0;

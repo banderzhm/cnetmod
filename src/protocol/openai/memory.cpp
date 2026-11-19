@@ -175,8 +175,8 @@ auto trim_messages(std::vector<message>& messages,
         if (index >= messages.size() - tail)
             return true;
         return (options.preserve_system_messages &&
-                (messages[index].role == "system" ||
-                    messages[index].role == "developer")) ||
+                   (messages[index].role == "system" ||
+                       messages[index].role == "developer")) ||
             messages[index].name == conversation_summary_message_name;
     };
 
@@ -241,6 +241,12 @@ auto compact_messages(std::vector<message>& messages,
             ++prefix;
     }
 
+    auto summary_start = std::min(messages.size(),
+        prefix + std::min(options.summary_keep_first_messages, messages.size() - prefix));
+    while (summary_start > prefix && summary_start < messages.size() &&
+        messages[summary_start].role == "tool")
+        --summary_start;
+
     const auto preserved_tail = std::max(options.preserved_tail_messages,
         options.summary_preserved_messages);
     auto summary_end = messages.size() > preserved_tail
@@ -249,13 +255,14 @@ auto compact_messages(std::vector<message>& messages,
 
     if (summary_end < messages.size() && messages[summary_end].role == "tool")
     {
-        while (summary_end > prefix && messages[summary_end].role == "tool")
+        while (summary_end > summary_start &&
+            messages[summary_end].role == "tool")
             --summary_end;
     }
 
     if (options.preserve_system_messages)
     {
-        for (auto index = prefix; index < summary_end; ++index)
+        for (auto index = summary_start; index < summary_end; ++index)
         {
             if (messages[index].role == "system" ||
                 messages[index].role == "developer")
@@ -266,7 +273,62 @@ auto compact_messages(std::vector<message>& messages,
         }
     }
 
-    if (summary_end <= prefix)
+    const auto budgeted_messages = messages.size() - prefix;
+    const auto summary_candidates = summary_end > summary_start
+        ? summary_end - summary_start
+        : std::size_t{0};
+    const auto progress = budgeted_messages == 0
+        ? 0.0
+        : static_cast<double>(summary_candidates) /
+            static_cast<double>(budgeted_messages);
+    bool hard_context_reset = false;
+    if (options.summary_minimum_progress > 0.0 &&
+        progress < options.summary_minimum_progress)
+    {
+        if (options.summary_failure == summary_failure_policy::return_error &&
+            summary_start > prefix)
+        {
+            summary_start = prefix;
+            hard_context_reset = true;
+        }
+        else
+        {
+            messages = std::move(trimmed);
+            co_return compaction_result{
+                .fallback_trimmed = probe.removed_messages > 0,
+                .summary_error =
+                    "conversation summary would forget below the minimum progress threshold",
+                .window = probe};
+        }
+    }
+
+    // A token-tight request can leave the recent-message preference consuming
+    // the whole budget. Strict compaction must still make progress, so shrink
+    // that preference to the hard tail limit while keeping a tool request and
+    // its results together.
+    if (hard_context_reset && summary_end <= summary_start)
+    {
+        const auto preserved_tail = std::min(options.preserved_tail_messages,
+            messages.size());
+        summary_end = messages.size() - preserved_tail;
+        while (summary_end > summary_start && summary_end < messages.size() &&
+            messages[summary_end].role == "tool")
+            --summary_end;
+        if (options.preserve_system_messages)
+        {
+            for (auto index = summary_start; index < summary_end; ++index)
+            {
+                if (messages[index].role == "system" ||
+                    messages[index].role == "developer")
+                {
+                    summary_end = index;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (summary_end <= summary_start)
     {
         messages = std::move(trimmed);
         co_return compaction_result{
@@ -275,13 +337,13 @@ auto compact_messages(std::vector<message>& messages,
     }
 
     std::size_t summarized_tokens = 0;
-    for (auto index = prefix; index < summary_end; ++index)
+    for (auto index = summary_start; index < summary_end; ++index)
         summarized_tokens += message_tokens(messages[index], options);
 
     auto generated = co_await options.summarizer->summarize({
         .session_id = session_id,
         .messages = std::span<const message>{messages}.subspan(
-            prefix, summary_end - prefix),
+            summary_start, summary_end - summary_start),
         .target_tokens = options.max_tokens,
     });
     if (!generated || generated->empty())
@@ -300,9 +362,9 @@ auto compact_messages(std::vector<message>& messages,
     const auto summary_tokens = message_tokens(summary, options);
 
     auto compacted = messages;
-    compacted.erase(compacted.begin() + static_cast<std::ptrdiff_t>(prefix),
+    compacted.erase(compacted.begin() + static_cast<std::ptrdiff_t>(summary_start),
         compacted.begin() + static_cast<std::ptrdiff_t>(summary_end));
-    compacted.insert(compacted.begin() + static_cast<std::ptrdiff_t>(prefix),
+    compacted.insert(compacted.begin() + static_cast<std::ptrdiff_t>(summary_start),
         std::move(summary));
 
     auto window_options = options;
@@ -311,7 +373,8 @@ auto compact_messages(std::vector<message>& messages,
     messages = std::move(compacted);
     co_return compaction_result{
         .summary_applied = true,
-        .summarized_messages = summary_end - prefix,
+        .hard_context_reset = hard_context_reset,
+        .summarized_messages = summary_end - summary_start,
         .summarized_tokens = summarized_tokens,
         .summary_tokens = summary_tokens,
         .window = window,
