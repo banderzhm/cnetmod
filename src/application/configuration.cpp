@@ -1,6 +1,7 @@
 module cnetmod.application.configuration;
 
 import std;
+import cnetmod.core.log;
 import cnetmod.application.recovery_policy;
 #if defined(CNETMOD_HAS_YAML_CONFIGURATION)
 import cnetmod.application.yaml_configuration;
@@ -204,26 +205,6 @@ namespace {
         return value.get<std::string>();
     }
 
-    auto parse_log_level(std::string_view value)
-        -> std::optional<logger::level>
-    {
-        if (value == "trace")
-            return logger::level::trace;
-        if (value == "debug")
-            return logger::level::debug;
-        if (value == "info")
-            return logger::level::info;
-        if (value == "warn")
-            return logger::level::warn;
-        if (value == "error")
-            return logger::level::error;
-        if (value == "critical")
-            return logger::level::critical;
-        if (value == "off")
-            return logger::level::off;
-        return std::nullopt;
-    }
-
     auto parse_boolean(std::string_view value) -> std::optional<bool>
     {
         if (value == "true" || value == "1")
@@ -378,7 +359,7 @@ namespace {
         if (const auto* level = cnetmod::json::find(item, "level"))
         {
             const auto text = string_value(*level, "logging.level");
-            const auto parsed = parse_log_level(text);
+            const auto parsed = logger::parse_level(text);
             if (!parsed)
                 fail("logging.level", std::format("unknown level '{}' (expected trace, debug, " "info, warn, error, critical or off)", text));
             result.logging.level = *parsed;
@@ -730,7 +711,7 @@ namespace {
             result.http.backlog = static_cast<int>(*parsed);
         if (auto value = environment("CNETMOD_LOG_LEVEL"))
         {
-            const auto level = parse_log_level(*value);
+            const auto level = logger::parse_level(*value);
             if (!level)
                 fail("env:CNETMOD_LOG_LEVEL",
                     std::format("unknown level '{}'", *value));

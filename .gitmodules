@@ -35,3 +35,6 @@
 [submodule "3rdparty/simdjson"]
 	path = 3rdparty/simdjson
 	url = https://github.com/simdjson/simdjson.git
+[submodule "3rdparty/pfr"]
+	path = 3rdparty/pfr
+	url = https://github.com/boostorg/pfr.git

@@ -1,23 +1,22 @@
 #include <cnetmod/config.hpp>
-#include <cnetmod/json.hpp>
 
 import std;
 import cnetmod.application;
+import cnetmod.application.reflected_options;
 import cnetmod.core.log;
 import cnetmod.coro.task;
-import cnetmod.json;
 import cnetmod.protocol.http;
 
 namespace application = cnetmod::application;
 namespace http = cnetmod::http;
-
-namespace {
 
 /// Typed configuration section `orders` in application.yaml.
 struct order_options
 {
     int page_size = 20;
 };
+
+namespace {
 
 /// Business component: constructed once at build time, injected by type.
 class order_catalog
@@ -48,7 +47,8 @@ public:
 
     void configure_options(application::options_registry& options) override
     {
-        options.section<order_options>("orders").validate(
+        options.section<order_options>(
+            "orders", application::decode_reflected_options<order_options>).validate(
             [](const order_options& value) -> std::expected<void, std::string>
             {
                 if (value.page_size <= 0 || value.page_size > 500)
@@ -87,9 +87,6 @@ public:
 };
 
 } // namespace
-
-CNETMOD_JSON(order_options,
-    CNETMOD_JSON_FIELD(page_size))
 
 auto main() -> int
 {

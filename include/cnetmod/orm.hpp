@@ -50,32 +50,18 @@
 #define SNOWFLAKE_PK_FLAGS ::cnetmod::orm::col_flag::primary_key
 #define SNOWFLAKE_PK_STRATEGY ::cnetmod::orm::id_strategy::snowflake
 
-#define CNETMOD_FIELD_3(M, COL, CT)                                           \
+#define CNETMOD_FIELD_2(M, CT) CNETMOD_FIELD_3(M, #M, CT)
+
+#define CNETMOD_FIELD_3(M, COL, CT)                                             \
     CNETMOD_FIELD_4(M, COL, CT, ::cnetmod::orm::col_flag::none)
 
 #define CNETMOD_FIELD_4(M, COL, CT, FLAGS)                                    \
     CNETMOD_FIELD_5(M, COL, CT, FLAGS, ::cnetmod::orm::id_strategy::none)
 
 #define CNETMOD_FIELD_5(M, COL, CT, FLAGS, STRATEGY)                          \
-    ::cnetmod::orm::field_mapping<_cnetmod_model_type>                        \
-    {                                                                         \
-        {#M, COL, ::cnetmod::orm::column_type::CT, FLAGS, STRATEGY},          \
-        [](auto& obj, const ::cnetmod::orm::field_value& value) {             \
-            ::cnetmod::orm::detail::set_member(obj.M, value);                 \
-        },                                                                    \
-        [](const auto& obj) {                                                 \
-            return ::cnetmod::orm::detail::get_member(obj.M);                 \
-        },                                                                    \
-        [](auto& obj, const ::cnetmod::orm::detail::record_json_scalar& value) {\
-            return ::cnetmod::orm::detail::decode_json_member(obj.M, value);  \
-        },                                                                    \
-        [](const auto& obj) {                                                 \
-            return ::cnetmod::orm::detail::encode_json_member(obj.M);         \
-        },                                                                    \
-        ::cnetmod::orm::detail::member_pointer_type<                          \
-            decltype(&_cnetmod_model_type::M)>(),                             \
-        &::cnetmod::orm::detail::matches_member_pointer<&_cnetmod_model_type::M>\
-    }
+    ::cnetmod::orm::detail::make_field_mapping<                               \
+        _cnetmod_model_type, &_cnetmod_model_type::M>(                        \
+        {#M, COL, ::cnetmod::orm::column_type::CT, FLAGS, STRATEGY})
 
 // Simplified: UUID_PK / SNOWFLAKE_PK used as 4th parameter of CNETMOD_FIELD
 // Actually expands to CNETMOD_FIELD_5, but transparent to users
@@ -84,27 +70,27 @@
 #define CNETMOD_FIELD_SNOWFLAKE_PK(M, COL, CT) \
     CNETMOD_FIELD_5(M, COL, CT, SNOWFLAKE_PK_FLAGS, SNOWFLAKE_PK_STRATEGY)
 
-// Select 3 / 4 / 5 parameter version
+// Two arguments use the member name as the SQL column label.
 #define CNETMOD_FIELD_SELECT(_1, _2, _3, _4, _5, NAME, ...) NAME
 #define CNETMOD_FIELD(...) \
-    CNETMOD_FIELD_SELECT(__VA_ARGS__, CNETMOD_FIELD_5, CNETMOD_FIELD_4, CNETMOD_FIELD_3)(__VA_ARGS__)
+    CNETMOD_FIELD_SELECT(__VA_ARGS__, CNETMOD_FIELD_5, CNETMOD_FIELD_4, \
+        CNETMOD_FIELD_3, CNETMOD_FIELD_2)(__VA_ARGS__)
 
 // CNETMOD_MODEL(Type, "table_name", CNETMOD_FIELD(...), ...)
-#define CNETMOD_MODEL(TYPE, TABLE, ...)                                    \
-    template <>                                                            \
-    struct ::cnetmod::orm::model_traits<TYPE>                              \
-    {                                                                      \
-        using _cnetmod_model_type = TYPE;                                  \
-        static auto meta() -> const ::cnetmod::orm::table_meta<TYPE>&      \
-        {                                                                  \
-            static const ::cnetmod::orm::field_mapping<TYPE> fields_[] = { \
-                __VA_ARGS__};                                              \
-            static const ::cnetmod::orm::table_meta<TYPE> m{               \
-                TABLE,                                                     \
-                std::span<const ::cnetmod::orm::field_mapping<TYPE>>(      \
-                    fields_, sizeof(fields_) / sizeof(fields_[0]))};       \
-            return m;                                                      \
-        }                                                                  \
+#define CNETMOD_MODEL(TYPE, TABLE, ...)                                                       \
+    template <>                                                                               \
+    struct ::cnetmod::orm::model_traits<TYPE>                                                 \
+    {                                                                                         \
+        using _cnetmod_model_type = decltype(                                                 \
+            ::cnetmod::orm::detail::registered_record_type(                                   \
+                static_cast<const model_traits*>(nullptr)));                                  \
+        static auto meta() -> const ::cnetmod::orm::table_meta<_cnetmod_model_type>&          \
+        {                                                                                     \
+            static const ::cnetmod::orm::field_mapping<_cnetmod_model_type> fields[] = {      \
+                __VA_ARGS__};                                                                 \
+            static const ::cnetmod::orm::table_meta<_cnetmod_model_type> metadata{TABLE, fields};\
+            return metadata;                                                                  \
+        }                                                                                     \
     };
 
 /**
@@ -113,21 +99,44 @@
  * Unlike CNETMOD_MODEL it has no table identity and is never accepted by CRUD
  * APIs. Fields use the same CNETMOD_FIELD declarations as persistent models.
  */
-#define CNETMOD_PROJECTION(TYPE, ...)                                      \
-    template <>                                                            \
-    struct ::cnetmod::orm::projection_traits<TYPE>                         \
-    {                                                                      \
-        using _cnetmod_model_type = TYPE;                                  \
-        static auto meta()                                                 \
-            -> const ::cnetmod::orm::projection_meta<TYPE>&                \
-        {                                                                  \
-            static const ::cnetmod::orm::field_mapping<TYPE> fields_[] = { \
-                __VA_ARGS__};                                              \
-            static const ::cnetmod::orm::projection_meta<TYPE> m{          \
-                std::span<const ::cnetmod::orm::field_mapping<TYPE>>(      \
-                    fields_, sizeof(fields_) / sizeof(fields_[0]))};       \
-            return m;                                                      \
-        }                                                                  \
+#define CNETMOD_PROJECTION(TYPE, ...)                                                         \
+    template <>                                                                               \
+    struct ::cnetmod::orm::projection_traits<TYPE>                                            \
+    {                                                                                         \
+        using _cnetmod_model_type = decltype(                                                 \
+            ::cnetmod::orm::detail::registered_record_type(                                   \
+                static_cast<const projection_traits*>(nullptr)));                             \
+        static auto meta() -> const ::cnetmod::orm::projection_meta<_cnetmod_model_type>&     \
+        {                                                                                     \
+            static const ::cnetmod::orm::field_mapping<_cnetmod_model_type> fields[] = {      \
+                __VA_ARGS__};                                                                 \
+            static const ::cnetmod::orm::projection_meta<_cnetmod_model_type> metadata{fields};\
+            return metadata;                                                                  \
+        }                                                                                     \
+    };
+
+// Import cnetmod.orm.reflected_projection before registering a reflected DTO.
+#define CNETMOD_REFLECTED_PROJECTION(TYPE, ...)                                               \
+    template <>                                                                               \
+    struct ::cnetmod::orm::projection_traits<TYPE>                                            \
+    {                                                                                         \
+        using _cnetmod_model_type = decltype(                                                 \
+            ::cnetmod::orm::detail::registered_record_type(                                   \
+                static_cast<const projection_traits*>(nullptr)));                             \
+        static auto meta() noexcept -> const ::cnetmod::orm::projection_meta<_cnetmod_model_type>&\
+        {                                                                                     \
+            static constexpr ::cnetmod::orm::projection_meta<_cnetmod_model_type> metadata{   \
+                _cnetmod_bindings.fields};                                                    \
+            return metadata;                                                                  \
+        }                                                                                     \
+        static void bind_xml(_cnetmod_model_type& target, const auto& source)                 \
+        {                                                                                     \
+            _cnetmod_bindings.bind_xml(target, source);                                       \
+        }                                                                                     \
+    private:                                                                                  \
+        inline static constexpr auto _cnetmod_bindings =                                      \
+            ::cnetmod::orm::reflected_projection<_cnetmod_model_type>::bindings_with_aliases( \
+                {__VA_ARGS__});                                                               \
     };
 
 // Helper macro to define field name constants

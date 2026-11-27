@@ -63,7 +63,7 @@ auto code_generator::generate_model(const table_info& table) const
     std::string code = std::format("// Generated from table: {}\n", table.name);
     if (!table.comment.empty())
         code += std::format("// {}\n", table.comment);
-    code += "\n#include <cnetmod/orm.hpp>\nimport std;\nimport " "cnetmod.protocol.mysql;\n\n";
+    code += "\n#include <cnetmod/orm.hpp>\n\nimport std;\nimport cnetmod.orm;\n\n";
     code += std::format("namespace {} {{\n\nstruct {} {{\n",
         config_.namespace_name, class_name);
     for (const auto& column : table.columns)
@@ -74,8 +74,9 @@ auto code_generator::generate_model(const table_info& table) const
             mysql_type_to_cpp(column.type, column.is_nullable),
             to_camel_case(column.name));
     }
-    code += "};\n\n";
-    code += std::format("CNETMOD_MODEL({}, \"{}\",\n", class_name, table.name);
+    code += std::format("}};\n\n}} // namespace {}\n\n", config_.namespace_name);
+    code += std::format("CNETMOD_MODEL({}::{}, \"{}\",\n",
+        config_.namespace_name, class_name, table.name);
     for (std::size_t index = 0; index < table.columns.size(); ++index)
     {
         const auto& column = table.columns[index];
@@ -86,14 +87,16 @@ auto code_generator::generate_model(const table_info& table) const
             flags += flags.empty() ? "AUTO_INC" : " | AUTO_INC";
         if (column.is_nullable)
             flags += flags.empty() ? "NULLABLE" : " | NULLABLE";
-        if (flags.empty())
-            flags = "NONE";
-        code += std::format("    CNETMOD_FIELD({}, \"{}\", {}, {}){}\n",
-            to_camel_case(column.name), column.name,
-            mysql_type_to_sql_type(column.type), flags,
-            index + 1 == table.columns.size() ? "" : ",");
+        const auto member = to_camel_case(column.name);
+        code += std::format("    CNETMOD_FIELD({}, ", member);
+        if (member != column.name || !flags.empty())
+            code += std::format("\"{}\", ", column.name);
+        code += mysql_type_to_sql_type(column.type);
+        if (!flags.empty())
+            code += std::format(", {}", flags);
+        code += index + 1 == table.columns.size() ? ")\n" : "),\n";
     }
-    code += std::format(")\n\n}} // namespace {}\n", config_.namespace_name);
+    code += ")\n";
     return code;
 }
 

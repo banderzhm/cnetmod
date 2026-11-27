@@ -115,20 +115,22 @@ namespace detail {
 
 } // namespace detail
 
-/// Extension point for the part of a resultMap that cannot be inferred from
-/// XML: the concrete C++ member which receives an association or collection.
-/// Keep this explicit instead of guessing member offsets from property strings.
-/// A specialization can use mapped_association_as()/mapped_collection_as().
+/// Reflected projections provide typed relation bindings through their traits.
+/// A specialization can override those bindings or add them to other records.
 export template <ResultRecord T> struct xml_object_graph_binder
 {
-    static void bind(T&, const mapped_object&) {}
+    static void bind(T& target, const mapped_object& source)
+    {
+        if constexpr (requires { projection_traits<T>::bind_xml(target, source); })
+            projection_traits<T>::bind_xml(target, source);
+    }
 };
 
 /// Type-safe final projection for XML resultMap output. The XML layer owns
 /// property names and joins; the C++ model owns actual members through the
 /// existing CNETMOD_MODEL setters. Both resultMap property names and declared
 /// database column names are accepted, which keeps aliases explicit in XML.
-/// xml_object_graph_binder<T> completes any explicitly-declared typed relations.
+/// xml_object_graph_binder<T> completes the typed relations.
 export template <ResultRecord T>
 auto from_mapped_object(const mapped_object& source) -> T
 {

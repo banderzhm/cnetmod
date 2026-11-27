@@ -29,6 +29,21 @@ static std::string temp_log_path(const char* name)
 // Tests
 // =============================================================================
 
+TEST(log_level_parser_accepts_only_canonical_names)
+{
+    using logger::level;
+    const std::pair<std::string_view, level> cases[] = {
+        {"trace", level::trace}, {"debug", level::debug}, {"info", level::info},
+        {"warn", level::warn}, {"error", level::error}, {"critical", level::critical},
+        {"off", level::off},
+    };
+    for (const auto& [name, severity] : cases)
+        ASSERT_TRUE(logger::parse_level(name) == severity);
+    ASSERT_FALSE(logger::parse_level("INFO").has_value());
+    ASSERT_FALSE(logger::parse_level("unknown").has_value());
+    ASSERT_FALSE(logger::parse_level("").has_value());
+}
+
 TEST(log_text_format_file_output)
 {
     auto path = temp_log_path("cnetmod_test_text.log");

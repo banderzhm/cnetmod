@@ -26,6 +26,9 @@ namespace detail {
     };
 } // namespace detail
 
+/// Parses the same case-sensitive severity names emitted by the logger.
+[[nodiscard]] auto parse_level(std::string_view name) noexcept -> std::optional<level>;
+
 void init(const std::string& name = "cnetmod", level lv = level::info,
     output_format fmt = output_format::text);
 void init_with_file(const std::string& name, const std::string& filepath,

@@ -65,25 +65,16 @@ auto state() -> logger_state&
     return instance;
 }
 
+// Keep names in level order so emission can use a direct lookup.
+constexpr auto level_names = std::to_array<std::string_view>({
+    "trace", "debug", "info", "warn", "error", "critical", "off"});
+static_assert(level_names.size() == static_cast<std::size_t>(level::off) + 1);
+
 auto level_name(level value) -> std::string_view
 {
-    switch (value)
-    {
-    case level::trace:
-        return "trace";
-    case level::debug:
-        return "debug";
-    case level::info:
-        return "info";
-    case level::warn:
-        return "warn";
-    case level::error:
-        return "error";
-    case level::critical:
-        return "critical";
-    case level::off:
-        return "off";
-    }
+    const auto index = static_cast<std::size_t>(value);
+    if (index < level_names.size())
+        return level_names[index];
     return "unknown";
 }
 
@@ -430,6 +421,16 @@ void write_log_with_correlation(level value, log_correlation correlation,
 } // namespace logger::detail
 
 namespace logger {
+
+auto parse_level(std::string_view name) noexcept -> std::optional<level>
+{
+    const auto& names = detail::level_names;
+    const auto entry = std::ranges::find(names, name);
+    if (entry == names.end())
+        return std::nullopt;
+    return static_cast<level>(entry - names.begin());
+}
+
 void init(const std::string& name, level value, output_format format)
 {
     auto& s = detail::state();

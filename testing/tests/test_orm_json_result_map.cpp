@@ -3,6 +3,7 @@
 
 import std;
 import cnetmod.orm;
+import cnetmod.orm.reflected_projection;
 import cnetmod.orm.automatic_field_fill;
 import cnetmod.orm.database_session;
 import cnetmod.io.io_context;
@@ -33,7 +34,7 @@ struct orm_json_user
 
 CNETMOD_MODEL(orm_json_user, "users",
     CNETMOD_FIELD(id, "id", bigint, PK | DATA_OWNER),
-    CNETMOD_FIELD(name, "name", varchar),
+    CNETMOD_FIELD(name, varchar),
     CNETMOD_FIELD(status, "status", int_, DATA_PARTITION))
 
 struct orm_crud_user
@@ -164,6 +165,16 @@ struct orm_json_user_graph
 CNETMOD_MODEL(orm_json_user_graph, "users",
     CNETMOD_FIELD(id, "id", bigint, PK),
     CNETMOD_FIELD(name, "name", varchar))
+
+struct orm_reflected_user_graph
+{
+    std::int64_t id{};
+    std::string name;
+    std::optional<orm_json_team> department;
+    std::vector<orm_json_role> roles;
+};
+
+CNETMOD_REFLECTED_PROJECTION(orm_reflected_user_graph, {"department", "team"})
 
 struct traced_database_client
 {
@@ -447,11 +458,38 @@ struct orm_json_projection
     std::optional<std::string> label;
 };
 
-CNETMOD_PROJECTION(orm_json_projection,
-    CNETMOD_FIELD(id, "id", bigint),
-    CNETMOD_FIELD(active, "is_active", boolean),
-    CNETMOD_FIELD(ratio, "ratio", float_),
-    CNETMOD_FIELD(label, "label", varchar, NULLABLE))
+CNETMOD_REFLECTED_PROJECTION(orm_json_projection, {"label", "display_name"})
+
+static_assert(orm::Projection<orm_json_projection>);
+static_assert(!orm::Model<orm_json_projection>);
+
+TEST(orm_reflected_projection_maps_sql_labels_and_nullable_properties)
+{
+    orm::query_result result;
+    result.columns = {{.name = "display_name"}, {.name = "ignored"}, {.name = "id"},
+        {.name = "active"}, {.name = "ratio"}};
+    result.rows.push_back({orm::field_value::null(),
+        orm::field_value::from_int64(11), orm::field_value::from_uint64(42),
+        orm::field_value::from_int64(1), orm::field_value::from_float(1.5F)});
+    result.rows.push_back({orm::field_value::from_string("Lin"),
+        orm::field_value::null(), orm::field_value::from_uint64(17)});
+    const auto records = orm::from_result_set<orm_json_projection>(result);
+    ASSERT_EQ(records.size(), 2U);
+    ASSERT_EQ(records.front().id, 42U);
+    ASSERT_TRUE(records.front().active);
+    ASSERT_EQ(records.front().ratio, 1.5F);
+    ASSERT_FALSE(records.front().label.has_value());
+    ASSERT_EQ(records.back().id, 17U);
+    ASSERT_FALSE(records.back().active);
+    ASSERT_EQ(records.back().label.value(), "Lin");
+
+    orm::mapped_object source;
+    source.values.emplace("id", orm::param_value::from_uint(9));
+    source.values.emplace("display_name", orm::param_value::from_string("Ada"));
+    const auto projection = orm::from_mapped_object<orm_json_projection>(source);
+    ASSERT_EQ(projection.id, 9U);
+    ASSERT_EQ(projection.label.value(), "Ada");
+}
 
 TEST(orm_json_projection_preserves_scalars_and_validates_input)
 {
@@ -461,6 +499,7 @@ TEST(orm_json_projection_preserves_scalars_and_validates_input)
     ASSERT_TRUE(encoded.has_value());
     ASSERT_TRUE(encoded->contains("\"active\":true"));
     ASSERT_TRUE(encoded->contains("\"label\":null"));
+    ASSERT_FALSE(encoded->contains("display_name"));
 
     const auto decoded = orm::parse_json<orm_json_projection>(*encoded);
     ASSERT_TRUE(decoded.has_value());
@@ -481,6 +520,12 @@ TEST(orm_json_projection_preserves_scalars_and_validates_input)
         R"({"id":1,"id":2,"active":false,"ratio":1,"extra":[]})", false);
     ASSERT_TRUE(lenient.has_value());
     ASSERT_EQ(lenient->id, 2U);
+
+    const auto last_valid = parse(R"({"id":[],"id":3,"active":true,"ratio":1,"label":"Ada"})");
+    ASSERT_TRUE(last_valid.has_value());
+    ASSERT_EQ(last_valid->id, 3U);
+    ASSERT_EQ(last_valid->label.value(), "Ada");
+    ASSERT_FALSE(parse(R"({"id":3,"id":[],"active":true,"ratio":1})").has_value());
 }
 
 TEST(xml_result_map_projects_scalar_object_graph_into_model_dto)
@@ -585,6 +630,70 @@ TEST(xml_mapper_registry_loads_namespaced_result_map)
     ASSERT_FALSE(graph.front().collections.contains("orders"));
 }
 
+TEST(xml_joined_collections_use_typed_composite_ids_and_keep_rows_without_ids)
+{
+    orm::result_map_def parent{.id = "Parent", .auto_mapping = false,
+        .id_mappings = {{.property = "id", .column = "parent_id"}},
+        .collections = {{.property = "events", .result_map = "Event"},
+            {.property = "notes", .result_map = "Note"}}};
+    orm::result_map_registry maps;
+    maps.register_result_map({.id = "Event", .auto_mapping = false,
+        .id_mappings = {{.property = "time", .column = "event_time"},
+            {.property = "left", .column = "left_key"},
+            {.property = "right", .column = "right_key"}}});
+    maps.register_result_map({.id = "Note", .auto_mapping = false,
+        .result_mappings = {{.property = "ratio", .column = "score"},
+            {.property = "payload", .column = "payload"}}});
+
+    using value = orm::field_value;
+    orm::result_set joined;
+    joined.columns = {{.name = "parent_id"}, {.name = "event_time"},
+        {.name = "left_key"}, {.name = "right_key"}, {.name = "score"},
+        {.name = "payload"}};
+    const std::string payload{"a\0b", 3};
+    const auto row = [&](int day, std::string left, std::string right) -> orm::row {
+        return {value::from_int64(7), value::from_date({2026, 11,
+                    static_cast<std::uint8_t>(day)}),
+            value::from_string(std::move(left)), value::from_string(std::move(right)),
+            value::from_float(1.5F), value::from_blob(payload)};
+    };
+    joined.rows = {row(1, "x;right=y", "z"), row(1, "x", "y;right=z"),
+        row(2, "x", "y;right=z"), row(1, "x", "y;right=z"),
+        {value::from_int64(7), value::null(), value::null(), value::null()}};
+
+    const auto graph = orm::result_map_applier::materialize_joined(parent, joined, maps);
+    ASSERT_EQ(graph.size(), 1U);
+    const auto& events = graph.front().collections.at("events");
+    ASSERT_EQ(events.size(), 3U);
+    ASSERT_EQ(events.at(1).values.at("right").str_val, "y;right=z");
+    ASSERT_EQ(events.at(2).values.at("time").date_val.day, 2U);
+    const auto& notes = graph.front().collections.at("notes");
+    ASSERT_EQ(notes.size(), 4U);
+    ASSERT_EQ(notes.front().values.at("ratio").double_val, 1.5);
+    ASSERT_EQ(notes.front().values.at("payload").str_val, payload);
+}
+
+TEST(mysql_result_adapter_transfers_owned_values_and_preserves_borrowed_results)
+{
+    using mysql_value = cnetmod::mysql::field_value;
+    cnetmod::mysql::result_set native;
+    const std::string text(4096, 't');
+    const std::string blob(4096, '\0');
+    native.columns = {{.name = "text"}, {.name = "blob"}};
+    native.rows = {{mysql_value::from_string(text), mysql_value::from_blob(blob)}};
+    native.info = "metadata";
+
+    const auto copied = orm::mysql_adapt_result(native);
+    ASSERT_EQ(native.rows.front().front().get_string(), text);
+    ASSERT_EQ(copied.rows.front().at(1).as_string(), blob);
+    const auto transferred = orm::mysql_database_result_adapter::adapt(std::move(native));
+    ASSERT_EQ(transferred.columns.at(1).name, "blob");
+    ASSERT_EQ(transferred.rows.front().front().get_string(), text);
+    ASSERT_TRUE(transferred.rows.front().at(1).is_blob());
+    ASSERT_EQ(transferred.rows.front().at(1).as_string(), blob);
+    ASSERT_EQ(transferred.info, "metadata");
+}
+
 TEST(xml_mapper_select_applies_declared_result_map_automatically)
 {
     orm::mapper_registry registry;
@@ -677,6 +786,24 @@ TEST(xml_mapper_select_materializes_joined_relations_without_null_children)
     ASSERT_EQ(result.data.front().roles.size(), 2U);
     ASSERT_FALSE(result.data.back().team.has_value());
     ASSERT_TRUE(result.data.back().roles.empty());
+
+    const auto reflected = cnetmod::sync_wait(users.select_xml_as<orm_reflected_user_graph>(
+        registry, "UserMapper.find", orm::param_context{}));
+    ASSERT_TRUE(reflected.ok());
+    ASSERT_EQ(reflected.data.size(), 2U);
+    const auto& user = reflected.data.front();
+    ASSERT_EQ(user.id, 7);
+    ASSERT_EQ(user.name, "Ada");
+    ASSERT_TRUE(user.department.has_value());
+    ASSERT_EQ(user.department->name, "Core");
+    ASSERT_EQ(user.roles.size(), 2U);
+    ASSERT_EQ(user.roles.at(1).name, "editor");
+    ASSERT_FALSE(reflected.data.back().department.has_value());
+    ASSERT_TRUE(reflected.data.back().roles.empty());
+
+    const auto json = orm::write_json(user);
+    ASSERT_TRUE(json.has_value());
+    ASSERT_EQ(*json, "{\"id\":7,\"name\":\"Ada\"}");
 }
 
 TEST(xml_mapper_registry_exposes_standard_statement_type_metadata)

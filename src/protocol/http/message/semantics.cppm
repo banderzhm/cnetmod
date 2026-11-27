@@ -144,17 +144,24 @@ export using response_body_source = request_body_source;
 // HTTP Method
 // =============================================================================
 
+// Emit both conversions from the same wire names while keeping the parser's
+// comparisons in the existing order. DELETE is a Windows macro.
+#define CNETMOD_HTTP_METHODS(X) \
+    X(GET, "GET")              \
+    X(HEAD, "HEAD")            \
+    X(POST, "POST")            \
+    X(PUT, "PUT")              \
+    X(DELETE_, "DELETE")       \
+    X(CONNECT, "CONNECT")      \
+    X(OPTIONS, "OPTIONS")      \
+    X(TRACE, "TRACE")          \
+    X(PATCH, "PATCH")
+
 export enum class http_method
 {
-    GET,
-    HEAD,
-    POST,
-    PUT,
-    DELETE_, // DELETE is a Windows macro
-    CONNECT,
-    OPTIONS,
-    TRACE,
-    PATCH,
+#define CNETMOD_HTTP_METHOD_ENUM(method, wire) method,
+    CNETMOD_HTTP_METHODS(CNETMOD_HTTP_METHOD_ENUM)
+#undef CNETMOD_HTTP_METHOD_ENUM
 };
 
 export constexpr auto method_to_string(http_method m) noexcept
@@ -162,24 +169,9 @@ export constexpr auto method_to_string(http_method m) noexcept
 {
     switch (m)
     {
-    case http_method::GET:
-        return "GET";
-    case http_method::HEAD:
-        return "HEAD";
-    case http_method::POST:
-        return "POST";
-    case http_method::PUT:
-        return "PUT";
-    case http_method::DELETE_:
-        return "DELETE";
-    case http_method::CONNECT:
-        return "CONNECT";
-    case http_method::OPTIONS:
-        return "OPTIONS";
-    case http_method::TRACE:
-        return "TRACE";
-    case http_method::PATCH:
-        return "PATCH";
+#define CNETMOD_HTTP_METHOD_NAME(method, wire) case http_method::method: return wire;
+    CNETMOD_HTTP_METHODS(CNETMOD_HTTP_METHOD_NAME)
+#undef CNETMOD_HTTP_METHOD_NAME
     default:
         return "UNKNOWN";
     }
@@ -188,26 +180,13 @@ export constexpr auto method_to_string(http_method m) noexcept
 export constexpr auto string_to_method(std::string_view s) noexcept
     -> std::optional<http_method>
 {
-    if (s == "GET")
-        return http_method::GET;
-    if (s == "HEAD")
-        return http_method::HEAD;
-    if (s == "POST")
-        return http_method::POST;
-    if (s == "PUT")
-        return http_method::PUT;
-    if (s == "DELETE")
-        return http_method::DELETE_;
-    if (s == "CONNECT")
-        return http_method::CONNECT;
-    if (s == "OPTIONS")
-        return http_method::OPTIONS;
-    if (s == "TRACE")
-        return http_method::TRACE;
-    if (s == "PATCH")
-        return http_method::PATCH;
+#define CNETMOD_HTTP_METHOD_PARSE(method, wire) if (s == wire) return http_method::method;
+    CNETMOD_HTTP_METHODS(CNETMOD_HTTP_METHOD_PARSE)
+#undef CNETMOD_HTTP_METHOD_PARSE
     return std::nullopt;
 }
+
+#undef CNETMOD_HTTP_METHODS
 
 // =============================================================================
 // HTTP Version

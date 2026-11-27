@@ -37,6 +37,11 @@ export enum class options_reload
 export template <class T>
 using options_validator = std::function<std::expected<void, std::string>(const T&)>;
 
+/// Optional alternative to the default cnetmod.json mapping for a section.
+export template <class T>
+using options_decoder = std::expected<T, configuration_error> (*)(
+    std::string_view path, const cnetmod::json::document* provided);
+
 /**
  * @brief Keeps a change subscription alive; destroying it unsubscribes.
  */
@@ -207,9 +212,8 @@ namespace detail {
      */
     template <class T>
     [[nodiscard]] auto decode_section(std::string_view name,
-        const cnetmod::json::document* provided,
-        const options_validator<T>& validator)
-        -> std::expected<std::shared_ptr<const T>, configuration_error>
+        const cnetmod::json::document* provided)
+        -> std::expected<T, configuration_error>
     {
         const std::string path{name};
         auto defaults = cnetmod::json::to_document(T{}, true);
@@ -234,13 +238,7 @@ namespace detail {
                 .code = decoded.error(),
                 .path = path,
                 .message = std::format("invalid section: {}", decoded.error().message())});
-        if (validator)
-        {
-            if (auto valid = validator(*decoded); !valid)
-                return std::unexpected(configuration_error{
-                    .path = path, .message = std::move(valid.error())});
-        }
-        return std::make_shared<const T>(std::move(*decoded));
+        return std::move(*decoded);
     }
 
 } // namespace detail
@@ -267,8 +265,8 @@ template <class T>
 class typed_options_section final : public options_section
 {
 public:
-    typed_options_section(std::string name, bool required)
-        : name_(std::move(name)), required_(required)
+    typed_options_section(std::string name, options_decoder<T> decoder, bool required)
+        : name_(std::move(name)), decoder_(decoder), required_(required)
     {
     }
 
@@ -285,12 +283,7 @@ public:
     [[nodiscard]] auto bind(const cnetmod::json::document* provided)
         -> std::expected<void, configuration_error> override
     {
-        if (provided == nullptr && required_)
-            return std::unexpected(configuration_error{
-                .code = std::make_error_code(std::errc::no_such_file_or_directory),
-                .path = name_,
-                .message = "required section is missing"});
-        auto decoded = detail::decode_section<T>(name_, provided, validator_);
+        auto decoded = decode(provided);
         if (!decoded)
             return std::unexpected(decoded.error());
         monitor_ = std::make_shared<options_monitor<T>>(std::move(*decoded));
@@ -300,12 +293,7 @@ public:
     [[nodiscard]] auto stage(const cnetmod::json::document* provided)
         -> std::expected<std::function<void()>, configuration_error> override
     {
-        if (provided == nullptr && required_)
-            return std::unexpected(configuration_error{
-                .code = std::make_error_code(std::errc::no_such_file_or_directory),
-                .path = name_,
-                .message = "required section is missing"});
-        auto decoded = detail::decode_section<T>(name_, provided, validator_);
+        auto decoded = decode(provided);
         if (!decoded)
             return std::unexpected(decoded.error());
         return [monitor = monitor_, next = std::move(*decoded)]() mutable
@@ -332,7 +320,28 @@ public:
     options_reload reload_ = options_reload::restart_required;
 
 private:
+    [[nodiscard]] auto decode(const cnetmod::json::document* provided) const
+        -> std::expected<std::shared_ptr<const T>, configuration_error>
+    {
+        if (provided == nullptr && required_)
+            return std::unexpected(configuration_error{
+                .code = std::make_error_code(std::errc::no_such_file_or_directory),
+                .path = name_,
+                .message = "required section is missing"});
+        auto decoded = decoder_(name_, provided);
+        if (!decoded)
+            return std::unexpected(decoded.error());
+        if (validator_)
+        {
+            if (auto valid = validator_(*decoded); !valid)
+                return std::unexpected(configuration_error{
+                    .path = name_, .message = std::move(valid.error())});
+        }
+        return std::make_shared<const T>(std::move(*decoded));
+    }
+
     std::string name_;
+    options_decoder<T> decoder_;
     bool required_;
     std::shared_ptr<options_monitor<T>> monitor_;
 };
@@ -397,14 +406,24 @@ public:
     auto section(std::string name, bool required = false)
         -> options_section_builder<T>
     {
+        return section<T>(std::move(name), detail::decode_section<T>, required);
+    }
+
+    /// Declares a section that uses an explicit decoder during bind and reload.
+    template <class T>
+    auto section(std::string name, options_decoder<T> decoder, bool required = false)
+        -> options_section_builder<T>
+    {
         if (name.empty())
             throw std::invalid_argument("options section name must not be empty");
+        if (decoder == nullptr)
+            throw std::invalid_argument("options section decoder must not be null");
         if (std::ranges::any_of(sections_,
                 [&name](const auto& item) { return item->name() == name; }))
             throw std::logic_error(std::format(
                 "options section '{}' is declared more than once", name));
         auto declared = std::make_unique<typed_options_section<T>>(
-            std::move(name), required);
+            std::move(name), decoder, required);
         auto& reference = *declared;
         sections_.push_back(std::move(declared));
         return options_section_builder<T>{reference};

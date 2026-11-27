@@ -23,6 +23,8 @@ auto mysql_adapt_parameter(const cnetmod::mysql::param_value& source)
 /// Converts the protocol-owned MySQL result representation into the stable,
 /// database-independent ORM result contract.
 auto mysql_adapt_result(const cnetmod::mysql::result_set& source) -> query_result;
+/// Transfer owned strings and BLOBs into the ORM result.
+auto mysql_adapt_result(cnetmod::mysql::result_set&& source) -> query_result;
 
 struct mysql_database_result_adapter
 {
