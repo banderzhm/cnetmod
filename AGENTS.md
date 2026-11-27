@@ -6692,8 +6692,8 @@ redis::redis_template cache{pool, {
     .scan_limit = 100000,
 }};
 
-auto order = co_await cache.get_as<order_record>("42");
-auto saved = co_await cache.set_as("42", value);
+auto order = co_await cache.get_as<order_record, order_codec>("42");
+auto saved = co_await cache.set_as<order_record, order_codec>("42", value);
 auto active = co_await cache.getex("session:abc", std::chrono::minutes{30});
 
 auto batch = cache.pipeline();
@@ -6723,7 +6723,7 @@ auto replies = co_await cache.execute(batch);
 - `sscan_all` 循环游标、保持首次出现顺序、去重，并在超过 `scan_limit` 时整体失败。
 - Pipeline 只执行一次 `exchange()`，返回
   `std::vector<std::expected<reply, std::error_code>>`；Redis 单条错误不会覆盖其他条。
-- `json_codec` 是 `get_as` / `set_as` 的默认 JSON codec；Redis 模块只通过 `cnetmod.json` 解析和序列化。若业务需要非 JSON 值编码，可显式传入 Redis 值 codec，但这不会替换框架 JSON 引擎。
+- `get_as<T, Codec>` / `set_as<T, Codec>` 由调用方指定值编码。业务可直接用 simdjson 读写后调用 `get` / `set`，也可用自己的领域 codec 复用同一套 Redis 连接、TTL 和取消逻辑。
 - 配置 `span_exporter` 后，每条命令产生 CLIENT span，只记录
   `db.system.name=redis` 与 `db.operation.name`，不记录 key、value 或服务端错误正文。
 - `eval_integer(script, keys, args)` 用于必须在 Redis 内原子完成的业务状态转换。
@@ -10486,9 +10486,8 @@ auto compose(application::composition_context& context)
 }
 ```
 
-`parse_offloaded(runtime, text)` 与 `dump_offloaded(runtime, value)` 在 Host CPU 池执行
-JSON 解析和序列化，避免 route 协程阻塞事件循环。两者拥有输入直到执行完成并返回
-`std::expected`；语法错误为 `invalid_argument`，内存不足保持 `not_enough_memory`。
+较大的 JSON 读写操作可以把拥有所有权的输入移动到 `runtime.offload()` 的回调。
+回调直接调用 JSON 库，返回拥有所有权的值。请求处理需要在提交前及恢复后检查取消状态。
 
 ## HTTP 先响应、后台继续执行
 
@@ -11460,7 +11459,7 @@ MSVC 构建使用 `rebuild_install.bat` 脚本。
 
 | 依赖 | 目录 | 用途 |
 |------|------|------|
-| nlohmann/json | `3rdparty/json` | Official `nlohmann.json` dependency module imported privately by `cnetmod.json` |
+| simdjson | `3rdparty/simdjson` | Compiled into the runtime. The JSON parser and native Builder are internal implementation dependencies. |
 | LevelDB | `3rdparty/leveldb` | 嵌入式键值存储 |
 | mimalloc | `3rdparty/mimalloc` | 最终可执行程序的进程级内存分配器 |
 | pugixml | `3rdparty/pugixml` | XML 解析（ORM mapper） |
@@ -11851,7 +11850,7 @@ CMake 为导入模块生成的合成 BMI target 不保证继承父目录选项�
 
 # JSON
 
-> `cnetmod.json` is the backend-neutral JSON document and typed codec facade. The implementation imports the pinned official `nlohmann.json` module; third-party JSON types never cross the framework boundary.
+> `cnetmod.json` is the compatibility interface for existing document and typed codec callers. The runtime uses the pinned simdjson source for parsing.
 
 **import**: `import cnetmod.json;`
 **macro header**: `#include <cnetmod/json.hpp>`
@@ -11860,10 +11859,10 @@ CMake 为导入模块生成的合成 BMI target 不保证继承父目录选项�
 ## Boundary rules
 
 1. Application and protocol code imports `cnetmod.json`; it never imports a parser library.
-2. Only `src/utils/json/json.cpp` may import `nlohmann.json` or spell `nlohmann::*`; application, protocol, ORM, and public module interfaces use `cnetmod.json`.
+2. New internal JSON code uses native simdjson APIs in implementation units. Preserve existing size, depth and duplicate-key policies when migrating a caller.
 3. `document`, errors, codecs, and DTO metadata contain only framework or standard-library types.
 4. `tools/check_json_boundary.py` enforces the boundary in CTest.
-5. `3rdparty/json/src/modules/json.cppm` is compiled as a dependency module exactly once. Do not include `nlohmann/json.hpp` in framework or business code.
+5. `3rdparty/simdjson/singleheader/simdjson.cpp` is compiled once into the runtime. Keep parser-backed views within the lifetime of their parser and input, and return owned data across asynchronous boundaries.
 
 ## Dynamic documents
 
@@ -11964,12 +11963,14 @@ CNETMOD_MODEL(user_record, "users",
     CNETMOD_FIELD(id, "id", bigint, PK),
     CNETMOD_FIELD(name, "name", varchar))
 
-auto wire = cnetmod::json::write(user_record{42, "Ada"});
+auto wire = cnetmod::orm::write_json(user_record{42, "Ada"});
+auto record = cnetmod::orm::parse_json<user_record>(*wire);
 ```
 
 This shared mapping covers ORM scalar fields, `DATE`, `DATETIME`, `TIME`, UUID,
 and nullable `DATETIME`. Database temporal values use their canonical
-timezone-free SQL text representation.
+timezone-free SQL text representation. ORM JSON mapping is implemented with
+native simdjson inside the ORM component.
 
 ## Embedding trusted JSON text
 
@@ -11995,9 +11996,9 @@ reports invalid JSON. The view must outlive the write call.
 
 ## Application offload
 
-Use `cnetmod::application::json_template` for parsing or writing on the
-Application-managed CPU pool. Its typed operations use the same codec contract,
-support cancellation, and resume on the application execution context.
+For expensive JSON work, move owned input into an Application
+`runtime.offload()` callback and return an owned result. Check request
+cancellation before offloading and after resuming on the event loop.
 
 ## Codec SPI
 
@@ -12011,8 +12012,9 @@ template <typename T>
 static auto encode(const T&) -> std::expected<std::string, std::error_code>;
 ```
 
-and satisfies `cnetmod::json::codec_for<Codec, T>`. RedisTemplate and other
-framework templates accept this SPI without exposing the parser backend.
+and satisfies `cnetmod::json::codec_for<Codec, T>` for compatibility callers.
+Redis value codecs use the same signatures and are supplied explicitly. Redis
+handles the encoded string while the caller chooses the serialization library.
 
 ## Verification
 
@@ -16126,6 +16128,7 @@ auto select_target(std::string_view share_name, std::string_view filter) -> std:
 void add_user(const std::string& username, const std::string& password, std::vector<std::string> groups = {});
 void allow_all(const std::string& topic_filter, std::set<std::string> groups = {});
 auto authenticate(std::string_view username, std::string_view password) const -> std::optional<std::string>;
+auto load_json(std::string_view config) -> std::expected<void, std::string>;
 auto load_file(const std::string& path) -> std::expected<void, std::string>;
 
 // persistence — 会话 + 保留消息持久化
@@ -16357,6 +16360,7 @@ class persistence {
 ### 通过 `broker_options` 启用持久化
 
 在 `broker_options` 中设置 `persistence_enabled = true` 和 `persistence` 字段，broker 自动在启动时加载已保存的会话和保留消息，并定期自动 flush。
+存档沿用 `sessions.json` 和 `retained.json` 的字段格式。读写在 MQTT 内部用 simdjson 完成。
 
 ```cpp
 mqtt::broker_options opts;

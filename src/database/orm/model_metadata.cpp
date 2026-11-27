@@ -1,3 +1,6 @@
+module;
+#include "../../utils/detail/simdjson_depth.hpp"
+
 module cnetmod.orm.model_metadata;
 
 namespace cnetmod::orm {
@@ -95,8 +98,7 @@ namespace {
     [[nodiscard]] auto json_type_error()
         -> std::expected<void, std::error_code>
     {
-        return std::unexpected(cnetmod::json::make_error_code(
-            cnetmod::json::errc::type_mismatch));
+        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
     }
 
     template <typename T>
@@ -190,92 +192,130 @@ namespace {
 
 } // namespace
 
-auto encode_json_member(const calendar_date& value)
-    -> std::expected<cnetmod::json::document, std::error_code>
+auto read_record_json(std::string_view input)
+    -> std::expected<record_json_fields, std::error_code>
 {
-    return cnetmod::json::document(value.to_string());
-}
+    using simdjson::dom::element_type;
+    simdjson::dom::parser parser;
+    parser.number_as_string(true);
+    simdjson::dom::element root;
+    if (!cnetmod::detail::parse_bounded_json(parser, input, root) || !root.is_object())
+        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
 
-auto encode_json_member(const calendar_datetime& value)
-    -> std::expected<cnetmod::json::document, std::error_code>
-{
-    return cnetmod::json::document(value.to_string());
-}
-
-auto encode_json_member(const clock_time& value)
-    -> std::expected<cnetmod::json::document, std::error_code>
-{
-    return cnetmod::json::document(value.to_string());
-}
-
-auto encode_json_member(const std::optional<calendar_datetime>& value)
-    -> std::expected<cnetmod::json::document, std::error_code>
-{
-    return value ? encode_json_member(*value)
-                 : std::expected<cnetmod::json::document, std::error_code>{
-                       cnetmod::json::document(nullptr)};
-}
-
-auto encode_json_member(const uuid& value)
-    -> std::expected<cnetmod::json::document, std::error_code>
-{
-    return cnetmod::json::document(value.to_string());
-}
-
-auto decode_json_member(
-    calendar_date& member, const cnetmod::json::document& source)
-    -> std::expected<void, std::error_code>
-{
-    if (!source.is_string() ||
-        !parse_date(source.get<std::string>(), member))
-        return json_type_error();
-    return {};
-}
-
-auto decode_json_member(
-    calendar_datetime& member, const cnetmod::json::document& source)
-    -> std::expected<void, std::error_code>
-{
-    if (!source.is_string() ||
-        !parse_datetime(source.get<std::string>(), member))
-        return json_type_error();
-    return {};
-}
-
-auto decode_json_member(
-    clock_time& member, const cnetmod::json::document& source)
-    -> std::expected<void, std::error_code>
-{
-    if (!source.is_string() ||
-        !parse_time(source.get<std::string>(), member))
-        return json_type_error();
-    return {};
-}
-
-auto decode_json_member(std::optional<calendar_datetime>& member,
-    const cnetmod::json::document& source)
-    -> std::expected<void, std::error_code>
-{
-    if (source.is_null())
+    record_json_fields fields;
+    for (const auto field : root.get_object().value_unsafe())
     {
-        member.reset();
-        return {};
+        record_json_scalar scalar;
+        const auto value = field.value;
+        switch (value.type())
+        {
+        case element_type::NULL_VALUE:
+            scalar = nullptr;
+            break;
+        case element_type::BOOL:
+            scalar = value.get_bool().value_unsafe();
+            break;
+        case element_type::INT64:
+            scalar = value.get_int64().value_unsafe();
+            break;
+        case element_type::UINT64:
+            scalar = value.get_uint64().value_unsafe();
+            break;
+        case element_type::DOUBLE:
+            scalar = value.get_double().value_unsafe();
+            break;
+        case element_type::STRING:
+            scalar = std::string{value.get_string().value_unsafe()};
+            break;
+        case element_type::BIGINT:
+        {
+            const auto number = value.get_bigint().value_unsafe();
+            const auto* end = number.data() + number.size();
+            double converted{};
+            const auto result = std::from_chars(number.data(), end, converted);
+            if (result.ec != std::errc{} || result.ptr != end || !std::isfinite(converted))
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            scalar = converted;
+            break;
+        }
+        case element_type::ARRAY:
+        case element_type::OBJECT:
+            break;
+        }
+        fields.insert_or_assign(std::string{field.key}, std::move(scalar));
     }
-    calendar_datetime value;
-    auto decoded = decode_json_member(value, source);
-    if (!decoded)
-        return decoded;
-    member = value;
+    return fields;
+}
+
+auto write_record_json(const record_json_fields& fields)
+    -> std::expected<std::string, std::error_code>
+{
+    simdjson::builder::string_builder builder;
+    builder.start_object();
+    bool first = true;
+    for (const auto& [key, scalar] : fields)
+    {
+        if (!std::exchange(first, false))
+            builder.append_comma();
+        std::visit([&](const auto& value)
+        {
+            using value_type = std::remove_cvref_t<decltype(value)>;
+            if constexpr (std::same_as<value_type, std::string>)
+                builder.append_key_value(std::string_view{key}, std::string_view{value});
+            else if constexpr (std::same_as<value_type, std::monostate>)
+                builder.append_key_value(std::string_view{key}, nullptr);
+            else if constexpr (std::same_as<value_type, double>)
+            {
+                if (std::isfinite(value))
+                    builder.append_key_value(std::string_view{key}, value);
+                else
+                    builder.append_key_value(std::string_view{key}, nullptr);
+            }
+            else
+                builder.append_key_value(std::string_view{key}, value);
+        }, scalar);
+    }
+    builder.end_object();
+    std::string_view output;
+    if (builder.view().get(output) || !builder.validate_unicode())
+        return std::unexpected(std::make_error_code(std::errc::illegal_byte_sequence));
+    return std::string{output};
+}
+
+auto decode_json_member(calendar_date& member, const record_json_scalar& source)
+    -> std::expected<void, std::error_code>
+{
+    const auto* value = std::get_if<std::string>(&source);
+    if (!value || !parse_date(*value, member))
+        return json_type_error();
     return {};
 }
 
-auto decode_json_member(
-    uuid& member, const cnetmod::json::document& source)
+auto decode_json_member(calendar_datetime& member, const record_json_scalar& source)
     -> std::expected<void, std::error_code>
 {
-    if (!source.is_string())
+    const auto* value = std::get_if<std::string>(&source);
+    if (!value || !parse_datetime(*value, member))
         return json_type_error();
-    auto parsed = uuid::from_string(source.get<std::string>());
+    return {};
+}
+
+auto decode_json_member(clock_time& member, const record_json_scalar& source)
+    -> std::expected<void, std::error_code>
+{
+    const auto* value = std::get_if<std::string>(&source);
+    if (!value || !parse_time(*value, member))
+        return json_type_error();
+    return {};
+}
+
+auto decode_json_member(uuid& member, const record_json_scalar& source)
+    -> std::expected<void, std::error_code>
+{
+    const auto* value = std::get_if<std::string>(&source);
+    if (!value)
+        return json_type_error();
+    auto parsed = uuid::from_string(*value);
     if (!parsed)
         return json_type_error();
     member = *parsed;

@@ -1,7 +1,6 @@
 include_guard(GLOBAL)
 
 include(${CMAKE_CURRENT_LIST_DIR}/Stdexec.cmake)
-include(${CMAKE_CURRENT_LIST_DIR}/NlohmannJson.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/YamlCppModules.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/Pugixml.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/BoringSSL.cmake)
@@ -22,7 +21,6 @@ macro(cnetmod_configure_third_party_dependencies)
     set(CNETMOD_USE_BORINGSSL_SUBMODULE ON CACHE BOOL
         "Use the bundled BoringSSL submodule (required by cnetmod)" FORCE)
     cnetmod_configure_boringssl_quic()
-    cnetmod_configure_nlohmann_json()
     cnetmod_configure_yaml_cpp_modules()
     if(CNETMOD_ENABLE_SSL AND NOT BoringSSL_FOUND)
         message(FATAL_ERROR "cnetmod requires the bundled BoringSSL provider")
@@ -57,7 +55,6 @@ endfunction()
 
 function(cnetmod_link_third_party_dependencies TARGET_NAME)
     cnetmod_link_stdexec(${TARGET_NAME})
-    cnetmod_link_nlohmann_json(${TARGET_NAME})
     cnetmod_link_yaml_cpp_modules(${TARGET_NAME})
     cnetmod_link_pugixml(${TARGET_NAME})
     cnetmod_link_boringssl(${TARGET_NAME})

@@ -2,13 +2,7 @@
 #include <cnetmod/json_codec.hpp>
 
 import std;
-import cnetmod.core;
-import cnetmod.coro.cancel;
-import cnetmod.coro.task;
-import cnetmod.executor.pool;
-import cnetmod.io;
 import cnetmod.json;
-import cnetmod.application.json_template;
 
 namespace cnetmod_test {
 struct sample_document
@@ -110,6 +104,11 @@ TEST(framework_document_uses_native_parser_boundaries)
         R"({"outer":[]})", {.max_depth = 1});
     ASSERT_FALSE(rejected_depth.has_value());
 
+    const auto large_integer = cnetmod::json::parse_document("18446744073709551616");
+    ASSERT_TRUE(large_integer.has_value());
+    ASSERT_TRUE(large_integer->is_double());
+    ASSERT_EQ(large_integer->get<double>(), 18446744073709551616.0);
+    ASSERT_TRUE(cnetmod::json::parse_document("\xef\xbb\xbf{}").has_value());
     ASSERT_FALSE(cnetmod::json::parse_document("{}{}").has_value());
     ASSERT_FALSE(cnetmod::json::parse_document(
         std::string(257, '[') + "0" + std::string(257, ']'))
@@ -168,45 +167,6 @@ TEST(framework_json_codec_enforces_schema_and_preserves_aggregate_values)
     ASSERT_FALSE(overflow.has_value());
     ASSERT_EQ(overflow.error(),
         cnetmod::json::make_error_code(cnetmod::json::errc::type_mismatch));
-}
-
-TEST(json_template_offloads_and_honours_cancellation)
-{
-    cnetmod::net_init network;
-    auto io = cnetmod::make_io_context();
-    cnetmod::thread_pool cpu_pool{2};
-    cnetmod::application::json_template json{*io, cpu_pool};
-    std::optional<std::expected<sample_document, std::error_code>> parsed;
-    std::optional<std::expected<std::string, std::error_code>> written;
-    std::optional<std::expected<sample_document, std::error_code>> cancelled;
-
-    auto run = [&]() -> cnetmod::task<void>
-    {
-        parsed = co_await json.parse<sample_document>(
-            R"({"name":"orders","count":7})");
-        written = co_await json.write(sample_document{"events", 9});
-        cnetmod::cancel_token cancellation;
-        cancellation.cancel();
-        cancelled = co_await json.parse<sample_document>("{}", &cancellation);
-        io->stop();
-    };
-    auto operation = run();
-    operation.handle().resume();
-    io->run();
-    operation.handle().promise().result();
-    cpu_pool.request_stop();
-
-    ASSERT_TRUE(parsed.has_value());
-    ASSERT_TRUE(parsed->has_value());
-    ASSERT_EQ(parsed->value().name, std::string{"orders"});
-    ASSERT_EQ(parsed->value().count, 7);
-    ASSERT_TRUE(written.has_value());
-    ASSERT_TRUE(written->has_value());
-    ASSERT_TRUE(written->value().contains("events"));
-    ASSERT_TRUE(cancelled.has_value());
-    ASSERT_FALSE(cancelled->has_value());
-    ASSERT_EQ(cancelled->error(),
-        std::make_error_code(std::errc::operation_canceled));
 }
 
 RUN_TESTS()

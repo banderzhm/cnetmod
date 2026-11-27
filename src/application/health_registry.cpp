@@ -1,3 +1,7 @@
+module;
+
+#include <simdjson.h>
+
 module cnetmod.application.health_registry;
 
 import std;
@@ -5,7 +9,6 @@ import cnetmod.instrumentation.error;
 import cnetmod.instrumentation.operation_scope;
 import cnetmod.instrumentation.operation_result;
 import cnetmod.instrumentation.tracing;
-import cnetmod.json;
 import cnetmod.coro.cancel;
 import cnetmod.coro.task_group;
 import cnetmod.protocol.http.middleware.tracing;
@@ -371,35 +374,52 @@ auto health_registry::snapshots() const
 
 auto health_registry::json(bool readiness_only) const -> std::string
 {
-    cnetmod::json::document components = cnetmod::json::object();
-    for (const auto& item : snapshots())
-    {
-        components[item.key.canonical_name()] = cnetmod::json::object({
-            {"status", status_name(item.report.status)},
-            {"required", item.requirement == service_requirement::required},
-            {"message", item.report.message},
-            {"error", item.report.error ? item.report.error.category().name() : ""},
-            {"checkedAtUnixMs", std::chrono::duration_cast<std::chrono::milliseconds>(item.report.checked_at.time_since_epoch()).count()},
-            {"consecutiveFailures", item.consecutive_failures},
-            {"consecutiveSuccesses", item.consecutive_successes},
-        });
-    }
-    auto healthy = readiness_only ? ready() : live();
-    if (!readiness_only)
-    {
-        for (const auto& item : snapshots())
+    const auto components = snapshots();
+    const bool healthy = readiness_only ? ready() : live() &&
+        std::ranges::none_of(components, [](const auto& item)
         {
-            if (item.report.status == service_health::down)
-            {
-                healthy = false;
-                break;
-            }
-        }
+            return item.report.status == service_health::down;
+        });
+
+    simdjson::builder::string_builder out;
+    out.start_object();
+    out.append_key_value("status", healthy ? "UP" : "DOWN");
+    out.append_comma();
+    out.escape_and_append_with_quotes("components");
+    out.append_colon();
+    out.start_object();
+    bool first = true;
+    for (const auto& item : components)
+    {
+        if (!std::exchange(first, false))
+            out.append_comma();
+        out.escape_and_append_with_quotes(item.key.canonical_name());
+        out.append_colon();
+        out.start_object();
+        out.append_key_value("status", status_name(item.report.status));
+        out.append_comma();
+        out.append_key_value("required", item.requirement == service_requirement::required);
+        out.append_comma();
+        out.append_key_value("message", item.report.message);
+        out.append_comma();
+        out.append_key_value("error", item.report.error ? item.report.error.category().name() : "");
+        out.append_comma();
+        out.append_key_value("checkedAtUnixMs",
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                item.report.checked_at.time_since_epoch()).count());
+        out.append_comma();
+        out.append_key_value("consecutiveFailures", item.consecutive_failures);
+        out.append_comma();
+        out.append_key_value("consecutiveSuccesses", item.consecutive_successes);
+        out.end_object();
     }
-    const auto encoded = cnetmod::json::write_document(cnetmod::json::object({
-        {"status", healthy ? "UP" : "DOWN"},
-        {"components", std::move(components)}}));
-    return encoded.value_or("{}");
+    out.end_object();
+    out.end_object();
+
+    std::string_view payload;
+    if (!out.validate_unicode() || out.view().get(payload))
+        return "{}";
+    return std::string{payload};
 }
 
 auto health_registry::policy() const noexcept -> health_policy

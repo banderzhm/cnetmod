@@ -345,7 +345,7 @@ installed libraries and falls back to pinned submodules where available; on
 Linux it prints Arch, Ubuntu, and CentOS installation commands for missing
 optional libraries. `vcpkg` and `conan` require their
 own toolchain and use package targets for managed dependencies. BoringSSL,
-nlohmann/json, and the YAML C++23 module facade remain pinned source dependencies in
+simdjson, and the YAML C++23 module facade remain pinned source dependencies in
 all three modes. Use a fresh build directory when changing modes.
 
 ### Build with Conan
@@ -385,8 +385,8 @@ conan create . --build=missing -pr:h vs2026 -pr:b vs2026
 
 The default Conan recipe installs the remaining ConanCenter packages such as
 `pugixml`, `leveldb`, `openssl`, and `zlib`. JSON is provided through the
-backend-neutral `cnetmod.json` facade. Its implementation imports the pinned
-official `nlohmann.json` module; application code never includes parser headers.
+`cnetmod.json` compatibility interface. The runtime compiles the pinned
+simdjson implementation and uses it for parsing.
 `mimalloc` is enabled by default and can be disabled with
 `-o cnetmod/*:with_mimalloc=False`. `stdexec` is normally taken from
 `3rdparty/stdexec`; if your Conan remote provides the upstream `p2300` package,

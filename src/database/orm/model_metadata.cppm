@@ -5,7 +5,6 @@ import cnetmod.orm.sql_query_data;
 import cnetmod.orm.sql_parameters;
 import cnetmod.database.datetime;
 import cnetmod.orm.id_generation;
-export import cnetmod.json;
 
 export namespace cnetmod::orm {
 
@@ -64,10 +63,22 @@ struct column_def
 
 template <class T> using field_setter = void (*)(T&, const field_value&);
 template <class T> using field_getter = param_value (*)(const T&);
+namespace detail {
+
+using record_json_scalar = std::variant<std::monostate, std::nullptr_t, bool,
+    std::int64_t, std::uint64_t, double, std::string>;
+using record_json_fields = std::map<std::string, record_json_scalar, std::less<>>;
+
+[[nodiscard]] auto read_record_json(std::string_view input)
+    -> std::expected<record_json_fields, std::error_code>;
+[[nodiscard]] auto write_record_json(const record_json_fields& fields)
+    -> std::expected<std::string, std::error_code>;
+
+} // namespace detail
+
 template <class T> using json_field_setter = std::expected<void, std::error_code> (*)(
-    T&, const cnetmod::json::document&);
-template <class T> using json_field_getter = std::expected<cnetmod::json::document,
-    std::error_code> (*)(const T&);
+    T&, const detail::record_json_scalar&);
+template <class T> using json_field_getter = detail::record_json_scalar (*)(const T&);
 
 namespace detail {
 
@@ -217,108 +228,156 @@ template <ResultRecord T>
 
 [[nodiscard]] auto sql_type_str(column_type type) noexcept -> std::string_view;
 
-/**
- * @brief Serializes a registered ORM model or projection with its field metadata.
- */
+/// Serialize a registered model or projection using its member names.
 template <ResultRecord T>
-[[nodiscard]] auto record_to_document(const T& value, bool emit_nulls)
-    -> std::expected<cnetmod::json::document, std::error_code>
+[[nodiscard]] auto write_json(const T& value, bool emit_nulls = false)
+    -> std::expected<std::string, std::error_code>
 {
-    auto result = cnetmod::json::object();
+    detail::record_json_fields fields;
     for (const auto& field : result_fields<T>())
     {
-        auto encoded = field.json_getter(value);
-        if (!encoded)
-            return std::unexpected(encoded.error());
-        if (!emit_nulls && encoded->is_null())
-            continue;
-        result[field.col.field_name] = std::move(*encoded);
+        auto scalar = field.json_getter(value);
+        if (emit_nulls || !std::holds_alternative<std::nullptr_t>(scalar))
+            fields.insert_or_assign(std::string{field.col.field_name}, std::move(scalar));
     }
-    return result;
+    return detail::write_record_json(fields);
 }
 
-/**
- * @brief Deserializes a document with the same metadata used by ORM mapping.
- */
+/// Parse a record, requiring all non-nullable members and checking scalar types.
 template <ResultRecord T>
-[[nodiscard]] auto record_from_document(
-    const cnetmod::json::document& source, bool reject_unknown)
+[[nodiscard]] auto parse_json(std::string_view input, bool reject_unknown = true)
     -> std::expected<T, std::error_code>
 {
-    if (!source.is_object())
-        return std::unexpected(
-            cnetmod::json::make_error_code(cnetmod::json::errc::type_mismatch));
+    auto fields = detail::read_record_json(input);
+    if (!fields)
+        return std::unexpected(fields.error());
+
     T result{};
     std::size_t consumed{};
     for (const auto& field : result_fields<T>())
     {
-        const auto* found = cnetmod::json::find(source, field.col.field_name);
-        if (found == nullptr)
+        const auto entry = fields->find(field.col.field_name);
+        if (entry == fields->end())
         {
             if (!field.col.is_nullable())
-                return std::unexpected(cnetmod::json::make_error_code(
-                    cnetmod::json::errc::missing_field));
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
             continue;
         }
         ++consumed;
-        auto assigned = field.json_setter(result, *found);
-        if (!assigned)
+        if (auto assigned = field.json_setter(result, entry->second); !assigned)
             return std::unexpected(assigned.error());
     }
-    if (reject_unknown && consumed != source.size())
-        return std::unexpected(
-            cnetmod::json::make_error_code(cnetmod::json::errc::unknown_field));
+    if (reject_unknown && consumed != fields->size())
+        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
     return result;
 }
 
 } // namespace cnetmod::orm
 
 export namespace cnetmod::orm::detail {
-[[nodiscard]] auto encode_json_member(const calendar_date& value)
-    -> std::expected<cnetmod::json::document, std::error_code>;
-[[nodiscard]] auto encode_json_member(const calendar_datetime& value)
-    -> std::expected<cnetmod::json::document, std::error_code>;
-[[nodiscard]] auto encode_json_member(const clock_time& value)
-    -> std::expected<cnetmod::json::document, std::error_code>;
-[[nodiscard]] auto encode_json_member(
-    const std::optional<calendar_datetime>& value)
-    -> std::expected<cnetmod::json::document, std::error_code>;
-[[nodiscard]] auto encode_json_member(const uuid& value)
-    -> std::expected<cnetmod::json::document, std::error_code>;
 
-[[nodiscard]] auto decode_json_member(
-    calendar_date& member, const cnetmod::json::document& source)
+[[nodiscard]] auto decode_json_member(calendar_date&, const record_json_scalar&)
     -> std::expected<void, std::error_code>;
-[[nodiscard]] auto decode_json_member(
-    calendar_datetime& member, const cnetmod::json::document& source)
+[[nodiscard]] auto decode_json_member(calendar_datetime&, const record_json_scalar&)
     -> std::expected<void, std::error_code>;
-[[nodiscard]] auto decode_json_member(
-    clock_time& member, const cnetmod::json::document& source)
+[[nodiscard]] auto decode_json_member(clock_time&, const record_json_scalar&)
     -> std::expected<void, std::error_code>;
-[[nodiscard]] auto decode_json_member(std::optional<calendar_datetime>& member,
-    const cnetmod::json::document& source)
-    -> std::expected<void, std::error_code>;
-[[nodiscard]] auto decode_json_member(
-    uuid& member, const cnetmod::json::document& source)
+[[nodiscard]] auto decode_json_member(uuid&, const record_json_scalar&)
     -> std::expected<void, std::error_code>;
 
 template <typename Member>
-[[nodiscard]] auto encode_json_member(const Member& value)
-    -> std::expected<cnetmod::json::document, std::error_code>
+[[nodiscard]] auto encode_json_member(const Member& value) -> record_json_scalar
 {
-    return cnetmod::json::to_document(value);
+    if constexpr (std::same_as<Member, bool> || std::same_as<Member, std::string>)
+        return value;
+    else if constexpr (std::is_enum_v<Member>)
+        return encode_json_member(static_cast<std::underlying_type_t<Member>>(value));
+    else if constexpr (std::unsigned_integral<Member>)
+        return static_cast<std::uint64_t>(value);
+    else if constexpr (std::signed_integral<Member>)
+        return static_cast<std::int64_t>(value);
+    else if constexpr (std::floating_point<Member>)
+        return static_cast<double>(value);
+    else if constexpr (requires { value.to_string(); })
+        return value.to_string();
+    else
+        return value ? encode_json_member(*value) : record_json_scalar{nullptr};
 }
 
 template <typename Member>
-[[nodiscard]] auto decode_json_member(
-    Member& member, const cnetmod::json::document& source)
+[[nodiscard]] auto decode_json_member(Member& member, const record_json_scalar& source)
     -> std::expected<void, std::error_code>
 {
-    auto decoded = cnetmod::json::from_document<Member>(source);
-    if (!decoded)
-        return std::unexpected(decoded.error());
-    member = std::move(*decoded);
-    return {};
+    if constexpr (std::same_as<Member, bool> || std::same_as<Member, std::string>)
+    {
+        if (const auto* value = std::get_if<Member>(&source))
+        {
+            member = *value;
+            return {};
+        }
+    }
+    else if constexpr (std::is_enum_v<Member>)
+    {
+        std::underlying_type_t<Member> value;
+        if (auto decoded = decode_json_member(value, source); !decoded)
+            return decoded;
+        member = static_cast<Member>(value);
+        return {};
+    }
+    else if constexpr (std::integral<Member>)
+    {
+        using integer_type = std::conditional_t<std::is_signed_v<Member>,
+            std::int64_t, std::uint64_t>;
+        const auto assign = [&](const auto* value) {
+            if (!value || !std::in_range<integer_type>(*value))
+                return false;
+            const auto number = static_cast<integer_type>(*value);
+            if (number < static_cast<integer_type>(std::numeric_limits<Member>::min()) ||
+                number > static_cast<integer_type>(std::numeric_limits<Member>::max()))
+                return false;
+            member = static_cast<Member>(number);
+            return true;
+        };
+        if (assign(std::get_if<std::int64_t>(&source)) ||
+            assign(std::get_if<std::uint64_t>(&source)))
+            return {};
+    }
+    else if constexpr (std::floating_point<Member>)
+    {
+        if (const auto* value = std::get_if<double>(&source))
+        {
+            if (*value <= std::numeric_limits<Member>::max() &&
+                *value >= -std::numeric_limits<Member>::max())
+            {
+                member = static_cast<Member>(*value);
+                return {};
+            }
+        }
+        if (const auto* value = std::get_if<std::int64_t>(&source))
+        {
+            member = static_cast<Member>(*value);
+            return {};
+        }
+        if (const auto* value = std::get_if<std::uint64_t>(&source))
+        {
+            member = static_cast<Member>(*value);
+            return {};
+        }
+    }
+    else
+    {
+        if (std::holds_alternative<std::nullptr_t>(source))
+        {
+            member.reset();
+            return {};
+        }
+        typename Member::value_type value{};
+        if (auto decoded = decode_json_member(value, source); !decoded)
+            return decoded;
+        member = std::move(value);
+        return {};
+    }
+    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
 }
 
 void set_member(std::int64_t&, const field_value&);
@@ -400,27 +459,3 @@ requires std::same_as<T, std::time_t> &&
     return param_value::from_int(static_cast<std::int64_t>(value));
 }
 } // namespace cnetmod::orm::detail
-
-export namespace cnetmod::json::detail {
-
-/**
- * @brief Maps every registered ORM record through its declared field metadata.
- */
-template <cnetmod::orm::ResultRecord T>
-struct document_codec<T>
-{
-    [[nodiscard]] static auto encode(const T& value, bool emit_nulls)
-        -> std::expected<document, std::error_code>
-    {
-        return cnetmod::orm::record_to_document(value, emit_nulls);
-    }
-
-    [[nodiscard]] static auto decode(
-        const document& source, bool reject_unknown)
-        -> std::expected<T, std::error_code>
-    {
-        return cnetmod::orm::record_from_document<T>(source, reject_unknown);
-    }
-};
-
-} // namespace cnetmod::json::detail

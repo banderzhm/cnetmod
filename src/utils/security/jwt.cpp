@@ -2,6 +2,8 @@ module;
 
 #include <openssl/rand.h>
 
+#include "../detail/simdjson_depth.hpp"
+
 /**
  * @file jwt.cpp
  * @brief Backend-neutral JWT HS256 implementation.
@@ -10,7 +12,6 @@ module cnetmod.security.jwt;
 
 import std;
 import cnetmod.coro.bridge;
-import cnetmod.json;
 import cnetmod.utils.hmac_sha256;
 
 namespace cnetmod::security {
@@ -149,16 +150,33 @@ auto sign_jwt_sync(const jwt_sign_options& options, std::string_view secret)
 {
     try
     {
-        json::document header = json::object();
-        header["alg"] = "HS256";
-        header["typ"] = "JWT";
+        simdjson::builder::string_builder header;
+        header.start_object();
+        header.append_key_value("alg", "HS256");
+        header.append_comma();
+        header.append_key_value("typ", "JWT");
+        header.end_object();
+
+        simdjson::builder::string_builder payload;
+        payload.start_object();
+        bool first = true;
+        const auto append = [&](std::string_view key, const auto& value)
+        {
+            if (!std::exchange(first, false))
+                payload.append_comma();
+            payload.append_key_value(key, value);
+        };
+        const auto append_default = [&](const char* key, const auto& value)
+        {
+            if (!options.custom_claims.contains(key))
+                append(key, value);
+        };
 
         const auto now = std::chrono::system_clock::now();
-        json::document payload = json::object();
-        payload["iss"] = options.issuer;
-        payload["sub"] = options.subject;
-        payload["iat"] = seconds_since_epoch(now);
-        payload["exp"] = seconds_since_epoch(now + options.lifetime);
+        append_default("iss", options.issuer);
+        append_default("sub", options.subject);
+        append_default("iat", seconds_since_epoch(now));
+        append_default("exp", seconds_since_epoch(now + options.lifetime));
         if (!options.scopes.empty())
         {
             std::string scopes;
@@ -168,23 +186,57 @@ auto sign_jwt_sync(const jwt_sign_options& options, std::string_view secret)
                     scopes.push_back(' ');
                 scopes += scope;
             }
-            payload["scope"] = std::move(scopes);
+            append_default("scope", scopes);
         }
         for (const auto& [key, value] : options.custom_claims)
-            payload[key] = value;
+            append(key, value);
+        payload.end_object();
 
-        const auto encoded_header = json::write_document(header);
-        const auto encoded_payload = json::write_document(payload);
-        if (!encoded_header || !encoded_payload)
+        std::string_view encoded_header;
+        std::string_view encoded_payload;
+        if (header.view().get(encoded_header) || !payload.validate_unicode() ||
+            payload.view().get(encoded_payload))
             return std::unexpected("jwt JSON serialization failed");
-        auto signing_input = encode_base64url(*encoded_header) + "." +
-            encode_base64url(*encoded_payload);
+        auto signing_input = encode_base64url(encoded_header) + "." +
+            encode_base64url(encoded_payload);
         return signing_input + "." + make_signature(signing_input, secret);
     }
     catch (const std::exception& error)
     {
         return std::unexpected(std::string{"jwt sign failed: "} + error.what());
     }
+}
+
+auto parse_claim_object(simdjson::dom::parser& parser, std::string_view text,
+    simdjson::dom::object& object) noexcept -> bool
+{
+    simdjson::dom::element document;
+    return cnetmod::detail::parse_bounded_json(parser, text, document) &&
+        !document.get_object().get(object);
+}
+
+auto numeric_date(simdjson::dom::element value)
+    -> std::optional<std::chrono::system_clock::time_point>
+{
+    using clock = std::chrono::system_clock;
+    using seconds = std::chrono::seconds;
+    constexpr auto earliest = std::chrono::duration_cast<seconds>(
+        clock::duration::min()).count();
+    constexpr auto latest = std::chrono::duration_cast<seconds>(
+        clock::duration::max()).count();
+    std::int64_t whole = 0;
+    if (value.get_int64().get(whole))
+    {
+        double fraction = 0.0;
+        if (!value.is_double() || value.get_double().get(fraction) ||
+            fraction < static_cast<double>(earliest) ||
+            fraction > static_cast<double>(latest))
+            return std::nullopt;
+        whole = static_cast<std::int64_t>(fraction);
+    }
+    if (whole < earliest || whole > latest)
+        return std::nullopt;
+    return clock::time_point{seconds{whole}};
 }
 
 auto verify_jwt_sync(std::string_view token, std::string_view secret)
@@ -211,37 +263,74 @@ auto verify_jwt_sync(std::string_view token, std::string_view secret)
         if (!header_text || !payload_text)
             return std::unexpected(!header_text ? header_text.error()
                                                 : payload_text.error());
-        const auto header = json::parse_document(*header_text);
-        const auto payload = json::parse_document(*payload_text);
-        if (!header || !header->is_object() || !payload || !payload->is_object())
+        simdjson::dom::parser header_parser;
+        simdjson::dom::parser payload_parser;
+        simdjson::dom::object header;
+        simdjson::dom::object payload;
+        if (!parse_claim_object(header_parser, *header_text, header) ||
+            !parse_claim_object(payload_parser, *payload_text, payload))
             return std::unexpected("invalid JWT JSON document");
-        if (json::value_or(*header, "alg", std::string{}) != "HS256" ||
-            json::value_or(*header, "typ", std::string{"JWT"}) != "JWT")
+
+        std::string_view algorithm;
+        std::string_view type = "JWT";
+        for (const auto field : header)
+        {
+            if (field.key != "alg" && field.key != "typ")
+                continue;
+            std::string_view value;
+            const auto error = field.value.get_string().get(value);
+            if (field.key == "alg")
+                algorithm = error ? std::string_view{} : value;
+            else
+                type = error ? std::string_view{"JWT"} : value;
+        }
+        if (algorithm != "HS256" || type != "JWT")
             return std::unexpected("unsupported JWT header");
 
-        const auto* issued_at = json::find(*payload, "iat");
-        const auto* expires_at = json::find(*payload, "exp");
-        if (issued_at == nullptr || expires_at == nullptr ||
-            !issued_at->is_number() || !expires_at->is_number())
-            return std::unexpected("JWT is missing numeric time claims");
-
         jwt_claims claims{};
-        claims.issuer = json::value_or(*payload, "iss", std::string{});
-        claims.subject = json::value_or(*payload, "sub", std::string{});
-        claims.issued_at = std::chrono::system_clock::time_point{
-            std::chrono::seconds{issued_at->as<std::int64_t>()}};
-        claims.expires_at = std::chrono::system_clock::time_point{
-            std::chrono::seconds{expires_at->as<std::int64_t>()}};
+        std::optional<std::chrono::system_clock::time_point> issued_at;
+        std::optional<std::chrono::system_clock::time_point> expires_at;
+        std::optional<simdjson::dom::element> scope;
+        constexpr std::array standard_claims{"aud", "nbf", "jti"};
+        for (const auto field : payload)
+        {
+            if (field.key == "iat")
+                issued_at = numeric_date(field.value);
+            else if (field.key == "exp")
+                expires_at = numeric_date(field.value);
+            else if (field.key == "scope")
+                scope = field.value;
+            else if (field.key == "iss" || field.key == "sub")
+            {
+                auto& target = field.key == "iss" ? claims.issuer : claims.subject;
+                std::string_view value;
+                if (field.value.get_string().get(value))
+                    target.clear();
+                else
+                    target = value;
+            }
+            else if (std::ranges::find(standard_claims, field.key) == standard_claims.end())
+            {
+                std::string_view value;
+                if (!field.value.get_string().get(value))
+                    claims.custom.insert_or_assign(std::string{field.key}, std::string{value});
+                else
+                    claims.custom.erase(std::string{field.key});
+            }
+        }
+
+        if (!issued_at || !expires_at)
+            return std::unexpected("JWT is missing numeric time claims");
+        claims.issued_at = *issued_at;
+        claims.expires_at = *expires_at;
         if (std::chrono::system_clock::now() > claims.expires_at)
             return std::unexpected("JWT has expired");
 
-        const auto* scope = json::find(*payload, "scope");
-        if (scope != nullptr)
+        if (scope)
         {
-            if (!scope->is_string())
+            std::string_view remaining;
+            if (scope->get_string().get(remaining))
                 return std::unexpected("JWT scope claim must be a string");
-            const auto scope_value = scope->get<std::string>();
-            std::string_view remaining{scope_value};
             while (!remaining.empty())
             {
                 const auto separator = remaining.find(' ');
@@ -252,16 +341,6 @@ auto verify_jwt_sync(std::string_view token, std::string_view secret)
                     break;
                 remaining.remove_prefix(separator + 1);
             }
-        }
-
-        constexpr std::array standard_claims{
-            "iss", "sub", "aud", "exp", "nbf", "iat", "jti", "scope"};
-        for (const auto& [key, value] : payload->get_object())
-        {
-            const auto standard = std::ranges::find(standard_claims, key) !=
-                standard_claims.end();
-            if (!standard && value.is_string())
-                claims.custom.emplace(key, value.get<std::string>());
         }
         return claims;
     }

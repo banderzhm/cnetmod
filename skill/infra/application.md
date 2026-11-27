@@ -288,9 +288,8 @@ auto compose(application::composition_context& context)
 }
 ```
 
-`parse_offloaded(runtime, text)` 与 `dump_offloaded(runtime, value)` 在 Host CPU 池执行
-JSON 解析和序列化，避免 route 协程阻塞事件循环。两者拥有输入直到执行完成并返回
-`std::expected`；语法错误为 `invalid_argument`，内存不足保持 `not_enough_memory`。
+较大的 JSON 读写操作可以把拥有所有权的输入移动到 `runtime.offload()` 的回调。
+回调直接调用 JSON 库，返回拥有所有权的值。请求处理需要在提交前及恢复后检查取消状态。
 
 ## HTTP 先响应、后台继续执行
 

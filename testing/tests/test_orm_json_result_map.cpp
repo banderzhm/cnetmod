@@ -1,9 +1,7 @@
 #include "test_framework.hpp"
-#include <cnetmod/json.hpp>
 #include <cnetmod/orm.hpp>
 
 import std;
-import cnetmod.json;
 import cnetmod.orm;
 import cnetmod.orm.automatic_field_fill;
 import cnetmod.orm.database_session;
@@ -397,15 +395,15 @@ TEST(orm_timestamp_fill_preserves_explicit_insert_and_excludes_created_at_from_u
     ASSERT_EQ(explicit_parameters.front().datetime_val.year, 2021);
 }
 
-TEST(orm_models_reuse_metadata_with_the_framework_json_codec)
+TEST(orm_models_reuse_metadata_for_json)
 {
     const orm_json_user original{42, "Ada", 1};
-    const auto encoded = cnetmod::json::write(original);
+    const auto encoded = orm::write_json(original);
     ASSERT_TRUE(encoded.has_value());
     ASSERT_TRUE(encoded->contains("\"id\":42"));
     ASSERT_TRUE(encoded->contains("\"name\":\"Ada\""));
 
-    const auto decoded = cnetmod::json::parse<orm_json_user>(*encoded);
+    const auto decoded = orm::parse_json<orm_json_user>(*encoded);
     ASSERT_TRUE(decoded.has_value());
     ASSERT_EQ(decoded->id, 42);
     ASSERT_EQ(decoded->name, "Ada");
@@ -425,20 +423,64 @@ TEST(orm_json_metadata_covers_temporal_uuid_and_nullable_fields)
         .deleted_at = std::nullopt,
     };
 
-    const auto encoded = cnetmod::json::write(original);
+    const auto encoded = orm::write_json(original);
     ASSERT_TRUE(encoded.has_value());
     ASSERT_TRUE(encoded->contains("\"business_date\":\"2026-09-22\""));
     ASSERT_TRUE(encoded->contains("\"created_at\":\"2026-09-22 14:35:17.123456\""));
     ASSERT_TRUE(encoded->contains("\"elapsed\":\"-125:04:03.654321\""));
     ASSERT_FALSE(encoded->contains("deleted_at"));
 
-    const auto decoded = cnetmod::json::parse<orm_json_temporal_record>(*encoded);
+    const auto decoded = orm::parse_json<orm_json_temporal_record>(*encoded);
     ASSERT_TRUE(decoded.has_value());
     ASSERT_EQ(decoded->id.to_string(), id->to_string());
     ASSERT_EQ(decoded->business_date.to_string(), "2026-09-22");
     ASSERT_EQ(decoded->created_at.to_string(), "2026-09-22 14:35:17.123456");
     ASSERT_EQ(decoded->elapsed.to_string(), "-125:04:03.654321");
     ASSERT_FALSE(decoded->deleted_at.has_value());
+}
+
+struct orm_json_projection
+{
+    std::uint64_t id{};
+    bool active{};
+    float ratio{};
+    std::optional<std::string> label;
+};
+
+CNETMOD_PROJECTION(orm_json_projection,
+    CNETMOD_FIELD(id, "id", bigint),
+    CNETMOD_FIELD(active, "is_active", boolean),
+    CNETMOD_FIELD(ratio, "ratio", float_),
+    CNETMOD_FIELD(label, "label", varchar, NULLABLE))
+
+TEST(orm_json_projection_preserves_scalars_and_validates_input)
+{
+    const orm_json_projection original{std::numeric_limits<std::uint64_t>::max(),
+        true, 1.25F, std::nullopt};
+    const auto encoded = orm::write_json(original, true);
+    ASSERT_TRUE(encoded.has_value());
+    ASSERT_TRUE(encoded->contains("\"active\":true"));
+    ASSERT_TRUE(encoded->contains("\"label\":null"));
+
+    const auto decoded = orm::parse_json<orm_json_projection>(*encoded);
+    ASSERT_TRUE(decoded.has_value());
+    ASSERT_EQ(decoded->id, original.id);
+    ASSERT_TRUE(decoded->active);
+    ASSERT_EQ(decoded->ratio, original.ratio);
+    ASSERT_FALSE(decoded->label.has_value());
+
+    auto parse = [](std::string_view input, bool reject_unknown = true) {
+        return orm::parse_json<orm_json_projection>(input, reject_unknown);
+    };
+    ASSERT_FALSE(parse(R"({"id":-1,"active":true,"ratio":1})").has_value());
+    ASSERT_FALSE(parse(R"({"id":1,"active":1,"ratio":1})").has_value());
+    ASSERT_FALSE(parse(R"({"id":1,"active":true,"ratio":1e40})").has_value());
+    ASSERT_FALSE(parse(R"({"id":1,"active":true})").has_value());
+    ASSERT_FALSE(parse(R"({"id":1,"active":true,"ratio":1,"extra":[]})").has_value());
+    const auto lenient = parse(
+        R"({"id":1,"id":2,"active":false,"ratio":1,"extra":[]})", false);
+    ASSERT_TRUE(lenient.has_value());
+    ASSERT_EQ(lenient->id, 2U);
 }
 
 TEST(xml_result_map_projects_scalar_object_graph_into_model_dto)

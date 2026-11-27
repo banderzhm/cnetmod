@@ -857,6 +857,51 @@ TEST(application_lifecycle_rolls_back_only_successful_services)
     }
 }
 
+#ifdef CNETMOD_HAS_SSL
+TEST(application_jwt_preserves_scopes_and_custom_string_claims)
+{
+    auto io = cnetmod::make_io_context();
+    cnetmod::thread_pool pool{1};
+    cnetmod::security::jwt_sign_options options;
+    options.issuer = "test issuer";
+    options.subject = "original subject";
+    options.scopes = {"read:items", "write:items"};
+    options.custom_claims = {{"sub", "overridden subject"}, {"detail", "quote\" and \\"}};
+    constexpr std::string_view secret = "application-jwt-roundtrip-secret";
+    std::optional<cnetmod::security::jwt_claims> claims;
+    bool wrong_secret_rejected = false;
+    bool invalid_utf8_rejected = false;
+
+    auto run = [&]() -> cnetmod::task<void>
+    {
+        const auto signed_token = co_await cnetmod::security::sign_jwt(pool, *io, options, secret);
+        if (signed_token)
+        {
+            auto verified = co_await cnetmod::security::verify_jwt(pool, *io, *signed_token, secret);
+            if (verified)
+                claims = std::move(*verified);
+            const auto rejected = co_await cnetmod::security::verify_jwt(
+                pool, *io, *signed_token, "wrong-secret");
+            wrong_secret_rejected = !rejected;
+        }
+        options.custom_claims["detail"] = std::string(1, static_cast<char>(0xff));
+        const auto invalid = co_await cnetmod::security::sign_jwt(pool, *io, options, secret);
+        invalid_utf8_rejected = !invalid;
+        io->stop();
+    };
+    cnetmod::spawn(*io, run());
+    io->run();
+
+    ASSERT_TRUE(claims.has_value());
+    ASSERT_EQ(claims->issuer, "test issuer");
+    ASSERT_EQ(claims->subject, "overridden subject");
+    ASSERT_TRUE(claims->scopes == options.scopes);
+    ASSERT_EQ(claims->custom.at("detail"), "quote\" and \\");
+    ASSERT_TRUE(wrong_secret_rejected);
+    ASSERT_TRUE(invalid_utf8_rejected);
+}
+#endif
+
 TEST(application_health_hysteresis_controls_readiness)
 {
     const auto events = std::make_shared<std::vector<std::string>>();
@@ -1373,7 +1418,14 @@ TEST(application_health_probe_preserves_error_codes_without_exception_details)
                                                                                                                                  : std::errc::io_error));
                 ASSERT_TRUE(snapshot.report.message.empty());
                 ASSERT_EQ(snapshot.consecutive_failures, 1U);
-                ASSERT_TRUE(health.json().find("private-probe-detail") == std::string::npos);
+                const auto health_payload = health.json();
+                ASSERT_TRUE(health_payload.find("private-probe-detail") == std::string::npos);
+                const auto document = cnetmod::json::parse_document(health_payload);
+                ASSERT_TRUE(document.has_value());
+                ASSERT_EQ(document->at("status").get<std::string>(), "DOWN");
+                const auto& component = document->at("components").at(snapshot.key.canonical_name());
+                ASSERT_EQ(component.at("status").get<std::string>(), "DOWN");
+                ASSERT_EQ(component.at("consecutiveFailures").get<std::uint64_t>(), 1U);
                 completed = true;
                 io->stop();
             };
@@ -1818,7 +1870,7 @@ TEST(repository_registration_fails_the_build_without_a_data_source)
 }
 #endif
 
-TEST(application_runtime_supervises_tasks_and_offloads_json)
+TEST(application_runtime_supervises_tasks_and_offloads_work)
 {
     cnetmod::net_init network;
     auto io = cnetmod::make_io_context();
@@ -1844,8 +1896,7 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
         });
     ASSERT_TRUE(accepted.has_value());
 
-    std::optional<std::expected<cnetmod::json::document, std::error_code>> parsed;
-    std::optional<std::expected<std::string, std::error_code>> dumped;
+    std::optional<int> offloaded;
     std::optional<std::expected<void, std::error_code>> file_written;
     std::optional<std::expected<void, std::error_code>> file_flushed;
     std::optional<std::expected<void, std::error_code>> durable_written;
@@ -1873,10 +1924,7 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
         co_await runtime.resume_to_event_loop();
         restored_thread = std::this_thread::get_id();
         cnetmod::cancel_token file_cancellation;
-        parsed = co_await application::parse_offloaded(runtime,
-            R"({"value":42})");
-        if (parsed)
-            dumped = co_await application::dump_offloaded(runtime, **parsed);
+        offloaded = co_await runtime.offload([] { return 42; });
         file_written = co_await runtime.files().write_all(
             file_path, "payload", file_cancellation);
         auto opened = co_await runtime.files().open(
@@ -1909,12 +1957,8 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
     ASSERT_TRUE(background_ran);
     ASSERT_TRUE(cpu_thread != event_loop_thread);
     ASSERT_EQ(restored_thread, event_loop_thread);
-    ASSERT_TRUE(parsed.has_value());
-    ASSERT_TRUE(parsed->has_value());
-    ASSERT_EQ(parsed->value().at("value").as<int>(), 42);
-    ASSERT_TRUE(dumped.has_value());
-    ASSERT_TRUE(dumped->has_value());
-    ASSERT_TRUE(dumped->value().contains("42"));
+    ASSERT_TRUE(offloaded.has_value());
+    ASSERT_EQ(*offloaded, 42);
     ASSERT_TRUE(file_written.has_value());
     ASSERT_TRUE(file_written->has_value());
     ASSERT_TRUE(file_flushed.has_value());

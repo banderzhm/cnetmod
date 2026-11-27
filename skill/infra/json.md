@@ -1,6 +1,6 @@
 # JSON
 
-> `cnetmod.json` is the backend-neutral JSON document and typed codec facade. The implementation imports the pinned official `nlohmann.json` module; third-party JSON types never cross the framework boundary.
+> `cnetmod.json` is the compatibility interface for existing document and typed codec callers. The runtime uses the pinned simdjson source for parsing.
 
 **import**: `import cnetmod.json;`
 **macro header**: `#include <cnetmod/json.hpp>`
@@ -9,10 +9,10 @@
 ## Boundary rules
 
 1. Application and protocol code imports `cnetmod.json`; it never imports a parser library.
-2. Only `src/utils/json/json.cpp` may import `nlohmann.json` or spell `nlohmann::*`; application, protocol, ORM, and public module interfaces use `cnetmod.json`.
+2. New internal JSON code uses native simdjson APIs in implementation units. Preserve existing size, depth and duplicate-key policies when migrating a caller.
 3. `document`, errors, codecs, and DTO metadata contain only framework or standard-library types.
 4. `tools/check_json_boundary.py` enforces the boundary in CTest.
-5. `3rdparty/json/src/modules/json.cppm` is compiled as a dependency module exactly once. Do not include `nlohmann/json.hpp` in framework or business code.
+5. `3rdparty/simdjson/singleheader/simdjson.cpp` is compiled once into the runtime. Keep parser-backed views within the lifetime of their parser and input, and return owned data across asynchronous boundaries.
 
 ## Dynamic documents
 
@@ -113,12 +113,14 @@ CNETMOD_MODEL(user_record, "users",
     CNETMOD_FIELD(id, "id", bigint, PK),
     CNETMOD_FIELD(name, "name", varchar))
 
-auto wire = cnetmod::json::write(user_record{42, "Ada"});
+auto wire = cnetmod::orm::write_json(user_record{42, "Ada"});
+auto record = cnetmod::orm::parse_json<user_record>(*wire);
 ```
 
 This shared mapping covers ORM scalar fields, `DATE`, `DATETIME`, `TIME`, UUID,
 and nullable `DATETIME`. Database temporal values use their canonical
-timezone-free SQL text representation.
+timezone-free SQL text representation. ORM JSON mapping is implemented with
+native simdjson inside the ORM component.
 
 ## Embedding trusted JSON text
 
@@ -144,9 +146,9 @@ reports invalid JSON. The view must outlive the write call.
 
 ## Application offload
 
-Use `cnetmod::application::json_template` for parsing or writing on the
-Application-managed CPU pool. Its typed operations use the same codec contract,
-support cancellation, and resume on the application execution context.
+For expensive JSON work, move owned input into an Application
+`runtime.offload()` callback and return an owned result. Check request
+cancellation before offloading and after resuming on the event loop.
 
 ## Codec SPI
 
@@ -160,8 +162,9 @@ template <typename T>
 static auto encode(const T&) -> std::expected<std::string, std::error_code>;
 ```
 
-and satisfies `cnetmod::json::codec_for<Codec, T>`. RedisTemplate and other
-framework templates accept this SPI without exposing the parser backend.
+and satisfies `cnetmod::json::codec_for<Codec, T>` for compatibility callers.
+Redis value codecs use the same signatures and are supplied explicitly. Redis
+handles the encoded string while the caller chooses the serialization library.
 
 ## Verification
 

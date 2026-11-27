@@ -50,91 +50,31 @@
 #define SNOWFLAKE_PK_FLAGS ::cnetmod::orm::col_flag::primary_key
 #define SNOWFLAKE_PK_STRATEGY ::cnetmod::orm::id_strategy::snowflake
 
-// CNETMOD_FIELD(member, "col_name", column_type_suffix) - 3
-#define CNETMOD_FIELD_3(M, COL, CT)                               \
-    ::cnetmod::orm::field_mapping<_cnetmod_model_type>            \
-    {                                                             \
-        {#M, COL, ::cnetmod::orm::column_type::CT,                \
-            ::cnetmod::orm::col_flag::none,                       \
-            ::cnetmod::orm::id_strategy::none},                   \
-            [](auto& obj, const ::cnetmod::orm::field_value& v) { \
-                ::cnetmod::orm::detail::set_member(obj.M, v);     \
-            },                                                    \
-            [](const auto& obj) -> ::cnetmod::orm::param_value {  \
-                return ::cnetmod::orm::detail::get_member(obj.M); \
-            },                                                    \
-            [](auto& obj, const ::cnetmod::json::document& value) \
-                -> std::expected<void, std::error_code> {         \
-                return ::cnetmod::orm::detail::decode_json_member(\
-                    obj.M, value);                                \
-            },                                                    \
-            [](const auto& obj)                                   \
-                -> std::expected<::cnetmod::json::document,       \
-                    std::error_code> {                            \
-                return ::cnetmod::orm::detail::encode_json_member(\
-                    obj.M);                                       \
-            },                                                    \
-            ::cnetmod::orm::detail::member_pointer_type<          \
-                decltype(&_cnetmod_model_type::M)>(),              \
-            &::cnetmod::orm::detail::matches_member_pointer<       \
-                &_cnetmod_model_type::M>                           \
-    }
+#define CNETMOD_FIELD_3(M, COL, CT)                                           \
+    CNETMOD_FIELD_4(M, COL, CT, ::cnetmod::orm::col_flag::none)
 
-// CNETMOD_FIELD(member, "col_name", column_type_suffix, flags) - 4
-#define CNETMOD_FIELD_4(M, COL, CT, FLAGS)                        \
-    ::cnetmod::orm::field_mapping<_cnetmod_model_type>            \
-    {                                                             \
-        {#M, COL, ::cnetmod::orm::column_type::CT, FLAGS,         \
-            ::cnetmod::orm::id_strategy::none},                   \
-            [](auto& obj, const ::cnetmod::orm::field_value& v) { \
-                ::cnetmod::orm::detail::set_member(obj.M, v);     \
-            },                                                    \
-            [](const auto& obj) -> ::cnetmod::orm::param_value {  \
-                return ::cnetmod::orm::detail::get_member(obj.M); \
-            },                                                    \
-            [](auto& obj, const ::cnetmod::json::document& value) \
-                -> std::expected<void, std::error_code> {         \
-                return ::cnetmod::orm::detail::decode_json_member(\
-                    obj.M, value);                                \
-            },                                                    \
-            [](const auto& obj)                                   \
-                -> std::expected<::cnetmod::json::document,       \
-                    std::error_code> {                            \
-                return ::cnetmod::orm::detail::encode_json_member(\
-                    obj.M);                                       \
-            },                                                    \
-            ::cnetmod::orm::detail::member_pointer_type<          \
-                decltype(&_cnetmod_model_type::M)>(),              \
-            &::cnetmod::orm::detail::matches_member_pointer<       \
-                &_cnetmod_model_type::M>                           \
-    }
+#define CNETMOD_FIELD_4(M, COL, CT, FLAGS)                                    \
+    CNETMOD_FIELD_5(M, COL, CT, FLAGS, ::cnetmod::orm::id_strategy::none)
 
-// CNETMOD_FIELD(member, "col_name", column_type_suffix, flags, strategy) - 5
-#define CNETMOD_FIELD_5(M, COL, CT, FLAGS, STRATEGY)                 \
-    ::cnetmod::orm::field_mapping<_cnetmod_model_type>               \
-    {                                                                \
-        {#M, COL, ::cnetmod::orm::column_type::CT, FLAGS, STRATEGY}, \
-            [](auto& obj, const ::cnetmod::orm::field_value& v) {    \
-                ::cnetmod::orm::detail::set_member(obj.M, v);        \
-            },                                                       \
-            [](const auto& obj) -> ::cnetmod::orm::param_value {     \
-                return ::cnetmod::orm::detail::get_member(obj.M);    \
-            },                                                       \
-            [](auto& obj, const ::cnetmod::json::document& value)    \
-                -> std::expected<void, std::error_code> {            \
-                return ::cnetmod::orm::detail::decode_json_member(   \
-                    obj.M, value);                                   \
-            },                                                       \
-            [](const auto& obj)                                      \
-                -> std::expected<::cnetmod::json::document,          \
-                    std::error_code> {                               \
-                return ::cnetmod::orm::detail::encode_json_member(   \
-                    obj.M);                                          \
-            },                                                       \
-            ::cnetmod::orm::detail::member_pointer_type<             \
-                decltype(&_cnetmod_model_type::M)>(),                 \
-            &::cnetmod::orm::detail::matches_member_pointer<          \
-                &_cnetmod_model_type::M>                              \
+#define CNETMOD_FIELD_5(M, COL, CT, FLAGS, STRATEGY)                          \
+    ::cnetmod::orm::field_mapping<_cnetmod_model_type>                        \
+    {                                                                         \
+        {#M, COL, ::cnetmod::orm::column_type::CT, FLAGS, STRATEGY},          \
+        [](auto& obj, const ::cnetmod::orm::field_value& value) {             \
+            ::cnetmod::orm::detail::set_member(obj.M, value);                 \
+        },                                                                    \
+        [](const auto& obj) {                                                 \
+            return ::cnetmod::orm::detail::get_member(obj.M);                 \
+        },                                                                    \
+        [](auto& obj, const ::cnetmod::orm::detail::record_json_scalar& value) {\
+            return ::cnetmod::orm::detail::decode_json_member(obj.M, value);  \
+        },                                                                    \
+        [](const auto& obj) {                                                 \
+            return ::cnetmod::orm::detail::encode_json_member(obj.M);         \
+        },                                                                    \
+        ::cnetmod::orm::detail::member_pointer_type<                          \
+            decltype(&_cnetmod_model_type::M)>(),                             \
+        &::cnetmod::orm::detail::matches_member_pointer<&_cnetmod_model_type::M>\
     }
 
 // Simplified: UUID_PK / SNOWFLAKE_PK used as 4th parameter of CNETMOD_FIELD

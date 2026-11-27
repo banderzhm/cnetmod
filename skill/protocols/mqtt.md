@@ -174,6 +174,7 @@ auto select_target(std::string_view share_name, std::string_view filter) -> std:
 void add_user(const std::string& username, const std::string& password, std::vector<std::string> groups = {});
 void allow_all(const std::string& topic_filter, std::set<std::string> groups = {});
 auto authenticate(std::string_view username, std::string_view password) const -> std::optional<std::string>;
+auto load_json(std::string_view config) -> std::expected<void, std::string>;
 auto load_file(const std::string& path) -> std::expected<void, std::string>;
 
 // persistence — 会话 + 保留消息持久化
@@ -405,6 +406,7 @@ class persistence {
 ### 通过 `broker_options` 启用持久化
 
 在 `broker_options` 中设置 `persistence_enabled = true` 和 `persistence` 字段，broker 自动在启动时加载已保存的会话和保留消息，并定期自动 flush。
+存档沿用 `sessions.json` 和 `retained.json` 的字段格式。读写在 MQTT 内部用 simdjson 完成。
 
 ```cpp
 mqtt::broker_options opts;

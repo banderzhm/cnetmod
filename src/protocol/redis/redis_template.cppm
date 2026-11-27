@@ -5,7 +5,6 @@ import cnetmod.coro.cancel;
 import cnetmod.coro.task;
 import cnetmod.instrumentation.tracing;
 import cnetmod.io.io_context;
-import cnetmod.json;
 import :client;
 import :pool;
 import :request;
@@ -115,26 +114,6 @@ struct template_options
     /// Maximum time for one wire exchange; zero disables this limit.
     std::chrono::steady_clock::duration operation_timeout =
         std::chrono::seconds{5};
-};
-
-/**
- * @brief Framework JSON codec used by typed Redis template operations.
- */
-struct json_codec
-{
-    template <typename T>
-    [[nodiscard]] static auto decode(std::string_view input)
-        -> std::expected<T, std::error_code>
-    {
-        return cnetmod::json::parse<T>(input);
-    }
-
-    template <typename T>
-    [[nodiscard]] static auto encode(const T& value)
-        -> std::expected<std::string, std::error_code>
-    {
-        return cnetmod::json::write(value);
-    }
 };
 
 /**
@@ -432,7 +411,8 @@ public:
         cancel_token& cancellation)
         -> task<std::expected<std::int64_t, std::error_code>>;
 
-    template <typename T, typename Codec = json_codec>
+    /// Decodes a Redis string using the caller's value codec.
+    template <typename T, typename Codec>
     [[nodiscard]] auto get_as(std::string_view key)
         -> task<std::expected<std::optional<T>, std::error_code>>
     {
@@ -440,7 +420,7 @@ public:
         co_return co_await get_as<T, Codec>(key, cancellation);
     }
 
-    template <typename T, typename Codec = json_codec>
+    template <typename T, typename Codec>
     [[nodiscard]] auto get_as(std::string_view key,
         cancel_token& cancellation)
         -> task<std::expected<std::optional<T>, std::error_code>>
@@ -456,7 +436,8 @@ public:
         co_return std::optional<T>{std::move(*decoded)};
     }
 
-    template <typename T, typename Codec = json_codec>
+    /// Encodes a Redis string using the caller's value codec.
+    template <typename T, typename Codec>
     [[nodiscard]] auto set_as(std::string_view key, const T& value,
         ttl_seconds ttl = {}) -> task<std::expected<void, std::error_code>>
     {
@@ -464,7 +445,7 @@ public:
         co_return co_await set_as<T, Codec>(key, value, ttl, cancellation);
     }
 
-    template <typename T, typename Codec = json_codec>
+    template <typename T, typename Codec>
     [[nodiscard]] auto set_as(std::string_view key, const T& value,
         ttl_seconds ttl, cancel_token& cancellation)
         -> task<std::expected<void, std::error_code>>

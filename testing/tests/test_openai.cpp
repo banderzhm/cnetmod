@@ -34,6 +34,51 @@ TEST(openai_aggregate_import_preserves_narrow_std_format_visibility)
 
 namespace openai = cnetmod::openai;
 
+#if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 8
+TEST(openai_native_endpoint_json_preserves_wire_fields)
+{
+    openai::tts_request speech{.input = "Line\n\"quoted\"", .speed = 1.25};
+    const auto speech_body = speech.to_json();
+    ASSERT_TRUE(speech_body.contains("\"input\":\"Line\\n\\\"quoted\\\"\""));
+    ASSERT_TRUE(speech_body.contains("\"speed\":1.25"));
+    ASSERT_FALSE(speech_body.contains("response_format"));
+    ASSERT_EQ(openai::transcription_response::from_json("plain text").text,
+        "plain text");
+    const auto transcription = openai::transcription_response::from_json(
+        R"({"text":"old","language":"en","text":"latest","duration":2})");
+    ASSERT_EQ(transcription.text, "latest");
+    ASSERT_EQ(transcription.duration, 2.0);
+
+    openai::embedding_request request{.input = {"first", "second"}, .dimensions = 3};
+    ASSERT_TRUE(request.to_json().contains("\"input\":[\"first\",\"second\"]"));
+    const auto embedding = openai::embedding_response::from_json(
+        R"({"data":[{"index":1,"embedding":[0,1.25,-2]}],"usage":{"total_tokens":4}})");
+    ASSERT_EQ(embedding.data.size(), 1U);
+    ASSERT_EQ(embedding.data.front().index, 1);
+    ASSERT_EQ(embedding.data.front().embedding.at(1), 1.25F);
+    ASSERT_EQ(embedding.token_usage.total_tokens, 4);
+    ASSERT_TRUE(openai::embedding_response::from_json(
+        R"({"data":[{"embedding":["invalid"]}]})").data.empty());
+
+    const openai::image_generation_request image{.prompt = "a tree", .n = 2};
+    ASSERT_TRUE(image.to_json().contains("\"n\":2"));
+    const auto images = openai::image_response::from_json(
+        R"({"created":42,"data":[{"b64_json":"YQ==","revised_prompt":"tree"}]})");
+    ASSERT_EQ(images.created, 42);
+    ASSERT_EQ(images.data.size(), 1U);
+    ASSERT_EQ(images.data.front().b64_json, "YQ==");
+
+    const openai::moderation_request moderation{.input = {"hello"}};
+    ASSERT_TRUE(moderation.to_json().contains("\"input\":\"hello\""));
+    const auto reviewed = openai::moderation_response::from_json(
+        R"({"results":[{"flagged":true,"categories":{"hate/threatening":true}}]})");
+    ASSERT_EQ(reviewed.results.size(), 1U);
+    ASSERT_TRUE(reviewed.results.front().flagged);
+    ASSERT_TRUE(reviewed.results.front().categories.hate_threatening);
+    ASSERT_FALSE(reviewed.results.front().categories.hate);
+}
+#endif
+
 namespace {
 auto response_with(openai::message value) -> openai::chat_response
 {

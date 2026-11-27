@@ -1,7 +1,6 @@
 #include "test_framework.hpp"
-#include <chrono>
-#include <filesystem>
 
+import std;
 import cnetmod.io.io_context;
 import cnetmod.protocol.mqtt;
 
@@ -85,6 +84,27 @@ TEST(mqtt_broker_metrics_initial_snapshot) {
     ASSERT_EQ(metrics.protocol_errors, 0u);
 }
 
+TEST(mqtt_security_loads_json_without_publishing_an_invalid_update) {
+    cnetmod::mqtt::security_config policy;
+    const auto configured = policy.load_json(
+        R"({"allow_anonymous":false,"anonymous_user":"guest","users":{
+            "node":{"password":"secret","groups":["sensors"]}
+        },"rules":[{"topic":"sensors/#","pub":"allow","groups":["sensors"]}]})");
+    ASSERT_TRUE(configured.has_value());
+    ASSERT_TRUE(policy.authenticate("node", "secret").has_value());
+    ASSERT_FALSE(policy.authenticate("node", "wrong").has_value());
+    ASSERT_TRUE(policy.authorize_publish("node", "sensors/temp"));
+    ASSERT_FALSE(policy.authorize_publish("node", "private/temp"));
+    ASSERT_FALSE(policy.authorize_subscribe("node", "sensors/temp"));
+    ASSERT_FALSE(policy.authenticate("", "").has_value());
+
+    const auto rejected = policy.load_json(
+        R"({"allow_anonymous":true,"users":{"broken":{"groups":[false]}}})");
+    ASSERT_FALSE(rejected.has_value());
+    ASSERT_FALSE(policy.authenticate("", "").has_value());
+    ASSERT_TRUE(policy.authorize_publish("node", "sensors/temp"));
+}
+
 TEST(mqtt_persistence_roundtrip_sessions_and_retained) {
     auto dir = std::filesystem::temp_directory_path() /
         ("cnetmod-mqtt-persist-" + std::to_string(
@@ -109,6 +129,15 @@ TEST(mqtt_persistence_roundtrip_sessions_and_retained) {
     offline.topic = "sensors/a/temp";
     offline.payload = "21.5";
     offline.qos_value = cnetmod::mqtt::qos::at_least_once;
+    namespace mqtt = cnetmod::mqtt;
+    const mqtt::properties expected_properties{
+        mqtt::mqtt_property::byte_prop(mqtt::property_id::payload_format_indicator, 1),
+        mqtt::mqtt_property::u16_prop(mqtt::property_id::topic_alias, 2),
+        mqtt::mqtt_property::u32_prop(mqtt::property_id::message_expiry_interval, 30),
+        mqtt::mqtt_property::string_prop(mqtt::property_id::content_type, "text/plain"),
+        mqtt::mqtt_property::string_pair_prop(mqtt::property_id::user_property, "source", "node-a"),
+    };
+    offline.props = expected_properties;
     session.enqueue_offline(std::move(offline));
 
     cnetmod::mqtt::retained_store retained;
@@ -130,12 +159,47 @@ TEST(mqtt_persistence_roundtrip_sessions_and_retained) {
     ASSERT_EQ(loaded->subscriptions.size(), 1u);
     ASSERT_EQ(loaded->offline_queue.size(), 1u);
     ASSERT_EQ(loaded->offline_queue.front().payload, std::string("21.5"));
+    const auto& saved_properties = loaded->offline_queue.front().props;
+    ASSERT_EQ(saved_properties.size(), expected_properties.size());
+    for (std::size_t i = 0; i < std::min(saved_properties.size(), expected_properties.size()); ++i)
+    {
+        ASSERT_TRUE(saved_properties[i].id == expected_properties[i].id);
+        ASSERT_TRUE(saved_properties[i].value == expected_properties[i].value);
+    }
 
     auto loaded_retained = store.load_retained();
     ASSERT_TRUE(loaded_retained.has_value());
     auto* retained_msg = loaded_retained->find("status/node-a");
     ASSERT_TRUE(retained_msg != nullptr);
     ASSERT_EQ(retained_msg->payload, std::string("online"));
+
+    {
+        std::ofstream legacy_file{dir / "sessions.json", std::ios::binary | std::ios::trunc};
+        legacy_file << R"([{
+            "version":5,"username":"legacy","session_expiry":60,
+            "offline_queue":[{"topic":"legacy/topic","qos":1,"payload":"old"}],
+            "next_packet_id":7,"inflight_out":[{"packet_id":6,"expected_ack":64,
+            "retry_count":3,"msg":{"topic":"legacy/inflight","payload":"pending","qos":1}}],
+            "client_id":"legacy-client","clean_session":false,
+            "will":{"topic":"legacy/will","message":"offline","qos":1,"retain":true}
+        }])";
+    }
+    auto legacy = store.load_sessions();
+    ASSERT_TRUE(legacy.has_value());
+    if (legacy)
+    {
+        const auto* old_session = legacy->find("legacy-client");
+        ASSERT_TRUE(old_session != nullptr);
+        if (old_session != nullptr)
+        {
+            ASSERT_EQ(old_session->next_packet_id, 7U);
+            ASSERT_EQ(old_session->offline_queue.size(), 1U);
+            ASSERT_EQ(old_session->inflight_out.size(), 1U);
+            ASSERT_TRUE(old_session->will_msg.has_value());
+            if (old_session->will_msg)
+                ASSERT_EQ(old_session->will_msg->message, std::string{"offline"});
+        }
+    }
 
     std::error_code ec;
     std::filesystem::remove_all(dir, ec);

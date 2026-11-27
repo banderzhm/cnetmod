@@ -15,7 +15,6 @@ import cnetmod.protocol.http;
 import cnetmod.application.async_file_template;
 import cnetmod.application.configuration;
 import cnetmod.application.rest_template;
-import cnetmod.application.json_template;
 import cnetmod.application.recovery_policy;
 import cnetmod.application.task_supervisor;
 import cnetmod.coro.bridge;
@@ -235,7 +234,6 @@ public:
     /**
      * @brief Returns typed JSON operations offloaded to the application CPU pool.
      */
-    [[nodiscard]] auto json() noexcept -> json_template&;
 
     /**
      * @brief Creates response compression managed by the application CPU pool.
@@ -292,7 +290,6 @@ private:
     execution_context executor_;
     async_file_template files_;
     rest_template rest_;
-    json_template json_;
 };
 
 } // namespace cnetmod::application

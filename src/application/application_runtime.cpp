@@ -11,7 +11,7 @@ application_runtime::application_runtime(io_context& io,
     task_supervisor& supervisor, observability::telemetry_hub& telemetry,
     std::stop_token cancellation,
     const application_configuration& configuration)
-    : io_(io), cpu_pool_(cpu_pool), supervisor_(supervisor), telemetry_(telemetry), cancellation_(cancellation), configuration_(configuration), executor_(io, cpu_pool), files_(io), rest_(event_loops, telemetry), json_(io, cpu_pool)
+    : io_(io), cpu_pool_(cpu_pool), supervisor_(supervisor), telemetry_(telemetry), cancellation_(cancellation), configuration_(configuration), executor_(io, cpu_pool), files_(io), rest_(event_loops, telemetry)
 {
 }
 
@@ -21,8 +21,7 @@ application_runtime::application_runtime(io_context& io, thread_pool& cpu_pool,
     const application_configuration& configuration)
     : io_(io), cpu_pool_(cpu_pool), supervisor_(supervisor), telemetry_(telemetry),
       cancellation_(cancellation), configuration_(configuration),
-      executor_(io, cpu_pool), files_(io), rest_(io, telemetry),
-      json_(io, cpu_pool)
+      executor_(io, cpu_pool), files_(io), rest_(io, telemetry)
 {
 }
 
@@ -51,11 +50,6 @@ auto application_runtime::files() noexcept -> async_file_template&
 auto application_runtime::rest() noexcept -> rest_template&
 {
     return rest_;
-}
-
-auto application_runtime::json() noexcept -> json_template&
-{
-    return json_;
 }
 
 auto application_runtime::configuration() const noexcept

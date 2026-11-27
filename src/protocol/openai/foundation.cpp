@@ -3,37 +3,42 @@
 module;
 
 #include <cnetmod/config.hpp>
+#include "../../utils/detail/simdjson_depth.hpp"
 
 module cnetmod.protocol.openai;
 
 import std;
 import :foundation;
-import cnetmod.json;
 
 namespace cnetmod::openai {
 
 auto error_response::from_json(std::string_view text) -> error_response
 {
+    using cnetmod::detail::find_last_json_field;
+    simdjson::dom::parser parser;
+    simdjson::dom::element value;
+    if (!cnetmod::detail::parse_bounded_json(parser, text, value))
+        return {.message = std::string{text}};
+
     error_response result;
-    auto parsed = cnetmod::json::parse_document(text);
-    if (!parsed)
+    simdjson::dom::object error;
+    if (find_last_json_field(value, "error").get_object().get(error))
     {
-        result.message = std::string(text);
+        std::string_view message = text;
+        (void)find_last_json_field(value, "message").get_string().get(message);
+        result.message = message;
         return result;
     }
-    const auto& value = *parsed;
-    if (value.contains("error") && value["error"].is_object())
+    for (const auto field : error)
     {
-        const auto& error = value["error"];
-        result.message = cnetmod::json::value_or(
-            error, "message", std::string{});
-        result.type = cnetmod::json::value_or(error, "type", std::string{});
-        result.code = cnetmod::json::value_or(error, "code", std::string{});
-    }
-    else
-    {
-        result.message = cnetmod::json::value_or(
-            value, "message", std::string{text});
+        std::string_view content;
+        (void)field.value.get_string().get(content);
+        if (field.key == "message")
+            result.message = content;
+        else if (field.key == "type")
+            result.type = content;
+        else if (field.key == "code")
+            result.code = content;
     }
     return result;
 }

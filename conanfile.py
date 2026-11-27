@@ -86,7 +86,7 @@ class CnetmodConan(ConanFile):
         "include/*",
         "src/*",
         "3rdparty/boringssl/*",
-        "3rdparty/json/*",
+        "3rdparty/simdjson/*",
         "3rdparty/icu/*",
         "3rdparty/leveldb/*",
         "3rdparty/pugixml/*",
