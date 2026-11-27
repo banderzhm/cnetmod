@@ -23,6 +23,7 @@ namespace {
     constexpr std::uint8_t flag_priority = 0x20;
     constexpr std::uint32_t error_protocol = 0x1;
     constexpr std::uint32_t error_frame_size = 0x6;
+    constexpr std::uint32_t error_refused_stream = 0x7;
     constexpr std::size_t response_batch_bytes = 64U * 1024U;
     // DATA payloads at least this large are framed by reference when the
     // transport supports vectored writes; smaller ones are cheaper to copy.
@@ -577,12 +578,14 @@ auto session::write_response(std::uint32_t stream_id,
         if (response.automatic_content_length && expected_length && !has_length)
             headers.push_back(
                 {"content-length", std::to_string(*expected_length)});
-        auto encoded = encoder_.encode(headers);
-        if (!encoded)
-            co_return std::unexpected(encoded.error());
         {
             co_await writer_mutex_.lock();
             cnetmod::async_lock_guard guard{writer_mutex_, std::adopt_lock};
+            if (!streams_.contains(stream_id))
+                co_return std::expected<void, std::error_code>{};
+            auto encoded = encoder_.encode(headers);
+            if (!encoded)
+                co_return std::unexpected(encoded.error());
             queue_frame({.type = frame_type::headers,
                             .flags = flag_end_headers,
                             .stream_id = stream_id},
@@ -881,6 +884,56 @@ auto session::dispatch_ready() -> cnetmod::task<void>
                 : std::nullopt;
             if (immediate)
                 response = std::move(*immediate);
+            else if (pending.detached)
+            {
+                // Only a handler that needs the async path gets persistent
+                // stream state. Keep reading other streams while it waits.
+                // Count children until they unwind, even after RST_STREAM.
+                if (active_header_handlers_ >= local_.max_concurrent_streams)
+                {
+                    std::array<std::byte, 4> error{
+                        std::byte{}, std::byte{}, std::byte{},
+                        static_cast<std::byte>(error_refused_stream)};
+                    queue_frame({.type = frame_type::rst_stream,
+                                    .stream_id = stream_id}, error);
+                    release_request_headers(std::move(request.headers));
+                    continue;
+                }
+                auto entry = streams_.try_emplace(stream_id, stream_id,
+                    static_cast<std::int32_t>(peer_.initial_window_size),
+                    static_cast<std::int32_t>(local_.initial_window_size),
+                    std::vector<header_field>{}).first;
+                (void)entry->second.receive_headers({}, true);
+                if (background_->run(
+                    [this, stream_id, request = std::move(request)](
+                        cnetmod::cancel_token& token) mutable
+                        -> cnetmod::task<std::expected<void, std::error_code>>
+                    {
+                        struct handler_slot
+                        {
+                            std::uint32_t& active;
+                            ~handler_slot() { --active; }
+                        } slot{active_header_handlers_};
+                        if (!streams_.contains(stream_id))
+                            co_return std::expected<void, std::error_code>{};
+                        try
+                        {
+                            auto output = co_await borrowed_streaming_handler_(request, token);
+                            release_request_headers(std::move(request.headers));
+                            co_return co_await write_response(stream_id, std::move(output), token);
+                        }
+                        catch (...)
+                        {
+                            // Wake the session reader so it can settle the group.
+                            socket_->shutdown_both();
+                            throw;
+                        }
+                    }))
+                    ++active_header_handlers_;
+                else
+                    streams_.erase(stream_id);
+                continue;
+            }
             else
                 response = co_await borrowed_streaming_handler_(
                     request, cancellation);
@@ -1286,46 +1339,49 @@ auto session::process_frame(frame_header header,
 
 auto session::run(std::span<const std::byte> initial) -> cnetmod::task<void>
 {
-    if (!initial.empty())
+    std::exception_ptr failure;
+    try
     {
-        if (auto result = receive(initial); !result)
+        bool running = true;
+        if (!initial.empty())
         {
-            (void)co_await flush_outbound();
-            co_await shutdown_streaming();
-            co_return;
-        }
-        co_await dispatch_ready();
-        if (!(co_await flush_batched_outbound()))
-        {
-            co_await shutdown_streaming();
-            co_return;
-        }
-    }
-    // The transport reader fills the returned range before receive() observes
-    // it; do not zero an otherwise opaque receive scratch buffer.
-    std::array<std::byte, 16 * 1024> buffer;
-    while (true)
-    {
-        auto read = co_await reader_({buffer.data(), buffer.size()});
-        if (!read || *read == 0)
-        {
-            if (read)
+            if (receive(initial))
+            {
+                co_await dispatch_ready();
+                running = (co_await flush_batched_outbound()).has_value();
+            }
+            else
+            {
                 (void)co_await flush_outbound();
-            co_await shutdown_streaming();
-            co_return;
+                running = false;
+            }
         }
-        if (auto result = receive(std::span{buffer.data(), *read}); !result)
+        // The transport fills the scratch buffer before receive() uses it.
+        std::array<std::byte, 16 * 1024> buffer;
+        while (running)
         {
-            (void)co_await flush_outbound();
-            co_await shutdown_streaming();
-            co_return;
-        }
-        co_await dispatch_ready();
-        if (!(co_await flush_batched_outbound()))
-        {
-            co_await shutdown_streaming();
-            co_return;
+            auto read = co_await reader_({buffer.data(), buffer.size()});
+            if (!read || *read == 0)
+            {
+                if (read)
+                    (void)co_await flush_outbound();
+                break;
+            }
+            if (!receive(std::span{buffer.data(), *read}))
+            {
+                (void)co_await flush_outbound();
+                break;
+            }
+            co_await dispatch_ready();
+            running = (co_await flush_batched_outbound()).has_value();
         }
     }
+    catch (...)
+    {
+        failure = std::current_exception();
+    }
+    co_await shutdown_streaming();
+    if (failure)
+        std::rethrow_exception(failure);
 }
 } // namespace cnetmod::http::v2

@@ -96,6 +96,26 @@ def main(server: str) -> int:
             assert bytes(bodies.get(3, b"")) == b"Hello, World!"
             assert bytes(bodies.get(5, b"")) == b"received: payload"
 
+        with socket.create_connection(("127.0.0.1", port), timeout=5) as sock:
+            h2 = H2Connection(H2Configuration(client_side=True, header_encoding="utf-8"))
+            h2.initiate_connection()
+            for stream, path in ((1, "/multiplex-delay"), (3, "/hello")):
+                h2.send_headers(stream, [
+                    (":method", "GET"), (":authority", "www.example.com"),
+                    (":scheme", "http"), (":path", path),
+                ], end_stream=True)
+            flush(sock, h2)
+            completed = []
+            while len(completed) < 2:
+                payload = sock.recv(65535)
+                if not payload:
+                    break
+                for event in h2.receive_data(payload):
+                    if isinstance(event, StreamEnded):
+                        completed.append(event.stream_id)
+                flush(sock, h2)
+            assert completed == [3, 1], f"delayed handler blocked another HTTP/2 stream: {completed}"
+
         # DATA on stream 0 is invalid in RFC 9113.  The peer must terminate
         # the connection with GOAWAY rather than crash or silently continue.
         with socket.create_connection(("127.0.0.1", port), timeout=5) as sock:

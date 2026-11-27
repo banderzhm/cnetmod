@@ -2290,3 +2290,161 @@ and syscall summaries are under `/home/cnetmod-chunked-response-20261109`.
 baseline are sufficient to reconstruct the correct three-write reference.
 Temporary test targets and host diagnostic files were removed after verification.
 Host power and proxy settings stayed at their pre-run values.
+
+## 2026-11-27 — HTTP/1.1 request header materialization
+
+With `942583a3` as the baseline, a Windows MSVC Release parser experiment
+skipped parsing an empty Content-Length. It was reverted after the short GET,
+POST, WebSocket handshake and fragmented request samples slowed by 5–11%.
+Unpinned same-binary controls varied enough to preclude causal attribution.
+
+A second candidate uses the existing heterogeneous `flat_map::try_emplace`
+when materializing owning headers. A miss searches once and constructs the
+owning strings, while a duplicate uses the original combined value path.
+HTTP types, parser and router tests passed. On one fixed measurement thread,
+the median paired latency changed by −14.69% for owning headers and −6.95%
+for duplicate headers. The corresponding A/A changes were −2.58% and
+−0.93%. Chunked and fragmented parser samples slowed by 1.69% and 1.75%.
+
+The HTTP server comparison used Windows IOCP, `oha`, 64 persistent loopback
+connections and three ordered pairs per row. The table shows median paired
+changes in requests per second and server CPU time per request. The A/B run
+served 38,790,305 successful requests with zero errors.
+
+| Workers | Owning headers A/B RPS / CPU | Header view A/B RPS / CPU | Header view A/A RPS |
+|---:|---:|---:|---:|
+| 4 | +2.16% / −1.60% | −0.48% / +0.66% | +1.49% |
+| 8 | +2.77% / −2.82% | −1.99% / +0.78% | −3.14% |
+| 16 | +2.31% / −1.04% | −0.81% / −0.12% | −2.66% |
+
+The Windows controls exceed the 1% regression threshold. The candidate
+remains a local experiment pending the Ubuntu epoll and io_uring gates. Use
+separate Release builds with `CNETMOD_HAS_IO_URING=OFF` for epoll and native
+liburing detection for io_uring. Verify actual syscall use outside measured
+rounds. Test the candidate against the same baseline within each backend.
+Record backend-to-backend results separately from the code change.
+
+The local WSL inventory contains Arch distributions only. The CLI stopped
+responding, `wsl --shutdown` timed out, and the administrator restart left
+`WslService` in `STOP_PENDING`. No Ubuntu samples were collected.
+
+Raw scripts, binaries, per-run JSON and the candidate patch are archived at
+`E:/json-mig-verify/http-header-materialization-pinned`. Earlier parser runs
+are under `http-framing` and `http-header-materialization` in the same root.
+
+### Ubuntu follow-up and io_uring profile
+
+WSL recovered. Both backends were built sequentially in
+`/home/cnetmod-ubuntu-http/build`, using the existing Ubuntu 24.04.5 image,
+Clang 23.1.4, libc++, ThinLTO, mimalloc and Linux 6.18.54.1 WSL2. The
+io_uring build used Ubuntu's liburing 2.5. Process file descriptors verified
+the selected backend. The build directory was reused across all variants.
+
+The owning-header candidate regressed 2.75% on epoll at 4 workers and 2.57%
+on io_uring at 8 workers. Server CPU time per request rose 2.73% and 2.56%,
+respectively. Same-binary throughput controls differed by +0.03% and −0.02%
+in those rows. The candidate was reverted. The remaining backend comparison
+was stopped when work returned to optimizing io_uring.
+
+At 8 workers, `perf cpu-clock` sampled HTTP and WebSocket churn with zero
+lost samples. The largest sample location was `_raw_spin_unlock_irqrestore`
+(25.42% and 28.11%), with the HTTP stack predominantly under the TCP
+receive/wakeup path. IRQ-disabled intervals can accumulate at IRQ restore,
+so these shares do not measure spinlock instruction cost. WebSocket also
+showed allocation samples, including `aligned_alloc` in receive coroutine
+paths. The next candidate starts the private WebSocket receive buffer empty.
+Complete plaintext frames can use provided buffers and skip a private 1 KiB
+allocation. Existing `prepare()` calls still allocate storage for pending
+bytes, fragmented frames and single-shot reads. No reactor flags changed.
+
+The existing WebSocket frame test passed in Release. The experiment uses
+the same two binaries across 4/8/16 workers, compares only io_uring, and
+includes same-binary controls. Frozen executables, raw logs and compressed
+profiles are under `/home/cnetmod-ubuntu-http/results`.
+
+The HttpArena WebSocket validator passed all 21 cases across the three
+worker counts. Short-connection load completed 27 scored samples with no
+reported connect, read or timeout errors. Throughput and CPU per response
+are the medians of the paired percentage changes.
+
+| Workers | Candidate throughput | Candidate CPU/response | Baseline A/A throughput |
+|---:|---:|---:|---:|
+| 4 | −6.68% | +5.17% | −9.57% |
+| 8 | −7.94% | +8.35% | −14.06% |
+| 16 | −27.22% | +37.41% | −18.45% |
+
+The baseline variance makes these point estimates unsuitable as the effect
+of the allocation change. At 16 workers, the candidate nevertheless fell
+below both baseline measurements in every block. The change was reverted.
+The related ordinary-WebSocket and HTTP churn screens were stopped after
+that decision. No part of this experiment was integrated or scored on the
+leaderboard.
+
+## 2026-11-27 — Request-path review and HTTP/2 multiplexing
+
+The review followed accept, I/O submission, protocol dispatch, handler
+execution, response write, and connection retirement. The highest-value
+change was an architectural difference between HTTP/2 request shapes.
+
+| Path | Observed structure | Decision |
+|---|---|---|
+| Accept and io_uring | Workers own their acceptor and reactor. Each admitted connection still schedules a task and can wake that same worker. | Measure per-accept batch notifications before changing dispatch fairness. |
+| HTTP/1.1 | The cleartext entry reads into an 8 KiB protocol-detection buffer, then feeds the initial bytes into parser-owned storage. | Keep the fragmented HTTP/2 preface contract and move ownership only if the entire receive flow can share it. Prior initial-buffer experiments regressed. |
+| HTTP/2 | HEADERS with END_STREAM avoid persistent stream allocation, including requests whose handlers later suspend. Those async handlers were awaited in the connection reader. Requests with buffered DATA already had a child-task path. | Schedule detached async requests as connection-owned children. Keep completed synchronous requests on their existing inline path. |
+| HTTP/3 and QUIC | Sharded UDP ingress processes datagrams in batches. A complete synchronous request can run inline; asynchronous or incomplete streams are handed to a connection-owned task. | Preserve the current owner and batch boundaries. |
+| WebSocket | HTTP upgrade hands buffered bytes to the connection, and provided receive buffers survive until their borrowed writes complete. | Treat HTTP-to-WebSocket handoff and receive retirement as one lifecycle when changing them. |
+| Gateway | The proxy already leases an upstream connection and transfers response ownership. Connection acquisition and the upstream exchange have distinct deadlines. | Fix downstream multiplexing first. Measure lease wait and upstream service time separately before merging those stages. |
+
+HTTP/2 now records stream state only when an async header-only child needs
+it, bounds those children by the advertised stream limit, and releases a
+slot when the child unwinds. The response writer checks that the stream is
+still open before emitting streaming headers. HPACK encoding now runs in
+the same critical section as frame enqueue so another stream cannot publish
+dependent headers first. All reader exits settle connection-owned tasks.
+
+The existing python-h2 interop suite sends a delayed stream and a fast
+stream on the same connection. The same test fixture is compiled for
+baseline and candidate. The baseline completes stream 1 before stream 3;
+the candidate completes stream 3 before stream 1.
+
+Ubuntu 24.04.5 on WSL2, Clang 23.1.4 Release with ThinLTO and io_uring.
+Three rotated A/B/A blocks per row. The delayed test used 16 connections,
+32 streams per connection and 4,096 requests per sample with a 10 ms handler
+wait. The synchronous profile used 256 connections and 32 streams per
+connection with a one-second warmup and four measured seconds.
+
+| Workers | Delayed RPS, baseline → candidate | Sync throughput A/B | Sync throughput A/A |
+|---:|---:|---:|---:|
+| 4 | 1,580 → 46,369 | +4.70% | +4.01% |
+| 8 | 1,581 → 46,652 | −4.55% | −14.19% |
+| 16 | 1,583 → 46,829 | −7.16% | +3.18% |
+
+The delayed result approaches the configured concurrency ceiling. Its
+same-binary control differed by at most 0.10% across the three row medians.
+The synchronous results are paired medians, with substantial variation
+between control runs. The 8- and 16-worker rows do not clear the acceptance
+gate. This is a verified multiplexing improvement and a local candidate.
+No release or leaderboard change is inferred. All 54 measured runs reported
+zero failed, errored or timed-out requests. HTTP/1.1 mixed short connections,
+WebSocket short connections and the seven-case WebSocket validator passed
+the focused 8-worker smoke checks. H3 and the Gateway stack were reviewed in
+source and were outside this measurement.
+
+The only build directory was `/home/cnetmod-ubuntu-http/build` (223 MiB at
+the end of the run). Final logs and checksums are in its sibling `results`
+directory under `h2-verified`.
+
+### Acceptance decision
+
+The maintainer accepted the measured `h2-fast` tradeoff for this change.
+An asynchronous handler waiting on one stream should let other streams
+on the same connection proceed. The regression test and delayed workload
+verify that behavior. The table retains the synchronous results and their
+controls. At four workers the absolute medians were 5,356,984 and 5,112,272
+req/s. The reported +4.70% is the median of the three within-block changes,
+while the same-binary control moved +4.01%. Treat that row as inconclusive
+for a synchronous throughput gain.
+
+Keep the multiplexing change locally. This decision applies to its measured
+`h2-fast` tradeoff. The existing acceptance criteria still apply to other
+changes and profiles.

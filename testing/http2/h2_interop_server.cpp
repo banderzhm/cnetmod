@@ -6,6 +6,7 @@ import cnetmod.core.net_init;
 import cnetmod.io.io_context;
 import cnetmod.coro.spawn;
 import cnetmod.coro.task;
+import cnetmod.coro.timer;
 import cnetmod.protocol.http;
 
 int main(int argc, char** argv) {
@@ -27,6 +28,10 @@ int main(int argc, char** argv) {
     router.post("/native-client-post", [](cnetmod::http::request_context& request) -> cnetmod::task<void> {
         request.text(cnetmod::http::status::ok, "received: " + std::string(request.body()));
         co_return;
+    });
+    router.get("/multiplex-delay", [](cnetmod::http::request_context& request) -> cnetmod::task<void> {
+        co_await cnetmod::async_sleep(request.io_ctx(), std::chrono::milliseconds{200});
+        request.text(cnetmod::http::status::ok, "delayed");
     });
     router.any("/*path", [](cnetmod::http::request_context& request) -> cnetmod::task<void> {
         if (request.method() == "POST") {

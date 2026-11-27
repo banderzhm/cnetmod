@@ -212,6 +212,7 @@ private:
     buffered_request_filter buffer_filter_;
     cnetmod::http::request_body_stream_options body_options_{};
     std::unique_ptr<cnetmod::task_group> background_;
+    std::uint32_t active_header_handlers_{};
     cnetmod::async_mutex writer_mutex_;
     std::vector<std::byte> input_;
     std::vector<std::byte> outbound_;
