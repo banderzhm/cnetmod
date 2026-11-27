@@ -3,6 +3,7 @@
 import std;
 import cnetmod.json;
 import cnetmod.application;
+import cnetmod.application.reflected_options;
 import cnetmod.core;
 import cnetmod.coro.task;
 import cnetmod.coro.spawn;
@@ -103,6 +104,20 @@ struct nested_rule
 struct nested_options
 {
     std::vector<nested_rule> rules;
+};
+
+struct reflected_option_rule
+{
+    int timeout_ms = 25;
+    bool enabled = true;
+};
+
+struct reflected_service_options
+{
+    reflected_option_rule defaults{.timeout_ms = 90};
+    std::vector<reflected_option_rule> rules;
+    std::optional<reflected_option_rule> fallback{reflected_option_rule{}};
+    std::map<std::string, reflected_option_rule> named;
 };
 
 template <>
@@ -398,6 +413,58 @@ TEST(options_sections_apply_defaults_inside_array_elements)
                                 }}))
                         .build();
     ASSERT_FALSE(rejected.has_value());
+}
+
+TEST(reflected_options_bind_defaults_and_validate_nested_paths_before_reload)
+{
+    using cnetmod::json::array;
+    using cnetmod::json::object;
+    application::options_registry sections;
+    sections.section<reflected_service_options>(
+            "service_options", application::decode_reflected_options<reflected_service_options>)
+        .validate([](const reflected_service_options& value) -> std::expected<void, std::string> {
+            if (value.defaults.timeout_ms <= 0)
+                return std::unexpected(std::string{"timeout must be positive"});
+            return {};
+        })
+        .reload(application::options_reload::runtime_safe);
+
+    application::application_configuration initial;
+    initial.sections["service_options"] = object({
+        {"defaults", object({{"enabled", false}})},
+        {"rules", array({object({{"timeout_ms", 50}})})},
+        {"fallback", nullptr},
+        {"named", object({{"backup", object({{"enabled", false}})}})},
+    });
+    ASSERT_TRUE(sections.bind(initial).has_value());
+    const auto original = sections.current<reflected_service_options>("service_options");
+    ASSERT_EQ(original->defaults.timeout_ms, 90);
+    ASSERT_FALSE(original->defaults.enabled);
+    ASSERT_EQ(original->rules.front().timeout_ms, 50);
+    ASSERT_TRUE(original->rules.front().enabled);
+    ASSERT_FALSE(original->fallback.has_value());
+    ASSERT_EQ(original->named.at("backup").timeout_ms, 25);
+
+    const std::array<std::string, 1> changed{"service_options"};
+    auto candidate = initial;
+    candidate.sections["service_options"]["rules"] =
+        array({object({{"typo", true}})});
+    auto rejected = sections.reload(candidate, changed);
+    ASSERT_FALSE(rejected.has_value());
+    ASSERT_EQ(rejected.error().path, "service_options.rules[0].typo");
+    ASSERT_TRUE(sections.current<reflected_service_options>("service_options") == original);
+
+    candidate = initial;
+    candidate.sections["service_options"]["defaults"]["timeout_ms"] = 0;
+    rejected = sections.reload(candidate, changed);
+    ASSERT_FALSE(rejected.has_value());
+    ASSERT_EQ(rejected.error().message, "timeout must be positive");
+    ASSERT_TRUE(sections.current<reflected_service_options>("service_options") == original);
+
+    candidate.sections["service_options"]["defaults"]["timeout_ms"] = 80;
+    auto reloaded = sections.reload(candidate, changed);
+    ASSERT_TRUE(reloaded.has_value());
+    ASSERT_EQ(sections.current<reflected_service_options>("service_options")->defaults.timeout_ms, 80);
 }
 
 TEST(options_sections_drive_conditional_registration)

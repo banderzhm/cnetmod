@@ -188,7 +188,7 @@ private:
             protocol_result.warning_count = state_.warning_count();
             protocol_result.info = state_.info();
 
-            auto adapted = mysql_adapt_result(protocol_result);
+            auto adapted = mysql_adapt_result(std::move(protocol_result));
             model_result<T> result;
             result.affected_rows = adapted.affected_rows;
             result.last_insert_id = adapted.last_insert_id;

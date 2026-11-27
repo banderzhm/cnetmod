@@ -3926,6 +3926,43 @@ It can receive direct columns or a declared `resultMap`, but it cannot be used
 with insert, update or delete CRUD APIs. The repository entity `T` continues
 to determine tenant, logical-delete and other automatic policies.
 
+For a read-only DTO whose C++ member names match the result column labels,
+use Boost.PFR to register its fields automatically:
+
+```cpp
+#include <cnetmod/orm.hpp>
+
+import std;
+import cnetmod.orm;
+import cnetmod.orm.reflected_projection;
+
+struct user_overview
+{
+    std::int64_t id{};
+    std::optional<std::string> display_name;
+};
+
+CNETMOD_REFLECTED_PROJECTION(user_overview)
+```
+
+Use the registered type with `select_xml_as<user_overview>()` and
+`from_result_set<user_overview>()`. The DTO must be a simple,
+default-initializable aggregate of ORM-supported member types.
+Optional members are nullable. Only list fields whose SQL result labels differ
+from their C++ names:
+
+```cpp
+CNETMOD_REFLECTED_PROJECTION(user_overview, {"display_name", "user_name"})
+```
+
+This maps the SQL label `user_name` to `display_name`. JSON still uses the
+C++ member name. The compiler rejects unknown members, repeated overrides,
+empty aliases and duplicate SQL labels. Use explicit `CNETMOD_PROJECTION`
+fields when the DTO includes members that should be excluded from mapping.
+For explicit models and projections, `CNETMOD_FIELD(name, varchar)` uses
+`name` as both the member and SQL column name.
+`CNETMOD_ENABLE_ORM` builds the pinned Boost.PFR module with the ORM.
+
 For a truly dynamic projection whose columns are not known at compile time,
 both layers expose `select_xml_result()`. It returns
 `cnetmod::database::query_result`, including column metadata, rows, affected
@@ -3999,12 +4036,23 @@ There are two supported result paths:
    `<collection resultMap="...">`, then projects the object graph into the
    requested model or projection type.
 
-Scalar properties are assigned through normal model setters. For associations
-and collections, specialize `xml_object_graph_binder<T>` and use
-`mapped_association_as<U>()` / `mapped_collection_as<U>()`; this is explicit
-because XML property strings cannot safely identify C++ member offsets.
-Joined-row object graphs are de-duplicated by `<id>` mappings. Nullable joined
-associations become `std::optional`. `autoMapping="true"` maps otherwise
+Scalar properties are assigned through normal model setters. A reflected
+projection binds `std::optional<U>` to an XML association and
+`std::vector<U>` to an XML collection when `U` is already registered as an
+ORM result record. Register child types before the containing projection.
+The C++ member name is the default XML property. Use a
+`CNETMOD_REFLECTED_PROJECTION` alias when the names differ. The relation
+members are populated from the mapped object graph. SQL column metadata and
+ORM JSON mapping describe the projection's scalar fields.
+
+For custom relation mapping or relations on an explicit model, specialize
+`xml_object_graph_binder<T>` and use `mapped_association_as<U>()` or
+`mapped_collection_as<U>()`. An explicit specialization supplies the full
+relation binding for that record.
+Joined-row object graphs are de-duplicated by typed `<id>` values, including
+composite and temporal keys. A collection without a complete ID keeps each
+present joined row. Nullable joined associations become `std::optional`.
+`autoMapping="true"` maps otherwise
 unmapped columns by snake_case-to-camelCase property name.
 
 Nested-query metadata such as `<association select="...">` and
@@ -10225,12 +10273,11 @@ optional 组件的单组件超时只触发降级与恢复，不能由共享计�
 
 ```cpp
 #include <cnetmod/config.hpp>
-#include <cnetmod/json.hpp>
 
 import std;
 import cnetmod.application;
+import cnetmod.application.reflected_options;
 import cnetmod.core.log;
-import cnetmod.json;
 
 namespace application = cnetmod::application;
 namespace http = cnetmod::http;
@@ -10239,9 +10286,6 @@ struct order_options
 {
     int page_size = 20;
 };
-
-CNETMOD_JSON(order_options,
-    CNETMOD_JSON_FIELD(page_size))
 
 class order_catalog
 {
@@ -10263,7 +10307,8 @@ public:
 
     void configure_options(application::options_registry& options) override
     {
-        options.section<order_options>("orders");
+        options.section<order_options>(
+            "orders", application::decode_reflected_options<order_options>);
     }
 
     auto register_components(application::registration_context& context)
@@ -10308,6 +10353,14 @@ auto main() -> int
     return host->run() ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 ```
+
+显式传入 `decode_reflected_options<T>` 后，简单聚合配置通过 Boost.PFR
+按 C++ 成员名绑定。每次绑定或重载从 `T{}` 的默认值开始，只赋值配置给出的字段。
+嵌套聚合保留未提供成员的默认值，提供的数组或字符串键映射替换整个成员，
+`null` 可以清空 `std::optional`。未知键和类型错误携带具体字段路径，例如
+`orders.rules[0].timeout_ms`。必填节、validator 和重载策略沿用 options registry。
+需要自定义字段名或编解码时，继续使用 `CNETMOD_JSON` 与
+`section<T>(name)`。
 
 `application_host` 自己创建 `net_init`、`io_context`、CPU `thread_pool`、HTTP 服务、Telemetry Hub、健康缓存和任务监管器。`request_stop()` 可由其他线程重复调用，所有调用汇入同一条幂等停机路径。CPU 线程数通过 `application.cpu_threads` 配置，默认取硬件并发数且至少为 1；也可由 `CNETMOD_CPU_THREADS` 覆盖。该值运行时变更需要重启。
 

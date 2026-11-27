@@ -33,8 +33,32 @@ auto from_result_set(const result_set& rs) -> std::vector<T>
 {
     std::vector<T> result;
     result.reserve(rs.rows.size());
-    for (auto& r : rs.rows)
-        result.push_back(from_row<T>(r, rs.columns));
+    if (rs.rows.size() <= 1)
+    {
+        if (!rs.rows.empty())
+            result.push_back(from_row<T>(rs.rows.front(), rs.columns));
+        return result;
+    }
+
+    std::vector<std::pair<std::size_t, field_setter<T>>> bindings;
+    bindings.reserve(std::min(rs.columns.size(), result_fields<T>().size()));
+    for (std::size_t index = 0; index < rs.columns.size(); ++index)
+    {
+        const auto* field = find_result_column<T>(rs.columns[index].name);
+        if (field && field->setter)
+            bindings.emplace_back(index, field->setter);
+    }
+    for (const auto& row : rs.rows)
+    {
+        T record{};
+        for (const auto& [index, setter] : bindings)
+        {
+            if (index >= row.size())
+                break;
+            setter(record, row[index]);
+        }
+        result.push_back(std::move(record));
+    }
     return result;
 }
 

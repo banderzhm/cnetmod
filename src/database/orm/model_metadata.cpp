@@ -38,59 +38,41 @@ auto column_def::is_snowflake() const noexcept -> bool
 
 auto sql_type_str(column_type type) noexcept -> std::string_view
 {
-    switch (type)
-    {
-    case column_type::tinyint:
-        return "TINYINT";
-    case column_type::smallint:
-        return "SMALLINT";
-    case column_type::mediumint:
-        return "MEDIUMINT";
-    case column_type::int_:
-        return "INT";
-    case column_type::bigint:
-        return "BIGINT";
-    case column_type::float_:
-        return "FLOAT";
-    case column_type::double_:
-        return "DOUBLE";
-    case column_type::decimal:
-        return "DECIMAL";
-    case column_type::bit:
-        return "BIT";
-    case column_type::year:
-        return "YEAR";
-    case column_type::time:
-        return "TIME";
-    case column_type::date:
-        return "DATE";
-    case column_type::datetime:
-        return "DATETIME";
-    case column_type::timestamp:
-        return "TIMESTAMP";
-    case column_type::char_:
-        return "CHAR(255)";
-    case column_type::varchar:
-        return "VARCHAR(255)";
-    case column_type::binary:
-        return "BINARY(255)";
-    case column_type::varbinary:
-        return "VARBINARY(255)";
-    case column_type::text:
-        return "TEXT";
-    case column_type::blob:
-        return "BLOB";
-    case column_type::enum_:
-        return "VARCHAR(64)";
-    case column_type::set:
-        return "VARCHAR(255)";
-    case column_type::json:
-        return "JSON";
-    case column_type::geometry:
-        return "GEOMETRY";
-    default:
-        return "TEXT";
-    }
+    static constexpr auto names = [] {
+        std::array<std::string_view, static_cast<std::size_t>(column_type::unknown) + 1> result;
+        result.fill("TEXT");
+        const auto bind = [&](column_type kind, std::string_view spelling) {
+            result[static_cast<std::size_t>(kind)] = spelling;
+        };
+        using enum column_type;
+        bind(tinyint, "TINYINT");
+        bind(smallint, "SMALLINT");
+        bind(mediumint, "MEDIUMINT");
+        bind(int_, "INT");
+        bind(bigint, "BIGINT");
+        bind(float_, "FLOAT");
+        bind(double_, "DOUBLE");
+        bind(decimal, "DECIMAL");
+        bind(bit, "BIT");
+        bind(year, "YEAR");
+        bind(time, "TIME");
+        bind(date, "DATE");
+        bind(datetime, "DATETIME");
+        bind(timestamp, "TIMESTAMP");
+        bind(char_, "CHAR(255)");
+        bind(varchar, "VARCHAR(255)");
+        bind(binary, "BINARY(255)");
+        bind(varbinary, "VARBINARY(255)");
+        bind(text, "TEXT");
+        bind(blob, "BLOB");
+        bind(enum_, "VARCHAR(64)");
+        bind(set, "VARCHAR(255)");
+        bind(json, "JSON");
+        bind(geometry, "GEOMETRY");
+        return result;
+    }();
+    const auto index = static_cast<std::size_t>(type);
+    return index < names.size() ? names[index] : std::string_view{"TEXT"};
 }
 } // namespace cnetmod::orm
 
@@ -194,86 +176,122 @@ namespace {
 
 } // namespace
 
-auto read_record_json(std::string_view input)
-    -> std::expected<record_json_fields, std::error_code>
+namespace {
+
+auto read_record_scalar(simdjson::dom::element value)
+    -> std::expected<record_json_scalar, std::error_code>
 {
     using simdjson::dom::element_type;
+    switch (value.type())
+    {
+    case element_type::NULL_VALUE:
+        return record_json_scalar{nullptr};
+    case element_type::BOOL:
+        return record_json_scalar{value.get_bool().value_unsafe()};
+    case element_type::INT64:
+        return record_json_scalar{value.get_int64().value_unsafe()};
+    case element_type::UINT64:
+        return record_json_scalar{value.get_uint64().value_unsafe()};
+    case element_type::DOUBLE:
+        return record_json_scalar{value.get_double().value_unsafe()};
+    case element_type::STRING:
+        return record_json_scalar{value.get_string().value_unsafe()};
+    case element_type::BIGINT:
+    {
+        const auto number = value.get_bigint().value_unsafe();
+        double converted{};
+        if (cnetmod::from_chars_double(number, converted) != std::errc{} ||
+            !std::isfinite(converted))
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        return record_json_scalar{converted};
+    }
+    case element_type::ARRAY:
+    case element_type::OBJECT:
+        return record_json_scalar{std::monostate{}};
+    }
+    std::unreachable();
+}
+
+} // namespace
+
+auto read_record_json(std::string_view input, std::span<const std::string_view> names,
+    bool reject_unknown, void* context, record_json_setter assign)
+    -> std::expected<void, std::error_code>
+{
     simdjson::dom::parser parser;
     parser.number_as_string(true);
     simdjson::dom::element root;
     if (!cnetmod::detail::parse_bounded_json(parser, input, root) || !root.is_object())
-        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        return json_type_error();
 
-    record_json_fields fields;
+    // Keep only the last occurrence of a key before converting the field.
+    // The tape views are consumed while the parser is still alive.
+    std::vector<std::optional<simdjson::dom::element>> values(names.size());
     for (const auto field : root.get_object().value_unsafe())
     {
-        record_json_scalar scalar;
-        const auto value = field.value;
-        switch (value.type())
-        {
-        case element_type::NULL_VALUE:
-            scalar = nullptr;
-            break;
-        case element_type::BOOL:
-            scalar = value.get_bool().value_unsafe();
-            break;
-        case element_type::INT64:
-            scalar = value.get_int64().value_unsafe();
-            break;
-        case element_type::UINT64:
-            scalar = value.get_uint64().value_unsafe();
-            break;
-        case element_type::DOUBLE:
-            scalar = value.get_double().value_unsafe();
-            break;
-        case element_type::STRING:
-            scalar = std::string{value.get_string().value_unsafe()};
-            break;
-        case element_type::BIGINT:
-        {
-            const auto number = value.get_bigint().value_unsafe();
-            double converted{};
-            if (cnetmod::from_chars_double(number, converted) != std::errc{} ||
-                !std::isfinite(converted))
-                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
-            scalar = converted;
-            break;
-        }
-        case element_type::ARRAY:
-        case element_type::OBJECT:
-            break;
-        }
-        fields.insert_or_assign(std::string{field.key}, std::move(scalar));
+        const auto matches = std::ranges::equal_range(names, field.key);
+        if (reject_unknown && (matches.empty() || matches.size() > 1))
+            return json_type_error();
+        if (field.value.type() == simdjson::dom::element_type::BIGINT &&
+            !read_record_scalar(field.value))
+            return json_type_error();
+        for (auto it = matches.begin(); it != matches.end(); ++it)
+            values[static_cast<std::size_t>(it - names.begin())] = field.value;
     }
-    return fields;
+    for (std::size_t index = 0; index < values.size(); ++index)
+    {
+        if (!values[index])
+        {
+            if (auto assigned = assign(context, index, nullptr); !assigned)
+                return assigned;
+            continue;
+        }
+        auto scalar = read_record_scalar(*values[index]);
+        if (!scalar)
+            return std::unexpected(scalar.error());
+        if (auto assigned = assign(context, index, &*scalar); !assigned)
+            return assigned;
+    }
+    return {};
 }
 
-auto write_record_json(const record_json_fields& fields)
+auto write_record_json(std::span<const std::string_view> names, bool emit_nulls,
+    const void* context, record_json_getter get)
     -> std::expected<std::string, std::error_code>
 {
     simdjson::builder::string_builder builder;
     builder.start_object();
     bool first = true;
-    for (const auto& [key, scalar] : fields)
+    for (std::size_t index = 0; index < names.size();)
     {
+        const auto key = names[index];
+        record_json_scalar scalar;
+        do
+        {
+            auto value = get(context, index++);
+            if (emit_nulls || !std::holds_alternative<std::nullptr_t>(value))
+                scalar = std::move(value);
+        } while (index < names.size() && names[index] == key);
+        if (std::holds_alternative<std::monostate>(scalar))
+            continue;
         if (!std::exchange(first, false))
             builder.append_comma();
         std::visit([&](const auto& value)
         {
             using value_type = std::remove_cvref_t<decltype(value)>;
             if constexpr (std::same_as<value_type, std::string>)
-                builder.append_key_value(std::string_view{key}, std::string_view{value});
+                builder.append_key_value(key, std::string_view{value});
             else if constexpr (std::same_as<value_type, std::monostate>)
-                builder.append_key_value(std::string_view{key}, nullptr);
+                builder.append_key_value(key, nullptr);
             else if constexpr (std::same_as<value_type, double>)
             {
                 if (std::isfinite(value))
-                    builder.append_key_value(std::string_view{key}, value);
+                    builder.append_key_value(key, value);
                 else
-                    builder.append_key_value(std::string_view{key}, nullptr);
+                    builder.append_key_value(key, nullptr);
             }
             else
-                builder.append_key_value(std::string_view{key}, value);
+                builder.append_key_value(key, value);
         }, scalar);
     }
     builder.end_object();
@@ -286,7 +304,7 @@ auto write_record_json(const record_json_fields& fields)
 auto decode_json_member(calendar_date& member, const record_json_scalar& source)
     -> std::expected<void, std::error_code>
 {
-    const auto* value = std::get_if<std::string>(&source);
+    const auto* value = std::get_if<std::string_view>(&source);
     if (!value || !parse_date(*value, member))
         return json_type_error();
     return {};
@@ -295,7 +313,7 @@ auto decode_json_member(calendar_date& member, const record_json_scalar& source)
 auto decode_json_member(calendar_datetime& member, const record_json_scalar& source)
     -> std::expected<void, std::error_code>
 {
-    const auto* value = std::get_if<std::string>(&source);
+    const auto* value = std::get_if<std::string_view>(&source);
     if (!value || !parse_datetime(*value, member))
         return json_type_error();
     return {};
@@ -304,7 +322,7 @@ auto decode_json_member(calendar_datetime& member, const record_json_scalar& sou
 auto decode_json_member(clock_time& member, const record_json_scalar& source)
     -> std::expected<void, std::error_code>
 {
-    const auto* value = std::get_if<std::string>(&source);
+    const auto* value = std::get_if<std::string_view>(&source);
     if (!value || !parse_time(*value, member))
         return json_type_error();
     return {};
@@ -313,7 +331,7 @@ auto decode_json_member(clock_time& member, const record_json_scalar& source)
 auto decode_json_member(uuid& member, const record_json_scalar& source)
     -> std::expected<void, std::error_code>
 {
-    const auto* value = std::get_if<std::string>(&source);
+    const auto* value = std::get_if<std::string_view>(&source);
     if (!value)
         return json_type_error();
     auto parsed = uuid::from_string(*value);

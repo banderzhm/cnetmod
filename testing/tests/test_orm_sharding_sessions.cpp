@@ -4,6 +4,7 @@
 import std;
 import cnetmod.orm;
 import cnetmod.orm.database_session;
+import cnetmod.orm.reflected_projection;
 import cnetmod.orm.session_gateway;
 import cnetmod.protocol.mysql;
 import cnetmod.coro.task;
@@ -20,7 +21,7 @@ struct routed_order
 
 CNETMOD_MODEL(routed_order, "orders",
     CNETMOD_FIELD(id, "id", bigint, PK),
-    CNETMOD_FIELD(description, "description", varchar))
+    CNETMOD_FIELD(description, varchar))
 
 struct order_summary
 {
@@ -28,9 +29,7 @@ struct order_summary
     std::string summary;
 };
 
-CNETMOD_PROJECTION(order_summary,
-    CNETMOD_FIELD(id, "id", bigint),
-    CNETMOD_FIELD(summary, "summary", varchar))
+CNETMOD_REFLECTED_PROJECTION(order_summary)
 
 struct policy_order
 {

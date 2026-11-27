@@ -66,12 +66,16 @@ template <class T> using field_getter = param_value (*)(const T&);
 namespace detail {
 
 using record_json_scalar = std::variant<std::monostate, std::nullptr_t, bool,
-    std::int64_t, std::uint64_t, double, std::string>;
-using record_json_fields = std::map<std::string, record_json_scalar, std::less<>>;
+    std::int64_t, std::uint64_t, double, std::string_view, std::string>;
+using record_json_setter = std::expected<void, std::error_code> (*)(
+    void*, std::size_t, const record_json_scalar*);
+using record_json_getter = record_json_scalar (*)(const void*, std::size_t);
 
-[[nodiscard]] auto read_record_json(std::string_view input)
-    -> std::expected<record_json_fields, std::error_code>;
-[[nodiscard]] auto write_record_json(const record_json_fields& fields)
+[[nodiscard]] auto read_record_json(std::string_view input,
+    std::span<const std::string_view> names, bool reject_unknown,
+    void* context, record_json_setter assign) -> std::expected<void, std::error_code>;
+[[nodiscard]] auto write_record_json(std::span<const std::string_view> names,
+    bool emit_nulls, const void* context, record_json_getter get)
     -> std::expected<std::string, std::error_code>;
 
 } // namespace detail
@@ -81,6 +85,10 @@ template <class T> using json_field_setter = std::expected<void, std::error_code
 template <class T> using json_field_getter = detail::record_json_scalar (*)(const T&);
 
 namespace detail {
+
+    // Recover the registered type from the injected trait name inside macros.
+    template <template <class> class Traits, class T>
+    auto registered_record_type(const Traits<T>*) -> T;
 
     template <class Pointer>
     inline constexpr std::byte member_pointer_type_tag{};
@@ -228,19 +236,54 @@ template <ResultRecord T>
 
 [[nodiscard]] auto sql_type_str(column_type type) noexcept -> std::string_view;
 
+namespace detail {
+
+template <ResultRecord T>
+struct record_json_layout
+{
+    std::vector<const field_mapping<T>*> fields;
+    std::vector<std::string_view> names;
+};
+
+template <ResultRecord T>
+[[nodiscard]] auto json_layout() -> const record_json_layout<T>&
+{
+    static const auto layout = [] {
+        record_json_layout<T> result;
+        const auto fields = result_fields<T>();
+        result.fields.reserve(fields.size());
+        for (const auto& field : fields)
+            result.fields.push_back(&field);
+        std::ranges::stable_sort(result.fields, {}, [](const auto* field) {
+            return field->col.field_name;
+        });
+        result.names.reserve(fields.size());
+        for (const auto* field : result.fields)
+            result.names.push_back(field->col.field_name);
+        return result;
+    }();
+    return layout;
+}
+
+} // namespace detail
+
 /// Serialize a registered model or projection using its member names.
 template <ResultRecord T>
 [[nodiscard]] auto write_json(const T& value, bool emit_nulls = false)
     -> std::expected<std::string, std::error_code>
 {
-    detail::record_json_fields fields;
-    for (const auto& field : result_fields<T>())
+    const auto& layout = detail::json_layout<T>();
+    struct write_context
     {
-        auto scalar = field.json_getter(value);
-        if (emit_nulls || !std::holds_alternative<std::nullptr_t>(scalar))
-            fields.insert_or_assign(std::string{field.col.field_name}, std::move(scalar));
-    }
-    return detail::write_record_json(fields);
+        const T& record;
+        const detail::record_json_layout<T>& layout;
+    };
+    const write_context context{value, layout};
+    const auto get = [](const void* state, std::size_t index) {
+        const auto& typed = *static_cast<const write_context*>(state);
+        return typed.layout.fields[index]->json_getter(typed.record);
+    };
+    return detail::write_record_json(layout.names, emit_nulls, &context, get);
 }
 
 /// Parse a record, requiring all non-nullable members and checking scalar types.
@@ -248,28 +291,27 @@ template <ResultRecord T>
 [[nodiscard]] auto parse_json(std::string_view input, bool reject_unknown = true)
     -> std::expected<T, std::error_code>
 {
-    auto fields = detail::read_record_json(input);
-    if (!fields)
-        return std::unexpected(fields.error());
-
-    T result{};
-    std::size_t consumed{};
-    for (const auto& field : result_fields<T>())
+    const auto& layout = detail::json_layout<T>();
+    struct read_context
     {
-        const auto entry = fields->find(field.col.field_name);
-        if (entry == fields->end())
-        {
-            if (!field.col.is_nullable())
-                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
-            continue;
-        }
-        ++consumed;
-        if (auto assigned = field.json_setter(result, entry->second); !assigned)
-            return std::unexpected(assigned.error());
-    }
-    if (reject_unknown && consumed != fields->size())
-        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
-    return result;
+        T record{};
+        const detail::record_json_layout<T>& layout;
+    };
+    read_context context{.layout = layout};
+    const auto assign = [](void* state, std::size_t index, const detail::record_json_scalar* value)
+        -> std::expected<void, std::error_code> {
+        auto& typed = *static_cast<read_context*>(state);
+        const auto& field = *typed.layout.fields[index];
+        if (value)
+            return field.json_setter(typed.record, *value);
+        if (!field.col.is_nullable())
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        return {};
+    };
+    if (auto read = detail::read_record_json(input, layout.names, reject_unknown, &context, assign);
+        !read)
+        return std::unexpected(read.error());
+    return std::move(context.record);
 }
 
 } // namespace cnetmod::orm
@@ -288,8 +330,10 @@ export namespace cnetmod::orm::detail {
 template <typename Member>
 [[nodiscard]] auto encode_json_member(const Member& value) -> record_json_scalar
 {
-    if constexpr (std::same_as<Member, bool> || std::same_as<Member, std::string>)
+    if constexpr (std::same_as<Member, bool>)
         return value;
+    else if constexpr (std::same_as<Member, std::string>)
+        return std::string_view{value};
     else if constexpr (std::is_enum_v<Member>)
         return encode_json_member(static_cast<std::underlying_type_t<Member>>(value));
     else if constexpr (std::unsigned_integral<Member>)
@@ -310,7 +354,8 @@ template <typename Member>
 {
     if constexpr (std::same_as<Member, bool> || std::same_as<Member, std::string>)
     {
-        if (const auto* value = std::get_if<Member>(&source))
+        using scalar_type = std::conditional_t<std::same_as<Member, bool>, bool, std::string_view>;
+        if (const auto* value = std::get_if<scalar_type>(&source))
         {
             member = *value;
             return {};
@@ -458,4 +503,30 @@ requires std::same_as<T, std::time_t> &&
 {
     return param_value::from_int(static_cast<std::int64_t>(value));
 }
+template <class T, auto Accessor>
+[[nodiscard]] constexpr auto make_field_mapping(column_def column) -> field_mapping<T>
+{
+    field_mapping<T> mapping{
+        .col = column,
+        .setter = [](T& record, const field_value& value) {
+            set_member(std::invoke(Accessor, record), value);
+        },
+        .getter = [](const T& record) {
+            return get_member(std::invoke(Accessor, record));
+        },
+        .json_setter = [](T& record, const record_json_scalar& value) {
+            return decode_json_member(std::invoke(Accessor, record), value);
+        },
+        .json_getter = [](const T& record) {
+            return encode_json_member(std::invoke(Accessor, record));
+        },
+    };
+    if constexpr (std::is_member_object_pointer_v<decltype(Accessor)>)
+    {
+        mapping.member_pointer_type = member_pointer_type<decltype(Accessor)>();
+        mapping.member_pointer_matches = &matches_member_pointer<Accessor>;
+    }
+    return mapping;
+}
+
 } // namespace cnetmod::orm::detail

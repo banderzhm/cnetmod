@@ -360,6 +360,43 @@ It can receive direct columns or a declared `resultMap`, but it cannot be used
 with insert, update or delete CRUD APIs. The repository entity `T` continues
 to determine tenant, logical-delete and other automatic policies.
 
+For a read-only DTO whose C++ member names match the result column labels,
+use Boost.PFR to register its fields automatically:
+
+```cpp
+#include <cnetmod/orm.hpp>
+
+import std;
+import cnetmod.orm;
+import cnetmod.orm.reflected_projection;
+
+struct user_overview
+{
+    std::int64_t id{};
+    std::optional<std::string> display_name;
+};
+
+CNETMOD_REFLECTED_PROJECTION(user_overview)
+```
+
+Use the registered type with `select_xml_as<user_overview>()` and
+`from_result_set<user_overview>()`. The DTO must be a simple,
+default-initializable aggregate of ORM-supported member types.
+Optional members are nullable. Only list fields whose SQL result labels differ
+from their C++ names:
+
+```cpp
+CNETMOD_REFLECTED_PROJECTION(user_overview, {"display_name", "user_name"})
+```
+
+This maps the SQL label `user_name` to `display_name`. JSON still uses the
+C++ member name. The compiler rejects unknown members, repeated overrides,
+empty aliases and duplicate SQL labels. Use explicit `CNETMOD_PROJECTION`
+fields when the DTO includes members that should be excluded from mapping.
+For explicit models and projections, `CNETMOD_FIELD(name, varchar)` uses
+`name` as both the member and SQL column name.
+`CNETMOD_ENABLE_ORM` builds the pinned Boost.PFR module with the ORM.
+
 For a truly dynamic projection whose columns are not known at compile time,
 both layers expose `select_xml_result()`. It returns
 `cnetmod::database::query_result`, including column metadata, rows, affected
@@ -433,12 +470,23 @@ There are two supported result paths:
    `<collection resultMap="...">`, then projects the object graph into the
    requested model or projection type.
 
-Scalar properties are assigned through normal model setters. For associations
-and collections, specialize `xml_object_graph_binder<T>` and use
-`mapped_association_as<U>()` / `mapped_collection_as<U>()`; this is explicit
-because XML property strings cannot safely identify C++ member offsets.
-Joined-row object graphs are de-duplicated by `<id>` mappings. Nullable joined
-associations become `std::optional`. `autoMapping="true"` maps otherwise
+Scalar properties are assigned through normal model setters. A reflected
+projection binds `std::optional<U>` to an XML association and
+`std::vector<U>` to an XML collection when `U` is already registered as an
+ORM result record. Register child types before the containing projection.
+The C++ member name is the default XML property. Use a
+`CNETMOD_REFLECTED_PROJECTION` alias when the names differ. The relation
+members are populated from the mapped object graph. SQL column metadata and
+ORM JSON mapping describe the projection's scalar fields.
+
+For custom relation mapping or relations on an explicit model, specialize
+`xml_object_graph_binder<T>` and use `mapped_association_as<U>()` or
+`mapped_collection_as<U>()`. An explicit specialization supplies the full
+relation binding for that record.
+Joined-row object graphs are de-duplicated by typed `<id>` values, including
+composite and temporal keys. A collection without a complete ID keeps each
+present joined row. Nullable joined associations become `std::optional`.
+`autoMapping="true"` maps otherwise
 unmapped columns by snake_case-to-camelCase property name.
 
 Nested-query metadata such as `<association select="...">` and

@@ -658,6 +658,31 @@ configure_cxx_modules(
 
 set(CNETMOD_COMPONENT_TARGETS cnetmod_runtime)
 
+if(CNETMOD_ENABLE_ORM OR CNETMOD_APPLICATION_MODULE_INTERFACE_FILES OR
+        CNETMOD_APPLICATION_MODULE_IMPLEMENTATION_CPP_FILES OR
+        CNETMOD_APPLICATION_REGULAR_CPP_SOURCES)
+    set(_cnetmod_pfr_dir "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/pfr")
+    if(NOT EXISTS "${_cnetmod_pfr_dir}/modules/boost_pfr.cppm")
+        message(FATAL_ERROR "Initialize the 3rdparty/pfr submodule to build reflection support.")
+    endif()
+    add_library(cnetmod_reflection STATIC)
+    cnetmod_configure_component(cnetmod_reflection reflection)
+    target_link_libraries(cnetmod_reflection PUBLIC cnetmod_runtime)
+    target_sources(cnetmod_reflection PUBLIC
+        FILE_SET cxx_modules TYPE CXX_MODULES
+        BASE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}"
+        FILES "${_cnetmod_pfr_dir}/modules/boost_pfr.cppm")
+    target_include_directories(cnetmod_reflection SYSTEM PUBLIC
+        "$<BUILD_INTERFACE:${_cnetmod_pfr_dir}/include>"
+        "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/cnetmod/pfr>")
+    install(DIRECTORY "${_cnetmod_pfr_dir}/include/boost"
+        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/cnetmod/pfr")
+    install(FILES "${_cnetmod_pfr_dir}/LICENSE_1_0.txt"
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/cnetmod/licenses"
+        RENAME boost-pfr.txt)
+    list(APPEND CNETMOD_COMPONENT_TARGETS cnetmod_reflection)
+endif()
+
 if(CNETMOD_ENABLE_ORM)
     cnetmod_add_component(cnetmod_orm orm
         CNETMOD_ORM_MODULE_INTERFACE_FILES
@@ -665,6 +690,7 @@ if(CNETMOD_ENABLE_ORM)
         CNETMOD_ORM_REGULAR_CPP_SOURCES)
     add_library(cnetmod::orm ALIAS cnetmod_orm)
     cnetmod_link_pugixml(cnetmod_orm)
+    target_link_libraries(cnetmod_orm PUBLIC cnetmod_reflection)
     target_include_directories(cnetmod_orm SYSTEM PRIVATE "${_cnetmod_simdjson_dir}")
     list(APPEND CNETMOD_COMPONENT_TARGETS cnetmod_orm)
 endif()
@@ -777,6 +803,7 @@ if(CNETMOD_APPLICATION_MODULE_INTERFACE_FILES OR
         CNETMOD_APPLICATION_MODULE_IMPLEMENTATION_CPP_FILES
         CNETMOD_APPLICATION_REGULAR_CPP_SOURCES)
     target_include_directories(cnetmod_application SYSTEM PRIVATE "${_cnetmod_simdjson_dir}")
+    target_link_libraries(cnetmod_application PUBLIC cnetmod_reflection)
     add_library(cnetmod::application ALIAS cnetmod_application)
     if(TARGET cnetmod_orm)
         target_link_libraries(cnetmod_application PUBLIC cnetmod_orm)

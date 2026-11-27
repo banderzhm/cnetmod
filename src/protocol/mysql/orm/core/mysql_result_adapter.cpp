@@ -6,7 +6,10 @@ import :orm_mysql_result_adapter;
 
 namespace cnetmod::orm {
 
-auto mysql_adapt_field(const cnetmod::mysql::field_value& source) -> field_value
+namespace {
+
+template <class Source>
+auto adapt_field(Source&& source) -> field_value
 {
     using mysql_kind = cnetmod::mysql::field_kind;
     switch (source.kind())
@@ -18,15 +21,9 @@ auto mysql_adapt_field(const cnetmod::mysql::field_value& source) -> field_value
     case mysql_kind::uint64:
         return field_value::from_uint64(source.as_uint64());
     case mysql_kind::string:
-        return field_value::from_string(std::string(source.as_string()));
+        return field_value::from_string(std::forward<Source>(source).str_val);
     case mysql_kind::blob:
-    {
-        const auto bytes = source.as_blob();
-        if (bytes.empty())
-            return field_value::from_blob({});
-        return field_value::from_blob(std::string(
-            reinterpret_cast<const char*>(bytes.data()), bytes.size()));
-    }
+        return field_value::from_blob(std::forward<Source>(source).str_val);
     case mysql_kind::float_:
         return field_value::from_float(source.as_float());
     case mysql_kind::double_:
@@ -50,6 +47,13 @@ auto mysql_adapt_field(const cnetmod::mysql::field_value& source) -> field_value
     }
     }
     return field_value::null();
+}
+
+} // namespace
+
+auto mysql_adapt_field(const cnetmod::mysql::field_value& source) -> field_value
+{
+    return adapt_field(source);
 }
 
 auto mysql_adapt_parameter(const query_parameter& source)
@@ -121,49 +125,64 @@ auto mysql_adapt_parameter(const cnetmod::mysql::param_value& source)
     return query_parameter::null();
 }
 
-auto mysql_adapt_result(const cnetmod::mysql::result_set& source) -> query_result
+namespace {
+
+template <class Source>
+auto adapt_result(Source&& source) -> query_result
 {
     query_result result;
     result.columns.reserve(source.columns.size());
-    for (const auto& column : source.columns)
+    for (auto& column : source.columns)
     {
         result.columns.push_back(column_metadata{
-            .database = column.database,
-            .table = column.table,
-            .original_table = column.org_table,
-            .name = column.name,
-            .original_name = column.org_name,
+            .database = std::forward_like<Source>(column.database),
+            .table = std::forward_like<Source>(column.table),
+            .original_table = std::forward_like<Source>(column.org_table),
+            .name = std::forward_like<Source>(column.name),
+            .original_name = std::forward_like<Source>(column.org_name),
             .native_type = static_cast<std::uint32_t>(column.type),
             .nullable = !column.is_not_null()});
     }
     result.rows.reserve(source.rows.size());
-    for (const auto& source_row : source.rows)
+    for (auto& source_row : source.rows)
     {
         row destination;
         destination.reserve(source_row.size());
-        for (const auto& value : source_row)
-            destination.push_back(mysql_adapt_field(value));
+        for (auto& value : source_row)
+            destination.push_back(adapt_field(std::forward_like<Source>(value)));
         result.rows.push_back(std::move(destination));
     }
     result.affected_rows = source.affected_rows;
     result.last_insert_id = source.last_insert_id;
-    result.info = source.info;
-    result.error_msg = source.error_msg;
+    result.info = std::forward<Source>(source).info;
+    result.error_msg = std::forward<Source>(source).error_msg;
     result.error_code = source.error_code;
-    result.sql_state = source.sql_state;
+    result.sql_state = std::forward<Source>(source).sql_state;
     return result;
+}
+
+} // namespace
+
+auto mysql_adapt_result(const cnetmod::mysql::result_set& source) -> query_result
+{
+    return adapt_result(source);
+}
+
+auto mysql_adapt_result(cnetmod::mysql::result_set&& source) -> query_result
+{
+    return adapt_result(std::move(source));
 }
 
 auto mysql_database_result_adapter::adapt(
     cnetmod::mysql::result_set&& source) -> query_result
 {
-    return mysql_adapt_result(source);
+    return mysql_adapt_result(std::move(source));
 }
 
 auto database_result_adapter<cnetmod::mysql::result_set>::adapt(
     cnetmod::mysql::result_set&& source) -> query_result
 {
-    return mysql_adapt_result(source);
+    return mysql_adapt_result(std::move(source));
 }
 
 } // namespace cnetmod::orm
