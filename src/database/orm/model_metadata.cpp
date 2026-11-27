@@ -3,6 +3,8 @@ module;
 
 module cnetmod.orm.model_metadata;
 
+import cnetmod.utils.charconv;
+
 namespace cnetmod::orm {
 auto column_def::is_pk() const noexcept -> bool
 {
@@ -230,10 +232,9 @@ auto read_record_json(std::string_view input)
         case element_type::BIGINT:
         {
             const auto number = value.get_bigint().value_unsafe();
-            const auto* end = number.data() + number.size();
             double converted{};
-            const auto result = std::from_chars(number.data(), end, converted);
-            if (result.ec != std::errc{} || result.ptr != end || !std::isfinite(converted))
+            if (cnetmod::from_chars_double(number, converted) != std::errc{} ||
+                !std::isfinite(converted))
                 return std::unexpected(std::make_error_code(std::errc::invalid_argument));
             scalar = converted;
             break;

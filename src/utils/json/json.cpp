@@ -5,6 +5,7 @@ module;
 module cnetmod.json;
 
 import std;
+import cnetmod.utils.charconv;
 
 namespace cnetmod::json {
 namespace {
@@ -61,10 +62,8 @@ namespace {
         case BIGINT:
         {
             const auto text = source.get_bigint().value_unsafe();
-            const auto end = text.data() + text.size();
             double value = 0.0;
-            const auto [cursor, error] = std::from_chars(text.data(), end, value);
-            if (error != std::errc{} || cursor != end)
+            if (cnetmod::from_chars_double(text, value) != std::errc{})
                 return std::nullopt;
             return document(value);
         }
