@@ -226,7 +226,7 @@ MSVC 构建使用 `rebuild_install.bat` 脚本。
 
 | 依赖 | 目录 | 用途 |
 |------|------|------|
-| nlohmann/json | `3rdparty/json` | Official `nlohmann.json` dependency module imported privately by `cnetmod.json` |
+| simdjson | `3rdparty/simdjson` | Compiled into the runtime. The JSON parser and native Builder are internal implementation dependencies. |
 | LevelDB | `3rdparty/leveldb` | 嵌入式键值存储 |
 | mimalloc | `3rdparty/mimalloc` | 最终可执行程序的进程级内存分配器 |
 | pugixml | `3rdparty/pugixml` | XML 解析（ORM mapper） |

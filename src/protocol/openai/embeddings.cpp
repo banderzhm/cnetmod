@@ -3,65 +3,96 @@
 module;
 
 #include <cnetmod/config.hpp>
+#include "../../utils/detail/simdjson_depth.hpp"
 
 module cnetmod.protocol.openai;
 
 import std;
 import :foundation;
 import :embeddings;
-import cnetmod.json;
 
 namespace cnetmod::openai {
 
 auto embedding_request::to_json() const -> std::string
 {
-    json value;
-    value["model"] = model;
-    if (input.size() == 1)
-        value["input"] = input.front();
-    else
+    simdjson::builder::string_builder builder;
+    builder.start_object();
+    if (dimensions)
     {
-        auto inputs = cnetmod::json::array();
-        for (const auto& item : input)
-            inputs.get_array().emplace_back(item);
-        value["input"] = std::move(inputs);
+        builder.append_key_value("dimensions", *dimensions);
+        builder.append_comma();
     }
     if (!encoding_format.empty())
-        value["encoding_format"] = encoding_format;
-    if (dimensions)
-        value["dimensions"] = *dimensions;
+    {
+        builder.append_key_value("encoding_format", std::string_view{encoding_format});
+        builder.append_comma();
+    }
+    if (input.size() == 1)
+        builder.append_key_value("input", std::string_view{input.front()});
+    else
+        builder.append_key_value("input", std::span<const std::string>{input});
+    builder.append_comma();
+    builder.append_key_value("model", std::string_view{model});
     if (!user.empty())
-        value["user"] = user;
-    return cnetmod::json::write_document(value).value_or("{}");
+    {
+        builder.append_comma();
+        builder.append_key_value("user", std::string_view{user});
+    }
+    builder.end_object();
+    std::string_view output;
+    if (builder.view().get(output) || !builder.validate_unicode())
+        return "{}";
+    return std::string{output};
 }
 
 auto embedding_response::from_json(std::string_view text) -> embedding_response
 {
+    using cnetmod::detail::find_last_json_field;
+    simdjson::dom::parser parser;
+    simdjson::dom::element value;
+    if (!cnetmod::detail::parse_bounded_json(parser, text, value))
+        return {};
+
+    const auto read_int = [](simdjson::dom::element object, std::string_view key) {
+        std::int64_t field{};
+        return !find_last_json_field(object, key).get_int64().get(field) &&
+                   std::in_range<int>(field)
+            ? static_cast<int>(field)
+            : 0;
+    };
+
     embedding_response result;
-    auto parsed = cnetmod::json::parse_document(text);
-    if (!parsed)
-        return result;
-    const auto& value = *parsed;
-    result.model = cnetmod::json::value_or(value, "model", std::string{});
-    if (value.contains("data") && value["data"].is_array())
+    std::string_view model;
+    if (!find_last_json_field(value, "model").get_string().get(model))
+        result.model = model;
+    simdjson::dom::array data;
+    if (!find_last_json_field(value, "data").get_array().get(data))
     {
-        for (const auto& item : value["data"].get_array())
+        result.data.reserve(data.size());
+        for (const auto item : data)
         {
-            embedding_data embedding{.index = cnetmod::json::value_or(
-                                         item, "index", 0)};
-            if (item.contains("embedding") && item["embedding"].is_array())
-                for (const auto& component : item["embedding"].get_array())
-                    embedding.embedding.push_back(component.as<float>());
-            result.data.push_back(std::move(embedding));
+            auto& embedding = result.data.emplace_back();
+            embedding.index = read_int(item, "index");
+            simdjson::dom::array components;
+            if (find_last_json_field(item, "embedding").get_array().get(components))
+                continue;
+            embedding.embedding.reserve(components.size());
+            for (const auto component : components)
+            {
+                double number{};
+                if (component.get_double().get(number) ||
+                    number > std::numeric_limits<float>::max() ||
+                    number < -std::numeric_limits<float>::max())
+                    return {};
+                embedding.embedding.push_back(static_cast<float>(number));
+            }
         }
     }
-    if (value.contains("usage") && value["usage"].is_object())
+    simdjson::dom::element tokens;
+    if (!find_last_json_field(value, "usage").get(tokens))
     {
-        const auto& tokens = value["usage"];
-        result.token_usage.prompt_tokens = cnetmod::json::value_or(
-            tokens, "prompt_tokens", 0);
-        result.token_usage.total_tokens = cnetmod::json::value_or(
-            tokens, "total_tokens", 0);
+        result.token_usage.prompt_tokens = read_int(tokens, "prompt_tokens");
+        result.token_usage.total_tokens = read_int(tokens, "total_tokens");
     }
     return result;
 }

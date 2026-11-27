@@ -1069,6 +1069,15 @@ TEST(otlp_acknowledgements_validate_counts_structure_and_bounds)
 {
     using cnetmod::observability::detail::parse_export_response;
     ASSERT_TRUE(parse_export_response("{}", "rejectedSpans", 2).has_value());
+    const auto duplicate = parse_export_response(
+        R"({"partialSuccess":true,"partialSuccess":{"rejectedSpans":1,"rejectedSpans":"2"}})",
+        "rejectedSpans", 2);
+    ASSERT_TRUE(duplicate.has_value());
+    ASSERT_EQ(duplicate->rejected, 2U);
+    ASSERT_TRUE(parse_export_response("{\"unknown\":" + std::string(255, '[') + "0" +
+        std::string(255, ']') + "}", "rejectedSpans", 2).has_value());
+    ASSERT_FALSE(parse_export_response("{\"unknown\":" + std::string(256, '[') +
+        std::string(256, ']') + "}", "rejectedSpans", 2).has_value());
     for (const auto field : {"rejectedSpans", "rejectedDataPoints", "rejectedLogRecords"})
     {
         for (const auto value : {"1", "\"1\""})

@@ -39,7 +39,7 @@ jobs:
 
     - name: Setup Homebrew and install LLVM
       run: |
-        brew install icu4c llvm@21 ninja cmake
+        brew install icu4c llvm@21 ninja
 
         LLVM_PREFIX="$(brew --prefix llvm@21)"
         LLVM_VERSION="$("${LLVM_PREFIX}/bin/clang++" --version)"
@@ -114,6 +114,11 @@ jobs:
           testing/http3/requirements.txt
           testing/grpc/requirements.txt
           testing/mqtt/requirements.txt
+
+    - name: Install CMake 4.4.5
+      run: |
+        python -m pip install --only-binary=:all: --retries 5 --timeout 60 cmake==4.4.5
+        cmake --version
 
     - name: Enable compiler cache
       uses: mozilla-actions/sccache-action@v0.0.11

@@ -351,8 +351,8 @@ redis::redis_template cache{pool, {
     .scan_limit = 100000,
 }};
 
-auto order = co_await cache.get_as<order_record>("42");
-auto saved = co_await cache.set_as("42", value);
+auto order = co_await cache.get_as<order_record, order_codec>("42");
+auto saved = co_await cache.set_as<order_record, order_codec>("42", value);
 auto active = co_await cache.getex("session:abc", std::chrono::minutes{30});
 
 auto batch = cache.pipeline();
@@ -382,7 +382,7 @@ auto replies = co_await cache.execute(batch);
 - `sscan_all` 循环游标、保持首次出现顺序、去重，并在超过 `scan_limit` 时整体失败。
 - Pipeline 只执行一次 `exchange()`，返回
   `std::vector<std::expected<reply, std::error_code>>`；Redis 单条错误不会覆盖其他条。
-- `json_codec` 是 `get_as` / `set_as` 的默认 JSON codec；Redis 模块只通过 `cnetmod.json` 解析和序列化。若业务需要非 JSON 值编码，可显式传入 Redis 值 codec，但这不会替换框架 JSON 引擎。
+- `get_as<T, Codec>` / `set_as<T, Codec>` 由调用方指定值编码。业务可直接用 simdjson 读写后调用 `get` / `set`，也可用自己的领域 codec 复用同一套 Redis 连接、TTL 和取消逻辑。
 - 配置 `span_exporter` 后，每条命令产生 CLIENT span，只记录
   `db.system.name=redis` 与 `db.operation.name`，不记录 key、value 或服务端错误正文。
 - `eval_integer(script, keys, args)` 用于必须在 Redis 内原子完成的业务状态转换。

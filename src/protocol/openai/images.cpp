@@ -3,51 +3,69 @@
 module;
 
 #include <cnetmod/config.hpp>
+#include "../../utils/detail/simdjson_depth.hpp"
 
 module cnetmod.protocol.openai;
 
 import std;
-import :foundation;
 import :images;
-import cnetmod.json;
 
 namespace cnetmod::openai {
 
 auto image_generation_request::to_json() const -> std::string
 {
-    json value{{"model", model}, {"prompt", prompt}};
+    simdjson::builder::string_builder builder;
+    builder.start_object();
+    builder.append_key_value("model", std::string_view{model});
+    const auto append = [&](std::string_view key, auto value) {
+        builder.append_comma();
+        builder.append_key_value(key, value);
+    };
     if (n != 1)
-        value["n"] = n;
+        append("n", n);
+    append("prompt", std::string_view{prompt});
     if (quality != "standard")
-        value["quality"] = quality;
+        append("quality", std::string_view{quality});
     if (response_format != "url")
-        value["response_format"] = response_format;
+        append("response_format", std::string_view{response_format});
     if (size != "1024x1024")
-        value["size"] = size;
+        append("size", std::string_view{size});
     if (style != "vivid")
-        value["style"] = style;
+        append("style", std::string_view{style});
     if (!user.empty())
-        value["user"] = user;
-    return cnetmod::json::write_document(value).value_or("{}");
+        append("user", std::string_view{user});
+    builder.end_object();
+    std::string_view output;
+    if (builder.view().get(output) || !builder.validate_unicode())
+        return "{}";
+    return std::string{output};
 }
 
 auto image_response::from_json(std::string_view text) -> image_response
 {
+    using cnetmod::detail::find_last_json_field;
+    simdjson::dom::parser parser;
+    simdjson::dom::element value;
+    if (!cnetmod::detail::parse_bounded_json(parser, text, value))
+        return {};
+
     image_response result;
-    auto parsed = cnetmod::json::parse_document(text);
-    if (!parsed)
-        return result;
-    const auto& value = *parsed;
-    result.created = cnetmod::json::value_or(
-        value, "created", std::int64_t{0});
-    if (value.contains("data") && value["data"].is_array())
-        for (const auto& item : value["data"].get_array())
-            result.data.push_back({.url = cnetmod::json::value_or(
-                                       item, "url", std::string{}),
-                .b64_json = cnetmod::json::value_or(
-                    item, "b64_json", std::string{}),
-                .revised_prompt = cnetmod::json::value_or(
-                    item, "revised_prompt", std::string{})});
+    (void)find_last_json_field(value, "created").get_int64().get(result.created);
+    simdjson::dom::array data;
+    if (!find_last_json_field(value, "data").get_array().get(data))
+    {
+        result.data.reserve(data.size());
+        for (const auto item : data)
+        {
+            const auto read = [&](std::string_view key) -> std::string {
+                std::string_view field;
+                (void)find_last_json_field(item, key).get_string().get(field);
+                return std::string{field};
+            };
+            result.data.push_back({.url = read("url"),
+                .b64_json = read("b64_json"), .revised_prompt = read("revised_prompt")});
+        }
+    }
     return result;
 }
 

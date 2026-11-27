@@ -5,11 +5,9 @@ module;
 export module cnetmod.protocol.mqtt:security;
 
 import std;
-import cnetmod.json;
 import :types;
 
 export namespace cnetmod::mqtt {
-using json = cnetmod::json::document;
 enum class auth_method
 {
     plain_password,
@@ -67,7 +65,7 @@ public:
         std::string_view topic_filter) const
         -> bool;
     [[nodiscard]] auto enabled() const noexcept -> bool;
-    auto load_json(const json& config) -> std::expected<void, std::string>;
+    auto load_json(std::string_view config) -> std::expected<void, std::string>;
     auto load_file(const std::string& path) -> std::expected<void, std::string>;
 
 private:

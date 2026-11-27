@@ -1,11 +1,11 @@
 module;
 
 #include <cnetmod/config.hpp>
+#include "../../../utils/detail/simdjson_depth.hpp"
 
 module cnetmod.protocol.mqtt;
 
 import std;
-import cnetmod.json;
 import :security;
 import :types;
 import :topic_filter;
@@ -133,65 +133,84 @@ auto security_config::enabled() const noexcept -> bool
     return !users_.empty() || !rules_.empty();
 }
 
-auto security_config::load_json(const json& config)
+auto security_config::load_json(std::string_view config)
     -> std::expected<void, std::string>
 {
+    using cnetmod::detail::find_last_json_field;
+
+    simdjson::dom::parser parser;
+    simdjson::dom::element root;
+    if (!cnetmod::detail::parse_bounded_json(parser, config, root) ||
+        !root.is_object())
+        return std::unexpected("JSON parse error");
+
     try
     {
-        if (config.contains("allow_anonymous"))
-            allow_anonymous_ = config["allow_anonymous"].get<bool>();
-        if (config.contains("anonymous_user"))
-            set_anonymous_user(config["anonymous_user"].get<std::string>());
-        if (config.contains("users") && config["users"].is_object())
-            for (const auto& [username, object] :
-                config["users"].get_object())
+        auto updated = *this;
+        if (const auto allow = find_last_json_field(root, "allow_anonymous"); !allow.error())
+            updated.allow_anonymous_ = allow.get_bool().value();
+        if (const auto guest = find_last_json_field(root, "anonymous_user"); !guest.error())
+            updated.set_anonymous_user(std::string{guest.get_string().value()});
+
+        simdjson::dom::object users;
+        if (!find_last_json_field(root, "users").get_object().get(users))
+        {
+            for (const auto field : users)
             {
                 user_entry user;
-                user.method = auth_method::plain_password;
-                user.password = cnetmod::json::value_or(
-                    object, "password", std::string{});
-                if (object.contains("method"))
+                const auto object = field.value;
+                std::string_view password;
+                if (!find_last_json_field(object, "password").get_string().get(password))
+                    user.password = password;
+                if (const auto method = find_last_json_field(object, "method"); !method.error())
                 {
-                    const auto method = object["method"].get<std::string>();
-                    if (method == "sha256")
+                    const auto name = method.get_string().value();
+                    if (name == "sha256")
                         user.method = auth_method::sha256;
-                    else if (method == "anonymous")
+                    else if (name == "anonymous")
                         user.method = auth_method::anonymous;
                 }
-                if (object.contains("digest"))
-                    user.digest = object["digest"].get<std::string>();
-                if (object.contains("salt"))
-                    user.salt = object["salt"].get<std::string>();
-                if (object.contains("groups") && object["groups"].is_array())
-                    for (const auto& group : object["groups"].get_array())
-                        user.groups.push_back(group.get<std::string>());
-                users_[username] = std::move(user);
+                if (const auto digest = find_last_json_field(object, "digest"); !digest.error())
+                    user.digest = digest.get_string().value();
+                if (const auto salt = find_last_json_field(object, "salt"); !salt.error())
+                    user.salt = salt.get_string().value();
+                simdjson::dom::array groups;
+                if (!find_last_json_field(object, "groups").get_array().get(groups))
+                    for (const auto group : groups)
+                        user.groups.emplace_back(group.get_string().value());
+                updated.users_.insert_or_assign(std::string{field.key}, std::move(user));
             }
-        if (config.contains("rules") && config["rules"].is_array())
-            for (const auto& object : config["rules"].get_array())
+        }
+
+        simdjson::dom::array rules;
+        if (!find_last_json_field(root, "rules").get_array().get(rules))
+        {
+            for (const auto object : rules)
             {
-                auth_rule rule;
-                rule.topic_filter = cnetmod::json::value_or(
-                    object, "topic", std::string{"#"});
-                rule.pub_action = cnetmod::json::value_or(
-                    object, "pub", std::string{"deny"}) == "allow"
-                    ? auth_action::allow
-                    : auth_action::deny;
-                rule.sub_action = cnetmod::json::value_or(
-                    object, "sub", std::string{"deny"}) == "allow"
-                    ? auth_action::allow
-                    : auth_action::deny;
-                if (object.contains("groups") && object["groups"].is_array())
-                    for (const auto& group : object["groups"].get_array())
-                        rule.groups.insert(group.get<std::string>());
-                rules_.push_back(std::move(rule));
+                auth_rule rule{.topic_filter = "#"};
+                std::string_view text;
+                if (!find_last_json_field(object, "topic").get_string().get(text))
+                    rule.topic_filter = text;
+                if (!find_last_json_field(object, "pub").get_string().get(text) && text == "allow")
+                    rule.pub_action = auth_action::allow;
+                if (!find_last_json_field(object, "sub").get_string().get(text) && text == "allow")
+                    rule.sub_action = auth_action::allow;
+                simdjson::dom::array groups;
+                if (!find_last_json_field(object, "groups").get_array().get(groups))
+                    for (const auto group : groups)
+                        rule.groups.emplace(group.get_string().value());
+                updated.rules_.push_back(std::move(rule));
             }
+        }
+        users_ = std::move(updated.users_);
+        rules_ = std::move(updated.rules_);
+        anonymous_user_ = std::move(updated.anonymous_user_);
+        allow_anonymous_ = updated.allow_anonymous_;
         return {};
     }
     catch (const std::exception& error)
     {
-        return std::unexpected(std::string("security config parse error: ") +
-            error.what());
+        return std::unexpected(std::string("security config parse error: ") + error.what());
     }
 }
 
@@ -203,10 +222,7 @@ auto security_config::load_file(const std::string& path)
         return std::unexpected("cannot open: " + path);
     const std::string content{std::istreambuf_iterator<char>{input},
         std::istreambuf_iterator<char>{}};
-    auto parsed = cnetmod::json::parse_document(content);
-    if (!parsed)
-        return std::unexpected("JSON parse error");
-    return load_json(*parsed);
+    return load_json(content);
 }
 
 auto security_config::get_user_groups(const std::string& username) const

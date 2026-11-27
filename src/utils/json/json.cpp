@@ -1,7 +1,11 @@
+module;
+
+#include <simdjson.h>
+
 module cnetmod.json;
 
 import std;
-import nlohmann.json;
+import cnetmod.utils.charconv;
 
 namespace cnetmod::json {
 namespace {
@@ -32,62 +36,75 @@ namespace {
         }
     };
 
-    auto from_nlohmann(const nlohmann::json& source) -> document
+    auto from_simdjson(simdjson::dom::element source,
+        parse_options options, std::size_t depth) -> std::optional<document>
     {
-        if (source.is_null())
-            return nullptr;
-        if (source.is_boolean())
-            return source.get<bool>();
-        if (source.is_string())
-            return source.get<std::string>();
-        if (source.is_number_unsigned())
-            return source.get<std::uint64_t>();
-        if (source.is_number_integer())
-            return source.get<std::int64_t>();
-        if (source.is_number_float())
-            return source.get<double>();
-        if (source.is_array())
+        using enum simdjson::dom::element_type;
+        switch (source.type())
         {
+        case NULL_VALUE:
+            return document(nullptr);
+        case BOOL:
+            return document(source.get_bool().value_unsafe());
+        case STRING:
+            return document(source.get_string().value_unsafe());
+        case INT64:
+        {
+            const auto value = source.get_int64().value_unsafe();
+            if (value < 0)
+                return document(value);
+            return document(static_cast<std::uint64_t>(value));
+        }
+        case UINT64:
+            return document(source.get_uint64().value_unsafe());
+        case DOUBLE:
+            return document(source.get_double().value_unsafe());
+        case BIGINT:
+        {
+            const auto text = source.get_bigint().value_unsafe();
+            double value = 0.0;
+            if (cnetmod::from_chars_double(text, value) != std::errc{})
+                return std::nullopt;
+            return document(value);
+        }
+        case ARRAY:
+        {
+            if (depth >= options.max_depth)
+                return std::nullopt;
+            const auto array = source.get_array().value_unsafe();
             auto result = document::array();
-            for (const auto& entry : source)
-                result.push_back(from_nlohmann(entry));
+            result.get_array().reserve(array.size());
+            for (const auto child : array)
+            {
+                auto node = from_simdjson(child, options, depth + 1);
+                if (!node)
+                    return std::nullopt;
+                result.push_back(std::move(*node));
+            }
             return result;
         }
-        auto result = document::object();
-        for (auto iterator = source.begin(); iterator != source.end(); ++iterator)
-            result[iterator.key()] = from_nlohmann(iterator.value());
-        return result;
+        case OBJECT:
+        {
+            if (depth >= options.max_depth)
+                return std::nullopt;
+            const auto object = source.get_object().value_unsafe();
+            auto result = document::object();
+            auto& entries = result.get_object();
+            for (const auto field : object)
+            {
+                if (options.reject_duplicate_keys && entries.contains(field.key))
+                    return std::nullopt;
+                auto node = from_simdjson(field.value, options, depth + 1);
+                if (!node)
+                    return std::nullopt;
+                entries.insert_or_assign(std::string{field.key}, std::move(*node));
+            }
+            return result;
+        }
+        }
+        return std::nullopt;
     }
 
-    auto to_nlohmann(const document& source) -> nlohmann::json
-    {
-        if (source.is_null())
-            return nullptr;
-        if (source.is_boolean())
-            return source.get<bool>();
-        if (source.is_string())
-            return source.get<std::string>();
-        if (source.is_number_unsigned())
-            return source.get<std::uint64_t>();
-        if (source.is_number_integer())
-            return source.get<std::int64_t>();
-        if (source.is_number_float())
-            return source.get<double>();
-        if (source.is_array())
-        {
-            auto result = nlohmann::json::array();
-            auto& values = result.get_ref<nlohmann::json::array_t&>();
-            values.reserve(source.size());
-            for (const auto& entry : source)
-                values.push_back(to_nlohmann(entry));
-            return result;
-        }
-        auto result = nlohmann::json::object();
-        for (const auto& [key, entry] :
-            source.get_ref<const document::object_type&>())
-            result[key] = to_nlohmann(entry);
-        return result;
-    }
 } // namespace
 
 auto make_error_code(errc value) noexcept -> std::error_code
@@ -104,48 +121,26 @@ auto parse_document(std::string_view input) -> std::expected<document, std::erro
 auto parse_document(std::string_view input, parse_options options)
     -> std::expected<document, std::error_code>
 {
-    try
-    {
-        bool violates_policy = false;
-        std::unordered_map<int, std::unordered_set<std::string>> object_keys;
-        const auto callback = [&](int depth, nlohmann::json::parse_event_t event,
-                                  nlohmann::json& parsed) -> bool
-        {
-            using event_type = nlohmann::json::parse_event_t;
-            if ((event == event_type::object_start || event == event_type::array_start) &&
-                static_cast<std::size_t>(depth) >= options.max_depth)
-                violates_policy = true;
+    if (input.starts_with("\xef\xbb\xbf"))
+        input.remove_prefix(3);
 
-            if (!options.reject_duplicate_keys)
-                return true;
-            if (event == event_type::object_start)
-                object_keys[depth].clear();
-            else if (event == event_type::key)
-            {
-                const auto& key = parsed.get_ref<const std::string&>();
-                if (!object_keys[depth].emplace(key).second)
-                    violates_policy = true;
-            }
-            else if (event == event_type::object_end)
-                object_keys.erase(depth);
-            return true;
-        };
-
-        auto parsed = nlohmann::json::parse(input, callback);
-        if (violates_policy)
-            return std::unexpected(make_error_code(errc::parse_failed));
-        return from_nlohmann(parsed);
-    }
-    catch (const nlohmann::json::exception&)
-    {
+    simdjson::dom::parser parser;
+    parser.number_as_string(true);
+    const auto depth = std::min(options.max_depth, input.size());
+    simdjson::dom::element root;
+    if (parser.allocate(input.size(), depth + 1) ||
+        parser.parse(input.data(), input.size()).get(root))
         return std::unexpected(make_error_code(errc::parse_failed));
-    }
+
+    auto decoded = from_simdjson(root, options, 0);
+    if (!decoded)
+        return std::unexpected(make_error_code(errc::parse_failed));
+    return std::move(*decoded);
 }
 
 namespace detail {
     namespace {
-        // RFC 3629 well-formedness, the same set nlohmann's UTF-8 decoder
-        // accepts: no overlongs, surrogates or code points above U+10FFFF.
+        // RFC 3629 excludes overlongs, surrogates and code points above U+10FFFF.
         [[nodiscard]] auto utf8_sequence_length(std::string_view text, std::size_t at) noexcept
             -> std::size_t
         {
@@ -326,17 +321,22 @@ namespace detail {
     auto append_double(json_writer& out, double value)
         -> std::expected<void, std::error_code>
     {
-        // Floating point keeps the backend's own formatting (shortest
-        // round-trip digits, "null" for non-finite values).
-        try
+        if (!std::isfinite(value))
         {
-            out.append(nlohmann::json(value).dump());
+            out.append("null");
             return {};
         }
-        catch (const nlohmann::json::exception&)
-        {
+        std::array<char, 32> text;
+        const auto [end, error] = std::to_chars(text.data(),
+            text.data() + text.size(), value, std::chars_format::general);
+        if (error != std::errc{})
             return std::unexpected(make_error_code(errc::serialization_failed));
-        }
+
+        const std::string_view token{text.data(), end};
+        out.append(token);
+        if (token.find_first_of(".eE") == std::string_view::npos)
+            out.append(".0");
+        return {};
     }
 
     auto append_document(json_writer& out, const document& value)
@@ -393,21 +393,18 @@ namespace detail {
 auto write_document(const document& value, bool prettify)
     -> std::expected<std::string, std::error_code>
 {
+    detail::json_writer out{256U};
+    if (auto written = detail::append_document(out, value); !written)
+        return std::unexpected(written.error());
+    auto compact = std::move(out).take();
     if (!prettify)
-    {
-        detail::json_writer out{256U};
-        if (auto written = detail::append_document(out, value); !written)
-            return std::unexpected(written.error());
-        return std::move(out).take();
-    }
-    try
-    {
-        return to_nlohmann(value).dump(2);
-    }
-    catch (const nlohmann::json::exception&)
-    {
+        return compact;
+
+    simdjson::dom::parser parser;
+    simdjson::dom::element root;
+    if (parser.parse(compact).get(root))
         return std::unexpected(make_error_code(errc::serialization_failed));
-    }
+    return simdjson::prettify(root);
 }
 
 auto document::parse(std::string_view input, std::nullptr_t,

@@ -588,6 +588,15 @@ add_library(cnetmod_runtime STATIC
 cnetmod_configure_component(cnetmod_runtime runtime)
 add_library(cnetmod::runtime ALIAS cnetmod_runtime)
 
+set(_cnetmod_simdjson_dir "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/simdjson/singleheader")
+if(NOT EXISTS "${_cnetmod_simdjson_dir}/simdjson.cpp")
+    message(FATAL_ERROR "Initialize the 3rdparty/simdjson submodule.")
+endif()
+target_sources(cnetmod_runtime PRIVATE "${_cnetmod_simdjson_dir}/simdjson.cpp")
+set_source_files_properties("${_cnetmod_simdjson_dir}/simdjson.cpp"
+    PROPERTIES CXX_SCAN_FOR_MODULES OFF)
+target_include_directories(cnetmod_runtime SYSTEM PRIVATE "${_cnetmod_simdjson_dir}")
+
 target_include_directories(cnetmod_runtime PUBLIC
     $<BUILD_INTERFACE:${CNETMOD_GENERATED_INCLUDE_DIR}>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -641,13 +650,11 @@ elseif(CNETMOD_HAS_IO_URING)
 endif()
 
 cnetmod_link_stdexec(cnetmod_runtime)
-cnetmod_link_nlohmann_json(cnetmod_runtime)
 cnetmod_link_boringssl(cnetmod_runtime)
 cnetmod_link_selected_stdlib(cnetmod_runtime)
 configure_cxx_modules(
     TARGET cnetmod_runtime
-    MODULE_INTERFACE_FILES ${CNETMOD_RUNTIME_MODULE_INTERFACE_FILES}
-    DEPENDENCY_MODULE_INTERFACE_FILES ${CNETMOD_NLOHMANN_JSON_MODULE})
+    MODULE_INTERFACE_FILES ${CNETMOD_RUNTIME_MODULE_INTERFACE_FILES})
 
 set(CNETMOD_COMPONENT_TARGETS cnetmod_runtime)
 
@@ -658,6 +665,7 @@ if(CNETMOD_ENABLE_ORM)
         CNETMOD_ORM_REGULAR_CPP_SOURCES)
     add_library(cnetmod::orm ALIAS cnetmod_orm)
     cnetmod_link_pugixml(cnetmod_orm)
+    target_include_directories(cnetmod_orm SYSTEM PRIVATE "${_cnetmod_simdjson_dir}")
     list(APPEND CNETMOD_COMPONENT_TARGETS cnetmod_orm)
 endif()
 
@@ -671,6 +679,9 @@ foreach(protocol IN LISTS CNETMOD_PROTOCOLS)
         CNETMOD_PROTOCOL_${protocol}_MODULE_INTERFACE_FILES
         CNETMOD_PROTOCOL_${protocol}_MODULE_IMPLEMENTATION_CPP_FILES
         CNETMOD_PROTOCOL_${protocol}_REGULAR_CPP_SOURCES)
+    if(_protocol_lower STREQUAL "mqtt" OR _protocol_lower STREQUAL "openai")
+        target_include_directories(${_target} SYSTEM PRIVATE "${_cnetmod_simdjson_dir}")
+    endif()
     add_library(cnetmod::${_protocol_lower} ALIAS ${_target})
     list(APPEND CNETMOD_COMPONENT_TARGETS ${_target})
 endforeach()
@@ -765,6 +776,7 @@ if(CNETMOD_APPLICATION_MODULE_INTERFACE_FILES OR
         CNETMOD_APPLICATION_MODULE_INTERFACE_FILES
         CNETMOD_APPLICATION_MODULE_IMPLEMENTATION_CPP_FILES
         CNETMOD_APPLICATION_REGULAR_CPP_SOURCES)
+    target_include_directories(cnetmod_application SYSTEM PRIVATE "${_cnetmod_simdjson_dir}")
     add_library(cnetmod::application ALIAS cnetmod_application)
     if(TARGET cnetmod_orm)
         target_link_libraries(cnetmod_application PUBLIC cnetmod_orm)
@@ -964,8 +976,6 @@ install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 install(FILES "${CNETMOD_GENERATED_INCLUDE_DIR}/cnetmod/version.hpp"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/cnetmod")
-install(DIRECTORY "${CNETMOD_NLOHMANN_JSON_SOURCE_DIR}/include/nlohmann"
-    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 
 # stdexec remains a private build-time implementation dependency.  It is not
 # installed because no public cnetmod module interface exposes its types.

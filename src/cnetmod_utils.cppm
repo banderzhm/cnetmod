@@ -11,5 +11,4 @@ export import cnetmod.utils.concurrent_containers.queue;
 export import cnetmod.utils.concurrent_containers.skip_list;
 export import cnetmod.utils.concurrent_containers.copy_on_write_value;
 export import cnetmod.utils.concurrent_containers.accumulators;
-export import :json;
 export import :application_result;

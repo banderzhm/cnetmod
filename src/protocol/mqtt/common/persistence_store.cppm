@@ -35,7 +35,7 @@ public:
 
 private:
     void ensure_dir();
-    static auto write_file(const std::string& path, const std::string& content)
+    static auto write_file(const std::string& path, std::string_view content)
         -> std::expected<void, std::string>;
     static auto read_file(const std::string& path)
         -> std::expected<std::string, std::string>;

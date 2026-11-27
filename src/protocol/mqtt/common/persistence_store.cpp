@@ -1,11 +1,11 @@
 module;
 
 #include <cnetmod/config.hpp>
+#include "../../../utils/detail/simdjson_depth.hpp"
 
 module cnetmod.protocol.mqtt;
 
 import std;
-import cnetmod.json;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.timer;
@@ -16,249 +16,353 @@ import :retained;
 
 namespace cnetmod::mqtt {
 namespace {
-    using json = cnetmod::json::document;
+    using simdjson::dom::element;
+    using simdjson::builder::string_builder;
+    using cnetmod::detail::find_last_json_field;
 
-    auto props_to_json(const properties& props) -> json
+    template <typename T>
+    auto mqtt_field(element object, std::string_view name, T fallback) -> T
     {
-        json result = cnetmod::json::array();
+        const auto field = find_last_json_field(object, name);
+        if constexpr (std::same_as<T, std::string>)
+        {
+            std::string_view value;
+            if (!field.get_string().get(value))
+                return std::string{value};
+        }
+        else if constexpr (std::same_as<T, bool>)
+        {
+            bool value = false;
+            if (!field.get_bool().get(value))
+                return value;
+        }
+        else
+        {
+            std::int64_t signed_value = 0;
+            std::uint64_t unsigned_value = 0;
+            if (!field.get_int64().get(signed_value))
+                return static_cast<T>(signed_value);
+            if (!field.get_uint64().get(unsigned_value))
+                return static_cast<T>(unsigned_value);
+            double value = 0.0;
+            if (!field.get_double().get(value) &&
+                value >= static_cast<double>(std::numeric_limits<T>::lowest()) &&
+                value <= static_cast<double>(std::numeric_limits<T>::max()))
+                return static_cast<T>(value);
+        }
+        return fallback;
+    }
+
+    void write_properties(string_builder& out, const properties& props)
+    {
+        out.start_array();
+        bool first = true;
         for (const auto& property : props)
         {
-            json object = cnetmod::json::object();
-            object["id"] = static_cast<std::uint8_t>(property.id);
+            if (!std::exchange(first, false))
+                out.append_comma();
+            out.start_object();
+            out.append_key_value("id", static_cast<std::uint8_t>(property.id));
+            out.append_comma();
             std::visit(
                 [&](const auto& value)
                 {
                     using value_type = std::decay_t<decltype(value)>;
-                    if constexpr (std::is_same_v<value_type, std::uint8_t>)
+                    if constexpr (std::same_as<value_type, std::pair<std::string, std::string>>)
                     {
-                        object["type"] = "u8";
-                        object["value"] = value;
-                    }
-                    else if constexpr (std::is_same_v<value_type, std::uint16_t>)
-                    {
-                        object["type"] = "u16";
-                        object["value"] = value;
-                    }
-                    else if constexpr (std::is_same_v<value_type, std::uint32_t>)
-                    {
-                        object["type"] = "u32";
-                        object["value"] = value;
-                    }
-                    else if constexpr (std::is_same_v<value_type, std::string>)
-                    {
-                        object["type"] = "str";
-                        object["value"] = value;
+                        out.append_key_value("type", "pair");
+                        out.append_comma();
+                        out.append_key_value("key", value.first);
+                        out.append_comma();
+                        out.append_key_value("val", value.second);
                     }
                     else
                     {
-                        object["type"] = "pair";
-                        object["key"] = value.first;
-                        object["val"] = value.second;
+                        constexpr auto type = [] {
+                            if constexpr (std::same_as<value_type, std::uint8_t>)
+                                return "u8";
+                            else if constexpr (std::same_as<value_type, std::uint16_t>)
+                                return "u16";
+                            else if constexpr (std::same_as<value_type, std::uint32_t>)
+                                return "u32";
+                            else
+                                return "str";
+                        }();
+                        out.append_key_value("type", type);
+                        out.append_comma();
+                        out.append_key_value("value", value);
                     }
                 },
                 property.value);
-            result.get_array().push_back(std::move(object));
+            out.end_object();
         }
-        return result;
+        out.end_array();
     }
 
-    auto props_from_json(const json& values) -> properties
+    auto props_from_json(element values) -> properties
     {
         properties result;
-        if (!values.is_array())
+        simdjson::dom::array entries;
+        if (values.get_array().get(entries))
             return result;
-        for (const auto& object : values.get_array())
+        for (const auto object : entries)
         {
             mqtt_property property;
             property.id = static_cast<property_id>(
-                cnetmod::json::value_or(object, "id", 0));
-            const auto type = cnetmod::json::value_or(
+                mqtt_field(object, "id", 0));
+            const auto type = mqtt_field(
                 object, "type", std::string{});
             if (type == "u8")
-                property.value = cnetmod::json::value_or(
+                property.value = mqtt_field(
                     object, "value", static_cast<std::uint8_t>(0));
             else if (type == "u16")
-                property.value = cnetmod::json::value_or(
+                property.value = mqtt_field(
                     object, "value", static_cast<std::uint16_t>(0));
             else if (type == "u32")
-                property.value = cnetmod::json::value_or(
+                property.value = mqtt_field(
                     object, "value", static_cast<std::uint32_t>(0));
             else if (type == "str")
-                property.value = cnetmod::json::value_or(
+                property.value = mqtt_field(
                     object, "value", std::string{});
             else if (type == "pair")
                 property.value = std::pair{
-                    cnetmod::json::value_or(object, "key", std::string{}),
-                    cnetmod::json::value_or(object, "val", std::string{})};
+                    mqtt_field(object, "key", std::string{}),
+                    mqtt_field(object, "val", std::string{})};
             result.push_back(std::move(property));
         }
         return result;
     }
 
-    auto will_to_json(const will& value) -> json
+    void write_will(string_builder& out, const will& value)
     {
-        auto result = cnetmod::json::object();
-        result["topic"] = value.topic;
-        result["message"] = value.message;
-        result["qos"] = static_cast<std::uint8_t>(value.qos_value);
-        result["retain"] = value.retain;
-        result["props"] = props_to_json(value.props);
-        return result;
+        out.start_object();
+        out.append_key_value("topic", value.topic);
+        out.append_comma();
+        out.append_key_value("message", value.message);
+        out.append_comma();
+        out.append_key_value("qos", static_cast<std::uint8_t>(value.qos_value));
+        out.append_comma();
+        out.append_key_value("retain", value.retain);
+        out.append_comma();
+        out.escape_and_append_with_quotes("props");
+        out.append_colon();
+        write_properties(out, value.props);
+        out.end_object();
     }
 
-    auto will_from_json(const json& object) -> will
+    auto will_from_json(element object) -> will
     {
         will value;
-        value.topic = cnetmod::json::value_or(object, "topic", std::string{});
-        value.message = cnetmod::json::value_or(object, "message", std::string{});
-        value.qos_value = static_cast<qos>(cnetmod::json::value_or(object, "qos", 0));
-        value.retain = cnetmod::json::value_or(object, "retain", false);
-        if (object.contains("props"))
-            value.props = props_from_json(object["props"]);
+        value.topic = mqtt_field(object, "topic", std::string{});
+        value.message = mqtt_field(object, "message", std::string{});
+        value.qos_value = static_cast<qos>(mqtt_field(object, "qos", 0));
+        value.retain = mqtt_field(object, "retain", false);
+        if (const auto field = find_last_json_field(object, "props"); !field.error())
+            value.props = props_from_json(field.value_unsafe());
         return value;
     }
 
-    auto sub_to_json(const subscribe_entry& value) -> json
+    void write_sub(string_builder& out, const subscribe_entry& value)
     {
-        auto result = cnetmod::json::object();
-        result["topic_filter"] = value.topic_filter;
-        result["max_qos"] = static_cast<std::uint8_t>(value.max_qos);
-        result["no_local"] = value.no_local;
-        result["retain_as_published"] = value.retain_as_published;
-        result["rh"] = static_cast<std::uint8_t>(value.rh);
-        return result;
+        out.start_object();
+        out.append_key_value("topic_filter", value.topic_filter);
+        out.append_comma();
+        out.append_key_value("max_qos", static_cast<std::uint8_t>(value.max_qos));
+        out.append_comma();
+        out.append_key_value("no_local", value.no_local);
+        out.append_comma();
+        out.append_key_value("retain_as_published", value.retain_as_published);
+        out.append_comma();
+        out.append_key_value("rh", static_cast<std::uint8_t>(value.rh));
+        out.end_object();
     }
 
-    auto sub_from_json(const json& object) -> subscribe_entry
+    auto sub_from_json(element object) -> subscribe_entry
     {
         subscribe_entry value;
-        value.topic_filter = cnetmod::json::value_or(object, "topic_filter", std::string{});
-        value.max_qos = static_cast<qos>(cnetmod::json::value_or(object, "max_qos", 0));
-        value.no_local = cnetmod::json::value_or(object, "no_local", false);
-        value.retain_as_published = cnetmod::json::value_or(object, "retain_as_published", false);
-        value.rh = static_cast<retain_handling>(cnetmod::json::value_or(object, "rh", 0));
+        value.topic_filter = mqtt_field(object, "topic_filter", std::string{});
+        value.max_qos = static_cast<qos>(mqtt_field(object, "max_qos", 0));
+        value.no_local = mqtt_field(object, "no_local", false);
+        value.retain_as_published = mqtt_field(object, "retain_as_published", false);
+        value.rh = static_cast<retain_handling>(mqtt_field(object, "rh", 0));
         return value;
     }
 
-    auto publish_to_json(const publish_message& value) -> json
+    void write_publish(string_builder& out, const publish_message& value)
     {
-        auto result = cnetmod::json::object();
-        result["topic"] = value.topic;
-        result["payload"] = value.payload.str();
-        result["qos"] = static_cast<std::uint8_t>(value.qos_value);
-        result["retain"] = value.retain;
-        result["props"] = props_to_json(value.props);
-        return result;
+        out.start_object();
+        out.append_key_value("topic", value.topic);
+        out.append_comma();
+        out.append_key_value("payload", value.payload.str());
+        out.append_comma();
+        out.append_key_value("qos", static_cast<std::uint8_t>(value.qos_value));
+        out.append_comma();
+        out.append_key_value("retain", value.retain);
+        out.append_comma();
+        out.escape_and_append_with_quotes("props");
+        out.append_colon();
+        write_properties(out, value.props);
+        out.end_object();
     }
 
-    auto publish_from_json(const json& object) -> publish_message
+    auto publish_from_json(element object) -> publish_message
     {
         publish_message value;
-        value.topic = cnetmod::json::value_or(object, "topic", std::string{});
-        value.payload = cnetmod::json::value_or(object, "payload", std::string{});
-        value.qos_value = static_cast<qos>(cnetmod::json::value_or(object, "qos", 0));
-        value.retain = cnetmod::json::value_or(object, "retain", false);
-        if (object.contains("props"))
-            value.props = props_from_json(object["props"]);
+        value.topic = mqtt_field(object, "topic", std::string{});
+        value.payload = mqtt_field(object, "payload", std::string{});
+        value.qos_value = static_cast<qos>(mqtt_field(object, "qos", 0));
+        value.retain = mqtt_field(object, "retain", false);
+        if (const auto field = find_last_json_field(object, "props"); !field.error())
+            value.props = props_from_json(field.value_unsafe());
         return value;
     }
 
-    auto inflight_to_json(const inflight_message& value) -> json
+    void write_inflight(string_builder& out, const inflight_message& value)
     {
-        auto result = cnetmod::json::object();
-        result["packet_id"] = value.packet_id;
-        result["msg"] = publish_to_json(value.msg);
-        result["expected_ack"] = static_cast<std::uint8_t>(value.expected_ack);
-        result["retry_count"] = value.retry_count;
-        return result;
+        out.start_object();
+        out.append_key_value("packet_id", value.packet_id);
+        out.append_comma();
+        out.escape_and_append_with_quotes("msg");
+        out.append_colon();
+        write_publish(out, value.msg);
+        out.append_comma();
+        out.append_key_value("expected_ack", static_cast<std::uint8_t>(value.expected_ack));
+        out.append_comma();
+        out.append_key_value("retry_count", value.retry_count);
+        out.end_object();
     }
 
-    auto inflight_from_json(const json& object) -> inflight_message
+    auto inflight_from_json(element object) -> inflight_message
     {
         inflight_message value;
-        value.packet_id = cnetmod::json::value_or(
+        value.packet_id = mqtt_field(
             object, "packet_id", static_cast<std::uint16_t>(0));
-        if (object.contains("msg"))
-            value.msg = publish_from_json(object["msg"]);
+        if (const auto field = find_last_json_field(object, "msg"); !field.error())
+            value.msg = publish_from_json(field.value_unsafe());
         value.expected_ack = static_cast<control_packet_type>(
-            cnetmod::json::value_or(
+            mqtt_field(
                 object, "expected_ack", static_cast<std::uint8_t>(0x40)));
-        value.retry_count = cnetmod::json::value_or(
+        value.retry_count = mqtt_field(
             object, "retry_count", static_cast<std::uint8_t>(0));
         value.send_time = std::chrono::steady_clock::now();
         return value;
     }
 
-    auto session_to_json(const session_state& value) -> json
+    void write_session(string_builder& out, const session_state& value)
     {
-        auto result = cnetmod::json::object();
-        result["client_id"] = value.client_id;
-        result["version"] = static_cast<std::uint8_t>(value.version);
-        result["clean_session"] = value.clean_session;
-        result["session_expiry"] = value.session_expiry_interval;
-        result["next_packet_id"] = value.next_packet_id;
-        result["username"] = value.username;
-        json subscriptions = cnetmod::json::object();
+        out.start_object();
+        out.append_key_value("client_id", value.client_id);
+        out.append_comma();
+        out.append_key_value("version", static_cast<std::uint8_t>(value.version));
+        out.append_comma();
+        out.append_key_value("clean_session", value.clean_session);
+        out.append_comma();
+        out.append_key_value("session_expiry", value.session_expiry_interval);
+        out.append_comma();
+        out.append_key_value("next_packet_id", value.next_packet_id);
+        out.append_comma();
+        out.append_key_value("username", value.username);
+        out.append_comma();
+        out.escape_and_append_with_quotes("subscriptions");
+        out.append_colon();
+        out.start_object();
+        bool first = true;
         for (const auto& [filter, entry] : value.subscriptions)
-            subscriptions[filter] = sub_to_json(entry);
-        result["subscriptions"] = std::move(subscriptions);
-        json queue = cnetmod::json::array();
+        {
+            if (!std::exchange(first, false))
+                out.append_comma();
+            out.escape_and_append_with_quotes(filter);
+            out.append_colon();
+            write_sub(out, entry);
+        }
+        out.end_object();
+        out.append_comma();
+        out.escape_and_append_with_quotes("offline_queue");
+        out.append_colon();
+        out.start_array();
+        first = true;
         for (const auto& message : value.offline_queue)
-            queue.get_array().push_back(publish_to_json(message));
-        result["offline_queue"] = std::move(queue);
-        json inflight = cnetmod::json::array();
+        {
+            if (!std::exchange(first, false))
+                out.append_comma();
+            write_publish(out, message);
+        }
+        out.end_array();
+        out.append_comma();
+        out.escape_and_append_with_quotes("inflight_out");
+        out.append_colon();
+        out.start_array();
+        first = true;
         for (const auto& message : value.inflight_out)
-            inflight.get_array().push_back(inflight_to_json(message));
-        result["inflight_out"] = std::move(inflight);
+        {
+            if (!std::exchange(first, false))
+                out.append_comma();
+            write_inflight(out, message);
+        }
+        out.end_array();
         if (value.will_msg)
-            result["will"] = will_to_json(*value.will_msg);
-        return result;
+        {
+            out.append_comma();
+            out.escape_and_append_with_quotes("will");
+            out.append_colon();
+            write_will(out, *value.will_msg);
+        }
+        out.end_object();
     }
 
-    auto session_from_json(const json& object) -> session_state
+    auto session_from_json(element object) -> session_state
     {
         session_state value;
-        value.client_id = cnetmod::json::value_or(object, "client_id", std::string{});
-        value.version = static_cast<protocol_version>(cnetmod::json::value_or(object, "version", 4));
-        value.clean_session = cnetmod::json::value_or(object, "clean_session", true);
+        value.client_id = mqtt_field(object, "client_id", std::string{});
+        value.version = static_cast<protocol_version>(mqtt_field(object, "version", 4));
+        value.clean_session = mqtt_field(object, "clean_session", true);
         value.session_expiry_interval =
-            cnetmod::json::value_or(object, "session_expiry", static_cast<std::uint32_t>(0));
+            mqtt_field(object, "session_expiry", static_cast<std::uint32_t>(0));
         value.next_packet_id =
-            cnetmod::json::value_or(object, "next_packet_id", static_cast<std::uint16_t>(1));
-        value.username = cnetmod::json::value_or(object, "username", std::string{});
-        if (object.contains("subscriptions") && object["subscriptions"].is_object())
-            for (const auto& [key, entry] : object["subscriptions"].get_object())
-                value.subscriptions[key] = sub_from_json(entry);
-        if (object.contains("offline_queue") && object["offline_queue"].is_array())
-            for (const auto& entry : object["offline_queue"].get_array())
+            mqtt_field(object, "next_packet_id", static_cast<std::uint16_t>(1));
+        value.username = mqtt_field(object, "username", std::string{});
+        simdjson::dom::object subscriptions;
+        if (!find_last_json_field(object, "subscriptions").get_object().get(subscriptions))
+            for (const auto field : subscriptions)
+                value.subscriptions[std::string{field.key}] = sub_from_json(field.value);
+        simdjson::dom::array queue;
+        if (!find_last_json_field(object, "offline_queue").get_array().get(queue))
+            for (const auto entry : queue)
                 value.offline_queue.push_back(publish_from_json(entry));
-        if (object.contains("inflight_out") && object["inflight_out"].is_array())
-            for (const auto& entry : object["inflight_out"].get_array())
+        simdjson::dom::array inflight;
+        if (!find_last_json_field(object, "inflight_out").get_array().get(inflight))
+            for (const auto entry : inflight)
                 value.inflight_out.push_back(inflight_from_json(entry));
-        if (object.contains("will") && !object["will"].is_null())
-            value.will_msg = will_from_json(object["will"]);
+        if (const auto field = find_last_json_field(object, "will");
+            !field.error() && !field.value_unsafe().is_null())
+            value.will_msg = will_from_json(field.value_unsafe());
         value.online = false;
         return value;
     }
 
-    auto retained_to_json(const retained_message& value) -> json
+    void write_retained(string_builder& out, const retained_message& value)
     {
-        auto result = cnetmod::json::object();
-        result["topic"] = value.topic;
-        result["payload"] = value.payload;
-        result["qos"] = static_cast<std::uint8_t>(value.qos_value);
-        result["props"] = props_to_json(value.props);
-        return result;
+        out.start_object();
+        out.append_key_value("topic", value.topic);
+        out.append_comma();
+        out.append_key_value("payload", value.payload);
+        out.append_comma();
+        out.append_key_value("qos", static_cast<std::uint8_t>(value.qos_value));
+        out.append_comma();
+        out.escape_and_append_with_quotes("props");
+        out.append_colon();
+        write_properties(out, value.props);
+        out.end_object();
     }
 
-    auto retained_from_json(const json& object) -> retained_message
+    auto retained_from_json(element object) -> retained_message
     {
         retained_message value;
-        value.topic = cnetmod::json::value_or(object, "topic", std::string{});
-        value.payload = cnetmod::json::value_or(object, "payload", std::string{});
-        value.qos_value = static_cast<qos>(cnetmod::json::value_or(object, "qos", 0));
-        if (object.contains("props"))
-            value.props = props_from_json(object["props"]);
+        value.topic = mqtt_field(object, "topic", std::string{});
+        value.payload = mqtt_field(object, "payload", std::string{});
+        value.qos_value = static_cast<qos>(mqtt_field(object, "qos", 0));
+        if (const auto field = find_last_json_field(object, "props"); !field.error())
+            value.props = props_from_json(field.value_unsafe());
         return value;
     }
 } // namespace
@@ -270,16 +374,23 @@ auto persistence::save_sessions(const session_store& store)
     -> std::expected<void, std::string>
 {
     ensure_dir();
-    json root = cnetmod::json::array();
+    string_builder out;
+    out.start_array();
+    bool first = true;
     store.for_each([&](const session_state& value)
         {
-            if (!value.clean_session || !value.offline_queue.empty() ||
-                !value.subscriptions.empty())
-                root.get_array().push_back(session_to_json(value));
+            if (value.clean_session && value.offline_queue.empty() &&
+                value.subscriptions.empty())
+                return;
+            if (!std::exchange(first, false))
+                out.append_comma();
+            write_session(out, value);
         });
-    const auto encoded = cnetmod::json::write_document(root, true);
-    return encoded ? write_file(opts_.data_dir + "/sessions.json", *encoded)
-                   : std::unexpected("failed to encode sessions JSON");
+    out.end_array();
+    std::string_view encoded;
+    if (!out.validate_unicode() || out.view().get(encoded))
+        return std::unexpected("failed to encode sessions JSON");
+    return write_file(opts_.data_dir + "/sessions.json", encoded);
 }
 
 auto persistence::load_sessions() -> std::expected<session_store, std::string>
@@ -289,12 +400,14 @@ auto persistence::load_sessions() -> std::expected<session_store, std::string>
         return std::unexpected(content.error());
     session_store store;
     {
-        auto root = cnetmod::json::parse_document(*content);
-        if (!root)
+        simdjson::dom::parser parser;
+        element root;
+        if (!cnetmod::detail::parse_bounded_json(parser, *content, root))
             return std::unexpected(std::string("sessions.json parse error"));
-        if (!root->is_array())
+        simdjson::dom::array rows;
+        if (root.get_array().get(rows))
             return std::unexpected(std::string("sessions.json: not an array"));
-        for (const auto& object : root->get_array())
+        for (const auto object : rows)
         {
             auto value = session_from_json(object);
             if (!value.client_id.empty())
@@ -313,14 +426,20 @@ auto persistence::save_retained(const retained_store& store)
     -> std::expected<void, std::string>
 {
     ensure_dir();
-    json root = cnetmod::json::array();
+    string_builder out;
+    out.start_array();
+    bool first = true;
     store.for_each([&](const retained_message& value)
         {
-            root.get_array().push_back(retained_to_json(value));
+            if (!std::exchange(first, false))
+                out.append_comma();
+            write_retained(out, value);
         });
-    const auto encoded = cnetmod::json::write_document(root, true);
-    return encoded ? write_file(opts_.data_dir + "/retained.json", *encoded)
-                   : std::unexpected("failed to encode retained JSON");
+    out.end_array();
+    std::string_view encoded;
+    if (!out.validate_unicode() || out.view().get(encoded))
+        return std::unexpected("failed to encode retained JSON");
+    return write_file(opts_.data_dir + "/retained.json", encoded);
 }
 
 auto persistence::load_retained()
@@ -331,12 +450,14 @@ auto persistence::load_retained()
         return std::unexpected(content.error());
     retained_store store;
     {
-        auto root = cnetmod::json::parse_document(*content);
-        if (!root)
+        simdjson::dom::parser parser;
+        element root;
+        if (!cnetmod::detail::parse_bounded_json(parser, *content, root))
             return std::unexpected(std::string("retained.json parse error"));
-        if (!root->is_array())
+        simdjson::dom::array rows;
+        if (root.get_array().get(rows))
             return std::unexpected(std::string("retained.json: not an array"));
-        for (const auto& object : root->get_array())
+        for (const auto object : rows)
         {
             auto value = retained_from_json(object);
             if (!value.topic.empty())
@@ -371,7 +492,7 @@ void persistence::ensure_dir()
 }
 
 auto persistence::write_file(const std::string& path,
-    const std::string& content)
+    std::string_view content)
     -> std::expected<void, std::string>
 {
     auto temporary = path + ".tmp";

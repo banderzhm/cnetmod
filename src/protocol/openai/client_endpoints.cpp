@@ -3,6 +3,7 @@
 module;
 
 #include <cnetmod/config.hpp>
+#include "../../utils/detail/simdjson_depth.hpp"
 
 module cnetmod.protocol.openai;
 
@@ -27,7 +28,6 @@ import :embeddings;
 import :audio;
 import :images;
 import :moderation;
-import cnetmod.json;
 
 namespace cnetmod::openai {
 
@@ -61,18 +61,27 @@ auto client::list_models()
         co_return std::unexpected(std::format("HTTP {}: {}", status, err.message));
     }
 
+    using cnetmod::detail::find_last_json_field;
+    simdjson::dom::parser parser;
+    simdjson::dom::element value;
+    simdjson::dom::array data;
     std::vector<model_info> models;
-    auto parsed = cnetmod::json::parse_document(resp_body);
-    if (parsed && parsed->contains("data") && (*parsed)["data"].is_array())
+    if (cnetmod::detail::parse_bounded_json(parser, resp_body, value) &&
+        !find_last_json_field(value, "data").get_array().get(data))
     {
-        for (const auto& m : (*parsed)["data"].get_array())
+        models.reserve(data.size());
+        for (const auto model : data)
         {
-            model_info info;
-            info.id = cnetmod::json::value_or(m, "id", std::string{});
-            info.owned_by = cnetmod::json::value_or(
-                m, "owned_by", std::string{});
-            info.created = cnetmod::json::value_or(m, "created", 0);
-            models.push_back(std::move(info));
+            auto& info = models.emplace_back();
+            std::string_view field;
+            if (!find_last_json_field(model, "id").get_string().get(field))
+                info.id = field;
+            if (!find_last_json_field(model, "owned_by").get_string().get(field))
+                info.owned_by = field;
+            std::int64_t created{};
+            if (!find_last_json_field(model, "created").get_int64().get(created) &&
+                std::in_range<int>(created))
+                info.created = static_cast<int>(created);
         }
     }
 

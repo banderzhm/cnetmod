@@ -13,9 +13,28 @@ import cnetmod.coro.timer;
 import cnetmod.executor.async_op;
 import cnetmod.instrumentation.tracing;
 import cnetmod.io.io_context;
-import cnetmod.json;
 
 namespace {
+
+struct decimal_codec
+{
+    template <typename T>
+    static auto decode(std::string_view input) -> std::expected<T, std::error_code>
+    {
+        T value{};
+        const auto end = input.data() + input.size();
+        const auto [cursor, error] = std::from_chars(input.data(), end, value);
+        if (error != std::errc{} || cursor != end)
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        return value;
+    }
+
+    template <typename T>
+    static auto encode(T value) -> std::expected<std::string, std::error_code>
+    {
+        return std::to_string(value);
+    }
+};
 
 struct scripted_step
 {
@@ -415,6 +434,9 @@ TEST(redis_template_normalizes_values_collections_scans_pipeline_and_spans)
     const auto mget_wire = "*2\r\n" + large_wire + "$-1\r\n";
     std::vector<scripted_step> steps;
     steps.push_back({command({"GET", "app:missing"}), {"$-1\r\n"}});
+    steps.push_back({command({"SET", "app:typed", "42", "EX", "9"}), {"+OK\r\n"}});
+    steps.push_back({command({"GET", "app:typed"}), {"$2\r\n42\r\n"}});
+    steps.push_back({command({"GET", "app:bad-value"}), {"$3\r\nbad\r\n"}});
     steps.push_back({command({"GET", "app:large"}),
         {large_wire.substr(0, 6300), large_wire.substr(6300)}});
     steps.push_back({command({"GETEX", "app:session", "EX", "9"}),
@@ -503,7 +525,11 @@ TEST(redis_template_normalizes_values_collections_scans_pipeline_and_spans)
     };
     auto exercise = [&]() -> cnetmod::task<void>
     {
-        auto missing = co_await redis.get("missing");
+        auto missing = co_await redis.get_as<int, decimal_codec>("missing");
+        auto typed_saved = co_await redis.set_as<int, decimal_codec>("typed", 42);
+        cnetmod::cancel_token cancellation;
+        auto typed_loaded = co_await redis.get_as<int, decimal_codec>("typed", cancellation);
+        auto invalid = co_await redis.get_as<int, decimal_codec>("bad-value");
         auto loaded = co_await redis.get("large");
         auto touched = co_await redis.getex(
             "session", std::chrono::seconds{9});
@@ -534,7 +560,9 @@ TEST(redis_template_normalizes_values_collections_scans_pipeline_and_spans)
         batch.raw_command(advanced);
         auto piped = co_await redis.execute(batch);
 
-        exercise_ok = missing && !*missing && loaded && *loaded &&
+        exercise_ok = missing && !*missing && typed_saved &&
+            typed_loaded && *typed_loaded && **typed_loaded == 42 &&
+            !invalid && invalid.error() == std::errc::invalid_argument && loaded && *loaded &&
             **loaded == large && touched && *touched && **touched == "active" &&
             scripted && *scripted == 1 && saved && deleted && *deleted && present &&
             !*present && incremented && *incremented == 5 && expired &&
@@ -869,24 +897,6 @@ TEST(redis_template_scan_honors_precancelled_token_without_network_io)
     if (!result)
         ASSERT_EQ(result.error(),
             std::make_error_code(std::errc::operation_canceled));
-}
-
-TEST(redis_template_json_codec_round_trips_and_rejects_invalid_data)
-{
-    auto encoded = cnetmod::redis::json_codec::encode(
-        std::vector<int>{1, 2, 3});
-    ASSERT_TRUE(encoded.has_value());
-    auto decoded = encoded
-        ? cnetmod::redis::json_codec::decode<std::vector<int>>(*encoded)
-        : std::expected<std::vector<int>, std::error_code>{
-              std::unexpected(std::make_error_code(std::errc::invalid_argument))};
-    ASSERT_TRUE(decoded.has_value());
-    if (decoded)
-        ASSERT_TRUE(*decoded == std::vector<int>({1, 2, 3}));
-    auto invalid = cnetmod::redis::json_codec::decode<std::vector<int>>("{");
-    ASSERT_FALSE(invalid.has_value());
-    if (!invalid)
-        ASSERT_EQ(invalid.error(), cnetmod::json::make_error_code(cnetmod::json::errc::parse_failed));
 }
 
 RUN_TESTS()
